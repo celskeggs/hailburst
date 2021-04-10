@@ -22,8 +22,35 @@ void puts (const char * str)
     while (*str) putc (*str++);
 }
 
+void putn (unsigned int i)
+{
+    if (i == 0) {
+        putc('0');
+    } else {
+        if (i >= 10) {
+            putn(i / 10);
+        }
+        putc('0' + (i % 10));
+    }
+}
+
+unsigned int get_trace_count(void)
+{
+    return *(volatile unsigned int *) 0x800000;
+}
+
 int main (void)
 {
+    unsigned int lcount = 0xFFFFFFFF, ncount;
     puts ("hello, world!\n");
+    while (1) {
+        ncount = get_trace_count();
+        if (ncount != lcount) {
+            puts ("count: ");
+            putn (ncount);
+            puts ("\n");
+            lcount = ncount;
+        }
+    }
     return 0;
 }
