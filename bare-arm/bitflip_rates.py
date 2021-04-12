@@ -52,3 +52,8 @@ def sample_old_n(r, n):
 
 print(sample_geo_n(0.1, 30000))
 print(sample_old_n(0.1, 30000))
+
+def mtbf_to_rate(mtbf):
+    return 1 - 0.5 ** (1 / mtbf)
+
+print(survival_rate(mtbf_to_rate(32.6), 32.6))

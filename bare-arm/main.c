@@ -34,22 +34,17 @@ void putn (unsigned int i)
     }
 }
 
-unsigned int get_trace_count(void)
-{
-    return *(volatile unsigned int *) 0x800000;
-}
+volatile int my_valuable_variable = 100;
 
 int main (void)
 {
-    unsigned int lcount = 0xFFFFFFFF, ncount;
     puts ("hello, world!\n");
     while (1) {
-        ncount = get_trace_count();
-        if (ncount != lcount) {
-            puts ("count: ");
-            putn (ncount);
+        if (my_valuable_variable != 100) {
+            puts ("memory error detected: ");
+            putn (my_valuable_variable);
             puts ("\n");
-            lcount = ncount;
+            my_valuable_variable = 100;
         }
     }
     return 0;
