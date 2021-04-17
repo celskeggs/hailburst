@@ -28,7 +28,7 @@ class MemoryRange:
         start_range, end_range, prio_text, prio_num, kind, name = parts
         assert len(start_range) == len(end_range) == len("000000000000ffff")
         assert prio_text == "(prio"
-        assert kind in ("i/o", "ram"), "TODO: add support for memory kind %s" % kind
+        assert kind in ("i/o", "ram", "romd"), "TODO: add support for memory kind %s" % kind
         return MemoryRange(
             start = int(start_range, 16),
             end = int(end_range, 16),
@@ -84,6 +84,12 @@ def mtree():
         elif line.startswith(' Root '):
             assert not scanning, "expected not scanning"
             scanning = True
+        elif line.startswith('  No rendered FlatView'):
+            assert scanning, "expected scanning"
+            for cn in curnames:
+                assert views[cn] == []
+                del views[cn]
+            curnames = None
         elif line.startswith('  '):
             assert scanning and curnames, "invalid state to begin view"
             for name in curnames:
@@ -104,6 +110,29 @@ def sample_geo(r):
 
 def mtbf_to_rate(mtbf):
     return 1 - 0.5 ** (1 / mtbf)
+
+
+time_units = {
+    "": 1,
+    "ns": 1,
+    "us": 1000,
+    "ms": 1000 * 1000,
+    "s": 1000 * 1000 * 1000,
+    "m": 60 * 1000 * 1000 * 1000,
+}
+
+
+def parse_time(s):
+    for unit, mul in sorted(time_units.items()):
+        if s.endswith(unit):
+            try:
+                res = int(s[:-len(unit)])
+            except ValueError:
+                continue  # try the next unit
+            if res <= 0:
+                raise ValueError("expected positive number of %s in %r" % (unit, s))
+            return res * mul
+    raise ValueError("could not parse units in %r" % s)
 
 
 def step_ns(ns):
@@ -155,17 +184,16 @@ def listram(args):
 
 
 @BuildCmd
-def stepns(args):
-    """Step QEMU virtual time forward by the specified number of nanoseconds"""
+def stepvt(args):
+    """Step QEMU virtual time forward by the specified amount of time, defaulting to nanoseconds."""
 
-    if not args.isdigit():
-        print("Expected ns argument.")
+    args = args.strip()
+    if not args:
+        print("Expected time argument.")
         return
 
-    ns = int(args)
-    if ns <= 0:
-        print("Expected positive number of ns.")
-        return
+    ns = parse_time(args)
+    assert ns > 0
 
     step_ns(ns)
 
@@ -198,16 +226,15 @@ def inject(args):
 def stepmtbf(args):
     """Fast-forward to the next sampled injection event."""
 
-    if not args.isdigit():
-        print("Expected ns argument.")
+    args = args.strip()
+    if not args:
+        print("Expected time argument.")
         return
-    mtbf = int(args)
-    if mtbf <= 0:
-        print("Expected positive number of ns.")
-        return
+
+    mtbf = parse_time(args)
+    assert mtbf > 0
 
     ns_to_failure = sample_geo(mtbf_to_rate(mtbf))
-
     step_ns(ns_to_failure)
 
 
@@ -222,7 +249,8 @@ def campaign(args):
         return
 
     iterations = int(args[0])
-    mtbf = int(args[1])
+    mtbf = parse_time(args[1])
+    assert mtbf > 0
 
     if args[2:]:
         rand_addr = False
