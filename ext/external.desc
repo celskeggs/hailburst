@@ -1,2 +1,2 @@
-name: failbochs_custom
-desc: buildroot configuration that runs successfully under failbochs
+name: thesis
+desc: buildroot configuration for thesis research

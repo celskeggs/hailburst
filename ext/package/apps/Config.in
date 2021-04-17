@@ -1,0 +1,4 @@
+config BR2_PACKAGE_APPS
+	bool "apps"
+	help
+	  Thesis programs.
