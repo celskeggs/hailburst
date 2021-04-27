@@ -15,6 +15,7 @@ endef
 
 define APPS_INSTALL_TARGET_CMDS
     $(INSTALL) -D -m 0755 $(@D)/app $(TARGET_DIR)/usr/bin
+    $(INSTALL) -D -m 0755 $(@D)/S80app $(TARGET_DIR)/etc/init.d
 endef
 
 $(eval $(generic-package))
