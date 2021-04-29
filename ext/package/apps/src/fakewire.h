@@ -16,9 +16,13 @@ typedef int16_t fw_char_t;
 #define FW_DATA(fwchar) ((fwchar) & FW_MASK_DATA)
 
 #define FW_PARITYFAIL (0x180)
+// Flow Control Token
 #define FW_CTRL_FCT (0x1F0)
+// Normal End of Packet
 #define FW_CTRL_EOP (0x1F1)
+// Error End of Packet
 #define FW_CTRL_EEP (0x1F2)
+// Escape
 #define FW_CTRL_ESC (0x1F3)
 
 // FakeWire port structure
