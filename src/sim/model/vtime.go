@@ -1,4 +1,4 @@
-package main
+package model
 
 import (
 	"fmt"
@@ -27,6 +27,27 @@ func (t VirtualTime) AtOrAfter(t2 VirtualTime) bool {
 		panic("times don't exist")
 	}
 	return t >= t2
+}
+
+func (t VirtualTime) After(t2 VirtualTime) bool {
+	if !t.TimeExists() || !t2.TimeExists() {
+		panic("times don't exist")
+	}
+	return t > t2
+}
+
+func (t VirtualTime) AtOrBefore(t2 VirtualTime) bool {
+	if !t.TimeExists() || !t2.TimeExists() {
+		panic("times don't exist")
+	}
+	return t <= t2
+}
+
+func (t VirtualTime) Before(t2 VirtualTime) bool {
+	if !t.TimeExists() || !t2.TimeExists() {
+		panic("times don't exist")
+	}
+	return t < t2
 }
 
 func (t VirtualTime) Add(duration time.Duration) VirtualTime {

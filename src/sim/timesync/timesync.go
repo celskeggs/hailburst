@@ -1,4 +1,4 @@
-package main
+package timesync
 
 import (
 	"context"
@@ -10,10 +10,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sim/model"
 )
 
-type TimesyncProtocolImpl interface {
-	Sync(pendingReadBytes int, now VirtualTime, writeData []byte) (expireAt VirtualTime, readData []byte)
+type ProtocolImpl interface {
+	Sync(pendingReadBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte)
 }
 
 func OnCancel(ctx context.Context, cb func()) {
@@ -237,7 +238,7 @@ func EncodeTimesyncReplies(w io.Writer) chan<- TimesyncReply {
 	return replies
 }
 
-func HandleTimesyncProtocol(ctx context.Context, conn net.Conn, impl TimesyncProtocolImpl) error {
+func HandleTimesyncProtocol(ctx context.Context, conn net.Conn, impl ProtocolImpl) error {
 	OnCancel(ctx, func() {
 		if err := conn.Close(); err != nil {
 			log.Printf("Unexpected error while closing timesync connection: %v", err)
@@ -252,7 +253,7 @@ func HandleTimesyncProtocol(ctx context.Context, conn net.Conn, impl TimesyncPro
 			return fmt.Errorf("unexpected sequence number %v instead of %v", request.SeqNum, nextSeqNum)
 		}
 
-		expireAt, data := impl.Sync(int(request.PendingReadBytes), VirtualTime(request.Now), request.Data)
+		expireAt, data := impl.Sync(int(request.PendingReadBytes), model.VirtualTime(request.Now), request.Data)
 		if request.PendingReadBytes > 0 && len(data) > 0 {
 			return fmt.Errorf(
 				"impermissible attempt to write %d bytes of data when %d were already pending",
@@ -282,7 +283,7 @@ func OnInterrupt(ctx context.Context, cb func()) {
 	}()
 }
 
-func Simple(sockpath string) error {
+func Simple(sockpath string, app ProtocolImpl) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	OnInterrupt(ctx, cancel)
@@ -291,17 +292,9 @@ func Simple(sockpath string) error {
 		return err
 	}
 	log.Printf("Leader connected to timesync protocol from %v", conn.RemoteAddr())
-	impl := MakeTestApp()
-	if err := HandleTimesyncProtocol(ctx, conn, impl); err != nil {
+	if err := HandleTimesyncProtocol(ctx, conn, app); err != nil {
 		return err
 	}
 	log.Printf("Exiting normally...")
 	return nil
-}
-
-func main() {
-	err := Simple("./timesync-test.sock")
-	if err != nil {
-		log.Fatalf("Encountered top-level error: %v", err)
-	}
 }

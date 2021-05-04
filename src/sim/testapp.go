@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"sim/model"
+	"sim/timesync"
 	"time"
 )
 
 type TestApp struct {
 	collectedData []byte
-	lastWrite VirtualTime
+	lastWrite model.VirtualTime
 }
 
-func (t *TestApp) Sync(pendingBytes int, now VirtualTime, writeData []byte) (expireAt VirtualTime, readData []byte) {
+func (t *TestApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte) {
 	if len(writeData) > 0 {
 		t.collectedData = append(t.collectedData, writeData...)
 		subslices := bytes.Split(t.collectedData, []byte("\n"))
@@ -27,7 +29,7 @@ func (t *TestApp) Sync(pendingBytes int, now VirtualTime, writeData []byte) (exp
 		log.Printf("%v: wrote data to timesync leader: %q", now, string(readData))
 	}
 	if now.AtOrAfter(t.lastWrite.Add(time.Second)) {
-		expireAt = NeverTimeout
+		expireAt = model.NeverTimeout
 	} else {
 		expireAt = t.lastWrite.Add(time.Second)
 	}
@@ -35,7 +37,7 @@ func (t *TestApp) Sync(pendingBytes int, now VirtualTime, writeData []byte) (exp
 	return expireAt, readData
 }
 
-func MakeTestApp() TimesyncProtocolImpl {
+func MakeTestApp() timesync.ProtocolImpl {
 	return &TestApp{
 		lastWrite: 0,
 	}
