@@ -12,7 +12,7 @@ type EventSource interface {
 
 type DataSourceBytes interface {
 	EventSource
-	// TryRead attempts to read a series of bytes from a sink.
+	// TryRead attempts to read a series of bytes from a source.
 	// If TryRead reads less than requested, the caller should assume it will not succeed in reading more until an
 	// event is sent to the source's subscribers -- and even then, it's not guaranteed.
 	TryRead(into []byte) int

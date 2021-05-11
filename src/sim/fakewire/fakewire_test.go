@@ -2,61 +2,110 @@ package fakewire
 
 import (
 	"math/rand"
+	"sim/component"
+	"sim/fakewire/fwmodel"
+	"sim/model"
+	"sim/testpoint"
+	"sim/util"
+	"strings"
 	"testing"
+	"time"
 )
 
-func randFWChar() FWChar {
+func randFWChar() fwmodel.FWChar {
 	// send a control character about once every fifteen data characters, at random
 	if rand.Intn(15) == 0 {
 		switch rand.Intn(4) {
-		case 0: return CtrlFCT
-		case 1: return CtrlEOP
-		case 2: return CtrlEEP
-		case 3: return CtrlESC
-		default: panic("impossible result")
+		case 0:
+			return fwmodel.CtrlFCT
+		case 1:
+			return fwmodel.CtrlEOP
+		case 2:
+			return fwmodel.CtrlEEP
+		case 3:
+			return fwmodel.CtrlESC
+		default:
+			panic("impossible result")
 		}
 	} else {
-		return DataChar(uint8(rand.Uint32()))
+		return fwmodel.DataChar(uint8(rand.Uint32()))
 	}
 }
 
+func stringBits(data []byte) string {
+	var midbits []string
+	for _, bit := range util.BytesToBits(data) {
+		if bit {
+			midbits = append(midbits, "1")
+		} else {
+			midbits = append(midbits, "0")
+		}
+	}
+	return strings.Join(midbits, " ")
+}
+
 func TestFakeWireCodecs(t *testing.T) {
-	inputData := make([]FWChar, 1024)
+	sim := component.MakeSimController()
+
+	inputData := make([]fwmodel.FWChar, 1024)
 
 	// deterministically generate some sample test vectors
-	rand.Seed(456)
+	rand.Seed(456789)
 	for i := 0; i < len(inputData); i++ {
 		inputData[i] = randFWChar()
 	}
 
-	t.Logf("Raw data: %v", inputData)
+	t.Logf("Raw input: %v", inputData)
 
-	// stick an encoder and decoder end-to-end
-	chIn := make(chan FWChar)
-	chMid := make(chan uint8)
-	chOut := make(chan FWChar)
+	inputDataCopy := append([]fwmodel.FWChar{}, inputData...)
+	testSource := testpoint.MakeDataSourceFW(sim, inputDataCopy)
+	testSink := testpoint.MakeDataSinkFW(sim)
+	midSource, midSink := component.DataBufferBytes(sim, 100)
+	midCopy := testpoint.MakeDataSink(sim)
 
-	go EncodeFakeWire(chMid, chIn)
-	go DecodeFakeWire(chOut, chMid)
+	EncodeFakeWire(sim, component.TeeDataSinks(sim, midSink, midCopy), testSource)
+	DecodeFakeWire(sim, testSink, midSource)
 
-	// feed in data
-	go func() {
-		for _, ch := range inputData {
-			chIn <- ch
-		}
-		close(chIn)
-	}()
+	sim.Advance(model.TimeZero.Add(time.Second))
 
-	// read out the data and confirm that it's correct
-	i := 0
-	for b := range chOut {
-		if i >= len(inputData) || inputData[i] != b {
-			t.Errorf("Mismatch on character %d", i)
-		}
-		i += 1
+	if !testSource.IsConsumed() {
+		t.Fatal("expected test source to be completely consumed")
 	}
-	// we should expect one or two characters to be lost to parity errors, right at the end
-	if i < len(inputData) - 2 || i > len(inputData) {
-		t.Errorf("Expected length %d (optionally minus one or two) in output, but actually length %d", len(inputData), i)
+	received := testSink.Collected
+
+	t.Logf("Raw output: %v", received)
+	// t.Logf("Raw bytes: %s", stringBits(midCopy.Take()))
+
+	// we might not have received the last one or two characters yet, depending on exact bitpacking
+	if len(received) < len(inputData) - 2 || len(received) > len(inputData) {
+		t.Errorf("received %d bytes instead of expected %d", len(received), len(inputData))
+	}
+	for i := 0; i < len(received) && i < len(inputData); i++ {
+		if inputData[i] != received[i] {
+			t.Errorf("mismatch on fwchar %d: %v instead of %v", i, received[i], inputData[i])
+		}
+	}
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	testSource.Refill([]fwmodel.FWChar{fwmodel.ParityFail})
+	sim.Advance(model.TimeZero.Add(time.Second))
+
+	// t.Logf("Raw bytes: %s", stringBits(midCopy.Take()))
+
+	if !testSource.IsConsumed() {
+		t.Fatal("expected test source to be completely consumed")
+	}
+	received = testSink.Collected
+	if len(received) != len(inputData) + 1 {
+		t.Errorf("received %d bytes instead of expected %d", len(received), len(inputData) + 1)
+	} else if received[len(received) - 1] != fwmodel.ParityFail {
+		t.Error("expected parity failure as very final character")
+	}
+	for i := 0; i < len(received) && i < len(inputData); i++ {
+		if inputData[i] != received[i] {
+			t.Errorf("mismatch on fwchar %d: %v instead of %v", i, received[i], inputData[i])
+		}
 	}
 }

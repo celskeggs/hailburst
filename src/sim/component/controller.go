@@ -37,7 +37,7 @@ func (tq *timerQueue) Pop() interface{} {
 	tqa := *tq
 	timer := tqa[len(tqa)-1]
 	timer.index = -1
-	*tq = tqa[0:len(tqa)-1]
+	*tq = tqa[0 : len(tqa)-1]
 	return timer
 }
 
@@ -58,7 +58,7 @@ func (sc *SimController) SetTimer(expireAt model.VirtualTime, callback func()) (
 	timer := &simTimer{
 		expireAt: expireAt,
 		callback: callback,
-		index: -1,
+		index:    -1,
 	}
 	heap.Push(&sc.timers, timer)
 	if timer.index == -1 {

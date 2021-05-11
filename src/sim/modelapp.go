@@ -35,9 +35,12 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 }
 
 func MakeModelApp(controller *component.SimController, source model.DataSourceBytes, sink model.DataSinkBytes) timesync.ProtocolImpl {
+	if controller.Now() != model.VirtualTime(0) {
+		panic("invalid starting time in MakeModelApp")
+	}
 	return &ModelApp{
 		controller: controller,
-		source: source,
-		sink: sink,
+		source:     source,
+		sink:       sink,
 	}
 }

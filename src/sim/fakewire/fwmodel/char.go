@@ -1,4 +1,4 @@
-package fakewire
+package fwmodel
 
 import (
 	"fmt"
@@ -18,20 +18,23 @@ const (
 	CtrlEEP FWChar = 0x1A2
 	// CtrlESC represents an Escape
 	CtrlESC FWChar = 0x1A3
+
+	// ParityFail indicates that a parity error was encountered (or should be produced)
+	ParityFail FWChar = 0x1FF
 )
 
 func DataChar(d uint8) FWChar {
 	return FWChar(d)
 }
 
-func ctrlCharFromIndex(index uint8) FWChar {
+func CtrlCharFromIndex(index uint8) FWChar {
 	if index > 3 {
 		panic("invalid index for control char")
 	}
 	return CtrlFCT + FWChar(index)
 }
 
-func (c FWChar) ctrlIndex() uint8 {
+func (c FWChar) CtrlIndex() uint8 {
 	if c >= CtrlFCT && c <= CtrlESC {
 		return uint8(c - CtrlFCT)
 	}
@@ -75,6 +78,8 @@ func (c FWChar) String() string {
 		return "EEP"
 	case CtrlESC:
 		return "ESC"
+	case ParityFail:
+		return "ParityFail"
 	default:
 		panic("unrecognized character during String")
 	}

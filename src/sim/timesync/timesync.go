@@ -196,9 +196,9 @@ func DecodeTimesyncRequests(r io.Reader) <-chan TimesyncRequest {
 }
 
 type TimesyncReply struct {
-	SeqNum           uint32
-	ExpireAt         int64
-	Data             []byte
+	SeqNum   uint32
+	ExpireAt int64
+	Data     []byte
 }
 
 func EncodeTimesyncReply(w io.Writer, reply TimesyncReply) error {

@@ -11,7 +11,7 @@ import (
 
 type TestApp struct {
 	collectedData []byte
-	lastWrite model.VirtualTime
+	lastWrite     model.VirtualTime
 }
 
 func (t *TestApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte) {

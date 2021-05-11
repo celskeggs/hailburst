@@ -18,7 +18,7 @@ func DataPumpBytes(ctx model.SimContext, source model.DataSourceBytes, sink mode
 			dataLevel -= sunk
 		} else if dataLevel < capacity {
 			sourced := source.TryRead(buffer[dataLevel:])
-			if sourced < 0 || sourced > capacity - dataLevel {
+			if sourced < 0 || sourced > capacity-dataLevel {
 				panic("invalid read amount")
 			}
 			dataLevel += sourced
