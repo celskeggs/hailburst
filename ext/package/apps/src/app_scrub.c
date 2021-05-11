@@ -5,8 +5,8 @@
 
 #include "app.h"
 
-// 20 MB!
-#define BUFSIZE (20 * 1024 * 1024)
+// 21 MB!
+#define BUFSIZE (21 * 1024 * 1024)
 #define FILL (0xCA72F19E)
 volatile int *buffer = NULL;
 
