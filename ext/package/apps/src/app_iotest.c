@@ -103,7 +103,7 @@ void task_iotest_receiver(void) {
                 if (c == '"' || c == '\\') {
                     putchar('\\');
                 }
-                putchar(i);
+                putchar(c);
             } else {
                 printf("\\x%02x", c & 0xFF);
             }

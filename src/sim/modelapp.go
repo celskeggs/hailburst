@@ -20,7 +20,7 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 			panic("UNIMPLEMENTED: back pressure on writes!")
 		}
 	}
-	nextTimer := t.controller.Advance(now)
+	expireAt = t.controller.Advance(now)
 	if pendingBytes == 0 {
 		outputData := make([]byte, 1024)
 		actual := t.source.TryRead(outputData)
@@ -28,7 +28,7 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 			readData = outputData[:actual]
 		}
 	}
-	if nextTimer.TimeExists() && nextTimer.AtOrBefore(now) {
+	if expireAt.TimeExists() && expireAt.AtOrBefore(now) {
 		panic("timer too soon to be valid")
 	}
 	return expireAt, readData

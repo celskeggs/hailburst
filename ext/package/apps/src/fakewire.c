@@ -65,7 +65,7 @@ void fakewire_attach(fw_port_t *fwp, const char *path, int flags) {
         options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
 
         // raw output
-        options.c_lflag &= ~OPOST;
+        options.c_oflag &= ~OPOST;
 
         if (tcsetattr(fwp->fd_in, TCSANOW, &options) < 0) {
             perror("tcsetattr");
