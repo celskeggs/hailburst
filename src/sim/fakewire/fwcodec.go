@@ -139,7 +139,7 @@ func (fwe *FWDecoder) DecodeFromBits(bits []bool) (data []fwmodel.FWChar, consum
 		}
 
 		nextChar, parityOdd := grabBitsAndParity(bits[consumed:consumed+nextBits+1], nextBits)
-		// fmt.Printf("Decode: C=%v, NC=%d, NB=%d, BITS=%v\n", ctrlBit, nextChar, nextBits, bits[consumed:consumed+nextBits+1])
+		// fmt.Printf("Decode: C=%v, NC=%d, NB=%d, BITS=%v\n", util.StringBits0([]bool{ctrlBit}), nextChar, nextBits, util.StringBits0(bits[consumed:consumed+nextBits+2]))
 		consumed += nextBits + 1
 
 		if ctrlBit {

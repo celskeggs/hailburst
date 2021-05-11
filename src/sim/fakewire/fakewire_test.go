@@ -6,8 +6,6 @@ import (
 	"sim/fakewire/fwmodel"
 	"sim/model"
 	"sim/testpoint"
-	"sim/util"
-	"strings"
 	"testing"
 	"time"
 )
@@ -30,18 +28,6 @@ func randFWChar() fwmodel.FWChar {
 	} else {
 		return fwmodel.DataChar(uint8(rand.Uint32()))
 	}
-}
-
-func stringBits(data []byte) string {
-	var midbits []string
-	for _, bit := range util.BytesToBits(data) {
-		if bit {
-			midbits = append(midbits, "1")
-		} else {
-			midbits = append(midbits, "0")
-		}
-	}
-	return strings.Join(midbits, " ")
 }
 
 func TestFakeWireCodecs(t *testing.T) {
@@ -74,7 +60,7 @@ func TestFakeWireCodecs(t *testing.T) {
 	received := testSink.Collected
 
 	t.Logf("Raw output: %v", received)
-	// t.Logf("Raw bytes: %s", stringBits(midCopy.Take()))
+	// t.Logf("Raw bytes: %s", util.StringBits(midCopy.Take()))
 
 	// we might not have received the last one or two characters yet, depending on exact bitpacking
 	if len(received) < len(inputData) - 2 || len(received) > len(inputData) {
@@ -92,7 +78,7 @@ func TestFakeWireCodecs(t *testing.T) {
 	testSource.Refill([]fwmodel.FWChar{fwmodel.ParityFail})
 	sim.Advance(model.TimeZero.Add(time.Second))
 
-	// t.Logf("Raw bytes: %s", stringBits(midCopy.Take()))
+	// t.Logf("Raw bytes: %s", util.StringBits(midCopy.Take()))
 
 	if !testSource.IsConsumed() {
 		t.Fatal("expected test source to be completely consumed")

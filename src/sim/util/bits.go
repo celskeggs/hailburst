@@ -1,5 +1,7 @@
 package util
 
+import "strings"
+
 const BitsPerByte = 8
 
 func BitsToByte(bits []bool) byte {
@@ -34,4 +36,20 @@ func BytesToBits(bytes []byte) []bool {
 		}
 	}
 	return output
+}
+
+func StringBits0(data []bool) string {
+	var midbits []string
+	for _, bit := range data {
+		if bit {
+			midbits = append(midbits, "1")
+		} else {
+			midbits = append(midbits, "0")
+		}
+	}
+	return strings.Join(midbits, "")
+}
+
+func StringBits(data []byte) string {
+	return StringBits0(BytesToBits(data))
 }

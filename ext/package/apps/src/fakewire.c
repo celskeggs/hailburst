@@ -8,6 +8,8 @@
 
 #include "fakewire.h"
 
+// #define DEBUG
+
 #define PORT_IO "/dev/ttyAMA1"
 
 void fakewire_attach(fw_port_t *fwp, const char *path, int flags) {
@@ -173,6 +175,9 @@ static void fakewire_write_bits(fw_port_t *fwp, uint32_t data, int nbits) {
     fwp->writeahead_bits += nbits;
     while (fwp->writeahead_bits >= 8) {
         uint8_t c = fwp->writeahead & 0xFF;
+#ifdef DEBUG
+        printf("Writing byte: %d: %d%d%d%d%d%d%d%d\n", c, c&1, (c>>1)&1, (c>>2)&1, (c>>3)&1, (c>>4)&1, (c>>5)&1, (c>>6)&1, (c>>7)&1);
+#endif
         if (write(fwp->fd_out, &c, 1) < 1) {
             perror("write");
             exit(1);
@@ -183,6 +188,29 @@ static void fakewire_write_bits(fw_port_t *fwp, uint32_t data, int nbits) {
 }
 
 void fakewire_write(fw_port_t *fwp, fw_char_t c) {
+#ifdef DEBUG
+    switch (c) {
+    case FW_PARITYFAIL:
+        printf("Writing character: ParityFail\n");
+        break;
+    case FW_CTRL_FCT:
+        printf("Writing character: FCT\n");
+        break;
+    case FW_CTRL_EOP:
+        printf("Writing character: EOP\n");
+        break;
+    case FW_CTRL_EEP:
+        printf("Writing character: EEP\n");
+        break;
+    case FW_CTRL_ESC:
+        printf("Writing character: ESC\n");
+        break;
+    default:
+        printf("Writing character: 0x%02x -> %c\n", c, c);
+        break;
+    }
+#endif
+
     int ctrl_bit = FW_IS_CTRL(c) ? 1 : 0;
 
     // [last:odd] [P] [C=0] -> P must be 0 to be odd!
@@ -192,16 +220,26 @@ void fakewire_write(fw_port_t *fwp, fw_char_t c) {
     int parity_bit = fwp->last_remainder ^ ctrl_bit ^ 1;
     assert((parity_bit >> 1) == 0);
 
+#ifdef DEBUG
+    printf("Generated bits (PC): %d%d\n", parity_bit, ctrl_bit);
+#endif
+
     uint32_t data_bits;
     int nbits;
     if (FW_IS_CTRL(c)) {
         assert(c >= FW_CTRL_FCT && c <= FW_CTRL_ESC);
         data_bits = c & 3;
         nbits = 2;
+#ifdef DEBUG
+        printf("Generated bits (CT): %d%d\n", c & 1, (c >> 1) & 1);
+#endif
     } else {
         data_bits = FW_DATA(c);
         assert(c == data_bits);
         nbits = 8;
+#ifdef DEBUG
+        printf("Generated bits (DA): %d%d%d%d%d%d%d%d\n", c&1, (c>>1)&1, (c>>2)&1, (c>>3)&1, (c>>4)&1, (c>>5)&1, (c>>6)&1, (c>>7)&1);
+#endif
     }
     fakewire_write_bits(fwp, (data_bits << 2) | (ctrl_bit << 1) | parity_bit, nbits + 2);
 

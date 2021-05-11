@@ -60,6 +60,14 @@ func (c FWChar) Data() (uint8, bool) {
 	}
 }
 
+func (c FWChar) DataUnwrap() uint8 {
+	ch, ok := c.Data()
+	if !ok {
+		panic("expected data character")
+	}
+	return ch
+}
+
 func (c FWChar) IsCtrl() bool {
 	_, isData := c.Data()
 	return !isData
