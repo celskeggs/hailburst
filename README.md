@@ -1,4 +1,4 @@
-# Scratch files for Hairburst development
+# Scratch files for Hailburst development
 
 # Notes on buildroot
 
