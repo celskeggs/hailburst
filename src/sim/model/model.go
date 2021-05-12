@@ -2,8 +2,8 @@ package model
 
 type SimContext interface {
 	Now() VirtualTime
-	SetTimer(expireAt VirtualTime, callback func()) (cancel func())
-	Later(callback func()) (cancel func())
+	SetTimer(expireAt VirtualTime, name string, callback func()) (cancel func())
+	Later(name string, callback func()) (cancel func())
 }
 
 type EventSource interface {

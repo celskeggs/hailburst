@@ -37,7 +37,7 @@ var _ fwmodel.DataSourceFWChar = &DataSourceFW{}
 
 func MakeDataSourceFW(ctx model.SimContext, ready []fwmodel.FWChar) *DataSourceFW {
 	return &DataSourceFW{
-		EventDispatcher: component.MakeEventDispatcher(ctx),
+		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.testpoint.DataSourceFW"),
 		Ready:           ready,
 	}
 }

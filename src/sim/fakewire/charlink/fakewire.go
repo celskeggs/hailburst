@@ -1,4 +1,4 @@
-package fakewire
+package charlink
 
 import (
 	"sim/fakewire/fwmodel"
@@ -84,7 +84,7 @@ func DecodeFakeWire(ctx model.SimContext, output fwmodel.DataSinkFWChar, input m
 	input.Subscribe(pump)
 	output.Subscribe(pump)
 	// get it started
-	ctx.Later(pump)
+	ctx.Later("sim.fakewire.charlink.DecodeFakeWire/Start", pump)
 }
 
 // EncodeFakeWire translates FakeWire characters to output bytes for a serial line.
@@ -145,5 +145,5 @@ func EncodeFakeWire(ctx model.SimContext, output model.DataSinkBytes, input fwmo
 	input.Subscribe(pump)
 	output.Subscribe(pump)
 	// get it started
-	ctx.Later(pump)
+	ctx.Later("sim.fakewire.charlink.EncodeFakeWire/Start", pump)
 }

@@ -1,4 +1,4 @@
-package fakewire
+package charlink
 
 import (
 	"sim/fakewire/fwmodel"

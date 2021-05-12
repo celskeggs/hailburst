@@ -54,8 +54,8 @@ func DataBufferBytes(ctx model.SimContext, capacity int) (model.DataSourceBytes,
 		ctx:      ctx,
 		buffered: make([]byte, 0, capacity),
 		capacity: capacity,
-		writable: MakeEventDispatcher(ctx),
-		readable: MakeEventDispatcher(ctx),
+		writable: MakeEventDispatcher(ctx, "sim.component.DataBufferBytes/Writable"),
+		readable: MakeEventDispatcher(ctx, "sim.component.DataBufferBytes/Readable"),
 	}
 	return (*dataBufferSource)(db), (*dataBufferSink)(db)
 }

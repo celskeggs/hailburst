@@ -1,22 +1,24 @@
-package component
+package charlink
 
 import (
+	"sim/component"
+	"sim/fakewire/fwmodel"
 	"sim/model"
 )
 
 type teeSinkHelper struct {
-	sink model.DataSinkBytes
-	pending []byte
+	sink fwmodel.DataSinkFWChar
+	pending []fwmodel.FWChar
 }
 
 type teeDataSinks struct {
-	*EventDispatcher
+	*component.EventDispatcher
 	sinks []*teeSinkHelper
 }
 
-func TeeDataSinks(ctx model.SimContext, sinks ...model.DataSinkBytes) model.DataSinkBytes {
+func TeeDataSinksFW(ctx model.SimContext, sinks ...fwmodel.DataSinkFWChar) fwmodel.DataSinkFWChar {
 	tds := &teeDataSinks{
-		EventDispatcher: MakeEventDispatcher(ctx, "sim.component.TeeDataSinks"),
+		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.fakewire.charlink.TeeDataSinksFW"),
 		sinks: make([]*teeSinkHelper, len(sinks)),
 	}
 	for i, sink := range sinks {
@@ -43,7 +45,7 @@ func (t *teeDataSinks) areAllReady() bool {
 	return true
 }
 
-func (t *teeDataSinks) TryWrite(from []byte) int {
+func (t *teeDataSinks) TryWrite(from []fwmodel.FWChar) int {
 	if !t.areAllReady() {
 		return 0
 	}
@@ -54,7 +56,7 @@ func (t *teeDataSinks) TryWrite(from []byte) int {
 		}
 		count := ts.sink.TryWrite(from)
 		if count < len(from) {
-			ts.pending = append([]byte{}, from[count:]...)
+			ts.pending = append([]fwmodel.FWChar{}, from[count:]...)
 		}
 		// fmt.Printf("tee output %d: wrote %d, pending %d\n", i, count, len(ts.pending))
 	}

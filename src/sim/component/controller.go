@@ -7,6 +7,7 @@ import (
 
 type simTimer struct {
 	expireAt model.VirtualTime
+	name     string
 	callback func()
 	index    int
 }
@@ -51,12 +52,13 @@ func (sc *SimController) Now() model.VirtualTime {
 	return sc.currentTime
 }
 
-func (sc *SimController) SetTimer(expireAt model.VirtualTime, callback func()) (cancel func()) {
+func (sc *SimController) SetTimer(expireAt model.VirtualTime, name string, callback func()) (cancel func()) {
 	if !expireAt.TimeExists() {
 		panic("attempt to set timer at nonexistent time")
 	}
 	timer := &simTimer{
 		expireAt: expireAt,
+		name:     name,
 		callback: callback,
 		index:    -1,
 	}
@@ -74,9 +76,9 @@ func (sc *SimController) SetTimer(expireAt model.VirtualTime, callback func()) (
 	}
 }
 
-func (sc *SimController) Later(callback func()) (cancel func()) {
+func (sc *SimController) Later(name string, callback func()) (cancel func()) {
 	// will cause it to be executed in Advance
-	return sc.SetTimer(sc.Now(), callback)
+	return sc.SetTimer(sc.Now(), name, callback)
 }
 
 func (sc *SimController) peekNextTimerExpiry() model.VirtualTime {
@@ -104,6 +106,7 @@ func (sc *SimController) runCurrentTimers() {
 		if nextTimer.expireAt.After(sc.Now()) {
 			panic("invalid expiration time for timer")
 		}
+		// fmt.Printf("Running timer callback %s(%v) at time %v\n", nextTimer.name, nextTimer.callback, nextTimer.expireAt)
 		// actual callback execution occurs here
 		nextTimer.callback()
 	}

@@ -27,5 +27,5 @@ func DataPumpBytes(ctx model.SimContext, source model.DataSourceBytes, sink mode
 	source.Subscribe(pump)
 	sink.Subscribe(pump)
 	// to get things kicked off
-	ctx.Later(pump)
+	ctx.Later("sim.component.DataPumpBytes/begin", pump)
 }

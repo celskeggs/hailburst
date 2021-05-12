@@ -19,6 +19,8 @@ const (
 	// CtrlESC represents an Escape
 	CtrlESC FWChar = 0x1A3
 
+	// NOTE: 0x1F0 is reserved for TokNull in fakewire/exchange.go
+
 	// ParityFail indicates that a parity error was encountered (or should be produced)
 	ParityFail FWChar = 0x1FF
 )

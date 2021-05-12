@@ -36,7 +36,7 @@ var _ model.DataSourceBytes = &DataSource{}
 
 func MakeDataSource(ctx model.SimContext, ready []byte) *DataSource {
 	return &DataSource{
-		EventDispatcher: component.MakeEventDispatcher(ctx),
+		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.testpoint.DataSource"),
 		Ready:           ready,
 	}
 }

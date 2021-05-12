@@ -1,21 +1,24 @@
 package component
 
 import (
+	"fmt"
 	"sim/model"
 	"sort"
 )
 
 type EventDispatcher struct {
 	ctx          model.SimContext
+	laterName    string
 	subscribers  map[uint64]func()
 	sorted       []func()
 	nextIndex    uint64
 	pendingLater bool
 }
 
-func MakeEventDispatcher(ctx model.SimContext) *EventDispatcher {
+func MakeEventDispatcher(ctx model.SimContext, name string) *EventDispatcher {
 	return &EventDispatcher{
 		ctx:         ctx,
+		laterName:   fmt.Sprintf("%s/DispatchLater", name),
 		subscribers: map[uint64]func(){},
 		sorted:      nil,
 		nextIndex:   0,
@@ -57,7 +60,7 @@ func (ed *EventDispatcher) DispatchLater() {
 	if !ed.pendingLater {
 		// fmt.Printf("---> dispatch armed for later on %p\n", ed)
 		ed.pendingLater = true
-		ed.ctx.Later(func() {
+		ed.ctx.Later(ed.laterName, func() {
 			// fmt.Printf("---> dispatch triggered now on %p (%d subscribers)\n", ed, len(ed.subscribers))
 			ed.pendingLater = false
 			ed.Dispatch()
