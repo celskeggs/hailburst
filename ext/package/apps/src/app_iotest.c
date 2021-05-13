@@ -6,28 +6,28 @@
 #include <unistd.h>
 
 #include "app.h"
-#include "fakewire.h"
+#include "fakewire_link.h"
 
-static fw_port_t fwport;
+static fw_link_t fwport;
 static bool fwport_init;
 
 void init_iotest(void) {
     assert(!fwport_init);
 
-    fakewire_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
+    fakewire_link_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
 
     fwport_init = true;
 }
 
 static void write_message(const char *msg) {
-    fakewire_write(&fwport, FW_CTRL_ESC);
-    fakewire_write(&fwport, FW_CTRL_FCT);
+    fakewire_link_write(&fwport, FW_CTRL_ESC);
+    fakewire_link_write(&fwport, FW_CTRL_FCT);
     for (const char *ch = msg; *ch; ch++) {
-        fakewire_write(&fwport, (uint8_t) *ch);
+        fakewire_link_write(&fwport, (uint8_t) *ch);
     }
-    fakewire_write(&fwport, FW_CTRL_EOP);
-    fakewire_write(&fwport, FW_CTRL_ESC);
-    fakewire_write(&fwport, FW_CTRL_FCT);
+    fakewire_link_write(&fwport, FW_CTRL_EOP);
+    fakewire_link_write(&fwport, FW_CTRL_ESC);
+    fakewire_link_write(&fwport, FW_CTRL_FCT);
 }
 
 void task_iotest_transmitter(void) {
@@ -48,7 +48,7 @@ void task_iotest_transmitter(void) {
 static bool read_message(char *msgout, size_t len) {
     while (true) {
         assert(len > 0);
-        fw_char_t ch = fakewire_read(&fwport);
+        fw_char_t ch = fakewire_link_read(&fwport);
         if (!FW_IS_CTRL(ch)) {
             if (len == 1) {
                 *msgout = '\0';
@@ -63,7 +63,7 @@ static bool read_message(char *msgout, size_t len) {
             fprintf(stderr, "rx: parity failure\n");
             return false;
         } else if (ch == FW_CTRL_ESC) {
-            ch = fakewire_read(&fwport);
+            ch = fakewire_link_read(&fwport);
             if (ch == FW_CTRL_FCT) {
                 // null! ignore.
                 continue;

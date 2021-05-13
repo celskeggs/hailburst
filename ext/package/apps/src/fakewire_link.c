@@ -6,17 +6,18 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "fakewire.h"
+#include "fakewire_link.h"
 
 // #define DEBUG
 
 #define PORT_IO "/dev/ttyAMA1"
 
-void fakewire_attach(fw_port_t *fwp, const char *path, int flags) {
-    memset(fwp, 0, sizeof(fw_port_t));
+void fakewire_link_attach(fw_link_t *fwp, const char *path, int flags) {
+    memset(fwp, 0, sizeof(fw_link_t));
 
     bit_buf_init(&fwp->readahead, FW_READAHEAD_LEN);
     fwp->parity_ok = true;
+    fwp->write_ok = true;
 
     fwp->writeahead_bits = 0;
     fwp->writeahead = 0;
@@ -25,6 +26,7 @@ void fakewire_attach(fw_port_t *fwp, const char *path, int flags) {
     if (flags != FW_FLAG_SERIAL) {
         assert(flags == FW_FLAG_FIFO_CONS || flags == FW_FLAG_FIFO_PROD);
         // alternate mode for host testing via pipe
+
 
         char path_buf[strlen(path) + 10];
         snprintf(path_buf, sizeof(path_buf), "%s-c2p.pipe", path);
@@ -77,8 +79,9 @@ void fakewire_attach(fw_port_t *fwp, const char *path, int flags) {
     assert(fwp->fd_in != 0 && fwp->fd_out != 0);
 }
 
-void fakewire_detach(fw_port_t *fwp) {
+void fakewire_link_detach(fw_link_t *fwp) {
     assert(fwp->fd_in != 0 && fwp->fd_out != 0);
+    printf("Detaching link...\n");
     if (fwp->fd_in >= 0 && fwp->fd_in != fwp->fd_out) {
         if (close(fwp->fd_in) < 0) {
             perror("close");
@@ -105,7 +108,7 @@ static int count_ones(uint32_t value) {
     return count;
 }
 
-static fw_char_t fakewire_parse_readbuf(fw_port_t *fwp) {
+static fw_char_t fakewire_link_parse_readbuf(fw_link_t *fwp) {
     if (!fwp->parity_ok) {
         return FW_PARITYFAIL;
     }
@@ -125,6 +128,7 @@ static fw_char_t fakewire_parse_readbuf(fw_port_t *fwp) {
         assert(dc == FW_DATA(dc));
         head = bit_buf_peek_bits(&fwp->readahead, 2);
         if (((count_ones(dc) + count_ones(head)) & 1) != 1) {
+            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on data character\n");
             // parity fail!
             fwp->parity_ok = false;
             return FW_PARITYFAIL;
@@ -136,6 +140,7 @@ static fw_char_t fakewire_parse_readbuf(fw_port_t *fwp) {
         assert(control >= 0 && control <= 3);
         head = bit_buf_peek_bits(&fwp->readahead, 2);
         if (((count_ones(control) + count_ones(head)) & 1) != 1) {
+            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on control character\n");
             // parity fail!
             fwp->parity_ok = false;
             return FW_PARITYFAIL;
@@ -144,18 +149,31 @@ static fw_char_t fakewire_parse_readbuf(fw_port_t *fwp) {
     }
 }
 
-fw_char_t fakewire_read(fw_port_t *fwp) {
+fw_char_t fakewire_link_read(fw_link_t *fwp) {
     uint8_t readbuf[FW_READAHEAD_LEN];
     fw_char_t ch;
-    while ((ch = fakewire_parse_readbuf(fwp)) < 0) {
+    while ((ch = fakewire_link_parse_readbuf(fwp)) < 0) {
         size_t count = bit_buf_insertable_bytes(&fwp->readahead);
         // if we can't parse yet, must have space to add more data!
-        assert(count >= 1 && count <= FW_READAHEAD_LEN);
+        if (count < 1 && count > FW_READAHEAD_LEN) {
+            fprintf(stderr, "fakewire_link_read: count outside of expected range: %lu not in [1, %u]\n", count, FW_READAHEAD_LEN);
+            abort();
+        }
+        int fd = fwp->fd_in;
+        if (fd == -1) {
+            fprintf(stderr, "fakewire_link_read: connection found to be closed (no fd)\n");
+            // connection already closed!
+            fwp->parity_ok = false;
+            return FW_PARITYFAIL;
+        }
         ssize_t actual = read(fwp->fd_in, readbuf, count);
         if (actual < 0) {
-            perror("read");
-            exit(1);
+            fprintf(stderr, "fakewire_link_read: attempt to read failed\n");
+            // read failure... end connection!
+            fwp->parity_ok = false;
+            return FW_PARITYFAIL;
         } else if (actual == 0) {
+            fprintf(stderr, "fakewire_link_read: encountered end of file\n");
             // EOF... end of connection!
             fwp->parity_ok = false;
             return FW_PARITYFAIL;
@@ -166,7 +184,7 @@ fw_char_t fakewire_read(fw_port_t *fwp) {
     return ch;
 }
 
-static void fakewire_write_bits(fw_port_t *fwp, uint32_t data, int nbits) {
+static int fakewire_link_write_bits(fw_link_t *fwp, uint32_t data, int nbits) {
     assert(0 <= fwp->writeahead_bits && fwp->writeahead_bits < 8);
     assert(nbits >= 1 && nbits <= 32);
     assert(fwp->writeahead_bits + nbits <= 32);
@@ -178,16 +196,25 @@ static void fakewire_write_bits(fw_port_t *fwp, uint32_t data, int nbits) {
 #ifdef DEBUG
         printf("Writing byte: %d: %d%d%d%d%d%d%d%d\n", c, c&1, (c>>1)&1, (c>>2)&1, (c>>3)&1, (c>>4)&1, (c>>5)&1, (c>>6)&1, (c>>7)&1);
 #endif
-        if (write(fwp->fd_out, &c, 1) < 1) {
-            perror("write");
-            exit(1);
+        int fd = fwp->fd_out;
+        // closing...
+        if (fd == -1) {
+            return -1;
+        }
+        if (write(fd, &c, 1) < 1) {
+            return -1;
         }
         fwp->writeahead >>= 8;
         fwp->writeahead_bits -= 8;
     }
+    return 0;
 }
 
-void fakewire_write(fw_port_t *fwp, fw_char_t c) {
+void fakewire_link_write(fw_link_t *fwp, fw_char_t c) {
+    if (!fwp->write_ok) {
+        return;
+    }
+
 #ifdef DEBUG
     switch (c) {
     case FW_PARITYFAIL:
@@ -241,7 +268,14 @@ void fakewire_write(fw_port_t *fwp, fw_char_t c) {
         printf("Generated bits (DA): %d%d%d%d%d%d%d%d\n", c&1, (c>>1)&1, (c>>2)&1, (c>>3)&1, (c>>4)&1, (c>>5)&1, (c>>6)&1, (c>>7)&1);
 #endif
     }
-    fakewire_write_bits(fwp, (data_bits << 2) | (ctrl_bit << 1) | parity_bit, nbits + 2);
+    if (fakewire_link_write_bits(fwp, (data_bits << 2) | (ctrl_bit << 1) | parity_bit, nbits + 2) < 0) {
+        fwp->write_ok = false;
+        return;
+    }
 
     fwp->last_remainder = count_ones(data_bits) & 1;
+}
+
+bool fakewire_link_write_ok(fw_link_t *fwp) {
+    return fwp->write_ok;
 }

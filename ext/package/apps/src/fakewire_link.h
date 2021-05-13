@@ -1,5 +1,5 @@
-#ifndef APP_FAKEWIRE_H
-#define APP_FAKEWIRE_H
+#ifndef APP_FAKEWIRE_LINK_H
+#define APP_FAKEWIRE_LINK_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -29,26 +29,28 @@ typedef int16_t fw_char_t;
 
 #define FW_READAHEAD_LEN 100
 
-typedef struct fw_port_st {
+typedef struct fw_link_st {
     int fd_in;
     int fd_out;
 
     bool parity_ok;
     bit_buf_t readahead;
 
+    bool write_ok;
     int writeahead_bits;
     uint32_t writeahead;
     uint8_t last_remainder; // 1 if odd # of one bits, 0 if even # of one bits
-} fw_port_t;
+} fw_link_t;
 
 #define FW_FLAG_SERIAL (0)
 #define FW_FLAG_FIFO_PROD (1)
 #define FW_FLAG_FIFO_CONS (2)
 
-void fakewire_attach(fw_port_t *fwp, const char *path, int flags);
-void fakewire_detach(fw_port_t *fwp);
+void fakewire_link_attach(fw_link_t *fwp, const char *path, int flags);
+void fakewire_link_detach(fw_link_t *fwp);
 
-fw_char_t fakewire_read(fw_port_t *fwp);
-void fakewire_write(fw_port_t *fwp, fw_char_t c);
+fw_char_t fakewire_link_read(fw_link_t *fwp);
+void fakewire_link_write(fw_link_t *fwp, fw_char_t c);
+bool fakewire_link_write_ok(fw_link_t *fwp);
 
-#endif /* APP_FAKEWIRE_H */
+#endif /* APP_FAKEWIRE_LINK_H */

@@ -1,2 +1,4 @@
-/fakewire_test
+/fakewire_link_test
+/fakewire_exc_test
 /test-scratch
+/*.o
