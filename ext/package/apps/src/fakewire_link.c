@@ -66,7 +66,8 @@ void fakewire_link_attach(fw_link_t *fwp, const char *path, int flags) {
         options.c_cflag |= CS8;
 
         // raw input
-        options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+        options.c_iflag &= ~(IXON | IXOFF | ICRNL | IGNCR | INLCR | ISTRIP);
+        options.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG | IEXTEN);
 
         // raw output
         options.c_oflag &= ~OPOST;

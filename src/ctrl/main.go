@@ -52,8 +52,8 @@ func (p *Processes) WaitAll() {
 	}
 }
 
-func TimesyncSocketExists() bool {
-	_, err := os.Stat("timesync-test.sock")
+func Exists(path string) bool {
+	_, err := os.Stat(path)
 	return err == nil
 }
 
@@ -81,13 +81,14 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	// NOTE: current issue happens between 3220ms and 3222ms
 	fmt.Printf("Launching applications...\n")
 	// remove old sockets; ignore any errors
-	_ = os.Remove("timesync-test.sock")
+	testSock := "timesync-test.sock"
+	guestLog := "guest.log"
+	_, _ = os.Remove(testSock), os.Remove(guestLog)
 	p := Processes{}
 	p.LaunchInTerminal("go run sim", ".")
-	for i := 0; i < 10 && !TimesyncSocketExists(); i++ {
+	for i := 0; i < 10 && !Exists(testSock); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
 	p.LaunchInTerminal("./gdb.sh", "./bare-arm")
@@ -102,13 +103,16 @@ func main() {
 		"-parallel", "none",
 		"-icount", "shift=0,sleep=off",
 		"-vga", "none",
-		"-chardev", "timesync,id=ts0,path=timesync-test.sock",
+		"-chardev", "timesync,id=ts0,path=" + testSock,
 		"-serial", "chardev:ts0",
-		"-serial", "file:guest.log",
+		"-serial", "file:" + guestLog,
 		"-nographic",
 	}
-	p.LaunchInTerminal("tail -f guest.log", ".")
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), ".")
+	for i := 0; i < 10 && !Exists(guestLog); i++ {
+		time.Sleep(time.Millisecond * 100)
+	}
+	p.LaunchInTerminal("tail -f " + guestLog, ".")
 	waitMain()
 	fmt.Printf("Interrupting all...\n")
 	p.Interrupt()
