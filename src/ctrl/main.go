@@ -5,16 +5,50 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
-func LaunchInTerminal(path string, cwd string) {
+type void struct{}
+
+type Processes struct {
+	Processes []*os.Process
+	DoneChannels []<-chan void
+}
+
+func (p *Processes) LaunchInTerminal(path string, cwd string) (wait func()) {
 	cmd := exec.Command("xterm", "-fa", "Monospace", "-fs", "10", "-e", fmt.Sprintf("%s || read -p 'Press enter to exit...'", path))
 	cmd.Dir = cwd
 	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
-	err := cmd.Run()
-	if err != nil {
-		log.Printf("Error on command %q: %v", path, err)
+	if err := cmd.Start(); err != nil {
+		log.Printf("Error launching command %q: %v", path, err)
+	}
+	p.Processes = append(p.Processes, cmd.Process)
+	done := make(chan void)
+	p.DoneChannels = append(p.DoneChannels, done)
+	go func() {
+		defer close(done)
+		if err := cmd.Wait(); err != nil {
+			log.Printf("Error on command %q: %v", path, err)
+		}
+	}()
+	return func() {
+		<-done
+	}
+}
+
+func (p *Processes) Interrupt() {
+	for _, proc := range p.Processes {
+		if err := proc.Signal(os.Interrupt); err != nil {
+			log.Printf("Error when interrupting: %v", err)
+		}
+	}
+	p.Processes = nil
+}
+
+func (p *Processes) WaitAll() {
+	for _, donech := range p.DoneChannels {
+		<-donech
 	}
 }
 
@@ -51,11 +85,33 @@ func main() {
 	fmt.Printf("Launching applications...\n")
 	// remove old sockets; ignore any errors
 	_ = os.Remove("timesync-test.sock")
-	go LaunchInTerminal("./sim.sh", ".")
+	p := Processes{}
+	p.LaunchInTerminal("go run sim", ".")
 	for i := 0; i < 10 && !TimesyncSocketExists(); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	go LaunchInTerminal("./gdb.sh", "./bare-arm")
+	p.LaunchInTerminal("./gdb.sh", "./bare-arm")
 	time.Sleep(time.Millisecond * 100)
-	LaunchInTerminal("./run.sh", ".")
+	cmd := []string {
+		"../qemu/build/qemu-system-arm",
+		"-S", "-s",
+		"-M", "virt",
+		"-m", "104",
+		"-kernel", "tree/images/zImage",
+		"-monitor", "stdio",
+		"-parallel", "none",
+		"-icount", "shift=0,sleep=off",
+		"-vga", "none",
+		"-chardev", "timesync,id=ts0,path=timesync-test.sock",
+		"-serial", "chardev:ts0",
+		"-serial", "file:guest.log",
+		"-nographic",
+	}
+	p.LaunchInTerminal("tail -f guest.log", ".")
+	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), ".")
+	waitMain()
+	fmt.Printf("Interrupting all...\n")
+	p.Interrupt()
+	fmt.Printf("Waiting for all to terminate...\n")
+	p.WaitAll()
 }
