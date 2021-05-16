@@ -1,3 +1,4 @@
+import csv
 import math
 import random
 
@@ -143,6 +144,41 @@ def step_ns(ns):
     print("Executed from t=%d ns to t=%d ns (total = %d ns)" % (start, end, end - start))
 
 
+class CSVWriter:
+    def __init__(self):
+        self.writer = None
+        self.flushable = None
+        self.injection_num = 0
+
+    def open(self, pathname):
+        if self.writer is not None:
+            print("CSV already opened. Not reopening.")
+            return
+        self.flushable = open(pathname, 'w', newline='')
+        self.writer = csv.writer(self.flushable)
+        self.writer.writerow(['Injection #', 'Injection Time', 'Address', 'Old Value', 'New Value'])
+        print("Writing log of injections to", pathname)
+
+    def write(self, address, old_value, new_value):
+        if self.writer is None:
+            # not recording
+            return
+        self.injection_num += 1
+        self.writer.writerow([str(self.injection_num), str(now()), hex(address), hex(old_value), hex(new_value)])
+        self.flushable.flush()
+
+    def close(self):
+        if self.writer is None:
+            print("CSV not open. Cannot close.")
+            return
+        self.flushable.close()
+        self.writer = None
+        self.flushable = None
+
+
+global_writer = CSVWriter()
+
+
 def inject_bitflip(address, bytewidth):
     assert bytewidth >= 1, "invalid bytewidth: %d" % bytewidth
     inferior = gdb.selected_inferior()
@@ -154,6 +190,7 @@ def inject_bitflip(address, bytewidth):
     rnvalue = int.from_bytes(inferior.read_memory(address, bytewidth), "little")
 
     assert nvalue == rnvalue and nvalue != ovalue, "mismatched values: o=%x n=%x rn=%x" % (ovalue, nvalue, rnvalue)
+    global_writer.write(address, ovalue, nvalue)
     print("Injected bitflip into address %x: old value %x -> new value %x" % (address, ovalue, nvalue))
 
 
@@ -196,6 +233,24 @@ def stepvt(args):
     assert ns > 0
 
     step_ns(ns)
+
+
+@BuildCmd
+def log_inject(args):
+    """Log all injections to a CSV file"""
+
+    args = args.strip().rsplit(" ", 1)
+    if len(args) != 1:
+        print("usage: log_inject <filename>")
+        print("Log all injections to a CSV file.")
+        print("usage: log_inject --close")
+        print("Stop logging injections.")
+        return
+
+    if args[0] == "--close":
+        global_writer.close()
+    else:
+        global_writer.open(args[0])
 
 
 @BuildCmd
@@ -245,7 +300,7 @@ def campaign(args):
     args = args.strip().split(" ")
     if len(args) < 2 or len(args) > 4:
         print("usage: campaign <iterations> <mtbf> [<address>] [<bytewidth>]")
-        print("bytewidth defaults to 4 bytes if no address specified")
+        print("bytewidth defaults to 4 bytes if address specified")
         return
 
     iterations = int(args[0])
