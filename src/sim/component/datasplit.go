@@ -5,7 +5,7 @@ import (
 )
 
 type teeSinkHelper struct {
-	sink model.DataSinkBytes
+	sink    model.DataSinkBytes
 	pending []byte
 }
 
@@ -17,7 +17,7 @@ type teeDataSinks struct {
 func TeeDataSinks(ctx model.SimContext, sinks ...model.DataSinkBytes) model.DataSinkBytes {
 	tds := &teeDataSinks{
 		EventDispatcher: MakeEventDispatcher(ctx, "sim.component.TeeDataSinks"),
-		sinks: make([]*teeSinkHelper, len(sinks)),
+		sinks:           make([]*teeSinkHelper, len(sinks)),
 	}
 	for i, sink := range sinks {
 		tds.sinks[i] = &teeSinkHelper{

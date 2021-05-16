@@ -12,7 +12,7 @@ import (
 type void struct{}
 
 type Processes struct {
-	Processes []*os.Process
+	Processes    []*os.Process
 	DoneChannels []<-chan void
 }
 
@@ -93,7 +93,7 @@ func main() {
 	}
 	p.LaunchInTerminal("./gdb.sh", "./bare-arm")
 	time.Sleep(time.Millisecond * 100)
-	cmd := []string {
+	cmd := []string{
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
 		"-M", "virt",
@@ -112,7 +112,7 @@ func main() {
 	for i := 0; i < 10 && !Exists(guestLog); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("tail -f " + guestLog, ".")
+	p.LaunchInTerminal("tail -f "+guestLog, ".")
 	waitMain()
 	fmt.Printf("Interrupting all...\n")
 	p.Interrupt()

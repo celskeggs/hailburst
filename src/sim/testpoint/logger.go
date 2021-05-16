@@ -12,8 +12,8 @@ import (
 type LoggerFW struct {
 	ctx model.SimContext
 	*component.EventDispatcher
-	chs  string
-	name string
+	chs              string
+	name             string
 	flushTimerCancel func()
 }
 
@@ -46,7 +46,7 @@ func (l *LoggerFW) TryWrite(from []fwmodel.FWChar) int {
 		}
 	}
 	if len(l.chs) > 0 {
-		l.flushTimerCancel = l.ctx.SetTimer(l.ctx.Now().Add(time.Millisecond * 500), "sim.testpoint.LoggerFW/Flush", func() {
+		l.flushTimerCancel = l.ctx.SetTimer(l.ctx.Now().Add(time.Millisecond*500), "sim.testpoint.LoggerFW/Flush", func() {
 			l.flush(" (time)")
 		})
 	}
@@ -60,8 +60,8 @@ func (l *LoggerFW) flush(hint string) {
 
 func MakeLoggerFW(ctx model.SimContext, name string) fwmodel.DataSinkFWChar {
 	return &LoggerFW{
-		ctx: ctx,
+		ctx:             ctx,
 		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.testpoint.LoggerFW"),
-		name: name,
+		name:            name,
 	}
 }

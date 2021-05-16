@@ -7,7 +7,7 @@ import (
 )
 
 type teeSinkHelper struct {
-	sink fwmodel.DataSinkFWChar
+	sink    fwmodel.DataSinkFWChar
 	pending []fwmodel.FWChar
 }
 
@@ -19,7 +19,7 @@ type teeDataSinks struct {
 func TeeDataSinksFW(ctx model.SimContext, sinks ...fwmodel.DataSinkFWChar) fwmodel.DataSinkFWChar {
 	tds := &teeDataSinks{
 		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.fakewire.charlink.TeeDataSinksFW"),
-		sinks: make([]*teeSinkHelper, len(sinks)),
+		sinks:           make([]*teeSinkHelper, len(sinks)),
 	}
 	for i, sink := range sinks {
 		tds.sinks[i] = &teeSinkHelper{

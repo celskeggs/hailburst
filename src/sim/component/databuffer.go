@@ -33,7 +33,7 @@ func (dbs *dataBufferSource) Subscribe(callback func()) (cancel func()) {
 
 func (dbs *dataBufferSink) TryWrite(from []byte) int {
 	toWrite := len(from)
-	if toWrite > dbs.capacity - len(dbs.buffered) {
+	if toWrite > dbs.capacity-len(dbs.buffered) {
 		toWrite = dbs.capacity - len(dbs.buffered)
 	}
 	if toWrite > 0 {

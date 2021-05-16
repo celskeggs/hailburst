@@ -15,7 +15,7 @@ import (
 func InstantiateLink(ctx model.SimContext, metered bool, name string) (sink fwmodel.DataSinkFWChar, source fwmodel.DataSourceFWChar) {
 	if metered {
 		serialOut, serialIn := component.DataBufferBytes(ctx, 160)
-		meteredIn := component.MakeMeteredSink(ctx, serialIn, 100, time.Microsecond * 100)
+		meteredIn := component.MakeMeteredSink(ctx, serialIn, 100, time.Microsecond*100)
 
 		fwDecodeOut, fwDecodeIn := charlink.DataBufferFWChar(ctx, 16)
 		// fwDecodeIn = charlink.TeeDataSinksFW(ctx, fwDecodeIn, testpoint.MakeLoggerFW(ctx, name + ".OUT"))
@@ -65,7 +65,7 @@ func RandPacket() []byte {
 	return data
 }
 
-func LogSim(sim model.SimContext, fmtStr string, args... interface{}) {
+func LogSim(sim model.SimContext, fmtStr string, args ...interface{}) {
 	fmt.Printf("%v %s\n", sim.Now(), fmt.Sprintf(fmtStr, args...))
 }
 

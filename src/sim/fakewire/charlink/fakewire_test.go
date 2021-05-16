@@ -63,7 +63,7 @@ func TestFakeWireCodecs(t *testing.T) {
 	// t.Logf("Raw bytes: %s", util.StringBits(midCopy.Take()))
 
 	// we might not have received the last one or two characters yet, depending on exact bitpacking
-	if len(received) < len(inputData) - 2 || len(received) > len(inputData) {
+	if len(received) < len(inputData)-2 || len(received) > len(inputData) {
 		t.Errorf("received %d bytes instead of expected %d", len(received), len(inputData))
 	}
 	for i := 0; i < len(received) && i < len(inputData); i++ {
@@ -84,9 +84,9 @@ func TestFakeWireCodecs(t *testing.T) {
 		t.Fatal("expected test source to be completely consumed")
 	}
 	received = testSink.Collected
-	if len(received) != len(inputData) + 1 {
-		t.Errorf("received %d bytes instead of expected %d", len(received), len(inputData) + 1)
-	} else if received[len(received) - 1] != fwmodel.ParityFail {
+	if len(received) != len(inputData)+1 {
+		t.Errorf("received %d bytes instead of expected %d", len(received), len(inputData)+1)
+	} else if received[len(received)-1] != fwmodel.ParityFail {
 		t.Error("expected parity failure as very final character")
 	}
 	for i := 0; i < len(received) && i < len(inputData); i++ {

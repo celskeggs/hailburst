@@ -38,10 +38,10 @@ type exchangeData struct {
 	pSink   packetSink
 	pSource packetSource
 
-	pendingSendFCT   bool
-	sendNextInitChar model.VirtualTime
-	cancelNextTimer  func()
-	isRecvESC        bool
+	pendingSendFCT     bool
+	sendNextInitChar   model.VirtualTime
+	cancelNextTimer    func()
+	isRecvESC          bool
 	sentAtLeastOneNull bool
 }
 
