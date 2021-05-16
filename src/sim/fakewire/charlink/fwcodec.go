@@ -53,6 +53,8 @@ func (fwe *FWEncoder) EncodeToBits(input []fwmodel.FWChar) (bits []bool, parityO
 		// store the bits
 		output = append(output, parityBit, !isData)
 
+		// fmt.Printf("Writing head: %x\n", util.BitsToByte([]bool{parityBit, !isData, false, false, false, false, false, false}))
+
 		// reset for next parity computation
 		lastRemainderOdd = false
 
@@ -65,6 +67,11 @@ func (fwe *FWEncoder) EncodeToBits(input []fwmodel.FWChar) (bits []bool, parityO
 			// flip last remainder oddness if bit is one
 			lastRemainderOdd = bit != lastRemainderOdd
 		}
+		/*if isData {
+			fmt.Printf("Writing data character: %x\n", nextWord)
+		} else {
+			fmt.Printf("Writing control character: %x\n", nextWord)
+		}*/
 	}
 
 	fwe.lastRemainderOdd = lastRemainderOdd

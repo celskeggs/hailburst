@@ -128,8 +128,11 @@ static fw_char_t fakewire_link_parse_readbuf(fw_link_t *fwp) {
         fw_char_t dc = (bit_buf_extract_bits(&fwp->readahead, 10) >> 2);
         assert(dc == FW_DATA(dc));
         head = bit_buf_peek_bits(&fwp->readahead, 2);
+#ifdef DEBUG
+        printf("data character: %x with head %x\n", dc, head);
+#endif
         if (((count_ones(dc) + count_ones(head)) & 1) != 1) {
-            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on data character\n");
+            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on data character %x with head %x\n", dc, head);
             // parity fail!
             fwp->parity_ok = false;
             return FW_PARITYFAIL;
@@ -140,8 +143,11 @@ static fw_char_t fakewire_link_parse_readbuf(fw_link_t *fwp) {
         fw_char_t control = bit_buf_extract_bits(&fwp->readahead, 4) >> 2;
         assert(control >= 0 && control <= 3);
         head = bit_buf_peek_bits(&fwp->readahead, 2);
+#ifdef DEBUG
+        printf("control character: %x with head %x\n", control, head);
+#endif
         if (((count_ones(control) + count_ones(head)) & 1) != 1) {
-            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on control character\n");
+            fprintf(stderr, "fakewire_link_parse_readbuf: hit parity failure on control character %x with head %x\n", control, head);
             // parity fail!
             fwp->parity_ok = false;
             return FW_PARITYFAIL;
@@ -180,6 +186,13 @@ fw_char_t fakewire_link_read(fw_link_t *fwp) {
             return FW_PARITYFAIL;
         }
         assert(actual >= 1 && actual <= count);
+#ifdef DEBUG
+        for (size_t i = 0; i < actual; i++) {
+            uint8_t val = readbuf[i];
+            printf("read byte: %d%d%d%d%d%d%d%d\n",
+                    val&1, (val>>1)&1, (val>>2)&1, (val>>3)&1, (val>>4)&1, (val>>5)&1, (val>>6)&1, (val>>7)&1);
+        }
+#endif
         bit_buf_insert_bytes(&fwp->readahead, readbuf, actual);
     }
     return ch;

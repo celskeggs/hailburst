@@ -113,7 +113,9 @@ func EncodeFakeWire(ctx model.SimContext, output model.DataSinkBytes, input fwmo
 		if bitbuffer.Skip(actual*util.BitsPerByte) != actual*util.BitsPerByte {
 			panic("invalid bitcount in buffer")
 		}
-		// fmt.Printf("remaining bits to write after writing %d bytes: %d\n", actual, bitbuffer.BitCount())
+		//for _, b := range bytedata {
+		//	fmt.Printf("writing byte: %s\n", util.StringBits([]byte{b}))
+		//}
 		return true
 	}
 	pumpIn := func() bool {
