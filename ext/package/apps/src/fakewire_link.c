@@ -156,7 +156,7 @@ fw_char_t fakewire_link_read(fw_link_t *fwp) {
         size_t count = bit_buf_insertable_bytes(&fwp->readahead);
         // if we can't parse yet, must have space to add more data!
         if (count < 1 && count > FW_READAHEAD_LEN) {
-            fprintf(stderr, "fakewire_link_read: count outside of expected range: %lu not in [1, %u]\n", count, FW_READAHEAD_LEN);
+            fprintf(stderr, "fakewire_link_read: count outside of expected range: %u not in [1, %u]\n", count, FW_READAHEAD_LEN);
             abort();
         }
         int fd = fwp->fd_in;

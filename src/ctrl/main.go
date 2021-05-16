@@ -25,11 +25,18 @@ func TimesyncSocketExists() bool {
 
 func main() {
 	if len(os.Args) >= 2 && os.Args[1] == "--rebuild" {
+		fmt.Printf("Running apps-dirclean...\n")
+		cmd0 := exec.Command("./make.sh", "apps-dirclean")
+		cmd0.Stdout = os.Stdout
+		cmd0.Stderr = os.Stderr
+		if err := cmd0.Run(); err != nil {
+			log.Fatal(err)
+		}
 		fmt.Printf("Running apps-rebuild...\n")
-		cmd := exec.Command("./make.sh", "apps-rebuild")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		cmd1 := exec.Command("./make.sh", "apps-rebuild")
+		cmd1.Stdout = os.Stdout
+		cmd1.Stderr = os.Stderr
+		if err := cmd1.Run(); err != nil {
 			log.Fatal(err)
 		}
 		fmt.Printf("Running make...\n")

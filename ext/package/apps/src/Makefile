@@ -3,7 +3,7 @@ GCC := gcc
 MY_CFLAGS := $(CFLAGS) -Wall -Werror -pthread -D_GNU_SOURCE -ggdb
 SCRATCHDIR := "test-scratch/"
 
-app: app.c app_scrub.c app_iotest.c bitbuf.c fakewire_link.c
+app: app.c app_scrub.c app_iotest.c bitbuf.c fakewire_link.c fakewire_exc.c
 	$(GCC) $(MY_CFLAGS) $^ -o $@
 
 clean:

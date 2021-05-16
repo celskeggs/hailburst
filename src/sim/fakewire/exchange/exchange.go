@@ -12,11 +12,12 @@ type exchangeState int
 
 // simplified/one-shot version of SpaceWire exchange protocol
 const (
-	Started    exchangeState = 1
-	Connecting exchangeState = 2
-	Run        exchangeState = 3
-	Erroring   exchangeState = 4
-	Errored    exchangeState = 5
+	Inactive   exchangeState = 1
+	Started    exchangeState = 2
+	Connecting exchangeState = 3
+	Run        exchangeState = 4
+	Erroring   exchangeState = 5
+	Errored    exchangeState = 6
 )
 
 type exchangeData struct {
@@ -41,6 +42,7 @@ type exchangeData struct {
 	sendNextInitChar model.VirtualTime
 	cancelNextTimer  func()
 	isRecvESC        bool
+	sentAtLeastOneNull bool
 }
 
 const TokNull = fwmodel.FWChar(0x1F0)
@@ -61,7 +63,7 @@ func (exc *exchangeData) receiveChar() (ch fwmodel.FWChar, any bool) {
 		if input[0] == fwmodel.CtrlFCT {
 			return TokNull, true
 		} else {
-			fmt.Printf("hit invalid character after ESC; treating as parity error\n")
+			fmt.Printf("hit invalid character %v after ESC; treating as parity error\n", input[0])
 			return fwmodel.ParityFail, true
 		}
 	} else {
@@ -73,6 +75,13 @@ func (exc *exchangeData) pump() {
 	if exc.pendingSendFCT {
 		if exc.lSink.TryWrite([]fwmodel.FWChar{fwmodel.CtrlFCT}) == 1 {
 			exc.pendingSendFCT = false
+		}
+	}
+	if exc.state == Inactive {
+		// don't send nulls until we receive something
+		if _, any := exc.receiveChar(); any {
+			exc.sentAtLeastOneNull = false
+			exc.state = Started
 		}
 	}
 	if exc.state == Started {
@@ -91,28 +100,31 @@ func (exc *exchangeData) pump() {
 					exc.cancelNextTimer()
 				}
 				exc.cancelNextTimer = exc.sim.SetTimer(exc.sendNextInitChar, "sim.fakewire.exchange.FakeWireExchange/SendNextInitChar", exc.pump)
+				exc.sentAtLeastOneNull = true
 			}
 		}
 
-		// and waiting to receive at least one NULL
-		if ch, any := exc.receiveChar(); any {
-			if ch == TokNull {
-				// start waiting to receive an FCT
-				exc.state = Connecting
+		if exc.sentAtLeastOneNull {
+			// and waiting to receive at least one NULL
+			if ch, any := exc.receiveChar(); any {
+				if ch == TokNull {
+					// start waiting to receive an FCT
+					exc.state = Connecting
 
-				// now... send one FCT followed by one NULL. I know that SpaceWire sends more than one FCT, but one is
-				// sufficient for us, and it simplifies distinguishing FCTs for init from buffer space markers
-				count := exc.lSink.TryWrite([]fwmodel.FWChar{fwmodel.CtrlFCT, fwmodel.CtrlESC, fwmodel.CtrlFCT})
-				if count == 0 || count == 2 {
-					exc.pendingSendFCT = true
+					// now... send one FCT followed by one NULL. I know that SpaceWire sends more than one FCT, but one is
+					// sufficient for us, and it simplifies distinguishing FCTs for init from buffer space markers
+					count := exc.lSink.TryWrite([]fwmodel.FWChar{fwmodel.CtrlFCT, fwmodel.CtrlESC, fwmodel.CtrlFCT})
+					if count == 0 || count == 2 {
+						exc.pendingSendFCT = true
+					}
+					if count <= 1 {
+						// so that we push the FCT over the next byte boundary if encoded to bits
+						exc.spacingPending = true
+					}
+				} else {
+					fmt.Printf("hit unexpected character when looking for a NULL: %v\n", ch)
+					exc.state = Erroring
 				}
-				if count <= 1 {
-					// so that we push the FCT over the next byte boundary if encoded to bits
-					exc.spacingPending = true
-				}
-			} else {
-				fmt.Printf("hit unexpected character when looking for a NULL: %v\n", ch)
-				exc.state = Erroring
 			}
 		}
 	}
@@ -226,6 +238,7 @@ func (exc *exchangeData) pump() {
 				// make packet available to reader
 				exc.inboundReady = true
 				exc.notifiedFIFOReady = false
+				exc.pSource.DispatchLater()
 			} else if chdata, isData := ch.Data(); isData {
 				exc.inboundPacket = append(exc.inboundPacket, chdata)
 			} else {
@@ -296,7 +309,7 @@ func (p packetSource) ReceivePacket() []byte {
 	return out
 }
 
-func FakeWireExchange(ctx model.SimContext, sink fwmodel.DataSinkFWChar, source fwmodel.DataSourceFWChar) (fwmodel.PacketSink, fwmodel.PacketSource) {
+func FakeWireExchange(ctx model.SimContext, sink fwmodel.DataSinkFWChar, source fwmodel.DataSourceFWChar, waitForNulls bool) (fwmodel.PacketSink, fwmodel.PacketSource) {
 	exc := &exchangeData{
 		sim:           ctx,
 		state:         Started,
@@ -314,6 +327,11 @@ func FakeWireExchange(ctx model.SimContext, sink fwmodel.DataSinkFWChar, source 
 	}
 	exc.pSink.exc = exc
 	exc.pSource.exc = exc
+
+	if waitForNulls {
+		// don't send anything until we receive at least one character
+		exc.state = Inactive
+	}
 
 	sink.Subscribe(exc.pump)
 	source.Subscribe(exc.pump)

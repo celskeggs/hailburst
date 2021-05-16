@@ -40,14 +40,14 @@ func (l *LoggerFW) TryWrite(from []fwmodel.FWChar) int {
 			}
 		}
 		if ch == fwmodel.CtrlEOP {
-			l.flush("")
+			l.flush(" (pckt)")
 		} else if len(l.chs) >= 100 {
-			l.flush(" (unterminated)")
+			l.flush(" (wrap)")
 		}
 	}
 	if len(l.chs) > 0 {
 		l.flushTimerCancel = l.ctx.SetTimer(l.ctx.Now().Add(time.Millisecond * 500), "sim.testpoint.LoggerFW/Flush", func() {
-			l.flush(" (flush)")
+			l.flush(" (time)")
 		})
 	}
 	return len(from)

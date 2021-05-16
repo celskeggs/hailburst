@@ -37,8 +37,8 @@ func InstantiateExchanges(ctx model.SimContext, metered bool) (leftSink, rightSi
 	leftOut, rightIn := InstantiateLink(ctx, metered, "LinkL2R")
 	rightOut, leftIn := InstantiateLink(ctx, metered, "LinkR2L")
 
-	leftSink, leftSource = FakeWireExchange(ctx, leftOut, leftIn)
-	rightSink, rightSource = FakeWireExchange(ctx, rightOut, rightIn)
+	leftSink, leftSource = FakeWireExchange(ctx, leftOut, leftIn, false)
+	rightSink, rightSource = FakeWireExchange(ctx, rightOut, rightIn, false)
 
 	return leftSink, rightSink, leftSource, rightSource
 }

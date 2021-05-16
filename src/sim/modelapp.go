@@ -2,7 +2,11 @@ package main
 
 import (
 	"sim/component"
+	"sim/fakewire/charlink"
+	"sim/fakewire/exchange"
+	"sim/fakewire/fwmodel"
 	"sim/model"
+	"sim/testpoint"
 	"sim/timesync"
 )
 
@@ -43,4 +47,26 @@ func MakeModelApp(controller *component.SimController, source model.DataSourceBy
 		source:     source,
 		sink:       sink,
 	}
+}
+
+func MakePacketApp(main func (model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink)) timesync.ProtocolImpl {
+	sim := component.MakeSimController()
+
+	// input: bytes -> line characters
+	inputBytesSource, inputBytesSink := component.DataBufferBytes(sim, 1024)
+	inputCharsSource, inputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	inputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[APP->BENCH]"), inputCharsSink)
+	charlink.DecodeFakeWire(sim, inputCharsSink, inputBytesSource)
+
+	// output: line characters -> bytes
+	outputBytesSource, outputBytesSink := component.DataBufferBytes(sim, 1024)
+	outputCharsSource, outputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	charlink.EncodeFakeWire(sim, outputBytesSink, outputCharsSource)
+	outputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[BENCH->APP]"), outputCharsSink)
+
+	// packet exchange
+	psink, psource := exchange.FakeWireExchange(sim, outputCharsSink, inputCharsSource, true)
+	main(sim, psource, psink)
+
+	return MakeModelApp(sim, outputBytesSource, inputBytesSink)
 }

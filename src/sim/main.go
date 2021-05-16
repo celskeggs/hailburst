@@ -1,29 +1,46 @@
 package main
 
 import (
+	"fmt"
 	"log"
-	"sim/component"
-	"sim/fakewire/charlink"
 	"sim/fakewire/fwmodel"
-	"sim/testpoint"
+	"sim/model"
 	"sim/timesync"
+	"time"
 )
 
-func MakeTestModelApp() timesync.ProtocolImpl {
-	sim := component.MakeSimController()
-	inputBufSource, inputBufSink := component.DataBufferBytes(sim, 1024)
-	logger := testpoint.MakeLoggerFW(sim, "Timesync")
-	charlink.DecodeFakeWire(sim, logger, inputBufSource)
-	outputBufSource, outputBufSink := component.DataBufferBytes(sim, 1024)
-	dataProvider := testpoint.MakeDataSourceFW(sim, []fwmodel.FWChar{
-		'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', fwmodel.CtrlEOP, fwmodel.CtrlESC, fwmodel.CtrlFCT,
-	})
-	charlink.EncodeFakeWire(sim, outputBufSink, dataProvider)
-	return MakeModelApp(sim, outputBufSource, inputBufSink)
+func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink) {
+	// writer
+	iter := 0
+	pending := true
+	var writePump func()
+	writePump = func() {
+		if pending && sink.CanAcceptPacket() {
+			sink.SendPacket([]byte(fmt.Sprintf("I AM MESSAGE %d FROM TESTBENCH\n", iter)))
+			iter += 1
+			pending = false
+			ctx.SetTimer(ctx.Now().Add(time.Second), "packetMain/writePump", func() {
+				pending = true
+				writePump()
+			})
+		}
+	}
+	sink.Subscribe(writePump)
+	ctx.Later("packetMain/writePump", writePump)
+
+	// reader
+	readPump := func() {
+		for source.HasPacketAvailable() {
+			packet := source.ReceivePacket()
+			fmt.Printf("Received packet: %q\n", string(packet))
+		}
+	}
+	source.Subscribe(readPump)
+	ctx.Later("packetMain/readPump", readPump)
 }
 
 func main() {
-	app := MakeTestModelApp()
+	app := MakePacketApp(packetMain)
 	err := timesync.Simple("./timesync-test.sock", app)
 	if err != nil {
 		log.Fatalf("Encountered top-level error: %v", err)
