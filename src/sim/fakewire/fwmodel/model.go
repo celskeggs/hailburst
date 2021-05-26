@@ -32,3 +32,8 @@ type PacketSink interface {
 	CanAcceptPacket() bool
 	SendPacket(packetData []byte)
 }
+
+type PacketWire struct {
+	Source PacketSource
+	Sink   PacketSink
+}
