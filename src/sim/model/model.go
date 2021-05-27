@@ -1,7 +1,10 @@
 package model
 
+import "math/rand"
+
 type SimContext interface {
 	Now() VirtualTime
+	Rand() *rand.Rand
 	SetTimer(expireAt VirtualTime, name string, callback func()) (cancel func())
 	Later(name string, callback func()) (cancel func())
 }

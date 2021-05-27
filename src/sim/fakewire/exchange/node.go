@@ -7,12 +7,12 @@ import (
 )
 
 type PacketNode struct {
-	ctx model.SimContext
-	usedSink bool
+	ctx        model.SimContext
+	usedSink   bool
 	usedSource bool
 
-	sink nodeSink
-	source nodeSource
+	sink          nodeSink
+	source        nodeSource
 	currentPacket []byte
 }
 

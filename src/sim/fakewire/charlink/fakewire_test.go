@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-func randFWChar() fwmodel.FWChar {
+func randFWChar(r *rand.Rand) fwmodel.FWChar {
 	// send a control character about once every fifteen data characters, at random
-	if rand.Intn(15) == 0 {
-		switch rand.Intn(4) {
+	if r.Intn(15) == 0 {
+		switch r.Intn(4) {
 		case 0:
 			return fwmodel.CtrlFCT
 		case 1:
@@ -26,19 +26,18 @@ func randFWChar() fwmodel.FWChar {
 			panic("impossible result")
 		}
 	} else {
-		return fwmodel.DataChar(uint8(rand.Uint32()))
+		return fwmodel.DataChar(uint8(r.Uint32()))
 	}
 }
 
 func TestFakeWireCodecs(t *testing.T) {
-	sim := component.MakeSimController()
+	sim := component.MakeSimControllerSeeded(456789)
 
 	inputData := make([]fwmodel.FWChar, 1024)
 
 	// deterministically generate some sample test vectors
-	rand.Seed(456789)
 	for i := 0; i < len(inputData); i++ {
-		inputData[i] = randFWChar()
+		inputData[i] = randFWChar(sim.Rand())
 	}
 
 	t.Logf("Raw input: %v", inputData)

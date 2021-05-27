@@ -7,6 +7,7 @@ import (
 	"sim/fakewire/charlink"
 	"sim/fakewire/fwmodel"
 	"sim/model"
+	"sim/testpoint"
 	"testing"
 	"time"
 )
@@ -59,19 +60,13 @@ func IterativeStepper(sim model.SimContext, step StepFunc, done func()) (start f
 	return stepper
 }
 
-func RandPacket() []byte {
-	data := make([]byte, rand.Intn(4000))
-	_, _ = rand.Read(data)
-	return data
-}
-
 func LogSim(sim model.SimContext, fmtStr string, args ...interface{}) {
 	fmt.Printf("%v %s\n", sim.Now(), fmt.Sprintf(fmtStr, args...))
 }
 
 func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSource, onError func(string), done func()) (start func()) {
 	var step1, step2, step3, step4 StepFunc
-	packetData := RandPacket()
+	packetData := testpoint.RandPacket(sim.Rand())
 	var timeout model.VirtualTime
 	step1 = func() (time.Duration, StepFunc) {
 		// LogSim(sim, "Performing validation at step1")
@@ -102,13 +97,8 @@ func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.Pa
 		// LogSim(sim, "Performing validation at step3")
 		if in.HasPacketAvailable() {
 			packet := in.ReceivePacket()
-			mismatches := 0
-			for i := 0; i < len(packet) && i < len(packetData); i++ {
-				if packet[i] != packetData[i] {
-					mismatches += 1
-				}
-			}
-			if len(packet) != len(packetData) {
+			mismatches, lengthOk := testpoint.ComparePackets(packet, packetData)
+			if !lengthOk {
 				onError(fmt.Sprintf("Expected packet of length %d, but got packet of length %d", len(packetData), len(packet)))
 				fmt.Printf("Wanted: %v\n", packetData)
 				fmt.Printf("Actual: %v\n", packet)
@@ -155,9 +145,7 @@ func Validator(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSo
 }
 
 func InnerTestExchanges(t *testing.T, metered bool, singleDir bool) {
-	sim := component.MakeSimController()
-
-	rand.Seed(12)
+	sim := component.MakeSimControllerSeeded(12)
 
 	lsink, rsink, lsource, rsource := InstantiateExchanges(sim, metered)
 

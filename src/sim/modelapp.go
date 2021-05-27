@@ -49,7 +49,7 @@ func MakeModelApp(controller *component.SimController, source model.DataSourceBy
 }
 
 func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink)) timesync.ProtocolImpl {
-	sim := component.MakeSimController()
+	sim := component.MakeSimControllerSeeded(1)
 
 	// input: bytes -> line characters
 	inputBytesSource, inputBytesSink := component.DataBufferBytes(sim, 1024)

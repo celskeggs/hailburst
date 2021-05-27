@@ -2,7 +2,9 @@ package component
 
 import (
 	"container/heap"
+	"math/rand"
 	"sim/model"
+	"time"
 )
 
 type simTimer struct {
@@ -44,9 +46,12 @@ func (tq *timerQueue) Pop() interface{} {
 
 type SimController struct {
 	currentTime model.VirtualTime
+	rand        *rand.Rand
 
 	timers timerQueue
 }
+
+var _ model.SimContext = &SimController{}
 
 func (sc *SimController) Now() model.VirtualTime {
 	return sc.currentTime
@@ -79,6 +84,10 @@ func (sc *SimController) SetTimer(expireAt model.VirtualTime, name string, callb
 func (sc *SimController) Later(name string, callback func()) (cancel func()) {
 	// will cause it to be executed in Advance
 	return sc.SetTimer(sc.Now(), name, callback)
+}
+
+func (sc *SimController) Rand() *rand.Rand {
+	return sc.rand
 }
 
 func (sc *SimController) peekNextTimerExpiry() model.VirtualTime {
@@ -133,8 +142,13 @@ func (sc *SimController) Advance(advanceTo model.VirtualTime) (nextTimer model.V
 	return sc.peekNextTimerExpiry()
 }
 
-func MakeSimController() *SimController {
+func MakeSimControllerRandomized() *SimController {
+	return MakeSimControllerSeeded(time.Now().UnixNano())
+}
+
+func MakeSimControllerSeeded(seed int64) *SimController {
 	return &SimController{
 		currentTime: 0,
+		rand:        rand.New(rand.NewSource(seed)),
 	}
 }

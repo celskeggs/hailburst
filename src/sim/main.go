@@ -44,7 +44,7 @@ func (cw *CSVWriter) Write(recordId uint, timestamp model.VirtualTime, iteration
 	cw.writeInternal(recordId, uint64(timestamp), iteration, totalErrors, markerReturned, lastMarkerSent)
 }
 
-func (cw *CSVWriter) writeInternal(vals... interface{}) {
+func (cw *CSVWriter) writeInternal(vals ...interface{}) {
 	parts := make([]string, len(vals))
 	for i := 0; i < 6; i++ {
 		parts[i] = fmt.Sprintf("%v", vals[i])
@@ -99,10 +99,10 @@ func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.
 		for source.HasPacketAvailable() {
 			recordId += 1
 			var packet struct {
-				Magic uint32
+				Magic     uint32
 				Iteration uint32
-				Total uint32
-				Marker uint32
+				Total     uint32
+				Marker    uint32
 			}
 			packetBytes := source.ReceivePacket()
 			if len(packetBytes) != 16 {
