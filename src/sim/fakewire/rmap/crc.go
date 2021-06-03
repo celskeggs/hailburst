@@ -37,7 +37,7 @@ var rmapCrcTable = []byte{
 
 func RmapCrc8(data []byte) (crc uint8) {
 	for _, b := range data {
-		crc = rmapCrcTable[crc ^ b]
+		crc = rmapCrcTable[crc^b]
 	}
 	return crc
 }

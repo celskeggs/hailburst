@@ -6,7 +6,13 @@ import (
 )
 
 func RandPacket(r *rand.Rand) []byte {
-	data := make([]byte, r.Intn(4000))
+	length := r.Intn(4000)
+	if r.Intn(4) == 0 {
+		length = r.Intn(10)
+	} else if r.Intn(10) == 0 {
+		length = r.Intn(80000)
+	}
+	data := make([]byte, length)
 	_, _ = r.Read(data)
 	return data
 }
