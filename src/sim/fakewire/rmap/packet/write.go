@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"encoding/binary"
@@ -7,33 +7,38 @@ import (
 )
 
 type WritePacket struct {
-	DestinationPath           []byte
+	DestinationPath           Path
 	DestinationLogicalAddress uint8 // should default to 254
-	VerifyData                bool
-	Acknowledge               bool
-	Increment                 bool
+	OptVerifyData             bool
+	OptAcknowledge            bool
+	OptIncrement              bool
 	DestinationKey            uint8
-	SourcePath                []byte
+	SourcePath                Path
 	SourceLogicalAddress      uint8 // should default to 254
 	TransactionIdentifier     uint16
 	ExtendedWriteAddress      uint8
 	WriteAddress              uint32
 	DataBytes                 []byte
+	DataCRC                   uint8
 }
 
 // these next three functions included for testing purposes
 
 func (wp WritePacket) IsValid() bool {
-	return len(wp.SourcePath) <= 12 && isSourcePathValid(wp.SourcePath) && len(wp.DataBytes) <= maxUint24
+	return len(wp.SourcePath) <= 12 && isSourcePathValid(wp.SourcePath) && len(wp.DataBytes) <= MaxUint24
 }
 
-func (wp WritePacket) PathBytes() (routing []byte, npath int) {
+func (wp WritePacket) VerifyData() bool {
+	return RmapCrc8(wp.DataBytes) == wp.DataCRC
+}
+
+func (wp WritePacket) PathBytes() (routing []uint8, npath int) {
 	path := append([]byte{}, wp.DestinationPath...)
 	path = append(path, wp.DestinationLogicalAddress)
 	return path, len(wp.DestinationPath)
 }
 
-func (wp WritePacket) MergePath(path []byte) (Packet, error) {
+func (wp WritePacket) MergePath(path Path) (Packet, error) {
 	copied := wp
 	if len(copied.DestinationPath) > 0 {
 		return nil, fmt.Errorf("destination path unexpectedly already populated")
@@ -48,10 +53,10 @@ func decodeWritePacket(ptcspalb uint8, packet []byte) (Packet, error) {
 	wp := WritePacket{}
 	wp.DestinationPath = nil
 	wp.DestinationLogicalAddress = packet[0]
-	wp.VerifyData = (ptcspalb & BitVerifyData) != 0
-	wp.Acknowledge = (ptcspalb & BitAcknowledge) != 0
-	wp.Increment = (ptcspalb & BitIncrement) != 0
-	sourcePathBytes := int(4 * (ptcspalb & BitsSPAL))
+	wp.OptVerifyData = (ptcspalb & bitVerifyData) != 0
+	wp.OptAcknowledge = (ptcspalb & bitAcknowledge) != 0
+	wp.OptIncrement = (ptcspalb & bitIncrement) != 0
+	sourcePathBytes := int(4 * (ptcspalb & bitsSPAL))
 	wp.DestinationKey = packet[3]
 	// parse source path address
 	if len(packet) < 17+sourcePathBytes {
@@ -70,28 +75,25 @@ func decodeWritePacket(ptcspalb uint8, packet []byte) (Packet, error) {
 		return nil, fmt.Errorf("invalid CRC on RMAP write packet header: computed %02x but header states %02x", computedHeaderCRC, headerCRC)
 	}
 	wp.DataBytes = remHeader[12 : len(remHeader)-1]
+	// TODO: handle length mismatches in a way consistent with a streaming implementation, like we did with CRC mismatches
 	if uint32(len(wp.DataBytes)) != dataLength {
 		return nil, fmt.Errorf("invalid number of data bytes in RMAP write packet: header specified %d but packet size implied %d", dataLength, len(wp.DataBytes))
 	}
-	dataCRC := remHeader[len(remHeader)-1]
-	computedDataCRC := RmapCrc8(wp.DataBytes)
-	if dataCRC != computedDataCRC {
-		return nil, fmt.Errorf("invalid CRC on RMAP write packet data: computed %02x but trailer states %02x", computedDataCRC, dataCRC)
-	}
+	wp.DataCRC = remHeader[len(remHeader)-1]
 	return wp, nil
 }
 
 func (wp WritePacket) Encode() ([]byte, error) {
 	packet := append([]byte{}, wp.DestinationPath...)
-	var ptcspalb uint8 = BitIsCommand | BitIsWrite
-	if wp.VerifyData {
-		ptcspalb |= BitVerifyData
+	var ptcspalb uint8 = bitIsCommand | bitIsWrite
+	if wp.OptVerifyData {
+		ptcspalb |= bitVerifyData
 	}
-	if wp.Acknowledge {
-		ptcspalb |= BitAcknowledge
+	if wp.OptAcknowledge {
+		ptcspalb |= bitAcknowledge
 	}
-	if wp.Increment {
-		ptcspalb |= BitIncrement
+	if wp.OptIncrement {
+		ptcspalb |= bitIncrement
 	}
 	encodedPath, err := encodeSourcePath(wp.SourcePath)
 	if err != nil {
@@ -101,7 +103,7 @@ func (wp WritePacket) Encode() ([]byte, error) {
 		panic("invalid encoding")
 	}
 	sourcePathAddrLen := len(encodedPath) / 4
-	if (sourcePathAddrLen & BitsSPAL) != sourcePathAddrLen {
+	if (sourcePathAddrLen & bitsSPAL) != sourcePathAddrLen {
 		return nil, fmt.Errorf("source path is too long: %d bytes", len(wp.SourcePath))
 	}
 	ptcspalb |= uint8(sourcePathAddrLen)
@@ -118,6 +120,9 @@ func (wp WritePacket) Encode() ([]byte, error) {
 	packet = append(packet, b...)
 	packet = append(packet, RmapCrc8(packet[len(wp.DestinationPath):]))
 	packet = append(packet, wp.DataBytes...)
-	packet = append(packet, RmapCrc8(wp.DataBytes))
+	if wp.DataCRC != RmapCrc8(wp.DataBytes) {
+		return nil, fmt.Errorf("cannot encoded with mismatched CRC")
+	}
+	packet = append(packet, wp.DataCRC)
 	return packet, nil
 }

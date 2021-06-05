@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"math/rand"
@@ -13,8 +13,8 @@ func RandWriteReply(r *rand.Rand) Packet {
 	return WriteReply{
 		SourcePath:                RandPath(r),
 		SourceLogicalAddress:      RandLogicalAddr(r),
-		VerifyData:                r.Intn(2) == 0,
-		Increment:                 r.Intn(2) == 0,
+		OptVerifyData:             r.Intn(2) == 0,
+		OptIncrement:              r.Intn(2) == 0,
 		Status:                    status,
 		DestinationLogicalAddress: RandLogicalAddr(r),
 		TransactionIdentifier:     uint16(r.Uint32()),

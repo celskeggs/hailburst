@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"encoding/binary"
@@ -7,10 +7,10 @@ import (
 )
 
 type WriteReply struct {
-	SourcePath                []byte
+	SourcePath                Path
 	SourceLogicalAddress      uint8 // should default to 254
-	VerifyData                bool
-	Increment                 bool
+	OptVerifyData             bool
+	OptIncrement              bool
 	Status                    uint8 // 0 for successful execution
 	DestinationLogicalAddress uint8 // should default to 254
 	TransactionIdentifier     uint16
@@ -22,13 +22,17 @@ func (wr WriteReply) IsValid() bool {
 	return len(wr.SourcePath) <= 12 && isSourcePathValid(wr.SourcePath)
 }
 
-func (wr WriteReply) PathBytes() (routing []byte, npath int) {
+func (wr WriteReply) VerifyData() bool {
+	return true  // no data to verify
+}
+
+func (wr WriteReply) PathBytes() (routing []uint8, npath int) {
 	path := append([]byte{}, wr.SourcePath...)
 	path = append(path, wr.SourceLogicalAddress)
 	return path, len(wr.SourcePath)
 }
 
-func (wr WriteReply) MergePath(path []byte) (Packet, error) {
+func (wr WriteReply) MergePath(path Path) (Packet, error) {
 	copied := wr
 	if len(copied.SourcePath) > 0 {
 		return nil, fmt.Errorf("source path unexpectedly already populated")
@@ -43,15 +47,15 @@ func decodeWriteReply(ptcspalb uint8, packet []byte) (Packet, error) {
 	wr := WriteReply{}
 	wr.SourcePath = nil
 	wr.SourceLogicalAddress = packet[0]
-	wr.VerifyData = (ptcspalb & BitVerifyData) != 0
-	if (ptcspalb & BitAcknowledge) == 0 {
+	wr.OptVerifyData = (ptcspalb & bitVerifyData) != 0
+	if (ptcspalb & bitAcknowledge) == 0 {
 		return nil, fmt.Errorf("not a valid RMAP write reply packet: ACK bit not set (len=%d, ptcspalb=%02x)", len(packet), ptcspalb)
 	}
 	// parse source path address
 	if len(packet) != 8 {
 		return nil, fmt.Errorf("not a valid RMAP write reply packet on second check (len=%d)", len(packet))
 	}
-	wr.Increment = (ptcspalb & BitIncrement) != 0
+	wr.OptIncrement = (ptcspalb & bitIncrement) != 0
 	// ignore the source path address length field... not important!
 	wr.Status = packet[3]
 	wr.DestinationLogicalAddress = packet[4]
@@ -66,12 +70,12 @@ func decodeWriteReply(ptcspalb uint8, packet []byte) (Packet, error) {
 
 func (wr WriteReply) Encode() ([]byte, error) {
 	packet := append([]byte{}, wr.SourcePath...)
-	var ptcspalb uint8 = BitIsWrite | BitAcknowledge
-	if wr.VerifyData {
-		ptcspalb |= BitVerifyData
+	var ptcspalb uint8 = bitIsWrite | bitAcknowledge
+	if wr.OptVerifyData {
+		ptcspalb |= bitVerifyData
 	}
-	if wr.Increment {
-		ptcspalb |= BitIncrement
+	if wr.OptIncrement {
+		ptcspalb |= bitIncrement
 	}
 	encodedPath, err := encodeSourcePath(wr.SourcePath)
 	if err != nil {
@@ -81,7 +85,7 @@ func (wr WriteReply) Encode() ([]byte, error) {
 		panic("invalid encoding")
 	}
 	sourcePathAddrLen := len(encodedPath) / 4
-	if (sourcePathAddrLen & BitsSPAL) != sourcePathAddrLen {
+	if (sourcePathAddrLen & bitsSPAL) != sourcePathAddrLen {
 		return nil, fmt.Errorf("source path is too long: %d bytes", len(wr.SourcePath))
 	}
 	ptcspalb |= uint8(sourcePathAddrLen)

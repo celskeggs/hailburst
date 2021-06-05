@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"encoding/binary"
@@ -7,11 +7,11 @@ import (
 )
 
 type ReadPacket struct {
-	DestinationPath           []byte
+	DestinationPath           Path
 	DestinationLogicalAddress uint8 // should default to 254
-	Increment                 bool
+	OptIncrement              bool
 	DestinationKey            uint8
-	SourcePath                []byte
+	SourcePath                Path
 	SourceLogicalAddress      uint8 // should default to 254
 	TransactionIdentifier     uint16
 	ExtendedReadAddress       uint8
@@ -22,16 +22,20 @@ type ReadPacket struct {
 // these next three functions included for testing purposes
 
 func (rp ReadPacket) IsValid() bool {
-	return len(rp.SourcePath) <= 12 && isSourcePathValid(rp.SourcePath) && rp.DataLength <= maxUint24
+	return len(rp.SourcePath) <= 12 && isSourcePathValid(rp.SourcePath) && rp.DataLength <= MaxUint24
 }
 
-func (rp ReadPacket) PathBytes() (routing []byte, npath int) {
+func (rp ReadPacket) VerifyData() bool {
+	return true  // no data to verify
+}
+
+func (rp ReadPacket) PathBytes() (routing []uint8, npath int) {
 	path := append([]byte{}, rp.DestinationPath...)
 	path = append(path, rp.DestinationLogicalAddress)
 	return path, len(rp.DestinationPath)
 }
 
-func (rp ReadPacket) MergePath(path []byte) (Packet, error) {
+func (rp ReadPacket) MergePath(path Path) (Packet, error) {
 	copied := rp
 	if len(copied.DestinationPath) > 0 {
 		return nil, fmt.Errorf("destination path unexpectedly already populated")
@@ -46,11 +50,11 @@ func decodeReadPacket(ptcspalb uint8, packet []byte) (Packet, error) {
 	rp := ReadPacket{}
 	rp.DestinationPath = nil
 	rp.DestinationLogicalAddress = packet[0]
-	if ptcspalb&(BitVerifyData|BitAcknowledge) != BitAcknowledge {
+	if ptcspalb&(bitVerifyData|bitAcknowledge) != bitAcknowledge {
 		return nil, fmt.Errorf("not a valid RMAP read packet (len=%d, ptcspalb=%02x)", len(packet), ptcspalb)
 	}
-	rp.Increment = (ptcspalb & BitIncrement) != 0
-	sourcePathBytes := int(4 * (ptcspalb & BitsSPAL))
+	rp.OptIncrement = (ptcspalb & bitIncrement) != 0
+	sourcePathBytes := int(4 * (ptcspalb & bitsSPAL))
 	rp.DestinationKey = packet[3]
 	// parse source path address
 	if len(packet) != 16+sourcePathBytes {
@@ -73,9 +77,9 @@ func decodeReadPacket(ptcspalb uint8, packet []byte) (Packet, error) {
 
 func (rp ReadPacket) Encode() ([]byte, error) {
 	packet := append([]byte{}, rp.DestinationPath...)
-	var ptcspalb uint8 = BitIsCommand | BitAcknowledge
-	if rp.Increment {
-		ptcspalb |= BitIncrement
+	var ptcspalb uint8 = bitIsCommand | bitAcknowledge
+	if rp.OptIncrement {
+		ptcspalb |= bitIncrement
 	}
 	encodedPath, err := encodeSourcePath(rp.SourcePath)
 	if err != nil {
@@ -85,7 +89,7 @@ func (rp ReadPacket) Encode() ([]byte, error) {
 		panic("invalid encoding")
 	}
 	sourcePathAddrLen := len(encodedPath) / 4
-	if (sourcePathAddrLen & BitsSPAL) != sourcePathAddrLen {
+	if (sourcePathAddrLen & bitsSPAL) != sourcePathAddrLen {
 		return nil, fmt.Errorf("source path is too long: %d bytes", len(rp.SourcePath))
 	}
 	ptcspalb |= uint8(sourcePathAddrLen)

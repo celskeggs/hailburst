@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"encoding/binary"
@@ -6,14 +6,16 @@ import (
 	"fmt"
 )
 
-func decodeSourcePath(path []byte) []byte {
+type Path []uint8
+
+func decodeSourcePath(path []byte) Path {
 	for len(path) > 1 && path[0] == 0 {
 		path = path[1:]
 	}
 	return path
 }
 
-func encodeSourcePath(path []byte) ([]byte, error) {
+func encodeSourcePath(path Path) ([]byte, error) {
 	if len(path) > 1 && path[0] == 0 {
 		return nil, errors.New("cannot encode any source path starting with 0x00 except 0x00 itself")
 	}
@@ -31,7 +33,7 @@ func encodeUint16BE(u uint16) []byte {
 	return out[:]
 }
 
-const maxUint24 = 0x00FFFFFF
+const MaxUint24 = 0x00FFFFFF
 
 func encodeUint24BE(u uint32) ([]byte, error) {
 	out := encodeUint32BE(u)
@@ -47,6 +49,6 @@ func encodeUint32BE(u uint32) []byte {
 	return out[:]
 }
 
-func isSourcePathValid(path []byte) bool {
+func isSourcePathValid(path Path) bool {
 	return len(path) <= 1 || path[0] != 0
 }

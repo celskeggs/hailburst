@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import "testing"
 

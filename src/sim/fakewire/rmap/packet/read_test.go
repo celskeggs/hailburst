@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"math/rand"
@@ -16,7 +16,7 @@ func RandReadPacket(r *rand.Rand) Packet {
 	return ReadPacket{
 		DestinationPath:           RandPath(r),
 		DestinationLogicalAddress: RandLogicalAddr(r),
-		Increment:                 r.Intn(2) == 0,
+		OptIncrement:              r.Intn(2) == 0,
 		DestinationKey:            uint8(r.Uint32()),
 		SourcePath:                RandPath(r),
 		SourceLogicalAddress:      RandLogicalAddr(r),

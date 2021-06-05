@@ -1,4 +1,4 @@
-package rmap
+package packet
 
 import (
 	"bytes"
@@ -160,16 +160,20 @@ func testPacketCorruptions(t *testing.T, generator func(*rand.Rand) Packet, r *r
 			_, npath := packet.PathBytes()
 			delivered := encoding[npath:]
 			// make sure baseline decodes correctly
-			_, err = DecodePacket(append([]byte{}, delivered...))
+			decoded, err := DecodePacket(append([]byte{}, delivered...))
 			if err != nil {
 				t.Error(err)
+				continue
+			}
+			if !decoded.VerifyData() {
+				t.Error("expected data to be verifiable")
 				continue
 			}
 			// corrupt packet
 			delivered[r.Intn(len(delivered))] ^= 1 << r.Intn(8)
 			// decode packet
-			_, err = DecodePacket(delivered)
-			if err == nil {
+			decodedCorrupt, err := DecodePacket(delivered)
+			if err == nil && decodedCorrupt.VerifyData() {
 				t.Error("should have encountered an error while decoding this corrupted packet")
 				continue
 			}
