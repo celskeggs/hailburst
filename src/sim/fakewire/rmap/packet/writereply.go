@@ -23,7 +23,7 @@ func (wr WriteReply) IsValid() bool {
 }
 
 func (wr WriteReply) VerifyData() bool {
-	return true  // no data to verify
+	return true // no data to verify
 }
 
 func (wr WriteReply) PathBytes() (routing []uint8, npath int) {

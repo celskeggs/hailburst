@@ -23,7 +23,7 @@ func (rr ReadReply) IsValid() bool {
 }
 
 func (rr ReadReply) VerifyData() bool {
-	return true  // data automatically verified on receive; no additional check needed
+	return true // data automatically verified on receive; no additional check needed
 }
 
 func (rr ReadReply) PathBytes() (routing []uint8, npath int) {
@@ -68,7 +68,7 @@ func decodeReadReply(ptcspalb uint8, packet []byte) (Packet, error) {
 	if headerCRC != computedHeaderCRC {
 		return nil, fmt.Errorf("invalid CRC on RMAP read reply header: computed %02x but header states %02x", computedHeaderCRC, headerCRC)
 	}
-	rr.DataBytes = packet[12:len(packet)-1]
+	rr.DataBytes = packet[12 : len(packet)-1]
 	if uint32(len(rr.DataBytes)) != dataLength {
 		return nil, fmt.Errorf("invalid number of data bytes in RMAP read reply: header specified %d but packet size implied %d", dataLength, len(rr.DataBytes))
 	}

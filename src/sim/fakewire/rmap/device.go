@@ -10,6 +10,7 @@ import (
 const NoError uint8 = 0
 
 type HeaderError int
+
 const (
 	HeaderErrNotACommand HeaderError = 128
 )

@@ -26,7 +26,7 @@ func (rp ReadPacket) IsValid() bool {
 }
 
 func (rp ReadPacket) VerifyData() bool {
-	return true  // no data to verify
+	return true // no data to verify
 }
 
 func (rp ReadPacket) PathBytes() (routing []uint8, npath int) {

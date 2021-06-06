@@ -133,7 +133,7 @@ func (td *TestDevice) AssumeAttemptWritePotentiallyCorrupted(extAddr uint8, writ
 func runReadWriteTrials(t *testing.T, seed int64, numReads, numWrites int, destLogical, sourceLogical, destKey uint8, useLogical bool) {
 	sim := component.MakeSimControllerSeeded(seed)
 	// mocked local device
-	testDevice := &TestDevice{ T: t }
+	testDevice := &TestDevice{T: t}
 	var ra RemoteAddressing
 	var swtch []fwmodel.PacketWire
 	if useLogical {
@@ -177,7 +177,7 @@ func runReadWriteTrials(t *testing.T, seed int64, numReads, numWrites int, destL
 
 	r := sim.Rand()
 
-	writeTrials := make([]bool, numReads + numWrites)
+	writeTrials := make([]bool, numReads+numWrites)
 	for i := 0; i < numWrites; i++ {
 		writeTrials[i] = true
 	}
@@ -189,12 +189,12 @@ func runReadWriteTrials(t *testing.T, seed int64, numReads, numWrites int, destL
 		extAddr := uint8(r.Uint32())
 		mainAddr := r.Uint32()
 		acknowledge := !isWriteTrial || r.Intn(2) == 0
-		verify := r.Intn(2) == 0  // only used for write trials
+		verify := r.Intn(2) == 0 // only used for write trials
 		increment := r.Intn(2) == 0
 
 		// no actual protocol-level requirement that requested read length and returned read length match, so we can
 		// do a better test by using different lengths
-		dataLength := r.Uint32() & 0x00FFFFFF  // only used for read trials
+		dataLength := r.Uint32() & 0x00FFFFFF // only used for read trials
 		dataBytes := testpoint.RandPacket(r)
 
 		status := uint8(r.Uint32())
@@ -301,7 +301,7 @@ func TestRmapReadCorruption(t *testing.T) {
 
 	sim := component.MakeSimControllerSeeded(seed)
 	// mocked local device
-	testDevice := &TestDevice{ T: t }
+	testDevice := &TestDevice{T: t}
 	// packet nodes
 	deviceInN, deviceOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
 	terminalInN, terminalOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
@@ -472,7 +472,7 @@ func TestRmapWriteCorruption(t *testing.T) {
 
 	sim := component.MakeSimControllerSeeded(seed)
 	// mocked local device
-	testDevice := &TestDevice{ T: t }
+	testDevice := &TestDevice{T: t}
 	// packet nodes
 	deviceInN, deviceOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
 	terminalInN, terminalOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
@@ -604,7 +604,8 @@ func TestRmapWriteCorruption(t *testing.T) {
 		if !acknowledge {
 			if deviceOut.HasPacketAvailable() {
 				t.Error("should not be any reply produced when acknowledge not set")
-			}		// before this point, the transaction should not have completed
+			}
+			// before this point, the transaction should not have completed
 			if !completion.Completed() {
 				t.Error("transaction should have immediately completed")
 			} else if stat := completion.Status(); stat != 0 {
