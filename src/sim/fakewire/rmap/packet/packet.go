@@ -30,7 +30,7 @@ const (
 
 func DecodePacket(packet []byte) (Packet, error) {
 	if len(packet) >= 2 && packet[1] != fwmodel.IdentifierRMAP {
-		return nil, fmt.Errorf("not a valid RMAP packet (len=%d, proto=%d)", len(packet), packet[0])
+		return nil, fmt.Errorf("not a valid RMAP packet (len=%d, proto=%d)", len(packet), packet[1])
 	}
 	if len(packet) < 8 {
 		return nil, fmt.Errorf("not a valid RMAP packet (len=%d)", len(packet))

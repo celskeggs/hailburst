@@ -8,18 +8,19 @@ import (
 	"sim/component"
 	"sim/fakewire/fwmodel"
 	"sim/fakewire/rmap/packet"
+	"sim/fakewire/router"
 	"sim/model"
 )
 
 type RemoteAddressing struct {
 	// how to get the packet there
 	DestinationPath    packet.Path
-	DestinationLogical uint8
+	DestinationLogical uint8 // (default 254)
 	// how to indicate we're talking to the right destination
 	DestinationKey uint8
 	// how to get a reply back
 	SourcePath    packet.Path
-	SourceLogical uint8
+	SourceLogical uint8 // (default 254)
 }
 
 type Completion struct {
@@ -30,15 +31,21 @@ type Completion struct {
 }
 
 func (c *Completion) Completed() bool {
-	panic("todo")
+	return c.completed
 }
 
-func (c *Completion) Status() int {
-	panic("todo")
+func (c *Completion) Status() uint8 {
+	if !c.completed {
+		panic("not yet completed")
+	}
+	return c.status
 }
 
 func (c *Completion) Data() []byte {
-	panic("todo")
+	if !c.completed {
+		panic("not yet completed")
+	}
+	return c.data
 }
 
 type RemoteTerminal struct {
@@ -83,7 +90,7 @@ func (rt *RemoteTerminal) logError(fmt string, args ...interface{}) {
 
 func comparePackets(reply packet.Packet, original packet.Packet) error {
 	if wp, ok := original.(packet.WritePacket); ok {
-		if wr, ok := original.(packet.WriteReply); ok {
+		if wr, ok := reply.(packet.WriteReply); ok {
 			if wr.OptVerifyData != wp.OptVerifyData || wr.OptIncrement != wp.OptIncrement || wp.OptAcknowledge != true {
 				return fmt.Errorf("mismatched flags: packet=%v, reply=%v", wp, wr)
 			} else if wr.SourceLogicalAddress != wp.SourceLogicalAddress {
@@ -100,7 +107,7 @@ func comparePackets(reply packet.Packet, original packet.Packet) error {
 			return fmt.Errorf("expected (write packet, write reply), but got: (%v, %v)", reflect.TypeOf(original), reflect.TypeOf(reply))
 		}
 	} else if rp, ok := original.(packet.ReadPacket); ok {
-		if rr, ok := original.(packet.ReadReply); ok {
+		if rr, ok := reply.(packet.ReadReply); ok {
 			if rr.OptIncrement != rp.OptIncrement {
 				return fmt.Errorf("mismatched flags: packet=%v, reply=%v", rp, rr)
 			} else if rr.SourceLogicalAddress != rp.SourceLogicalAddress {
@@ -137,7 +144,7 @@ func (rt *RemoteTerminal) processPackets() {
 			} else {
 				completion.completed = true
 				completion.status = wr.Status
-				rt.outstandingTransactions[wr.TransactionIdentifier] = nil
+				delete(rt.outstandingTransactions, wr.TransactionIdentifier)
 			}
 		} else if rr, ok := decoded.(packet.ReadReply); ok {
 			completion := rt.outstandingTransactions[rr.TransactionIdentifier]
@@ -149,7 +156,7 @@ func (rt *RemoteTerminal) processPackets() {
 				completion.completed = true
 				completion.status = rr.Status
 				completion.data = rr.DataBytes
-				rt.outstandingTransactions[rr.TransactionIdentifier] = nil
+				delete(rt.outstandingTransactions, rr.TransactionIdentifier)
 			}
 		} else {
 			rt.logError("RMAP Remote Terminal received unexpected packet: %v", decoded)
@@ -161,11 +168,17 @@ func (rt *RemoteTerminal) Subscribe(callback func()) (cancel func()) {
 	return rt.event.Subscribe(callback)
 }
 
-func (rt *RemoteTerminal) Attach(addressing RemoteAddressing) *RemoteDevice {
+func (rt *RemoteTerminal) Attach(addressing RemoteAddressing) (*RemoteDevice, error) {
+	if router.Classify(int(addressing.SourceLogical)) != router.AddressTypeLogical {
+		return nil, fmt.Errorf("not a valid logical address: %v", addressing.SourceLogical)
+	}
+	if router.Classify(int(addressing.DestinationLogical)) != router.AddressTypeLogical {
+		return nil, fmt.Errorf("not a valid logical address: %v", addressing.DestinationLogical)
+	}
 	return &RemoteDevice{
 		rt:         rt,
 		addressing: addressing,
-	}
+	}, nil
 }
 
 func (rt *RemoteTerminal) generateTxId() (uint16, *Completion, error) {
@@ -212,7 +225,7 @@ func (rd *RemoteDevice) Write(acknowledge, verify, increment bool, extAddr uint8
 			status:    NoError,
 		}
 	}
-	txmit, err := packet.WritePacket{
+	wp := packet.WritePacket{
 		DestinationPath:           rd.addressing.DestinationPath,
 		DestinationLogicalAddress: rd.addressing.DestinationLogical,
 		OptVerifyData:             verify,
@@ -226,7 +239,9 @@ func (rd *RemoteDevice) Write(acknowledge, verify, increment bool, extAddr uint8
 		WriteAddress:              writeAddr,
 		DataBytes:                 data,
 		DataCRC:                   packet.RmapCrc8(data),
-	}.Encode()
+	}
+	completion.original = wp
+	txmit, err := wp.Encode()
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +263,7 @@ func (rd *RemoteDevice) Read(increment bool, extAddr uint8, readAddr uint32, dat
 	if err != nil {
 		return nil, err
 	}
-	txmit, err := packet.ReadPacket{
+	rp := packet.ReadPacket{
 		DestinationPath:           rd.addressing.DestinationPath,
 		DestinationLogicalAddress: rd.addressing.DestinationLogical,
 		OptIncrement:              increment,
@@ -259,7 +274,9 @@ func (rd *RemoteDevice) Read(increment bool, extAddr uint8, readAddr uint32, dat
 		ExtendedReadAddress:       extAddr,
 		ReadAddress:               readAddr,
 		DataLength:                uint32(dataLength),
-	}.Encode()
+	}
+	completion.original = rp
+	txmit, err := rp.Encode()
 	if err != nil {
 		return nil, err
 	}
