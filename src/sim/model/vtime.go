@@ -61,5 +61,15 @@ func (t VirtualTime) Add(duration time.Duration) VirtualTime {
 	return t2
 }
 
+func (t VirtualTime) Since(base VirtualTime) time.Duration {
+	if !t.TimeExists() || !base.TimeExists() {
+		panic("times don't exist")
+	}
+	if base > t {
+		panic("cannot compute negative duration in since; expectation is that base is AT or BEFORE t")
+	}
+	return time.Nanosecond * time.Duration(t - base)
+}
+
 const NeverTimeout VirtualTime = -1
 const TimeZero VirtualTime = 0
