@@ -71,5 +71,14 @@ func (t VirtualTime) Since(base VirtualTime) time.Duration {
 	return time.Nanosecond * time.Duration(t - base)
 }
 
+func (t VirtualTime) Nanoseconds() uint64 {
+	return uint64(t)
+}
+
+func FromNanoseconds(t uint64) (VirtualTime, bool) {
+	vt := VirtualTime(t)
+	return vt, vt.TimeExists()
+}
+
 const NeverTimeout VirtualTime = -1
 const TimeZero VirtualTime = 0

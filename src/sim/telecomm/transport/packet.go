@@ -1,8 +1,9 @@
-package ground
+package transport
 
 import (
 	"bytes"
 	"encoding/binary"
+	"hash/crc32"
 )
 
 /*
@@ -24,10 +25,27 @@ const (
 
 type CommPacket struct {
 	MagicNumber uint32
-	CommandId   uint32
+	CmdTlmId    uint32
 	Timestamp   uint64
 	DataBytes   []byte
 	CRC         uint32
+}
+
+func (cp *CommPacket) ComputeCRC() uint32 {
+	var buf bytes.Buffer
+	if binary.Write(&buf, binary.BigEndian, cp.MagicNumber) != nil {
+		panic("unexpected error")
+	}
+	if binary.Write(&buf, binary.BigEndian, cp.CmdTlmId) != nil {
+		panic("unexpected error")
+	}
+	if binary.Write(&buf, binary.BigEndian, cp.Timestamp) != nil {
+		panic("unexpected error")
+	}
+	if _, err := buf.Write(cp.DataBytes); err != nil {
+		panic("unexpected error")
+	}
+	return crc32.ChecksumIEEE(buf.Bytes())
 }
 
 func decodeEscapes(region []byte) (decoded []byte, ok bool) {
@@ -75,7 +93,7 @@ func DecodeCommPacket(stream []byte) (packet *CommPacket, bytesUsed int, errors 
 	be := binary.BigEndian
 	return &CommPacket{
 		MagicNumber: be.Uint32(decodedBytes[0:]),
-		CommandId:   be.Uint32(decodedBytes[4:]),
+		CmdTlmId:    be.Uint32(decodedBytes[4:]),
 		Timestamp:   be.Uint64(decodedBytes[8:]),
 		DataBytes:   decodedBytes[16 : len(decodedBytes)-4],
 		CRC:         be.Uint32(decodedBytes[len(decodedBytes)-4:]),
@@ -86,7 +104,7 @@ func (cp *CommPacket) Encode() []byte {
 	plain := make([]byte, 20+len(cp.DataBytes))
 	be := binary.BigEndian
 	be.PutUint32(plain[0:], cp.MagicNumber)
-	be.PutUint32(plain[4:], cp.CommandId)
+	be.PutUint32(plain[4:], cp.CmdTlmId)
 	be.PutUint64(plain[8:], cp.Timestamp)
 	copy(plain[16:], cp.DataBytes)
 	be.PutUint32(plain[len(plain)-4:], cp.CRC)

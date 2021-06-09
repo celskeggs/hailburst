@@ -1,4 +1,4 @@
-package ground
+package transport
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 func RandCommPacket(r *rand.Rand) *CommPacket {
 	return &CommPacket{
 		MagicNumber: r.Uint32(),
-		CommandId:   r.Uint32(),
+		CmdTlmId:    r.Uint32(),
 		Timestamp:   r.Uint64(),
 		DataBytes:   testpoint.RandPacket(r),
 		CRC:         r.Uint32(),
@@ -18,7 +18,7 @@ func RandCommPacket(r *rand.Rand) *CommPacket {
 }
 
 func CommPacketsEqual(c1, c2 *CommPacket) bool {
-	return c1.MagicNumber == c2.MagicNumber && c1.CRC == c2.CRC && c1.CommandId == c2.CommandId && c1.Timestamp == c2.Timestamp && bytes.Equal(c1.DataBytes, c2.DataBytes)
+	return c1.MagicNumber == c2.MagicNumber && c1.CRC == c2.CRC && c1.CmdTlmId == c2.CmdTlmId && c1.Timestamp == c2.Timestamp && bytes.Equal(c1.DataBytes, c2.DataBytes)
 }
 
 func TestCodecSimple(t *testing.T) {

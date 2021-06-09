@@ -11,6 +11,7 @@ import (
 	"sim/fakewire/fwmodel"
 	"sim/model"
 	"sim/timesync"
+	"sim/timesync/integrate"
 	"time"
 )
 
@@ -127,7 +128,7 @@ func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.
 }
 
 func main() {
-	app := MakePacketApp(packetMain)
+	app := integrate.MakePacketApp(packetMain)
 	err := timesync.Simple("./timesync-test.sock", app)
 	if err != nil {
 		log.Fatalf("Encountered top-level error: %v", err)

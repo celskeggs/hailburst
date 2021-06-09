@@ -6,7 +6,6 @@ import (
 	"sim/fakewire/rmap"
 	"sim/model"
 	"sim/telecomm"
-	"time"
 )
 
 const (
@@ -47,7 +46,6 @@ const (
 )
 
 type FWRadioConfig struct {
-	ByteDuration   time.Duration
 	MemorySize     int
 	LogicalAddress uint8
 	DestinationKey uint8
@@ -55,10 +53,9 @@ type FWRadioConfig struct {
 
 type fwRadio struct {
 	ctx          model.SimContext
-	ByteDuration time.Duration
 	RadioMemory  []byte
 	Registers    [NumRegisters]uint32
-	Connection   telecomm.Connection
+	Connection   *telecomm.Connection
 
 	CurrentTxStart model.VirtualTime
 }
@@ -294,10 +291,9 @@ func (f *fwRadio) AttemptRead(extAddr uint8, readAddr uint32, increment bool, da
 	}
 }
 
-func (frc FWRadioConfig) Construct(ctx model.SimContext, wire fwmodel.PacketWire, tele telecomm.Connection) {
+func (frc FWRadioConfig) Construct(ctx model.SimContext, wire fwmodel.PacketWire, tele *telecomm.Connection) {
 	fr := &fwRadio{
 		ctx:          ctx,
-		ByteDuration: frc.ByteDuration,
 		RadioMemory:  make([]byte, frc.MemorySize),
 		Registers:    [NumRegisters]uint32{},
 		Connection:   tele,

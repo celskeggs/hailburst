@@ -1,4 +1,4 @@
-package ground
+package transport
 
 import (
 	"sim/component"
@@ -75,7 +75,7 @@ func (s *Sender) Subscribe(callback func()) (cancel func()) {
 	return s.disp.Subscribe(callback)
 }
 
-func (s *Sender) Send(packet *CommPacket) bool {
+func (s *Sender) CanSend() bool {
 	if s.dest.LastEndTime().After(s.ctx.Now()) {
 		// not done sending yet... don't accept more data to transmit.
 		// but set a timer, so that when we DO have the ability to send, we can let anyone subscribed know
@@ -83,6 +83,14 @@ func (s *Sender) Send(packet *CommPacket) bool {
 			s.canceltimer()
 		}
 		s.canceltimer = s.ctx.SetTimer(s.dest.LastEndTime(), "sim.telecomm.ground.Sender/CompleteSend", s.disp.Dispatch)
+		return false
+	} else {
+		return true
+	}
+}
+
+func (s *Sender) Send(packet *CommPacket) bool {
+	if !s.CanSend() {
 		return false
 	}
 	// in this case, we have no pending bytes to send, so we can transmit now!
