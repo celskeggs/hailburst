@@ -68,7 +68,7 @@ func (t VirtualTime) Since(base VirtualTime) time.Duration {
 	if base > t {
 		panic("cannot compute negative duration in since; expectation is that base is AT or BEFORE t")
 	}
-	return time.Nanosecond * time.Duration(t - base)
+	return time.Nanosecond * time.Duration(t-base)
 }
 
 func (t VirtualTime) Nanoseconds() uint64 {

@@ -1,8 +1,10 @@
 package mission
 
 import (
+	"log"
 	"math"
 	"math/rand"
+	"reflect"
 	"sim/model"
 	"sim/telecomm"
 	"sim/telecomm/transport"
@@ -13,7 +15,7 @@ import (
 func randInterval(r *rand.Rand, base time.Duration) time.Duration {
 	baseNs := base.Nanoseconds()
 	// multiply by something in the range [0.25, 4.0)
-	ns := float64(baseNs) * math.Pow(2.0, r.Float64() * 4 - 2)
+	ns := float64(baseNs) * math.Pow(2.0, r.Float64()*4-2)
 	return time.Nanosecond * time.Duration(ns)
 }
 
@@ -27,6 +29,7 @@ func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, int
 			panic("should not ever call genCmd with pendingCmd != nil")
 		}
 		pendingCmd = transport.GenerateCmd(ctx.Rand())
+		log.Printf("Sending command: %v %v", reflect.TypeOf(pendingCmd), pendingCmd)
 		update()
 	}
 	sender := transport.MakeSender(ctx, dest)
@@ -56,5 +59,6 @@ func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, int
 		}
 	}
 	sender.Subscribe(update)
-	ctx.Later("sim.telecomm.cmd.CommandGenerator/First", genCmd)
+	// don't start the generator for a few seconds, to let the software initialize on boot
+	ctx.SetTimer(model.TimeZero.Add(time.Second * 3), "sim.telecomm.cmd.CommandGenerator/First", genCmd)
 }

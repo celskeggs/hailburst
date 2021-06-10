@@ -55,7 +55,7 @@ func decodeEscapes(region []byte) (decoded []byte, ok bool) {
 		return nil, false
 	}
 	// make sure there are no escapes except Escape+EscEscape
-	for i := 0; i < len(region) - 1; i++ {
+	for i := 0; i < len(region)-1; i++ {
 		if region[i] == Escape && region[i+1] != EscEscape {
 			return nil, false
 		}

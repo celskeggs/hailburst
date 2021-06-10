@@ -7,8 +7,8 @@ import (
 )
 
 type randomMagneticEnvironment struct {
-	ctx model.SimContext
-	x, y, z float64
+	ctx           model.SimContext
+	x, y, z       float64
 	lastTimestamp model.VirtualTime
 }
 

@@ -150,7 +150,7 @@ func (m *magneticDevice) AttemptRead(extAddr uint8, readAddr uint32, increment b
 		return nil, ErrInvalidAddr
 	}
 	readOffset := readAddr * 2
-	var regBytes  [NumRegisters*2]byte
+	var regBytes [NumRegisters * 2]byte
 	be := binary.BigEndian
 	be.PutUint16(regBytes[2*RegErrors:], m.ErrorCount)
 	be.PutUint16(regBytes[2*RegPower:], encodeBool(m.PowerEnabled))
@@ -159,7 +159,7 @@ func (m *magneticDevice) AttemptRead(extAddr uint8, readAddr uint32, increment b
 	be.PutUint16(regBytes[2*RegY:], uint16(m.SnapY))
 	be.PutUint16(regBytes[2*RegZ:], uint16(m.SnapZ))
 	rbLen := uint32(len(regBytes))
-	if readOffset > rbLen || dataLength > rbLen || readOffset + dataLength > rbLen {
+	if readOffset > rbLen || dataLength > rbLen || readOffset+dataLength > rbLen {
 		return nil, ErrInvalidAddr
 	}
 	return regBytes[readOffset:][:dataLength], StatusOk

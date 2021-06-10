@@ -16,7 +16,7 @@ func TestByteScheduleSimple(t *testing.T) {
 
 	data := make([]byte, 4000)
 	sim.Rand().Read(data)
-	bsch.FillBytes(sim.Now().Add(time.Millisecond * 1000), time.Millisecond, data)
+	bsch.FillBytes(sim.Now().Add(time.Millisecond*1000), time.Millisecond, data)
 	sim.Advance(sim.Now().Add(time.Millisecond * 2500))
 	bsch.ClearBytes(sim.Now().Add(time.Millisecond * 500))
 	sim.Advance(sim.Now().Add(time.Millisecond * 10000))
@@ -52,7 +52,7 @@ func TestByteScheduleComplex(t *testing.T) {
 	trials := 1000
 	for i := 0; i < trials && !t.Failed(); i++ {
 		c := r.Intn(4)
-		if i == trials - 1 {
+		if i == trials-1 {
 			// last trial! so fast-forward past the end...
 			minTargetTime := bytesByStartTime.LastTime()
 			if !minTargetTime.TimeExists() || minTargetTime.Before(sim.Now()) {
@@ -74,7 +74,7 @@ func TestByteScheduleComplex(t *testing.T) {
 			}
 			byteData := testpoint.RandPacket(r)
 			for i, b := range byteData {
-				bytesByStartTime[actualTargetTime.Add(byteDuration * time.Duration(i))] = b
+				bytesByStartTime[actualTargetTime.Add(byteDuration*time.Duration(i))] = b
 			}
 			t.Logf("FillBytes(%v, %v, {%v})", actualTargetTime, byteDuration, len(byteData))
 			bsch.FillBytes(actualTargetTime, byteDuration, byteData)

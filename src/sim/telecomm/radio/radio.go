@@ -52,10 +52,10 @@ type FWRadioConfig struct {
 }
 
 type fwRadio struct {
-	ctx          model.SimContext
-	RadioMemory  []byte
-	Registers    [NumRegisters]uint32
-	Connection   *telecomm.Connection
+	ctx         model.SimContext
+	RadioMemory []byte
+	Registers   [NumRegisters]uint32
+	Connection  *telecomm.Connection
 
 	CurrentTxStart model.VirtualTime
 }
@@ -293,10 +293,10 @@ func (f *fwRadio) AttemptRead(extAddr uint8, readAddr uint32, increment bool, da
 
 func (frc FWRadioConfig) Construct(ctx model.SimContext, wire fwmodel.PacketWire, tele *telecomm.Connection) {
 	fr := &fwRadio{
-		ctx:          ctx,
-		RadioMemory:  make([]byte, frc.MemorySize),
-		Registers:    [NumRegisters]uint32{},
-		Connection:   tele,
+		ctx:         ctx,
+		RadioMemory: make([]byte, frc.MemorySize),
+		Registers:   [NumRegisters]uint32{},
+		Connection:  tele,
 	}
 	fr.Registers[RegMagic] = MagicNum
 	fr.Registers[RegTxPtr] = 0

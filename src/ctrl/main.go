@@ -83,12 +83,12 @@ func main() {
 	}
 	fmt.Printf("Launching applications...\n")
 	// remove old sockets; ignore any errors
-	testSock := "timesync-test.sock"
+	timesyncSocket := "timesync.sock"
 	guestLog := "guest.log"
-	_, _ = os.Remove(testSock), os.Remove(guestLog)
+	_, _ = os.Remove(timesyncSocket), os.Remove(guestLog)
 	p := Processes{}
-	p.LaunchInTerminal("go run sim", ".")
-	for i := 0; i < 10 && !Exists(testSock); i++ {
+	p.LaunchInTerminal("go run sim/experiments/requirements", ".")
+	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
 	p.LaunchInTerminal("./gdb.sh", "./bare-arm")
@@ -103,7 +103,7 @@ func main() {
 		"-parallel", "none",
 		"-icount", "shift=0,sleep=off",
 		"-vga", "none",
-		"-chardev", "timesync,id=ts0,path=" + testSock,
+		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-serial", "chardev:ts0",
 		"-serial", "file:" + guestLog,
 		"-nographic",

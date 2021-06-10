@@ -7,9 +7,11 @@ import (
 )
 
 const (
-	MagicNumTlm     = 0x7313DA7A // "tele-data"
-	CmdReceivedTID  = 0x01000001
-	CmdCompletedTID = 0x01000002
+	MagicNumTlm           = 0x7313DA7A // "tele-data"
+	CmdReceivedTID        = 0x01000001
+	CmdCompletedTID       = 0x01000002
+	PingOccurredTID       = 0x01000003
+	MagPwrStateChangedTID = 0x02000001
 )
 
 type Telemetry interface {
@@ -18,7 +20,7 @@ type Telemetry interface {
 
 type CmdReceived struct {
 	OriginalTimestamp uint64
-	OriginalCommandId uint32
+	OriginalCommandId uint32 // the CID
 }
 
 func (CmdReceived) Validate() bool {
@@ -34,6 +36,22 @@ func (CmdCompleted) Validate() bool {
 	return true
 }
 
+type Pong struct {
+	PingID uint32
+}
+
+func (Pong) Validate() bool {
+	return true
+}
+
+type MagPwrStateChanged struct {
+	PowerState bool
+}
+
+func (MagPwrStateChanged) Validate() bool {
+	return true
+}
+
 func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, ok bool) {
 	if cp.MagicNumber != MagicNumTlm {
 		return nil, 0, false
@@ -46,6 +64,10 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 		t = &CmdReceived{}
 	case CmdCompletedTID:
 		t = &CmdCompleted{}
+	case PingOccurredTID:
+		t = &Pong{}
+	case MagPwrStateChangedTID:
+		t = &MagPwrStateChanged{}
 	default:
 		return nil, 0, false
 	}

@@ -16,24 +16,26 @@ import (
 )
 
 const (
-	PortFSW = 1
-	PortRadio = 2
+	PortFSW    = 1
+	PortRadio  = 2
 	PortMagnet = 3
 
 	NumPorts = 3
 
-	AddrFSW = 40
-	AddrRadio = 41
+	AddrFSW    = 40
+	AddrRadio  = 41
 	AddrMagnet = 42
 
-	KeyRadio = 101
+	KeyRadio  = 101
 	KeyMagnet = 102
 )
 
-func BuildSpacecraft() timesync.ProtocolImpl {
+func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string)) timesync.ProtocolImpl {
 	return integrate.MakePacketApp(func(sim model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink) {
 		// build the activity collector
-		ac := verifier.MakeActivityVerifier(sim)
+		ac := verifier.MakeActivityVerifier(sim, func(explanation string) {
+			onFailure(sim.Now().Since(model.TimeZero), explanation)
+		})
 
 		// now, build the onboard FakeWire topology
 		ports := router.Router(sim, NumPorts, false, func(address int) (port int, pop bool, drop bool) {
