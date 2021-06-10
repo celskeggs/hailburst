@@ -20,7 +20,7 @@ func main() {
 			log.Printf("Encountered error while closing log file: %v", err)
 		}
 	}()
-	_, err = logFile.WriteString("Experiment started.\n")
+	_, err = logFile.WriteString("\nExperiment started.\n")
 	if err == nil {
 		err = logFile.Sync()
 	}
@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("Encountered error while writing to log file: %v", err)
 	}
 	app := spacecraft.BuildSpacecraft(func(elapsed time.Duration, explanation string) {
-		_, err := logFile.WriteString(fmt.Sprintf("Experiment: time elapsed is %v\n%s", elapsed, explanation))
+		_, err := logFile.WriteString(fmt.Sprintf("Experiment: time elapsed is %v\n%s\n", elapsed, explanation))
 		if err == nil {
 			err = logFile.Sync()
 		}
