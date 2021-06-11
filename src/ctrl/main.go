@@ -58,6 +58,10 @@ func Exists(path string) bool {
 }
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "--help" {
+		fmt.Printf("Usage: ./ctrl.sh [--rebuild]\n")
+		return
+	}
 	if len(os.Args) >= 2 && os.Args[1] == "--rebuild" {
 		fmt.Printf("Running apps-dirclean...\n")
 		cmd0 := exec.Command("./make.sh", "apps-dirclean")

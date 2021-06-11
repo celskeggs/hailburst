@@ -27,7 +27,7 @@ void task_iotest_transmitter(void) {
 
     for (int index = 0;; index++) {
         snprintf(msgbuf, sizeof(msgbuf), "this is txmit msg #%d\n", index);
-        printf("tx: sending msg %d (%d bytes)...\n", index, strlen(msgbuf));
+        printf("tx: sending msg %d (%zd bytes)...\n", index, strlen(msgbuf));
         if (fakewire_exc_write(&fwport, (uint8_t*) msgbuf, strlen(msgbuf)) < 0) {
             printf("tx: failed to write\n");
             break;
@@ -50,7 +50,7 @@ void task_iotest_receiver(void) {
             fprintf(stderr, "rx: errored; halting receive loop\n");
             break;
         }
-        printf("rx: read message %d of %d bytes\n", index, len);
+        printf("rx: read message %d of %zd bytes\n", index, len);
         printf("rx: MSG: \"");
         for (int i = 0; i < len; i++) {
             uint8_t c = msgbuf[i];

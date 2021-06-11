@@ -71,7 +71,7 @@ static void *reader_task(void *opaque) {
             return NULL;
         }
         if (count != 4) {
-            fprintf(stderr, "reader task received invalid packet size: %d\n", count);
+            fprintf(stderr, "reader task received invalid packet size: %zd\n", count);
             run_ok = false;
             return NULL;
         }

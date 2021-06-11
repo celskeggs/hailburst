@@ -5,9 +5,10 @@
 #include "app.h"
 
 static TaskSpec tasks_entry[] = {
-    { .name = "task_scrub_memory", .func = task_scrub_memory },
-    // { .name = "task_iotest_transmitter", .func = task_iotest_transmitter },
-    // { .name = "task_iotest_receiver", .func = task_iotest_receiver },
+    // { .name = "task_scrub_memory", .init = NULL, .func = task_scrub_memory },
+    { .name = "task_rmap_listener", .init = init_rmap_listener, .func = task_rmap_listener },
+    // { .name = "task_iotest_transmitter", .init = init_iotest, .func = task_iotest_transmitter },
+    // { .name = "task_iotest_receiver", .init = NULL, .func = task_iotest_receiver },
 };
 
 static void *task_wrapper(void *opaque) {
@@ -24,8 +25,12 @@ int main(int argc, char *argv[]) {
 	freopen("/dev/console", "w", stdout);
 	freopen("/dev/console", "w", stderr);
 
-    // TODO: come up with a standard interface for this
-    // init_iotest();
+    for (int i = 0; i < sizeof(tasks_entry) / sizeof(*tasks_entry); i++) {
+        TaskSpec *s = &tasks_entry[i];
+        if (s->init) {
+            s->init();
+        }
+    }
 
     pthread_t threads[sizeof(tasks_entry) / sizeof(*tasks_entry)];
 
