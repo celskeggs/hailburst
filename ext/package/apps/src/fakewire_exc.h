@@ -2,6 +2,7 @@
 #define APP_FAKEWIRE_EXC_H
 
 #include "fakewire_link.h"
+#include "thread.h"
 
 // simplified/one-shot version of SpaceWire exchange protocol
 typedef enum fw_exchange_state_e {

@@ -1,5 +1,5 @@
-#ifndef APP_FAKEWIRE_RMAP_H
-#define APP_FAKEWIRE_RMAP_H
+#ifndef APP_RMAP_H
+#define APP_RMAP_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -85,4 +85,4 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
 rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
                         uint8_t ext_addr, uint32_t main_addr, size_t *data_length, void *data_out);
 
-#endif /* APP_FAKEWIRE_RMAP_H */
+#endif /* APP_RMAP_H */

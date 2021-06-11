@@ -24,6 +24,8 @@ const (
 	ReqPingPong = "ReqPingPong"
 )
 
+// TODO: think about requirements that make sure that telemetry isn't received when it SHOULDN'T be
+
 var requirements = []string{ReqReceipt, ReqCompletePing, ReqPingPong}
 
 type ReqTracker struct {

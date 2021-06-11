@@ -1,6 +1,7 @@
 #ifndef APP_BITBUF_H
 #define APP_BITBUF_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 // Bit buffer structure
