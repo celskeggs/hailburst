@@ -90,7 +90,7 @@ static bool radio_read_registers(radio_t *radio, rmap_context_t *ctx,
     size_t expected_read_len = (last_reg - first_reg + 1) * 4;
     size_t actual_read_len = expected_read_len;
     // fetch the data over the network
-    status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg, &actual_read_len, output);
+    status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg * 4, &actual_read_len, output);
     if (status != RS_OK) {
         fprintf(stderr, "Radio: invalid status while querying registers [%u, %u]: 0x%03x\n",
                 first_reg, last_reg, status);
@@ -124,7 +124,7 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
         input_copy[i] = ntohl(input[i]);
     }
     // transmit the data over the network
-    status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg, num_regs * 4, input_copy);
+    status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg * 4, num_regs * 4, input_copy);
     if (status != RS_OK) {
         fprintf(stderr, "Radio: invalid status while updating registers [%u, %u]: 0x%03x\n",
                 first_reg, last_reg, status);

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include "rmap.h"
 #include "radio.h"
 #include "ringbuf.h"
+#include "comm.h"
 
 static fw_exchange_t fwport;
 static rmap_addr_t radio_routing = {
@@ -28,6 +30,7 @@ static rmap_addr_t radio_routing = {
 static rmap_monitor_t monitor;
 static radio_t radio;
 static ringbuf_t uplink, downlink;
+static comm_dec_t decoder;
 static bool rmap_init = false;
 
 void init_rmap_listener(void) {
@@ -35,31 +38,33 @@ void init_rmap_listener(void) {
 
     fakewire_exc_init(&fwport, "rmap_io");
     fakewire_exc_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
-    rmap_init_monitor(&monitor, &fwport, /* max read length */ 4);
+    rmap_init_monitor(&monitor, &fwport, 0x2000);
     ringbuf_init(&uplink, 0x4000);
     ringbuf_init(&downlink, 0x4000);
     radio_init(&radio, &monitor, &radio_routing, &uplink, &downlink);
+    comm_dec_init(&decoder, &uplink);
 
     rmap_init = true;
 }
 
 void task_rmap_listener(void) {
     assert(rmap_init);
-    uint8_t buffer[64];
-    char fmtout[256];
+    char fmtout[4096];
+    comm_packet_t packet;
 
     for (;;) {
-        printf("APP: Waiting for uplink data...\n");
-        size_t count = ringbuf_read(&uplink, buffer, sizeof(buffer), RB_BLOCKING);
-        assert(count > 0 && count <= sizeof(buffer));
+        printf("APP: Waiting for next command...\n");
+        comm_dec_decode(&decoder, &packet);
+        printf("APP: Received command: cid=0x%08x, timestamp_ns=%"PRIu64", len=%zu:\n", packet.cmd_tlm_id, packet.timestamp_ns, packet.data_len);
+        assert(packet.data_len < sizeof(fmtout) / 3);
         int fi = 0;
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < packet.data_len; i++) {
             if (i > 0) {
                 fmtout[fi++] = ' ';
             }
-            fi += sprintf(&fmtout[fi], "%02x", buffer[i]);
+            fi += sprintf(&fmtout[fi], "%02x", packet.data_bytes[i]);
         }
-        printf("APP: Received %zu bytes of uplink data: {%s}\n", count, fmtout);
+        printf("APP: {%s}\n", fmtout);
     }
 
 

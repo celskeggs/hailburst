@@ -1,4 +1,5 @@
 config BR2_PACKAGE_APPS
 	bool "apps"
+	select BR2_PACKAGE_ZLIB
 	help
 	  Thesis programs.
