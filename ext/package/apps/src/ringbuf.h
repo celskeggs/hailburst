@@ -15,19 +15,23 @@ typedef struct {
     pthread_cond_t  cond;
 
     uint8_t *memory;
+    size_t   elem_size;
     size_t   capacity;
     // TODO: make sure I test integer overflow or read_idx and write_idx... SHOULD be fine, but needs to be tested
     size_t   read_idx;
     size_t   write_idx;
 } ringbuf_t;
 
-void ringbuf_init(ringbuf_t *rb, size_t size);
+void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size);
 
-size_t ringbuf_write(ringbuf_t *rb, uint8_t *data_in, size_t data_len, ringbuf_flags_t flags);
-size_t ringbuf_read(ringbuf_t *rb, uint8_t *data_out, size_t data_len, ringbuf_flags_t flags);
+size_t ringbuf_write(ringbuf_t *rb, uint8_t *data_in, size_t elem_count, ringbuf_flags_t flags);
+size_t ringbuf_read(ringbuf_t *rb, uint8_t *data_out, size_t elem_count, ringbuf_flags_t flags);
 
-void ringbuf_write_all(ringbuf_t *rb, uint8_t *data_in, size_t data_len);
+void ringbuf_write_all(ringbuf_t *rb, uint8_t *data_in, size_t elem_count);
 
+static inline size_t ringbuf_elem_size(ringbuf_t *rb) {
+    return rb->elem_size;
+}
 static inline size_t ringbuf_capacity(ringbuf_t *rb) {
     return rb->capacity;
 }

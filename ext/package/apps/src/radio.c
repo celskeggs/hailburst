@@ -40,6 +40,8 @@ static void *radio_downlink_loop(void *radio_opaque);
 
 void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringbuf_t *uplink, ringbuf_t *downlink) {
     assert(radio != NULL && mon != NULL && address != NULL && uplink != NULL && downlink != NULL);
+    assert(ringbuf_elem_size(uplink) == 1);
+    assert(ringbuf_elem_size(downlink) == 1);
     size_t max_write_len = ringbuf_capacity(downlink);
     if (max_write_len > RMAP_MAX_DATA_LEN) {
         max_write_len = RMAP_MAX_DATA_LEN;

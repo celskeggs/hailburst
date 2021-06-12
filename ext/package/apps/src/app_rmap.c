@@ -39,8 +39,8 @@ void init_rmap_listener(void) {
     fakewire_exc_init(&fwport, "rmap_io");
     fakewire_exc_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
     rmap_init_monitor(&monitor, &fwport, 0x2000);
-    ringbuf_init(&uplink, 0x4000);
-    ringbuf_init(&downlink, 0x4000);
+    ringbuf_init(&uplink, 0x4000, 1);
+    ringbuf_init(&downlink, 0x4000, 1);
     radio_init(&radio, &monitor, &radio_routing, &uplink, &downlink);
     comm_dec_init(&decoder, &uplink);
 

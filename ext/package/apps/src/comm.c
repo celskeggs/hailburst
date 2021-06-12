@@ -5,23 +5,6 @@
 
 #include "comm.h"
 
-/*
-
-typedef struct {
-    uint32_t cmd_tlm_id;
-    uint64_t timestamp_ns;
-    size_t   data_len;
-    uint8_t *data_bytes;
-} comm_packet_t;
-
-typedef struct {
-    ringbuf_t *uplink;
-    uint8_t   *scratch_buffer;
-    size_t     resume_start;
-    size_t     resume_end;
-} comm_dec_t;
-*/
-
 enum {
     COMM_SCRATCH_SIZE   = 1024,
     COMM_CMD_MAGIC_NUM  = 0x73133C2C, // "tele-exec"
@@ -34,6 +17,7 @@ enum {
 
 void comm_dec_init(comm_dec_t *dec, ringbuf_t *uplink) {
     assert(dec != NULL && uplink != NULL);
+    assert(ringbuf_elem_size(uplink) == 1);
     dec->uplink = uplink;
     dec->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
     dec->resume_start = dec->resume_end = 0;
