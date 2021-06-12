@@ -24,10 +24,10 @@ typedef struct {
 
 void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size);
 
-size_t ringbuf_write(ringbuf_t *rb, uint8_t *data_in, size_t elem_count, ringbuf_flags_t flags);
-size_t ringbuf_read(ringbuf_t *rb, uint8_t *data_out, size_t elem_count, ringbuf_flags_t flags);
+size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_flags_t flags);
+size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_flags_t flags);
 
-void ringbuf_write_all(ringbuf_t *rb, uint8_t *data_in, size_t elem_count);
+void ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count);
 
 static inline size_t ringbuf_elem_size(ringbuf_t *rb) {
     return rb->elem_size;

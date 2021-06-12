@@ -21,8 +21,16 @@ typedef struct {
     uint32_t   err_count;
 } comm_dec_t;
 
+typedef struct {
+    ringbuf_t *downlink;
+    uint8_t   *scratch_buffer;
+} comm_enc_t;
+
 void comm_dec_init(comm_dec_t *dec, ringbuf_t *uplink);
 // NOTE: the byte array produced here will be reused on the next call
 void comm_dec_decode(comm_dec_t *dec, comm_packet_t *out);
+
+void comm_enc_init(comm_enc_t *enc, ringbuf_t *downlink);
+void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in);
 
 #endif /* APP_COMM_H */

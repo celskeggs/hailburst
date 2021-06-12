@@ -10,7 +10,9 @@ const (
 	MagicNumTlm           = 0x7313DA7A // "tele-data"
 	CmdReceivedTID        = 0x01000001
 	CmdCompletedTID       = 0x01000002
-	PingOccurredTID       = 0x01000003
+	CmdNotRecognizedTID   = 0x01000003
+	TlmDroppedTID         = 0x01000004
+	PongTID               = 0x01000005
 	MagPwrStateChangedTID = 0x02000001
 )
 
@@ -30,9 +32,28 @@ func (CmdReceived) Validate() bool {
 type CmdCompleted struct {
 	OriginalTimestamp uint64
 	OriginalCommandId uint32
+	Success           bool
 }
 
 func (CmdCompleted) Validate() bool {
+	return true
+}
+
+type CmdNotRecognized struct {
+	OriginalTimestamp uint64
+	OriginalCommandId uint32
+	Length            uint32
+}
+
+func (CmdNotRecognized) Validate() bool {
+	return true
+}
+
+type TlmDropped struct {
+	MessagesLost uint32
+}
+
+func (TlmDropped) Validate() bool {
 	return true
 }
 
@@ -64,7 +85,11 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 		t = &CmdReceived{}
 	case CmdCompletedTID:
 		t = &CmdCompleted{}
-	case PingOccurredTID:
+	case CmdNotRecognizedTID:
+		t = &CmdNotRecognized{}
+	case TlmDroppedTID:
+		t = &TlmDropped{}
+	case PongTID:
 		t = &Pong{}
 	case MagPwrStateChangedTID:
 		t = &MagPwrStateChanged{}

@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "cmd.h"
 #include "fakewire_exc.h"
 #include "rmap.h"
 #include "radio.h"
@@ -65,6 +66,8 @@ void task_rmap_listener(void) {
             fi += sprintf(&fmtout[fi], "%02x", packet.data_bytes[i]);
         }
         printf("APP: {%s}\n", fmtout);
+        // execute command
+        cmd_execute(packet.cmd_tlm_id, packet.timestamp_ns, packet.data_bytes, packet.data_len);
     }
 
 
