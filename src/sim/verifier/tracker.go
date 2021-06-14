@@ -1,6 +1,9 @@
 package verifier
 
 import (
+	"fmt"
+	"log"
+	"reflect"
 	"sim/model"
 	"sim/telecomm/transport"
 	"sort"
@@ -28,6 +31,11 @@ type TelemetryDownlinkEvent struct {
 
 func (e TelemetryDownlinkEvent) Timestamp() model.VirtualTime {
 	return e.LocalTimestamp
+}
+
+func (e TelemetryDownlinkEvent) String() string {
+	return fmt.Sprintf("TlmDownEvt{Remote=%v, Local=%v, Telemetry=%v %v}",
+		e.RemoteTimestamp, e.LocalTimestamp, reflect.TypeOf(e.Telemetry), e.Telemetry)
 }
 
 type MagnetometerPowerEvent struct {
@@ -94,6 +102,7 @@ func (a *tracker) OnCommandUplink(command transport.Command, sendTimestamp model
 }
 
 func (a *tracker) OnTelemetryErrors(byteErrors int, packetErrors int) {
+	log.Printf("Detected telemetry errors: byte=%d, packet=%d", byteErrors, packetErrors)
 	a.TelemetryByteErrors += byteErrors
 	a.TelemetryPacketErrors += packetErrors
 }

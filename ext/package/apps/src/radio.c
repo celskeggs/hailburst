@@ -11,11 +11,15 @@ enum {
     REG_BASE_ADDR  = 0x0000,
 
     // local buffer within radio.c
-    UPLINK_BUF_LOCAL_SIZE = 0x1000,
+    UPLINK_BUF_LOCAL_SIZE   = 0x1000,
+    DOWNLINK_BUF_LOCAL_SIZE = 0x1000,
 
     RX_STATE_IDLE      = 0x00,
     RX_STATE_LISTENING = 0x01,
     RX_STATE_OVERFLOW  = 0x02,
+
+    TX_STATE_IDLE   = 0x00,
+    TX_STATE_ACTIVE = 0x01,
 };
 
 typedef enum {
@@ -53,6 +57,8 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
     radio->down_ring = downlink;
     radio->uplink_buf_local = malloc(UPLINK_BUF_LOCAL_SIZE);
     assert(radio->uplink_buf_local != NULL);
+    radio->downlink_buf_local = malloc(DOWNLINK_BUF_LOCAL_SIZE);
+    assert(radio->downlink_buf_local != NULL);
     radio->bytes_extracted = 0;
 
     // arbitrarily use up_ctx for this initial configuration
@@ -79,6 +85,20 @@ static bool radio_read_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_
     if (actual_read != read_len) {
         fprintf(stderr, "Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx\n",
                 rel_address, read_len, actual_read);
+        return false;
+    }
+    return true;
+}
+
+static bool radio_write_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_address, size_t write_len, void *write_in) {
+    rmap_status_t status;
+    assert(radio != NULL && ctx != NULL && write_in != NULL);
+    assert(write_len <= RMAP_MAX_DATA_LEN);
+    status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
+                        0x00, rel_address + radio->mem_access_base, write_len, write_in);
+    if (status != RS_OK) {
+        fprintf(stderr, "Radio: invalid status while writing memory at 0x%x of length 0x%zx: 0x%03x\n",
+                rel_address, write_len, status);
         return false;
     }
     return true;
@@ -177,7 +197,7 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
  * buffering arrangement without too much trouble.                                               *
  *************************************************************************************************/
 
-// interacts with radio to read from and rotate virtual ring buffer;
+// interacts with radio to read from and flip virtual ping-pong buffer;
 // returns number of bytes placed into the uplink_buf_local buffer, or negative numbers on error.
 static ssize_t radio_uplink_service(radio_t *radio) {
     _Static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
@@ -349,8 +369,71 @@ static void *radio_uplink_loop(void *radio_opaque) {
     }
 }
 
+static bool radio_downlink_service(radio_t *radio, size_t append_len) {
+    uint32_t state;
+    // make sure the radio is idle
+    if (!radio_read_register(radio, &radio->down_ctx, REG_TX_STATE, &state)) {
+        return false;
+    }
+    assert(state == TX_STATE_IDLE);
+
+    // write the new transmission into radio memory
+    if (!radio_write_memory(radio, &radio->down_ctx, radio->tx_region.base, append_len, radio->downlink_buf_local)) {
+        return false;
+    }
+
+    // start the write
+    _Static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+    _Static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
+    assert(append_len <= radio->tx_region.size);
+    uint32_t reg[] = {
+        /* REG_TX_PTR */   radio->tx_region.base,
+        /* REG_TX_LEN */   append_len,
+        /* REG_TX_STATE */ TX_STATE_ACTIVE,
+    };
+    if (!radio_write_registers(radio, &radio->down_ctx, REG_TX_PTR, REG_TX_STATE, reg)) {
+        return false;
+    }
+
+    // monitor the write until it completes
+    uint32_t cur_len = 0;
+    for (;;) {
+        if (!radio_read_register(radio, &radio->down_ctx, REG_TX_LEN, &cur_len)) {
+            return false;
+        }
+        if (cur_len > 0) {
+            usleep(cur_len + 5);
+        } else {
+            break;
+        }
+    }
+
+    // confirm that the radio has, in fact, stopped transmitting
+    if (!radio_read_register(radio, &radio->down_ctx, REG_TX_STATE, &state)) {
+        return false;
+    }
+    assert(state == TX_STATE_IDLE);
+
+    printf("Radio: finished transmitting %u bytes.\n", append_len);
+
+    return true;
+}
+
 static void *radio_downlink_loop(void *radio_opaque) {
-    // TODO
-    fprintf(stderr, "Downlink: UNIMPLEMENTED\n");
-    return NULL;
+    radio_t *radio = (radio_t *) radio_opaque;
+    assert(radio != NULL);
+    size_t max_len = radio->tx_region.size;
+    if (max_len > DOWNLINK_BUF_LOCAL_SIZE) {
+        max_len = DOWNLINK_BUF_LOCAL_SIZE;
+    }
+    assert(max_len > 0);
+    for (;;) {
+        size_t grabbed = ringbuf_read(radio->down_ring, radio->downlink_buf_local, max_len, RB_BLOCKING);
+        assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
+
+        if (!radio_downlink_service(radio, grabbed)) {
+            fprintf(stderr, "Radio: hit error in downlink loop; halting downlink thread.\n");
+            return NULL;
+        }
+    }
 }

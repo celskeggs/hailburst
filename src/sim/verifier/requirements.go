@@ -22,11 +22,14 @@ const (
 	// No later than 200ms after the Ping command's receive point, the flight software shall indicate a Pong with a
 	// matching PingID.
 	ReqPingPong = "ReqPingPong"
+	// ReqNoTelemErrs indicates:
+	// The flight software shall not downlink any telemetry sequences containing validation errors.
+	ReqNoTelemErrs = "ReqNoTelemErrs"
 )
 
 // TODO: think about requirements that make sure that telemetry isn't received when it SHOULDN'T be
 
-var requirements = []string{ReqReceipt, ReqCompletePing, ReqPingPong}
+var requirements = []string{ReqReceipt, ReqCompletePing, ReqPingPong, ReqNoTelemErrs}
 
 type ReqTracker struct {
 	outstanding map[string]int
@@ -78,6 +81,13 @@ func (rt *ReqTracker) Failed() bool {
 		}
 	}
 	return false
+}
+
+func (rt *ReqTracker) CountSuccesses() (n int) {
+	for _, c := range rt.succeeded {
+		n += c
+	}
+	return n
 }
 
 func (rt *ReqTracker) ExplainFailure() string {

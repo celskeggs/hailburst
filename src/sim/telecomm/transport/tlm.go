@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"sim/model"
 )
 
@@ -73,12 +74,12 @@ func (MagPwrStateChanged) Validate() bool {
 	return true
 }
 
-func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, ok bool) {
+func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, err error) {
 	if cp.MagicNumber != MagicNumTlm {
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("wrong magic number: %08x instead of %08x", cp.MagicNumber, MagicNumTlm)
 	}
 	if cp.CRC != cp.ComputeCRC() {
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("wrong CRC32: %08x computed instead of %08x specified", cp.ComputeCRC(), cp.CRC)
 	}
 	switch cp.CmdTlmId {
 	case CmdReceivedTID:
@@ -94,21 +95,21 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 	case MagPwrStateChangedTID:
 		t = &MagPwrStateChanged{}
 	default:
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("unrecognized telemetry ID: %08x", cp.CmdTlmId)
 	}
 	r := bytes.NewReader(cp.DataBytes)
-	if binary.Read(r, binary.BigEndian, t) != nil {
-		return nil, 0, false
+	if err := binary.Read(r, binary.BigEndian, t); err != nil {
+		return nil, 0, fmt.Errorf("while decoding %d bytes into ID %08x: %v", len(cp.DataBytes), cp.CmdTlmId, err)
 	}
 	if r.Len() != 0 {
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("extraneous bytes left over in telemetry packet: %d", r.Len())
 	}
 	if !t.Validate() {
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("unpacked telemetry failed validation: %v", t)
 	}
 	timestampNs, nsOk := model.FromNanoseconds(cp.Timestamp)
 	if !nsOk {
-		return nil, 0, false
+		return nil, 0, fmt.Errorf("nanoseconds value not unpacked correctly: %v", cp.Timestamp)
 	}
-	return t, timestampNs, true
+	return t, timestampNs, nil
 }

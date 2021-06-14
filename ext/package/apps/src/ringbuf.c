@@ -17,6 +17,7 @@ void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
     rb->memory = malloc(capacity * elem_size);
     assert(rb->memory != NULL);
     rb->capacity = capacity;
+    rb->elem_size = elem_size;
     rb->read_idx = rb->write_idx = 0;
 }
 

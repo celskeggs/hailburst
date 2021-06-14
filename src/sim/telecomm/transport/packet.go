@@ -91,13 +91,14 @@ func DecodeCommPacket(stream []byte) (packet *CommPacket, bytesUsed int, errors 
 		return nil, consumed, consumed
 	}
 	be := binary.BigEndian
-	return &CommPacket{
+	cp := &CommPacket{
 		MagicNumber: be.Uint32(decodedBytes[0:]),
 		CmdTlmId:    be.Uint32(decodedBytes[4:]),
 		Timestamp:   be.Uint64(decodedBytes[8:]),
 		DataBytes:   decodedBytes[16 : len(decodedBytes)-4],
 		CRC:         be.Uint32(decodedBytes[len(decodedBytes)-4:]),
-	}, consumed, sop
+	}
+	return cp, consumed, sop
 }
 
 func (cp *CommPacket) Encode() []byte {

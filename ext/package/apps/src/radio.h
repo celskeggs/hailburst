@@ -10,18 +10,19 @@ typedef struct {
 } memregion_t;
 
 typedef struct {
-    rmap_context_t  up_ctx;
-    rmap_context_t  down_ctx;
-    rmap_addr_t     address;
-    uint32_t        mem_access_base;
-    memregion_t     rx_halves[2];
-    memregion_t     tx_region;
-    uint32_t        bytes_extracted;
-    ringbuf_t      *up_ring;
-    ringbuf_t      *down_ring;
-    pthread_t       up_thread;
-    pthread_t       down_thread;
-    uint8_t        *uplink_buf_local;
+    rmap_context_t up_ctx;
+    rmap_context_t down_ctx;
+    rmap_addr_t    address;
+    uint32_t       mem_access_base;
+    memregion_t    rx_halves[2];
+    memregion_t    tx_region;
+    uint32_t       bytes_extracted;
+    ringbuf_t     *up_ring;
+    ringbuf_t     *down_ring;
+    pthread_t      up_thread;
+    pthread_t      down_thread;
+    uint8_t       *uplink_buf_local;
+    uint8_t       *downlink_buf_local;
 } radio_t;
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground

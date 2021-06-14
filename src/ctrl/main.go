@@ -91,7 +91,7 @@ func main() {
 	guestLog := "guest.log"
 	_, _ = os.Remove(timesyncSocket), os.Remove(guestLog)
 	p := Processes{}
-	p.LaunchInTerminal("go run sim/experiments/requirements", ".")
+	p.LaunchInTerminal("go run sim/experiments/requirements |& tee sim.log", ".")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}

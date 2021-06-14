@@ -36,7 +36,7 @@ static void *telemetry_mainloop(void *encoder_opaque);
 
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry_initialized);
-    ringbuf_init(&telemetry_ring, MAX_BUFFERED, MAX_TLM_BODY);
+    ringbuf_init(&telemetry_ring, MAX_BUFFERED, sizeof(tlm_elem_t));
     // TODO: adjust this to match simulation clock
     int time_ok = clock_gettime(CLOCK_BOOTTIME, &time_zero);
     assert(time_ok == 0);
@@ -157,7 +157,7 @@ void tlm_pong(uint32_t ping_id) {
 void tlm_mag_pwr_state_changed(bool power_state) {
     printf("Magnetometer Power State Changed: PowerState=%d\n", power_state);
 
-    tlm_elem_t tlm = { .telemetry_id = PONG_TID, .data_len = 1 };
+    tlm_elem_t tlm = { .telemetry_id = MAG_PWR_STATE_CHANGED_TID, .data_len = 1 };
     tlm.data_bytes[0] = (power_state ? 1 : 0);
     telemetry_record(&tlm);
 }

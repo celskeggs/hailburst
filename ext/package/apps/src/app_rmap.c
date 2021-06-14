@@ -13,6 +13,7 @@
 #include "radio.h"
 #include "ringbuf.h"
 #include "comm.h"
+#include "tlm.h"
 
 static fw_exchange_t fwport;
 static rmap_addr_t radio_routing = {
@@ -32,6 +33,7 @@ static rmap_monitor_t monitor;
 static radio_t radio;
 static ringbuf_t uplink, downlink;
 static comm_dec_t decoder;
+static comm_enc_t encoder;
 static bool rmap_init = false;
 
 void init_rmap_listener(void) {
@@ -44,6 +46,8 @@ void init_rmap_listener(void) {
     ringbuf_init(&downlink, 0x4000, 1);
     radio_init(&radio, &monitor, &radio_routing, &uplink, &downlink);
     comm_dec_init(&decoder, &uplink);
+    comm_enc_init(&encoder, &downlink);
+    telemetry_init(&encoder);
 
     rmap_init = true;
 }

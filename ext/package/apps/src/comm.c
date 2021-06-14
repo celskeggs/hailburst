@@ -8,11 +8,17 @@
 enum {
     COMM_SCRATCH_SIZE   = 1024,
     COMM_CMD_MAGIC_NUM  = 0x73133C2C, // "tele-exec"
+    COMM_TLM_MAGIC_NUM  = 0x7313DA7A, // "tele-data"
 
     // internal representations to be returned by comm_dec_next_symbol
     SYMBOL_PACKET_START = 0x1000,
     SYMBOL_PACKET_END   = 0x2000,
     SYMBOL_ERROR        = 0x3000,
+
+    BYTE_ESCAPE     = 0xFF,
+    BYTE_ESC_ESCAPE = 0x11,
+    BYTE_ESC_SOP    = 0x22,
+    BYTE_ESC_EOP    = 0x33,
 };
 
 void comm_dec_init(comm_dec_t *dec, ringbuf_t *uplink) {
@@ -44,16 +50,16 @@ static uint8_t comm_dec_next_byte(comm_dec_t *dec, size_t protect_len) {
 
 static uint16_t comm_dec_next_symbol(comm_dec_t *dec, size_t protect_len) {
     uint8_t next_byte = comm_dec_next_byte(dec, protect_len);
-    if (next_byte != 0xFF) {
+    if (next_byte != BYTE_ESCAPE) {
         return next_byte;
     }
-    // if 0xFF, then we need to grab another byte to complete the escape sequence
+    // if BYTE_ESCAPE, then we need to grab another byte to complete the escape sequence
     switch (comm_dec_next_byte(dec, protect_len)) {
-    case 0x11:
-        return 0xFF;
-    case 0x22:
+    case BYTE_ESC_ESCAPE:
+        return BYTE_ESCAPE;
+    case BYTE_ESC_SOP:
         return SYMBOL_PACKET_START;
-    case 0x33:
+    case BYTE_ESC_EOP:
         return SYMBOL_PACKET_END;
     default:
         // invalid escape sequence
@@ -114,4 +120,65 @@ void comm_dec_decode(comm_dec_t *dec, comm_packet_t *out) {
         // otherwise... we simply don't have a valid packet. we must discard this one and try again.
         dec->err_count += 1;
     }
+}
+
+void comm_enc_init(comm_enc_t *enc, ringbuf_t *downlink) {
+    assert(enc != NULL && downlink != NULL);
+    assert(ringbuf_elem_size(downlink) == 1);
+    enc->downlink = downlink;
+    enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
+}
+
+static void comm_enc_escape_limited(comm_enc_t *enc, uint8_t *data, size_t len) {
+    assert(0 < len && len <= COMM_SCRATCH_SIZE / 2);
+    size_t out_i = 0;
+    for (size_t in_i = 0; in_i < len; in_i++) {
+        assert(out_i < COMM_SCRATCH_SIZE - 1);
+        uint8_t di = data[in_i];
+        enc->scratch_buffer[out_i++] = di;
+        if (di == BYTE_ESCAPE) {
+            enc->scratch_buffer[out_i++] = BYTE_ESC_ESCAPE;
+        }
+    }
+    ringbuf_write_all(enc->downlink, enc->scratch_buffer, out_i);
+}
+
+static void comm_enc_escape(comm_enc_t *enc, uint8_t *data, size_t len) {
+    while (len > COMM_SCRATCH_SIZE / 2) {
+        comm_enc_escape_limited(enc, data, COMM_SCRATCH_SIZE / 2);
+        data += COMM_SCRATCH_SIZE / 2;
+        len  -= COMM_SCRATCH_SIZE / 2;
+    }
+    if (len > 0) {
+        comm_enc_escape_limited(enc, data, len);
+    }
+}
+
+void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in) {
+    assert(enc != NULL && in != NULL);
+
+    // start of packet
+    ringbuf_write_all(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_SOP}, 2);
+
+    // encode header fields
+    uint32_t fields[] = {
+        htonl(COMM_TLM_MAGIC_NUM),
+        htonl(in->cmd_tlm_id),
+        htonl((uint32_t) (in->timestamp_ns >> 32)),
+        htonl((uint32_t) (in->timestamp_ns >> 0)),
+    };
+    uint32_t crc;
+    comm_enc_escape(enc, (uint8_t*) fields, sizeof(fields));
+    crc = crc32(0, (uint8_t*) fields, sizeof(fields));
+
+    // encode body
+    comm_enc_escape(enc, in->data_bytes, in->data_len);
+    crc = crc32(crc, in->data_bytes, in->data_len);
+
+    // encode trailing CRC
+    crc = htonl(crc);
+    comm_enc_escape(enc, (uint8_t*) &crc, sizeof(crc));
+
+    // end of packet
+    ringbuf_write_all(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_EOP}, 2);
 }
