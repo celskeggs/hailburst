@@ -17,7 +17,7 @@ type Processes struct {
 }
 
 func (p *Processes) LaunchInTerminal(path string, cwd string) (wait func()) {
-	cmd := exec.Command("xterm", "-fa", "Monospace", "-fs", "10", "-e", fmt.Sprintf("%s || read -p 'Press enter to exit...'", path))
+	cmd := exec.Command("xterm", "-fa", "Monospace", "-fs", "10", "-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", path))
 	cmd.Dir = cwd
 	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
@@ -63,6 +63,16 @@ func main() {
 		return
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--rebuild" {
+		// first part is just to confirm that the code IS compilable (using the host toolchain)
+		fmt.Printf("Running make app/make clean as a precheck\n")
+		cmd := exec.Command("bash", "-c", "make app && make clean")
+		cmd.Dir = "ext/package/apps/src"
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+		// then actually build the real image, with the target toolchain
 		fmt.Printf("Running apps-dirclean...\n")
 		cmd0 := exec.Command("./make.sh", "apps-dirclean")
 		cmd0.Stdout = os.Stdout

@@ -14,6 +14,7 @@ const (
 	CmdNotRecognizedTID   = 0x01000003
 	TlmDroppedTID         = 0x01000004
 	PongTID               = 0x01000005
+	ClockCalibratedTID    = 0x01000006
 	MagPwrStateChangedTID = 0x02000001
 )
 
@@ -66,6 +67,14 @@ func (Pong) Validate() bool {
 	return true
 }
 
+type ClockCalibrated struct {
+	Adjustment int64
+}
+
+func (ClockCalibrated) Validate() bool {
+	return true
+}
+
 type MagPwrStateChanged struct {
 	PowerState bool
 }
@@ -94,6 +103,8 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 		t = &Pong{}
 	case MagPwrStateChangedTID:
 		t = &MagPwrStateChanged{}
+	case ClockCalibratedTID:
+		t = &ClockCalibrated{}
 	default:
 		return nil, 0, fmt.Errorf("unrecognized telemetry ID: %08x", cp.CmdTlmId)
 	}

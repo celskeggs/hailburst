@@ -35,12 +35,11 @@ func (v *verifier) checkExactlyOne(req string, interval time.Duration, predicate
 }
 
 func (v *verifier) checkExactlyOneTelemetry(req string, interval time.Duration, predicate func(t transport.Telemetry) bool) {
-	// start := v.sim.Now()
-	// end := start.Add(interval)
+	start := v.sim.Now()
+	end := start.Add(interval)
 	v.checkExactlyOne(req, interval, func(e Event) bool {
 		tde, ok := e.(TelemetryDownlinkEvent)
-		// TODO: re-introduce limits on remote timestamp
-		return ok /* && tde.RemoteTimestamp.AtOrAfter(start) && tde.RemoteTimestamp.Before(end) */ && predicate(tde.Telemetry)
+		return ok && tde.RemoteTimestamp.AtOrAfter(start) && tde.RemoteTimestamp.Before(end) && predicate(tde.Telemetry)
 	})
 }
 

@@ -7,12 +7,13 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "clock.h"
 #include "cmd.h"
+#include "comm.h"
 #include "fakewire_exc.h"
-#include "rmap.h"
 #include "radio.h"
 #include "ringbuf.h"
-#include "comm.h"
+#include "rmap.h"
 #include "tlm.h"
 
 static fw_exchange_t fwport;
@@ -28,6 +29,19 @@ static rmap_addr_t radio_routing = {
         .logical_address = 40,
     },
     .dest_key = 101,
+};
+static rmap_addr_t clock_routing = {
+    .destination = {
+        .path_bytes = NULL,
+        .num_path_bytes = 0,
+        .logical_address = 43,
+    },
+    .source = {
+        .path_bytes = NULL,
+        .num_path_bytes = 0,
+        .logical_address = 40,
+    },
+    .dest_key = 103,
 };
 static rmap_monitor_t monitor;
 static radio_t radio;
@@ -48,6 +62,7 @@ void init_rmap_listener(void) {
     comm_dec_init(&decoder, &uplink);
     comm_enc_init(&encoder, &downlink);
     telemetry_init(&encoder);
+    clock_init(&monitor, &clock_routing);
 
     rmap_init = true;
 }

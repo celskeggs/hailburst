@@ -414,7 +414,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     }
     assert(state == TX_STATE_IDLE);
 
-    printf("Radio: finished transmitting %u bytes.\n", append_len);
+    printf("Radio: finished transmitting %zu bytes.\n", append_len);
 
     return true;
 }

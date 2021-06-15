@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#include "clock.h"
 #include "thread.h"
 #include "tlm.h"
 
@@ -21,6 +22,7 @@ enum {
 	CMD_NOT_RECOGNIZED_TID    = 0x01000003,
 	TLM_DROPPED_TID           = 0x01000004,
 	PONG_TID                  = 0x01000005,
+	CLOCK_CALIBRATED_TID      = 0x01000006,
 	MAG_PWR_STATE_CHANGED_TID = 0x02000001,
 };
 
@@ -29,7 +31,6 @@ static ringbuf_t telemetry_ring;
 // atomic
 static uint32_t telemetry_dropped = 0;
 
-static struct timespec time_zero;
 static pthread_t telemetry_mainloop_thread;
 
 static void *telemetry_mainloop(void *encoder_opaque);
@@ -37,20 +38,10 @@ static void *telemetry_mainloop(void *encoder_opaque);
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry_initialized);
     ringbuf_init(&telemetry_ring, MAX_BUFFERED, sizeof(tlm_elem_t));
-    // TODO: adjust this to match simulation clock
-    int time_ok = clock_gettime(CLOCK_BOOTTIME, &time_zero);
-    assert(time_ok == 0);
+
     telemetry_initialized = true;
 
     thread_create(&telemetry_mainloop_thread, telemetry_mainloop, encoder);
-}
-
-static inline uint64_t telemetry_timestamp(void) {
-    struct timespec ct;
-    int time_ok = clock_gettime(CLOCK_BOOTTIME, &ct);
-    assert(time_ok == 0);
-    return 1000000000 * ((int64_t) ct.tv_sec - (int64_t) time_zero.tv_sec)
-           + ((int64_t) ct.tv_nsec - (int64_t) time_zero.tv_nsec);
 }
 
 static void telemetry_record(tlm_elem_t *insert) {
@@ -58,7 +49,7 @@ static void telemetry_record(tlm_elem_t *insert) {
     assert(insert->data_len <= MAX_TLM_BODY);
     if (telemetry_initialized) {
         // first, snapshot current time
-        insert->timestamp_ns = telemetry_timestamp();
+        insert->timestamp_ns = clock_timestamp();
         // then write element to ring buffer
         written = ringbuf_write(&telemetry_ring, insert, 1, RB_NONBLOCKING);
         assert(written <= 1);
@@ -87,7 +78,7 @@ static void *telemetry_mainloop(void *encoder_opaque) {
 
             // fill in telemetry packet
             packet.cmd_tlm_id = TLM_DROPPED_TID;
-            packet.timestamp_ns = telemetry_timestamp();
+            packet.timestamp_ns = clock_timestamp();
             packet.data_len = sizeof(drop_count);
             packet.data_bytes = (uint8_t*) &drop_count;
         } else {
@@ -151,6 +142,16 @@ void tlm_pong(uint32_t ping_id) {
     tlm_elem_t tlm = { .telemetry_id = PONG_TID, .data_len = 4 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
     *out++ = htonl(ping_id);
+    telemetry_record(&tlm);
+}
+
+void tlm_clock_calibrated(int64_t adjustment) {
+    printf("ClockCalibrated: Adjustment=%"PRId64"\n", adjustment);
+
+    tlm_elem_t tlm = { .telemetry_id = CLOCK_CALIBRATED_TID, .data_len = 8 };
+    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    *out++ = htonl((uint32_t) (adjustment >> 32));
+    *out++ = htonl((uint32_t) (adjustment >> 0));
     telemetry_record(&tlm);
 }
 

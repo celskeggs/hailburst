@@ -5,6 +5,7 @@ import (
 	"sim/fakewire/fwmodel"
 	"sim/fakewire/router"
 	"sim/model"
+	"sim/spacecraft/clock"
 	"sim/spacecraft/magnetometer"
 	"sim/telecomm"
 	"sim/telecomm/mission"
@@ -19,15 +20,18 @@ const (
 	PortFSW    = 1
 	PortRadio  = 2
 	PortMagnet = 3
+	PortClock  = 4
 
-	NumPorts = 3
+	NumPorts = 4
 
 	AddrFSW    = 40
 	AddrRadio  = 41
 	AddrMagnet = 42
+	AddrClock  = 43
 
 	KeyRadio  = 101
 	KeyMagnet = 102
+	KeyClock  = 103
 )
 
 func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string)) timesync.ProtocolImpl {
@@ -46,6 +50,8 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string)) 
 				return PortRadio, false, false
 			case AddrMagnet:
 				return PortMagnet, false, false
+			case AddrClock:
+				return PortClock, false, false
 			default:
 				return -1, false, true
 			}
@@ -71,5 +77,10 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string)) 
 			LogicalAddress:   AddrMagnet,
 			DestinationKey:   KeyMagnet,
 		}.Construct(sim, ports[PortMagnet], magnetometer.MakeRandomMagneticEnvironment(sim), ac)
+		// connect a spacecraft clock to the switch on Port 4
+		clock.Config{
+			LogicalAddress: AddrClock,
+			DestinationKey: KeyClock,
+		}.Construct(sim, ports[PortClock])
 	})
 }
