@@ -71,13 +71,39 @@ func (t VirtualTime) Since(base VirtualTime) time.Duration {
 	return time.Nanosecond * time.Duration(t-base)
 }
 
+func abs(i64 int64) int64 {
+	if i64 < 0 {
+		return -i64
+	} else {
+		return i64
+	}
+}
+
+func (t VirtualTime) TimeDistance(t2 VirtualTime) time.Duration {
+	if !t.TimeExists() || !t2.TimeExists() {
+		panic("times don't exist")
+	}
+	return time.Nanosecond * time.Duration(abs(int64(t-t2)))
+}
+
 func (t VirtualTime) Nanoseconds() uint64 {
+	if !t.TimeExists() {
+		panic("time doesn't exist")
+	}
 	return uint64(t)
 }
 
 func FromNanoseconds(t uint64) (VirtualTime, bool) {
 	vt := VirtualTime(t)
 	return vt, vt.TimeExists()
+}
+
+func FromNanosecondsAssume(t uint64) VirtualTime {
+	vt, ok := FromNanoseconds(t)
+	if !ok {
+		panic("nanoseconds validity assumption failed")
+	}
+	return vt
 }
 
 const NeverTimeout VirtualTime = -1

@@ -35,7 +35,6 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(status == RS_OK);
     assert(read_len == sizeof(magic_num));
     magic_num = ntohl(magic_num);
-    printf("Magic number: %x (expected %x)\n", magic_num, CLOCK_MAGIC_NUM);
     assert(magic_num == CLOCK_MAGIC_NUM);
 
     // prepare for a fast set of samples
@@ -52,7 +51,6 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(status == RS_OK);
     assert(read_len == sizeof(ref_time_sampled_raw));
     uint64_t ref_time_sampled = ((uint64_t) ntohl(ref_time_sampled_raw[0]) << 32) | ntohl(ref_time_sampled_raw[1]);
-    printf("ref_time_sampled: %"PRIu64"\n", ref_time_sampled);
 
     // now compute the appropriate offset
     clock_offset_adj = ref_time_sampled - (local_time_presampled + local_time_postsampled) / 2;

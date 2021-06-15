@@ -93,6 +93,16 @@ func (a *tracker) search(startTime, endTime model.VirtualTime, predicate func(Ev
 	return all
 }
 
+// searchLast returns the most recent element that matches the predicate.
+func (a *tracker) searchLast(predicate func(Event) bool) Event {
+	for i := len(a.Events) - 1; i >= 0; i-- {
+		if predicate(a.Events[i]) {
+			return a.Events[i]
+		}
+	}
+	return nil
+}
+
 func (a *tracker) OnCommandUplink(command transport.Command, sendTimestamp model.VirtualTime) {
 	a.insert(CommandUplinkEvent{
 		SendTimestamp:    sendTimestamp,

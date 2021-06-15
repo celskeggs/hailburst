@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sim/model"
 )
@@ -16,71 +17,86 @@ const (
 	PongTID               = 0x01000005
 	ClockCalibratedTID    = 0x01000006
 	MagPwrStateChangedTID = 0x02000001
+	MagReadingsArrayTID   = 0x02000002
 )
 
+type BaseTelemetry struct{}
+
+func (bt *BaseTelemetry) Decode(t Telemetry, dataBytes []byte, tlmId uint32) error {
+	r := bytes.NewReader(dataBytes)
+	if err := binary.Read(r, binary.BigEndian, t); err != nil {
+		return fmt.Errorf("while decoding %d bytes into ID %08x: %v", len(dataBytes), tlmId, err)
+	}
+	if r.Len() != 0 {
+		return fmt.Errorf("extraneous bytes left over in telemetry packet: %d", r.Len())
+	}
+	return nil
+}
+
 type Telemetry interface {
-	Validate() bool
+	// Decode takes a reference to this interface itself, just to simplify the implementation of BaseTelemetry
+	Decode(t Telemetry, dataBytes []byte, tlmId uint32) error
 }
 
 type CmdReceived struct {
+	BaseTelemetry
 	OriginalTimestamp uint64
 	OriginalCommandId uint32 // the CID
 }
 
-func (CmdReceived) Validate() bool {
-	return true
-}
-
 type CmdCompleted struct {
+	BaseTelemetry
 	OriginalTimestamp uint64
 	OriginalCommandId uint32
 	Success           bool
 }
 
-func (CmdCompleted) Validate() bool {
-	return true
-}
-
 type CmdNotRecognized struct {
+	BaseTelemetry
 	OriginalTimestamp uint64
 	OriginalCommandId uint32
 	Length            uint32
 }
 
-func (CmdNotRecognized) Validate() bool {
-	return true
-}
-
 type TlmDropped struct {
+	BaseTelemetry
 	MessagesLost uint32
 }
 
-func (TlmDropped) Validate() bool {
-	return true
-}
-
 type Pong struct {
+	BaseTelemetry
 	PingID uint32
 }
 
-func (Pong) Validate() bool {
-	return true
-}
-
 type ClockCalibrated struct {
+	BaseTelemetry
 	Adjustment int64
 }
 
-func (ClockCalibrated) Validate() bool {
-	return true
-}
-
 type MagPwrStateChanged struct {
+	BaseTelemetry
 	PowerState bool
 }
 
-func (MagPwrStateChanged) Validate() bool {
-	return true
+type MagReadingsArray struct {
+	Readings []struct {
+		ReadingTime      uint64
+		MagX, MagY, MagZ int16
+	}
+}
+
+func (m *MagReadingsArray) Decode(_ Telemetry, dataBytes []byte, tlmId uint32) error {
+	r := bytes.NewReader(dataBytes)
+	if err := binary.Read(r, binary.BigEndian, &m.Readings); err != nil {
+		return fmt.Errorf("while decoding %d bytes into array-based ID %08x: %v", len(dataBytes), tlmId, err)
+	}
+	if r.Len() != 0 {
+		return fmt.Errorf("extraneous bytes left over in array-based telemetry packet: %d", r.Len())
+	}
+	if len(m.Readings) == 0 {
+		return errors.New("cannot have zero entries in downlinked magnetometer readings array")
+	}
+	return nil
 }
 
 func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, err error) {
@@ -105,18 +121,13 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 		t = &MagPwrStateChanged{}
 	case ClockCalibratedTID:
 		t = &ClockCalibrated{}
+	case MagReadingsArrayTID:
+		t = &MagReadingsArray{}
 	default:
 		return nil, 0, fmt.Errorf("unrecognized telemetry ID: %08x", cp.CmdTlmId)
 	}
-	r := bytes.NewReader(cp.DataBytes)
-	if err := binary.Read(r, binary.BigEndian, t); err != nil {
-		return nil, 0, fmt.Errorf("while decoding %d bytes into ID %08x: %v", len(cp.DataBytes), cp.CmdTlmId, err)
-	}
-	if r.Len() != 0 {
-		return nil, 0, fmt.Errorf("extraneous bytes left over in telemetry packet: %d", r.Len())
-	}
-	if !t.Validate() {
-		return nil, 0, fmt.Errorf("unpacked telemetry failed validation: %v", t)
+	if err := t.Decode(t, cp.DataBytes, cp.CmdTlmId); err != nil {
+		return nil, 0, err
 	}
 	timestampNs, nsOk := model.FromNanoseconds(cp.Timestamp)
 	if !nsOk {
