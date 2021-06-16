@@ -84,10 +84,18 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 			cc, ok := t.(*transport.CmdCompleted)
 			return ok && cc.OriginalCommandId == command.CmdId() && cc.OriginalTimestamp == sendTimestamp.Nanoseconds()
 		})
-		v.checkExactlyOne(ReqMagSetPwr, time.Millisecond*200, func(e Event) bool {
-			mpe, ok := e.(MagnetometerPowerEvent)
-			return ok && mpe.Powered == magCmd.PowerState
+		latest := v.tracker.searchLast(func(e Event) bool {
+			cue, ok1 := e.(CommandUplinkEvent)
+			_, ok2 := cue.Command.(transport.MagSetPwrState)
+			return ok1 && ok2 && cue.SendTimestamp != sendTimestamp
 		})
+		lastPowerState := latest != nil && latest.(CommandUplinkEvent).Command.(transport.MagSetPwrState).PowerState
+		if lastPowerState != magCmd.PowerState {
+			v.checkExactlyOne(ReqMagSetPwr, time.Millisecond*200, func(e Event) bool {
+				mpe, ok := e.(MagnetometerPowerEvent)
+				return ok && mpe.Powered == magCmd.PowerState
+			})
+		}
 	}
 }
 
@@ -317,7 +325,12 @@ func (v *verifier) OnMeasureMagnetometer(x, y, z int16) {
 func (v *verifier) startPeriodicValidation(nbe, npe int) {
 	completion := v.rqt.Start(ReqNoTelemErrs)
 	v.sim.SetTimer(v.sim.Now().Add(time.Second), "sim.verifier.ActivityVerifier/Periodic", func() {
-		completion(v.tracker.TelemetryByteErrors == nbe && v.tracker.TelemetryPacketErrors == npe)
+		telemOk := v.tracker.TelemetryByteErrors == nbe && v.tracker.TelemetryPacketErrors == npe
+		if !telemOk {
+			log.Printf("Telemetry not okay: %v != %v || %v != %v\n",
+				       v.tracker.TelemetryByteErrors, nbe, v.tracker.TelemetryPacketErrors, npe)
+		}
+		completion(telemOk)
 		v.startPeriodicValidation(v.tracker.TelemetryByteErrors, v.tracker.TelemetryPacketErrors)
 	})
 }

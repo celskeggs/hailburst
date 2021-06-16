@@ -11,6 +11,8 @@
 #include "fakewire_exc.h"
 #include "thread.h"
 
+#if 0
+
 // 21 MB!
 #define BUFSIZE (21 * 1024 * 1024)
 #define FILL (0xCA72F19E)
@@ -104,3 +106,5 @@ void task_scrub_memory(void) {
     thread_join(reader);
     fakewire_exc_destroy(&fwport);
 }
+
+#endif

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "debug.h"
 #include "radio.h"
 
 enum {
@@ -210,7 +211,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     if (reg[REG_RX_STATE] == RX_STATE_IDLE) {
-        fprintf(stderr, "Radio: initializing uplink out of IDLE mode\n");
+        debug0("Radio: initializing uplink out of IDLE mode");
 
         radio->bytes_extracted = 0;
         reg[REG_RX_PTR] = radio->rx_halves[0].base;
@@ -414,7 +415,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     }
     assert(state == TX_STATE_IDLE);
 
-    printf("Radio: finished transmitting %zu bytes.\n", append_len);
+    debugf("Radio: finished transmitting %zu bytes.", append_len);
 
     return true;
 }

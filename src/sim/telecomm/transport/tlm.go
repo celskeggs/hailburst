@@ -78,17 +78,23 @@ type MagPwrStateChanged struct {
 	PowerState bool
 }
 
+type MagReading struct {
+	ReadingTime      uint64
+	MagX, MagY, MagZ int16
+}
+
 type MagReadingsArray struct {
-	Readings []struct {
-		ReadingTime      uint64
-		MagX, MagY, MagZ int16
-	}
+	Readings []MagReading
 }
 
 func (m *MagReadingsArray) Decode(_ Telemetry, dataBytes []byte, tlmId uint32) error {
 	r := bytes.NewReader(dataBytes)
-	if err := binary.Read(r, binary.BigEndian, &m.Readings); err != nil {
-		return fmt.Errorf("while decoding %d bytes into array-based ID %08x: %v", len(dataBytes), tlmId, err)
+	for r.Len() > 0 {
+		var mr MagReading
+		if err := binary.Read(r, binary.BigEndian, &mr); err != nil {
+			return fmt.Errorf("while decoding %d bytes into array-based ID %08x: %v", len(dataBytes), tlmId, err)
+		}
+		m.Readings = append(m.Readings, mr)
 	}
 	if r.Len() != 0 {
 		return fmt.Errorf("extraneous bytes left over in array-based telemetry packet: %d", r.Len())

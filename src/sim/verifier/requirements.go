@@ -33,7 +33,7 @@ const (
 	ReqPingPong = "ReqPingPong"
 	// ReqMagSetPwr requires:
 	// No later than 200ms after each MagSetPwrState command's receive point, the flight software shall have updated
-	// the power state of the magnetometer device to the specified state.
+	// the power state of the magnetometer device to the specified state, if it differs.
 	ReqMagSetPwr = "ReqMagSetPwr"
 	// ReqUnchangedPwr requires:
 	// The power state of the magnetometer device shall not be changed unless specifically commanded.

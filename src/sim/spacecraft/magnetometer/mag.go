@@ -120,6 +120,7 @@ func (m *magneticDevice) AttemptWrite(extAddr uint8, writeAddr uint32, increment
 				m.CancelLatch = m.Context.SetTimer(m.Context.Now().Add(m.MeasurementDelay), "sim.spacecraft.magnetometer.MagneticDevice/Latch", func() {
 					if m.LatchSet {
 						m.LatchSet = false
+						m.CancelLatch = nil
 						m.SnapX, m.SnapY, m.SnapZ = latchX, latchY, latchZ
 					}
 				})

@@ -1,8 +1,11 @@
+#include <arpa/inet.h>
 #include <assert.h>
+#include <inttypes.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "clock.h"
+#include "debug.h"
 #include "magnetometer.h"
 #include "tlm.h"
 
@@ -23,8 +26,11 @@ enum {
 
 static void magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_t value) {
     rmap_status_t status;
+    value = htons(value);
+    debug0("Start register write");
     status = rmap_write(&mag->rctx, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
                         0x00, reg, 2, &value);
+    debug0("Finish register write");
     assert(status == RS_OK);
 }
 
@@ -49,7 +55,10 @@ static void magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
         uint16_t registers[4];
         size_t data_length = sizeof(registers);
         status = rmap_read(&mag->rctx, &mag->address, RF_INCREMENT, 0x00, REG_LATCH, &data_length, registers);
-        assert(status == RS_OK);
+        assert(status == RS_OK && data_length == sizeof(registers));
+        for (int i = 0; i < 4; i++) {
+            registers[i] = ntohs(registers[i]);
+        }
 
         assert(registers[0] == LATCH_OFF || registers[0] == LATCH_ON);
         if (registers[0] == LATCH_OFF) {
@@ -69,13 +78,16 @@ static void *magnetometer_mainloop(void *mag_opaque) {
     assert(mag != NULL);
 
     for (;;) {
+        debug0("Checking for magnetometer power command...");
         mutex_lock(&mag->mutex);
         // wait for magnetometer power command
         while (!mag->should_be_powered) {
+            debug0("Waiting for magnetometer power command...");
             cond_wait(&mag->cond, &mag->mutex);
         }
         assert(mag->should_be_powered == true);
         mutex_unlock(&mag->mutex);
+        debug0("Turning on magnetometer power...");
 
         // turn on power
         magnetometer_set_register(mag, REG_POWER, POWER_ON);
@@ -126,6 +138,7 @@ void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     mutex_lock(&mag->mutex);
     if (powered != mag->should_be_powered) {
         mag->should_be_powered = powered;
+        debugf("Broadcasting &mag->cond with should_be_powered=%d", mag->should_be_powered);
         cond_broadcast(&mag->cond);
     }
     mutex_unlock(&mag->mutex);

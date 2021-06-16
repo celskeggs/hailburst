@@ -8,7 +8,7 @@ all: app
 %.o: %.c *.h
 	$(GCC) $(MY_CFLAGS) -c $< -o $@
 
-app: app.o app_iotest.o app_rmap.o app_scrub.o bitbuf.o fakewire_link.o fakewire_exc.o rmap.o ringbuf.o radio.o comm.o cmd.o tlm.o clock.o magnetometer.o
+app: spacecraft.o bitbuf.o fakewire_link.o fakewire_exc.o rmap.o ringbuf.o radio.o comm.o cmd.o tlm.o clock.o magnetometer.o
 	$(GCC) $(MY_CFLAGS) $^ -o $@
 
 fakewire_link_test: fakewire_link_test.o test_common.o fakewire_link.o bitbuf.o
