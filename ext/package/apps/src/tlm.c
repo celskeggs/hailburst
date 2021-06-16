@@ -176,9 +176,9 @@ void tlm_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings) {
     *out++ = htonl((uint32_t) (readings[0].reading_time >> 32));
     *out++ = htonl((uint32_t) (readings[0].reading_time >> 0));
     uint16_t *out16 = (uint16_t*) out;
-    *out16++ = readings[0].mag_x;
-    *out16++ = readings[1].mag_x;
-    *out16++ = readings[2].mag_x;
+    *out16++ = htons(readings[0].mag_x);
+    *out16++ = htons(readings[0].mag_y);
+    *out16++ = htons(readings[0].mag_z);
     assert((uint8_t*) out16 - tlm.data_bytes == tlm.data_len);
     telemetry_record(&tlm);
 }

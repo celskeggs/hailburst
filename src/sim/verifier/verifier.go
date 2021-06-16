@@ -204,12 +204,22 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 
 			matchOk := true
 			if len(samePeriodMeasurements) != len(readingsArray.Readings) {
+				log.Printf("Mismatched # of readings for period %v to %v: %d measurements, %d readings",
+					firstReadingTime.Add(-MaxMagMeasTimeVariance), lastReadingTime.Add(MaxMagMeasTimeVariance),
+					len(samePeriodMeasurements), len(readingsArray.Readings))
 				matchOk = false
 			} else {
 				for i, reading := range readingsArray.Readings {
 					mme := samePeriodMeasurements[i].(MagnetometerMeasureEvent)
-					timeDiff := model.FromNanosecondsAssume(reading.ReadingTime).TimeDistance(mme.MeasTimestamp)
+					rt := model.FromNanosecondsAssume(reading.ReadingTime)
+					timeDiff := rt.TimeDistance(mme.MeasTimestamp)
 					if timeDiff >= MaxMagMeasTimeVariance || mme.X != reading.MagX || mme.Y != reading.MagY || mme.Z != reading.MagZ {
+						log.Printf("Mismatched meas/reading %d:\n" +
+								   "measure = {time=%v, x=%v, y=%v, z=%v}\n" +
+							       "reading = {time=%v, x=%v, y=%v, z=%v}",
+							       i,
+							       mme.MeasTimestamp, mme.X, mme.Y, mme.Z,
+							       rt, reading.MagX, reading.MagY, reading.MagZ)
 						matchOk = false
 					}
 				}
