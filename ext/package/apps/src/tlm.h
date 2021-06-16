@@ -22,6 +22,8 @@ void tlm_cmd_not_recognized(uint64_t original_timestamp, uint32_t original_comma
 void tlm_pong(uint32_t ping_id);
 void tlm_clock_calibrated(int64_t adjustment);
 void tlm_mag_pwr_state_changed(bool power_state);
-void tlm_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings);
+
+// synchronous telemetry writes
+void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings);
 
 #endif /* APP_TLM_H */

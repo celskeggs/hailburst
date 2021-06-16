@@ -111,15 +111,52 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             // take and report reading
             tlm_mag_reading_t reading;
             magnetometer_take_reading(mag, &reading);
-            tlm_mag_readings_array(&reading, 1);
 
             mutex_lock(&mag->mutex);
+            if (mag->num_readings < MAGNETOMETER_MAX_READINGS) {
+                mag->readings[mag->num_readings++] = reading;
+            } else {
+                debugf("Magnetometer: maxed out at %zu collected readings.", mag->num_readings);
+            }
         }
         mutex_unlock(&mag->mutex);
 
         // turn off power
         magnetometer_set_register(mag, REG_POWER, POWER_OFF);
         tlm_mag_pwr_state_changed(false);
+    }
+}
+
+static void *magnetometer_telemloop(void *mag_opaque) {
+    magnetometer_t *mag = (magnetometer_t *) mag_opaque;
+    assert(mag != NULL);
+
+    // runs every 5.5 seconds to meet requirements
+    for (;;) {
+        uint64_t last_telem_time = clock_timestamp();
+
+        // see if we have readings to downlink
+        mutex_lock(&mag->mutex);
+        if (mag->num_readings > 0) {
+            // snapshot readings to send
+            size_t num_downlink = mag->num_readings;
+            assert(num_downlink <= MAGNETOMETER_MAX_READINGS);
+            mutex_unlock(&mag->mutex);
+
+            // send readings
+            tlm_sync_mag_readings_array(mag->readings, num_downlink);
+
+            last_telem_time = clock_timestamp();
+
+            // rearrange any readings collected in the interim
+            mutex_lock(&mag->mutex);
+            mag->num_readings -= num_downlink;
+            assert(mag->num_readings <= MAGNETOMETER_MAX_READINGS);
+            memmove(&mag->readings[0], &mag->readings[num_downlink], mag->num_readings);
+        }
+        mutex_unlock(&mag->mutex);
+
+        sleep_until(last_telem_time + (uint64_t) 5500000000);
     }
 }
 
@@ -131,6 +168,7 @@ void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *ad
     rmap_init_context(&mag->rctx, mon, 4);
     memcpy(&mag->address, address, sizeof(rmap_addr_t));
     thread_create(&mag->query_thread, magnetometer_mainloop, mag);
+    thread_create(&mag->telem_thread, magnetometer_telemloop, mag);
 }
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {

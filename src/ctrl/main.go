@@ -105,7 +105,7 @@ func main() {
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("./gdb.sh -ex 'stepvt 5s'", "./bare-arm")
+	p.LaunchInTerminal("./gdb.sh -ex 'stepvt 20s'", "./bare-arm")
 	time.Sleep(time.Millisecond * 100)
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",
