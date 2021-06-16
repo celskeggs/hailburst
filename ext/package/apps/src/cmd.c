@@ -1,9 +1,11 @@
 #include <arpa/inet.h>
+#include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 #include "cmd.h"
+#include "spacecraft.h"
 #include "tlm.h"
 
 enum {
@@ -17,9 +19,9 @@ static bool cmd_ping(uint32_t ping_id) {
 }
 
 static bool cmd_mag_set_pwr_state(bool pwr_state) {
-    printf("Not implemented: MAG_SET_PWR_STATE (%d)\n", pwr_state);
-    tlm_mag_pwr_state_changed(pwr_state);
-    return false;
+    assert(app_magnetometer != NULL);
+    magnetometer_set_powered(app_magnetometer, pwr_state);
+    return true;
 }
 
 void cmd_execute(uint32_t cid, uint64_t timestamp_ns, uint8_t *args, size_t args_len) {

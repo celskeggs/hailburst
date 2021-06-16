@@ -58,6 +58,9 @@ const (
 	// ReqCorrectMagReadings requires:
 	// The flight software shall not downlink any reading that does not match one produced by the magnetometer.
 	ReqCorrectMagReadings = "ReqCorrectMagReadings"
+	// ReqBatchedMagReadings requires:
+	// The flight software shall not downlink magnetometer readings more frequently than once every five seconds.
+	ReqBatchedMagReadings = "ReqBatchedMagReadings"
 	// ReqNoTelemErrs requires:
 	// The flight software shall not downlink any telemetry sequences containing validation errors.
 	ReqNoTelemErrs = "ReqNoTelemErrs"
@@ -86,6 +89,7 @@ var requirements = []string{
 	ReqDownlinkMagReadings,
 	ReqOrderedMagReadings,
 	ReqCorrectMagReadings,
+	ReqBatchedMagReadings,
 	ReqNoTelemErrs,
 	ReqTelemOrdered,
 	ReqTelemRecent,

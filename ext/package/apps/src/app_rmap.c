@@ -11,9 +11,11 @@
 #include "cmd.h"
 #include "comm.h"
 #include "fakewire_exc.h"
+#include "magnetometer.h"
 #include "radio.h"
 #include "ringbuf.h"
 #include "rmap.h"
+#include "spacecraft.h"
 #include "tlm.h"
 
 static fw_exchange_t fwport;
@@ -29,6 +31,19 @@ static rmap_addr_t radio_routing = {
         .logical_address = 40,
     },
     .dest_key = 101,
+};
+static rmap_addr_t magnetometer_routing = {
+    .destination = {
+        .path_bytes = NULL,
+        .num_path_bytes = 0,
+        .logical_address = 42,
+    },
+    .source = {
+        .path_bytes = NULL,
+        .num_path_bytes = 0,
+        .logical_address = 40,
+    },
+    .dest_key = 102,
 };
 static rmap_addr_t clock_routing = {
     .destination = {
@@ -49,6 +64,8 @@ static ringbuf_t uplink, downlink;
 static comm_dec_t decoder;
 static comm_enc_t encoder;
 static bool rmap_init = false;
+static magnetometer_t magnetometer;
+magnetometer_t *app_magnetometer = NULL;
 
 void init_rmap_listener(void) {
     assert(!rmap_init);
@@ -63,6 +80,9 @@ void init_rmap_listener(void) {
     comm_enc_init(&encoder, &downlink);
     telemetry_init(&encoder);
     clock_init(&monitor, &clock_routing);
+    magnetometer_init(&magnetometer, &monitor, &magnetometer_routing);
+
+    app_magnetometer = &magnetometer;
 
     rmap_init = true;
 }

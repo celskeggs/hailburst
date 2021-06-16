@@ -24,6 +24,7 @@ enum {
 	PONG_TID                  = 0x01000005,
 	CLOCK_CALIBRATED_TID      = 0x01000006,
 	MAG_PWR_STATE_CHANGED_TID = 0x02000001,
+	MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
 static bool telemetry_initialized = false;
@@ -160,5 +161,23 @@ void tlm_mag_pwr_state_changed(bool power_state) {
 
     tlm_elem_t tlm = { .telemetry_id = MAG_PWR_STATE_CHANGED_TID, .data_len = 1 };
     tlm.data_bytes[0] = (power_state ? 1 : 0);
+    telemetry_record(&tlm);
+}
+
+void tlm_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings) {
+    assert(num_readings == 1); // other counts not yet implemented because of needed ring buffer changes
+
+    printf("Magnetometer Readings Array: Readings[0]={%"PRIu64", %d, %d, %d}\n",
+           readings[0].reading_time, readings[0].mag_x, readings[0].mag_y, readings[0].mag_z);
+
+    tlm_elem_t tlm = { .telemetry_id = MAG_READINGS_ARRAY_TID, .data_len = 14 };
+    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    *out++ = htonl((uint32_t) (readings[0].reading_time >> 32));
+    *out++ = htonl((uint32_t) (readings[0].reading_time >> 0));
+    uint16_t *out16 = (uint16_t*) out;
+    *out16++ = readings[0].mag_x;
+    *out16++ = readings[1].mag_x;
+    *out16++ = readings[2].mag_x;
+    assert((uint8_t*) out16 - tlm.data_bytes == tlm.data_len);
     telemetry_record(&tlm);
 }

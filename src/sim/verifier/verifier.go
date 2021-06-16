@@ -153,13 +153,12 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 			_, ok2 := tde.Telemetry.(*transport.MagReadingsArray)
 			return ok1 && ok2 && tde.LocalTimestamp != now
 		})
-		lastReadings := lastReadingsArray.(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray).Readings
-		// guaranteed to have at least one element by telemetry decoder
-		lastReadingTime, lrtOk := model.FromNanoseconds(lastReadings[len(lastReadings)-1].ReadingTime)
-
 		inOrder := true
-		if !lrtOk {
-			inOrder = false
+		lastReadingTime := model.TimeZero
+		if lastReadingsArray != nil {
+			lastReadings := lastReadingsArray.(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray).Readings
+			// guaranteed to have at least one element by telemetry decoder
+			lastReadingTime, inOrder = model.FromNanoseconds(lastReadings[len(lastReadings)-1].ReadingTime)
 		}
 
 		// now validate the order
@@ -173,6 +172,15 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 		}
 
 		v.rqt.Immediate(ReqOrderedMagReadings, inOrder)
+
+		// validate that there was enough spacing between reading downlinks
+		if lastReadingsArray != nil {
+			lastLocalTimestamp := lastReadingsArray.(TelemetryDownlinkEvent).LocalTimestamp
+			lastRemoteTimestamp := lastReadingsArray.(TelemetryDownlinkEvent).RemoteTimestamp
+			v.rqt.Immediate(ReqBatchedMagReadings,
+				now.AtOrAfter(lastLocalTimestamp.Add(time.Second*5)) &&
+					remoteTimestamp.AtOrAfter(lastRemoteTimestamp.Add(time.Second*5)))
+		}
 
 		if inOrder {
 			// now make sure that everything matches a real measurement
