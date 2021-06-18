@@ -37,7 +37,11 @@ func main() {
 		}
 		log.Printf("Wrote failure information to log file")
 	})
-	err = timesync.Simple("./timesync.sock", app)
+	profiler, err := MakeProfiler("profile.csv", app)
+	if err != nil {
+		log.Fatalf("Cannot initialize profiler: %v", err)
+	}
+	err = timesync.Simple("./timesync.sock", profiler)
 	if err != nil {
 		log.Fatalf("Encountered top-level error: %v", err)
 	}

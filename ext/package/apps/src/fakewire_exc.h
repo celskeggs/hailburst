@@ -18,12 +18,15 @@ typedef struct fw_exchange_st {
 
     fw_exchange_state state;
     fw_link_t         io_port;
+    fw_receiver_t     link_interface;
 
     pthread_mutex_t mutex;
     pthread_cond_t  cond;
+    pthread_mutex_t tx_mutex;
 
-    pthread_t reader_thread;
-    pthread_t writer_thread;
+    pthread_t flowtx_thread;
+
+    bool recv_in_escape;
 
     uint8_t *inbound_buffer;
     size_t   inbound_buffer_offset;
@@ -32,23 +35,18 @@ typedef struct fw_exchange_st {
 
     bool     has_sent_fct;
 
-    uint8_t *outbound_buffer;
-    size_t   outbound_buffer_offset;
-    size_t   outbound_buffer_max;
-    bool     outbound_write_done;
-
     bool     remote_sent_fct;
 } fw_exchange_t;
 
 // these two functions are not threadsafe; the current thread must be the only thread accessing fwe
 void fakewire_exc_init(fw_exchange_t *fwe, const char *label);
 // in addition, destroy must only be called if the exchange was never attached, or if it was already detached.
-void fakewire_exc_destroy(fw_exchange_t *fwe);
+//void fakewire_exc_destroy(fw_exchange_t *fwe);
 
 // the remaining functions ARE threadsafe
 
 void fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags);
-void fakewire_exc_detach(fw_exchange_t *fwe);
+//void fakewire_exc_detach(fw_exchange_t *fwe);
 
 // actual length of packet is returned (>= 0), or else a negative number to indicate an error.
 // if the buffer is too small for the packet, only up to packet_max bytes are written, but the return value includes the

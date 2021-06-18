@@ -118,8 +118,11 @@ func main() {
 		"-icount", "shift=0,sleep=off",
 		"-vga", "none",
 		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
-		"-serial", "chardev:ts0",
+		/* "-serial", "chardev:ts0", */
+		"-serial", "null",
 		"-serial", "file:" + guestLog,
+		"-device", "virtio-serial-device",
+		"-device", "virtserialport,name=tsvc0,chardev=ts0",
 		"-nographic",
 	}
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), ".")
