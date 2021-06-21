@@ -16,8 +16,8 @@ type Processes struct {
 	DoneChannels []<-chan void
 }
 
-func (p *Processes) LaunchInTerminal(path string, cwd string) (wait func()) {
-	cmd := exec.Command("xterm", "-fa", "Monospace", "-fs", "10", "-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", path))
+func (p *Processes) LaunchInTerminal(path string, title string, cwd string) (wait func()) {
+	cmd := exec.Command("xterm", "-fa", "Monospace", "-T", title, "-fs", "10", "-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", path))
 	cmd.Dir = cwd
 	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
@@ -57,12 +57,21 @@ func Exists(path string) bool {
 	return err == nil
 }
 
+func hasArg(name string) bool {
+	for _, a := range os.Args[1:] {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
-	if len(os.Args) >= 2 && os.Args[1] == "--help" {
+	if hasArg("--help") {
 		fmt.Printf("Usage: ./ctrl.sh [--rebuild]\n")
 		return
 	}
-	if len(os.Args) >= 2 && os.Args[1] == "--rebuild" {
+	if hasArg("--rebuild") {
 		// first part is just to confirm that the code IS compilable (using the host toolchain)
 		fmt.Printf("Running make app/make clean as a precheck\n")
 		cmd := exec.Command("bash", "-c", "make app && make clean")
@@ -95,17 +104,21 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	gdbCmd := "./gdb.sh -ex 'stepvt 20s'"
+	if hasArg("--pause") {
+		gdbCmd = "./gdb.sh"
+	}
 	fmt.Printf("Launching applications...\n")
 	// remove old sockets; ignore any errors
 	timesyncSocket := "timesync.sock"
 	guestLog := "guest.log"
 	_, _ = os.Remove(timesyncSocket), os.Remove(guestLog)
 	p := Processes{}
-	p.LaunchInTerminal("go run sim/experiments/requirements |& tee sim.log", ".")
+	p.LaunchInTerminal("go run sim/experiments/requirements |& tee sim.log", "Simulation", ".")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("./gdb.sh -ex 'stepvt 20s'", "./bare-arm")
+	p.LaunchInTerminal(gdbCmd, "GDB", "./bare-arm")
 	time.Sleep(time.Millisecond * 100)
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",
@@ -125,11 +138,11 @@ func main() {
 		"-device", "virtserialport,name=tsvc0,chardev=ts0",
 		"-nographic",
 	}
-	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), ".")
+	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), "QEMU", ".")
 	for i := 0; i < 10 && !Exists(guestLog); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("tail -f "+guestLog, ".")
+	p.LaunchInTerminal("tail -f "+guestLog, "Guest Log", ".")
 	waitMain()
 	fmt.Printf("Interrupting all...\n")
 	p.Interrupt()

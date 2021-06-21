@@ -12,10 +12,16 @@ enum {
     FW_LINK_RING_SIZE = 1024,
 };
 
+//#define DEBUG
+
 static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
     assert(opaque != NULL && bytes_in != NULL);
     assert(bytes_count > 0);
     fw_link_t *fwl = (fw_link_t*) opaque;
+
+#ifdef DEBUG
+    debugf("[fakewire_link] Transmitting %zu regular bytes.", bytes_count);
+#endif
 
     fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
 }
@@ -24,11 +30,19 @@ static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
+#ifdef DEBUG
+    debugf("[fakewire_link] Transmitting control character: %d.", symbol);
+#endif
+
     fakewire_enc_encode_ctrl(&fwl->encoder, symbol);
 }
 
 static void fakewire_link_parity_fail(void *opaque) {
     // do nothing. we'll just stop transmitting.
+
+#ifdef DEBUG
+    debug0("[fakewire_link] Transmitting parity failure.");
+#endif
 }
 
 static void *fakewire_link_output_loop(void *opaque) {

@@ -365,7 +365,7 @@ static void *radio_uplink_loop(void *radio_opaque) {
 
         // only sleep if we haven't been reading all that much data. if we have, then we'd better keep at it!
         if (grabbed < 500) {
-            usleep(1000);
+            usleep(10000);
         }
     }
 }

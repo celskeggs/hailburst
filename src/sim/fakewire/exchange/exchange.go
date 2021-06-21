@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"fmt"
+	"log"
 	"sim/component"
 	"sim/fakewire/fwmodel"
 	"sim/model"
@@ -141,7 +142,11 @@ func (exc *exchangeData) pump() {
 		}
 
 		// waiting to receive one FCT (but accepting extra NULLs)
-		if ch, any := exc.receiveChar(); any {
+		for exc.state == Connecting {
+			ch, any := exc.receiveChar()
+			if !any {
+				break
+			}
 			if ch == TokNull {
 				// that's fine; discard it
 			} else if ch == fwmodel.CtrlFCT {
@@ -149,7 +154,7 @@ func (exc *exchangeData) pump() {
 				exc.remoteFIFOReady = true
 				exc.notifiedFIFOReady = true
 			} else {
-				fmt.Printf("hit unexpected character when looking for a NULL or FCT: %v\n", ch)
+				log.Printf("hit unexpected character when looking for a NULL or FCT: %v\n", ch)
 				exc.state = Erroring
 			}
 		}

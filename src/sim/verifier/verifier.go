@@ -208,20 +208,20 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 					firstReadingTime.Add(-MaxMagMeasTimeVariance), lastReadingTime.Add(MaxMagMeasTimeVariance),
 					len(samePeriodMeasurements), len(readingsArray.Readings))
 				matchOk = false
-			} else {
-				for i, reading := range readingsArray.Readings {
-					mme := samePeriodMeasurements[i].(MagnetometerMeasureEvent)
-					rt := model.FromNanosecondsAssume(reading.ReadingTime)
-					timeDiff := rt.TimeDistance(mme.MeasTimestamp)
-					if timeDiff >= MaxMagMeasTimeVariance || mme.X != reading.MagX || mme.Y != reading.MagY || mme.Z != reading.MagZ {
-						log.Printf("Mismatched meas/reading %d:\n" +
-								   "measure = {time=%v, x=%v, y=%v, z=%v}\n" +
-							       "reading = {time=%v, x=%v, y=%v, z=%v}",
-							       i,
-							       mme.MeasTimestamp, mme.X, mme.Y, mme.Z,
-							       rt, reading.MagX, reading.MagY, reading.MagZ)
-						matchOk = false
-					}
+			}
+			for i := 0; i < len(readingsArray.Readings) && i < len(samePeriodMeasurements); i++ {
+				reading := readingsArray.Readings[i]
+				mme := samePeriodMeasurements[i].(MagnetometerMeasureEvent)
+				rt := model.FromNanosecondsAssume(reading.ReadingTime)
+				timeDiff := rt.TimeDistance(mme.MeasTimestamp)
+				if timeDiff >= MaxMagMeasTimeVariance || mme.X != reading.MagX || mme.Y != reading.MagY || mme.Z != reading.MagZ {
+					log.Printf("Mismatched meas/reading %d:\n"+
+						"measure = {time=%v, x=%v, y=%v, z=%v}\n"+
+						"reading = {time=%v, x=%v, y=%v, z=%v}",
+						i,
+						mme.MeasTimestamp, mme.X, mme.Y, mme.Z,
+						rt, reading.MagX, reading.MagY, reading.MagZ)
+					matchOk = false
 				}
 			}
 			v.rqt.Immediate(ReqCorrectMagReadings, matchOk)
@@ -338,7 +338,7 @@ func (v *verifier) startPeriodicValidation(nbe, npe int) {
 		telemOk := v.tracker.TelemetryByteErrors == nbe && v.tracker.TelemetryPacketErrors == npe
 		if !telemOk {
 			log.Printf("Telemetry not okay: %v != %v || %v != %v\n",
-				       v.tracker.TelemetryByteErrors, nbe, v.tracker.TelemetryPacketErrors, npe)
+				v.tracker.TelemetryByteErrors, nbe, v.tracker.TelemetryPacketErrors, npe)
 		}
 		completion(telemOk)
 		v.startPeriodicValidation(v.tracker.TelemetryByteErrors, v.tracker.TelemetryPacketErrors)

@@ -15,6 +15,8 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
 static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol);
 static void fakewire_exc_on_parity_fail(void *opaque);
 
+//#define DEBUG
+
 void fakewire_exc_init(fw_exchange_t *fwe, const char *label) {
     memset(fwe, 0, sizeof(fw_exchange_t));
     fwe->state = FW_EXC_DISCONNECTED;
@@ -93,6 +95,10 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     assert(fwe != NULL && bytes_in != NULL);
     assert(bytes_count > 0);
 
+#ifdef DEBUG
+    debugf("[fakewire_exc] Received %zu regular bytes.", bytes_count);
+#endif
+
     mutex_lock(&fwe->mutex);
 
     assert(fwe->state >= FW_EXC_DISCONNECTED && fwe->state <= FW_EXC_ERRORED);
@@ -131,6 +137,10 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
+#ifdef DEBUG
+    debugf("[fakewire_exc] Received control character: %d.", symbol);
+#endif
+
     mutex_lock(&fwe->mutex);
 
     assert(fwe->state >= FW_EXC_DISCONNECTED && fwe->state <= FW_EXC_ERRORED);
@@ -158,7 +168,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
         } else {
             fwe->remote_sent_fct = true;
             debug_puts("reader: remote_sent_fct = true\n");
-            if (fwe->state == FW_EXC_CONNECTING) {
+            if (fwe->state == FW_EXC_CONNECTING && fwe->has_sent_fct) {
                 fwe->state = FW_EXC_RUN;
             }
             cond_broadcast(&fwe->cond);
@@ -194,6 +204,10 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
 static void fakewire_exc_on_parity_fail(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
+
+#ifdef DEBUG
+    debug0("[fakewire_exc] Detected parity failure.");
+#endif
 
     mutex_lock(&fwe->mutex);
 
@@ -296,13 +310,14 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
         if (fwe->inbound_buffer != NULL && !fwe->has_sent_fct && !fwe->inbound_read_done) {
             // if we're ready to receive data, but haven't sent a FCT, send one
 
+            mutex_lock(&fwe->tx_mutex);
+
             fwe->has_sent_fct = true;
             debug_puts("writer: has_sent_fct = true\n");
             cond_broadcast(&fwe->cond);
 
             mutex_unlock(&fwe->mutex);
 
-            mutex_lock(&fwe->tx_mutex);
             // send FCT to allow first/subsequent packet
             link_write->recv_ctrl(link_write->param, FWC_FCT);
             // send NULL to make sure the FCT gets encoded into a byte
@@ -311,6 +326,11 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
             mutex_unlock(&fwe->tx_mutex);
 
             mutex_lock(&fwe->mutex);
+
+            if (fwe->state == FW_EXC_CONNECTING && fwe->remote_sent_fct) {
+                fwe->state = FW_EXC_RUN;
+                cond_broadcast(&fwe->cond);
+            }
         } else {
             // otherwise, wait until we do need to send an FCT
 

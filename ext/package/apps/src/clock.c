@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "clock.h"
+#include "debug.h"
 #include "tlm.h"
 
 int64_t clock_offset_adj = 0;
@@ -52,8 +53,10 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(read_len == sizeof(ref_time_sampled_raw));
     uint64_t ref_time_sampled = ((uint64_t) ntohl(ref_time_sampled_raw[0]) << 32) | ntohl(ref_time_sampled_raw[1]);
 
+    // debugf("Timing details: local_pre=%"PRIu64" ref=%"PRIu64" local_post=%"PRIu64, local_time_presampled, ref_time_sampled, local_time_postsampled);
+
     // now compute the appropriate offset
-    clock_offset_adj = ref_time_sampled - (local_time_presampled + local_time_postsampled) / 2;
+    clock_offset_adj = ref_time_sampled - local_time_postsampled;
 
     // and log our success, which will include a time using our new adjustment
     tlm_clock_calibrated(clock_offset_adj);

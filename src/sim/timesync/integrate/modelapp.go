@@ -16,6 +16,11 @@ type ModelApp struct {
 }
 
 func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte) {
+	// fast-forward time right up until the receive point
+	if t.controller.Now() < now {
+		_ = t.controller.Advance(now - 1)
+	}
+	// then send the data
 	if len(writeData) > 0 {
 		// write the received data into the simulation
 		actual := t.sink.TryWrite(writeData)
@@ -23,7 +28,9 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 			panic("UNIMPLEMENTED: back pressure on writes!")
 		}
 	}
+	// then allow the data to be received in the proper nanosecond
 	expireAt = t.controller.Advance(now)
+	// then extract any reply data
 	if pendingBytes == 0 {
 		outputData := make([]byte, 1024)
 		actual := t.source.TryRead(outputData)

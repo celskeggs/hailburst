@@ -13,10 +13,10 @@ func AttachTelemetryCollector(ctx model.SimContext, input *telecomm.Connection, 
 	transport.AttachReceiver(ctx, input, func(packet *transport.CommPacket) {
 		telem, timestamp, err := transport.DecodeTelemetry(packet)
 		if err == nil {
-			log.Printf("Received telemetry: %v %v", reflect.TypeOf(telem), telem)
+			log.Printf("%v Received telemetry: %v %v", ctx.Now(), reflect.TypeOf(telem), telem)
 			ac.OnTelemetryDownlink(telem, timestamp)
 		} else {
-			log.Printf("Telemetry packet error: %v", err)
+			log.Printf("%v Telemetry packet error: %v", ctx.Now(), err)
 			ac.OnTelemetryErrors(0, 1)
 		}
 	}, func(errorCount int) {
