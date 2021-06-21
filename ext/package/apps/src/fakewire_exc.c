@@ -5,6 +5,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "debug.h"
 #include "fakewire_exc.h"
 #include "thread.h"
 
@@ -324,10 +325,6 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
 int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
     assert(fwe != NULL);
 
-    // make sure only one packet is being attempted at a time; the others can wait their turn
-    mutex_lock(&fwe->tx_mutex);
-
-    // total order: acquire tx_mutex before mutex
     mutex_lock(&fwe->mutex);
     // wait until we are ready to send a packet
     while (fwe->state != FW_EXC_RUN || !fwe->remote_sent_fct) {
@@ -339,6 +336,11 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
         assert(fwe->state > FW_EXC_DISCONNECTED && fwe->state < FW_EXC_ERRORED);
         cond_wait(&fwe->cond, &fwe->mutex);
     }
+
+    // make sure only one packet is being attempted at a time; the others can wait their turn
+    // (total order: acquire tx_mutex before mutex)
+    mutex_lock(&fwe->tx_mutex);
+
     // clear the FCT marker
     assert(fwe->remote_sent_fct == true);
     fwe->remote_sent_fct = false;

@@ -94,12 +94,14 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
 void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output) {
     assert(fwe != NULL && output != NULL);
     assert(ringbuf_elem_size(output) == 1);
+    fwe->output = output;
     fwe->stashed_bits = 0;
     fwe->stashed = 0;
     fwe->last_remainder = 0; // (either initialization should be fine)
 }
 
 void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
+    assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
     // allocate enough space for byte_count * 10 + 6 bits, plus a bit of margin
     uint8_t temp[byte_count + (byte_count >> 2) + 4];
@@ -140,6 +142,7 @@ void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_
 }
 
 void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol) {
+    assert(fwe != NULL);
     assert(symbol >= FWC_FCT && symbol <= FWC_ESC);
 
     // [last:odd] [P] [C=1] -> P must be 1 to be odd!

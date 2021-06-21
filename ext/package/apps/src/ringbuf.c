@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "debug.h"
 #include "ringbuf.h"
 
 void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
+    assert(rb != NULL);
     mutex_init(&rb->mutex);
     cond_init(&rb->cond);
     // make sure this is a power of two
@@ -23,21 +25,25 @@ void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
 
 // masks an unwrapped index into a valid array offset
 static inline size_t mask(ringbuf_t *rb, size_t index) {
+    assert(rb != NULL);
     return index & (rb->capacity - 1);
 }
 
 // _locked means the function assumes the lock is held
 static inline size_t ringbuf_size_locked(ringbuf_t *rb) {
+    assert(rb != NULL);
     size_t size = rb->write_idx - rb->read_idx;
     assert(size <= rb->capacity);
     return size;
 }
 
 static inline size_t ringbuf_space_locked(ringbuf_t *rb) {
+    assert(rb != NULL);
     return rb->capacity - ringbuf_size_locked(rb);
 }
 
 size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_flags_t flags) {
+    assert(rb != NULL && data_in != NULL);
     mutex_lock(&rb->mutex);
     // first, if we're being asked to write more data than we can, limit it.
     size_t space = ringbuf_space_locked(rb);
@@ -74,6 +80,7 @@ size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_fl
 }
 
 size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_flags_t flags) {
+    assert(rb != NULL && data_out != NULL);
     mutex_lock(&rb->mutex);
     // first, if we're being asked to read more data than we have, limit it.
     size_t size = ringbuf_size_locked(rb);
@@ -108,6 +115,7 @@ size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_fl
 }
 
 size_t ringbuf_size(ringbuf_t *rb) {
+    assert(rb != NULL);
     mutex_lock(&rb->mutex);
     size_t size = ringbuf_size_locked(rb);
     mutex_unlock(&rb->mutex);
@@ -115,6 +123,7 @@ size_t ringbuf_size(ringbuf_t *rb) {
 }
 
 size_t ringbuf_space(ringbuf_t *rb) {
+    assert(rb != NULL);
     mutex_lock(&rb->mutex);
     size_t space = ringbuf_space_locked(rb);
     mutex_unlock(&rb->mutex);
@@ -122,6 +131,7 @@ size_t ringbuf_space(ringbuf_t *rb) {
 }
 
 void ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count) {
+    assert(rb != NULL);
     while (elem_count > 0) {
         size_t sent = ringbuf_write(rb, data_in, elem_count, RB_BLOCKING);
         assert(sent > 0 && sent <= elem_count);

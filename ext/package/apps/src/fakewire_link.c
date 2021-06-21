@@ -41,6 +41,11 @@ static void *fakewire_link_output_loop(void *opaque) {
         // read as many bytes as possible from ring buffer in one chunk
         size_t count_bytes = ringbuf_read(&fwl->enc_ring, write_buf, sizeof(write_buf), RB_BLOCKING);
         assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
+        if (count_bytes < sizeof(write_buf)) {
+            usleep(500); // wait half a millisecond to bunch related writes
+            count_bytes += ringbuf_read(&fwl->enc_ring, write_buf + count_bytes, sizeof(write_buf) - count_bytes, RB_NONBLOCKING);
+        }
+        assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
 
         // write one large chunk to the output port
         ssize_t actual = write(fwl->fd_out, write_buf, count_bytes);
@@ -74,6 +79,7 @@ static void *fakewire_link_input_loop(void *opaque) {
 }
 
 void fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path, int flags) {
+    assert(fwl != NULL && receiver != NULL && path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // first, configure all the data structures and interfaces
