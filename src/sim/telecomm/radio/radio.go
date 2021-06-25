@@ -71,8 +71,8 @@ func min32(a, b uint32) uint32 {
 func (f *fwRadio) updateTelecommSimulation() {
 	// simulate reception
 	incoming := f.Connection.PullBytesAvailable()
-	if len(incoming) > 0 && f.Registers[RegRxState] == RxStateListening {
-		for len(incoming) > 0 {
+	if f.Registers[RegRxState] == RxStateListening {
+		for {
 			rxPtr := f.Registers[RegRxPtr]
 			rxLen := f.Registers[RegRxLen]
 			if rxLen == 0 || rxPtr >= uint32(len(f.RadioMemory)) {
@@ -84,6 +84,9 @@ func (f *fwRadio) updateTelecommSimulation() {
 				} else {
 					break
 				}
+			}
+			if len(incoming) == 0 {
+				break
 			}
 			countAttempt := min32(uint32(len(incoming)), rxLen)
 			countActual := copy(f.RadioMemory[rxPtr:], incoming[:countAttempt])

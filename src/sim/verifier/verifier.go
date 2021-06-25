@@ -125,6 +125,9 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 
 	// check ReqTelemRecent
 	recentOk := now.Add(-10*time.Millisecond).Before(remoteTimestamp) && remoteTimestamp.Before(now)
+	if !recentOk && now.After(remoteTimestamp) {
+		log.Printf("ReqTelemRecent failure: delay=%v", now.Since(remoteTimestamp))
+	}
 	v.rqt.Immediate(ReqTelemRecent, recentOk)
 
 	// check ReqCmdRecvExpected
@@ -357,7 +360,7 @@ func MakeActivityVerifier(sim model.SimContext, onFailure func(explanation strin
 	var prevExplanation string
 	var lsuccess int
 	v.rqt.Subscribe(func() {
-		if v.rqt.Failed() || v.rqt.CountSuccesses() >= lsuccess+5 {
+		if v.rqt.Failed() || v.rqt.CountSuccesses() >= lsuccess+50 {
 			explanation := v.rqt.ExplainFailure()
 			if v.rqt.Failed() && !hasReportedFailure {
 				hasReportedFailure = true

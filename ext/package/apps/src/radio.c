@@ -7,6 +7,8 @@
 #include "debug.h"
 #include "radio.h"
 
+// #define DEBUGIDX
+
 enum {
     RADIO_MAGIC    = 0x7E1ECA11,
     REG_BASE_ADDR  = 0x0000,
@@ -171,8 +173,8 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
         return false;
     }
     // alignment check is just here as a spot check... could be eliminated if radio config changed to not be aligned
-    if (mem_base % 0x1000 != 0 || mem_size % 0x1000 != 0 ||
-            mem_base < 0x1000 || mem_size < 0x1000 ||
+    if (mem_base % 0x100 != 0 || mem_size % 0x100 != 0 ||
+            mem_base < 0x100 || mem_size < 0x100 ||
             mem_base > RMAP_MAX_DATA_LEN || mem_size > RMAP_MAX_DATA_LEN) {
         fprintf(stderr, "Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.\n", mem_base, mem_size);
         return false;
@@ -220,6 +222,11 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         reg[REG_RX_LEN_ALT] = radio->rx_halves[1].size;
         reg[REG_RX_STATE] = RX_STATE_LISTENING;
 
+#ifdef DEBUGIDX
+        debugf("Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
+               reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
+#endif
+
         if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
             return -1;
         }
@@ -234,6 +241,10 @@ static ssize_t radio_uplink_service(radio_t *radio) {
 
     uint32_t end_index_prime = reg[REG_RX_PTR] + reg[REG_RX_LEN];
     uint32_t end_index_alt = reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT];
+#ifdef DEBUGIDX
+    debugf("Radio indices: end_index_h0=%u, end_index_h1=%u, end_index_prime=%u, end_index_alt=%u, extracted=%u",
+           end_index_h0, end_index_h1, end_index_prime, end_index_alt, radio->bytes_extracted);
+#endif
     assert(end_index_prime == end_index_h0
         || end_index_prime == end_index_h1);
     assert(end_index_prime != end_index_alt);
@@ -312,6 +323,11 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     bool any_unread_data_in_alternate = (reread_half == 0 && end_index_prime == end_index_h1)
                                      || (reread_half == 1 && end_index_prime == end_index_h0);
 
+#ifdef DEBUGIDX
+    debugf("Unread stats: bytes_extracted=%u, reread_half=%d, a_u_d_i_a=%d, ptr=%u, ptr_alt=%u",
+           radio->bytes_extracted, reread_half, any_unread_data_in_alternate, reg[REG_RX_PTR], reg[REG_RX_PTR_ALT]);
+#endif
+
     if (any_unread_data_in_alternate) {
         // then we CANNOT safely have the alternate pointer and length set! we will have to finish reading.
         assert(end_index_alt == 0);
@@ -325,7 +341,11 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             reg[REG_RX_PTR_ALT] = 0;
             reg[REG_RX_LEN_ALT] = 0;
             reg[REG_RX_STATE] = RX_STATE_LISTENING;
-            fprintf(stderr, "Radio: uplink OVERFLOW condition hit; clearing and resuming uplink\n");
+            debug0("Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
+#ifdef DEBUGIDX
+            debugf("Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
+                   reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
+#endif
             if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
                 return -1;
             }
@@ -334,7 +354,11 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             assert(reg[REG_RX_STATE] == RX_STATE_LISTENING);
             reg[REG_RX_PTR_ALT] = new_region.base;
             reg[REG_RX_LEN_ALT] = new_region.size;
-            if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR_ALT, REG_RX_LEN_ALT, reg + REG_RX_PTR)) {
+#ifdef DEBUGIDX
+            debugf("Radio UPDATED indices: end_index_prime=<unchanged>, end_index_alt=%u",
+                   reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
+#endif
+            if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR_ALT, REG_RX_LEN_ALT, reg + REG_RX_PTR_ALT)) {
                 return -1;
             }
         } else {

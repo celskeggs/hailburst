@@ -2,7 +2,6 @@ package magnetometer
 
 import (
 	"encoding/binary"
-	"log"
 	"sim/fakewire/fwmodel"
 	"sim/fakewire/rmap"
 	"sim/model"
@@ -114,7 +113,6 @@ func (m *magneticDevice) AttemptWrite(extAddr uint8, writeAddr uint32, increment
 			if !m.LatchSet {
 				m.LatchSet = true
 				latchX, latchY, latchZ := m.Environment.MeasureNow()
-				log.Printf("Measurement point: now=%v", m.Context.Now())
 				m.Collector.OnMeasureMagnetometer(latchX, latchY, latchZ)
 				if m.CancelLatch != nil {
 					panic("cancel latch should always be nil when LatchSet is false")

@@ -41,10 +41,8 @@ static void sleep_until(uint64_t target_time) {
 
 static void magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *reading_out) {
     // trigger reading
-    debug0("Setting registers...");
     magnetometer_set_register(mag, REG_LATCH, LATCH_ON);
     reading_out->reading_time = clock_timestamp();
-    debugf("Stopped setting registers; timestamp was %"PRIu64, reading_out->reading_time);
 
     usleep(15000);
 

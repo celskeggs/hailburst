@@ -41,10 +41,9 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     // prepare for a fast set of samples
     uint32_t ref_time_sampled_raw[2];
     read_len = sizeof(ref_time_sampled_raw);
-    uint64_t local_time_presampled, local_time_postsampled;
+    uint64_t local_time_postsampled;
 
     // sample twice locally and once remotely
-    local_time_presampled = clock_timestamp();
     status = rmap_read(&clock_ctx, address, RF_INCREMENT, 0x00, REG_CLOCK, &read_len, &ref_time_sampled_raw[0]);
     local_time_postsampled = clock_timestamp();
 
