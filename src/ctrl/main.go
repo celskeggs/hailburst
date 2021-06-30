@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -105,6 +107,9 @@ func main() {
 		}
 	}
 	gdbCmd := "./gdb.sh -ex 'stepvt 20s'"
+	if hasArg("--irradiate") {
+		gdbCmd = "./gdb.sh -ex 'stepvt 3s' -ex 'campaign 6000 100ms'"
+	}
 	if hasArg("--pause") {
 		gdbCmd = "./gdb.sh"
 	}
@@ -113,6 +118,16 @@ func main() {
 	timesyncSocket := "timesync.sock"
 	guestLog := "guest.log"
 	_, _ = os.Remove(timesyncSocket), os.Remove(guestLog)
+
+	f, err := os.OpenFile("requirements.log", os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = f.Seek(0, io.SeekEnd)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	p := Processes{}
 	p.LaunchInTerminal("go run sim/experiments/requirements |& tee sim.log", "Simulation", ".")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
@@ -128,11 +143,9 @@ func main() {
 		"-kernel", "tree/images/zImage",
 		"-monitor", "stdio",
 		"-parallel", "none",
-		"-icount", "shift=0,sleep=off",
+		"-icount", "shift=1,sleep=off",
 		"-vga", "none",
 		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
-		/* "-serial", "chardev:ts0", */
-		"-serial", "null",
 		"-serial", "file:" + guestLog,
 		"-device", "virtio-serial-device",
 		"-device", "virtserialport,name=tsvc0,chardev=ts0",
@@ -143,7 +156,28 @@ func main() {
 		time.Sleep(time.Millisecond * 100)
 	}
 	p.LaunchInTerminal("tail -f "+guestLog, "Guest Log", ".")
-	waitMain()
+	if hasArg("--monitor") {
+		log.Printf("Monitoring requirements log...")
+		br := bufio.NewReader(f)
+		for {
+			line, err := br.ReadString('\n')
+			if err == io.EOF {
+				// keep rereading until more data is added to the file
+				continue
+			}
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Print(line)
+			if line == "Failure detected in experiment.\n" {
+				break
+			}
+		}
+		// let the simulation run a little longer before killing it...
+		time.Sleep(time.Second * 10)
+	} else {
+		waitMain()
+	}
 	fmt.Printf("Interrupting all...\n")
 	p.Interrupt()
 	fmt.Printf("Waiting for all to terminate...\n")

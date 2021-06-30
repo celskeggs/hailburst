@@ -126,6 +126,9 @@ func (a *tracker) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTimes
 }
 
 func (a *tracker) OnSetMagnetometerPower(powered bool) {
+	if a.IsMagnetometerPowered == powered {
+		panic("should not transition to power state that was already set")
+	}
 	a.IsMagnetometerPowered = powered
 	a.insert(MagnetometerPowerEvent{
 		Powered:         powered,

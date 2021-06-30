@@ -11,6 +11,9 @@ import (
 // "Indicate" means to have finished downlinking all bytes in the telemetry packet containing a message.
 
 const (
+	// ReqInitClock requires:
+	// No later than 5s after simulation start, the flight software shall indicate that the clock is calibrated.
+	ReqInitClock = "ReqInitClock"
 	// ReqReceipt requires:
 	// No later than 100ms after each command's receive point, the flight software shall indicate the command’s receipt
 	// exactly once.
@@ -77,6 +80,7 @@ const (
 )
 
 var requirements = []string{
+	ReqInitClock,
 	ReqReceipt,
 	ReqCmdRecvExpected,
 	ReqCmdCompleteExpected,

@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"fmt"
 	"log"
 	"sim/model"
 	"sim/telecomm/transport"
@@ -37,22 +38,29 @@ func (v *verifier) checkReqProgressive(req string, firstCheck model.VirtualTime,
 	})
 }
 
-func (v *verifier) checkExactlyOne(req string, interval time.Duration, predicate func(e Event) bool) {
+func (v *verifier) checkExactlyOne(req string, interval time.Duration, predicate func(e Event) bool, onFail func(model.VirtualTime, int)) {
 	start := v.sim.Now()
 	end := start.Add(interval)
 	v.checkReq(req, end, func() bool {
 		found := v.tracker.search(start, end, predicate)
-		return len(found) == 1
+		if len(found) == 1 {
+			return true
+		} else {
+			if onFail != nil {
+				onFail(start, len(found))
+			}
+			return false
+		}
 	})
 }
 
-func (v *verifier) checkExactlyOneTelemetry(req string, interval time.Duration, predicate func(t transport.Telemetry) bool) {
+func (v *verifier) checkExactlyOneTelemetry(req string, interval time.Duration, predicate func(t transport.Telemetry) bool, onFail func(model.VirtualTime, int)) {
 	start := v.sim.Now()
 	end := start.Add(interval)
 	v.checkExactlyOne(req, interval, func(e Event) bool {
 		tde, ok := e.(TelemetryDownlinkEvent)
 		return ok && tde.RemoteTimestamp.AtOrAfter(start) && tde.RemoteTimestamp.Before(end) && predicate(tde.Telemetry)
-	})
+	}, onFail)
 }
 
 func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp model.VirtualTime) {
@@ -63,6 +71,9 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 		// should be a CmdReceived packet with the correct original CID and timestamp
 		cr, ok := t.(*transport.CmdReceived)
 		return ok && cr.OriginalCommandId == command.CmdId() && cr.OriginalTimestamp == sendTimestamp.Nanoseconds()
+	}, func(start model.VirtualTime, count int) {
+		log.Printf("Receipt failure: no receipt for command in %v-%v: CID=%v, TS=%v, actualCount=%v",
+			start, v.sim.Now(), command.CmdId(), sendTimestamp.Nanoseconds(), count)
 	})
 
 	if pingCmd, ok := command.(transport.Ping); ok {
@@ -70,12 +81,12 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 			// should be a CmdCompleted packet with the correct original CID and timestamp
 			cc, ok := t.(*transport.CmdCompleted)
 			return ok && cc.OriginalCommandId == command.CmdId() && cc.OriginalTimestamp == sendTimestamp.Nanoseconds()
-		})
+		}, nil)
 		v.checkExactlyOneTelemetry(ReqPingPong, time.Millisecond*200, func(t transport.Telemetry) bool {
 			// should be a CmdReceived packet with the correct original CID and timestamp
 			pongTlm, ok := t.(*transport.Pong)
 			return ok && pongTlm.PingID == pingCmd.PingID
-		})
+		}, nil)
 	}
 
 	if magCmd, ok := command.(transport.MagSetPwrState); ok {
@@ -83,7 +94,7 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 			// should be a CmdCompleted packet with the correct original CID and timestamp
 			cc, ok := t.(*transport.CmdCompleted)
 			return ok && cc.OriginalCommandId == command.CmdId() && cc.OriginalTimestamp == sendTimestamp.Nanoseconds()
-		})
+		}, nil)
 		latest := v.tracker.searchLast(func(e Event) bool {
 			cue, ok1 := e.(CommandUplinkEvent)
 			_, ok2 := cue.Command.(transport.MagSetPwrState)
@@ -94,7 +105,7 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 			v.checkExactlyOne(ReqMagSetPwr, time.Millisecond*200, func(e Event) bool {
 				mpe, ok := e.(MagnetometerPowerEvent)
 				return ok && mpe.Powered == magCmd.PowerState
-			})
+			}, nil)
 		}
 	}
 }
@@ -269,7 +280,11 @@ func (v *verifier) OnSetMagnetometerPower(powered bool) {
 				})
 				if len(depowered) == 1 {
 					if depowered[0].(MagnetometerPowerEvent).Powered {
-						panic("should not transition powered->powered")
+						allTransitions := v.tracker.search(model.TimeZero, pollAt, func(e Event) bool {
+							_, ok := e.(MagnetometerPowerEvent)
+							return ok
+						})
+						panic(fmt.Sprintf("should not transition powered->powered: %v", allTransitions))
 					}
 					// passed, but no further requirement to check.
 					return true, false
@@ -378,5 +393,9 @@ func MakeActivityVerifier(sim model.SimContext, onFailure func(explanation strin
 		}
 	})
 	v.startPeriodicValidation(0, 0)
+	v.checkExactlyOneTelemetry(ReqInitClock, time.Second * 5, func(t transport.Telemetry) bool {
+		_, ok := t.(*transport.ClockCalibrated)
+		return ok
+	}, nil)
 	return v
 }

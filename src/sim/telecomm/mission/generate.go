@@ -60,5 +60,5 @@ func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, int
 	}
 	sender.Subscribe(update)
 	// don't start the generator for a few seconds, to let the software initialize on boot
-	ctx.SetTimer(model.TimeZero.Add(time.Second*3), "sim.telecomm.cmd.CommandGenerator/First", genCmd)
+	ctx.SetTimer(model.TimeZero.Add(time.Second*5), "sim.telecomm.cmd.CommandGenerator/First", genCmd)
 }
