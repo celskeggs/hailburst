@@ -139,7 +139,7 @@ func main() {
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
 		"-M", "virt",
-		"-m", "104",
+		"-m", "20",
 		"-kernel", "tree/images/zImage",
 		"-monitor", "stdio",
 		"-parallel", "none",

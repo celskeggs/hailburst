@@ -105,7 +105,7 @@ func main() {
 		path.Join(origDir, "../qemu/build/qemu-system-arm"),
 		"-S", "-gdb", fmt.Sprintf("tcp::%v", port),
 		"-M", "virt",
-		"-m", "104",
+		"-m", "20",
 		"-kernel", path.Join(origDir, "tree/images/zImage"),
 		"-monitor", "stdio",
 		"-parallel", "none",
