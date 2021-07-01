@@ -284,7 +284,7 @@ func (v *verifier) OnSetMagnetometerPower(powered bool) {
 							_, ok := e.(MagnetometerPowerEvent)
 							return ok
 						})
-						panic(fmt.Sprintf("should not transition powered->powered: %v", allTransitions))
+						panic(fmt.Sprintf("should not transition powered->powered: %v\nlastReading = %v\npollAt = %v", allTransitions, lastReading, pollAt))
 					}
 					// passed, but no further requirement to check.
 					return true, false

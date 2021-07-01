@@ -88,6 +88,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(f)
 
 	p := Processes{}
 	timesyncSocket := "timesync.sock"
@@ -118,35 +124,44 @@ func main() {
 	}
 	time.Sleep(time.Millisecond * 100)
 	p.Launch("gdb-multiarch", []string{
+		"-batch",
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
 		"-ex", "source " + path.Join(origDir, "bare-arm/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
 		"-ex", "stepvt 3s",
-		"-ex", "campaign 6000 100ms",
+		"-ex", "campaign 10000 100ms",
+		"-ex", "printf \"Campaign concluded\n\"",
+		"-ex", "monitor info vtime",
 	}, "gdb.log")
-	log.Printf("Monitoring requirements log...")
-	br := bufio.NewReader(f)
-	for {
-		line, err := br.ReadString('\n')
-		if err == io.EOF {
-			// keep rereading until more data is added to the file
-			time.Sleep(time.Second)
-			continue
+	go func() {
+		log.Printf("Monitoring requirements log...")
+		br := bufio.NewReader(f)
+		for {
+			line, err := br.ReadString('\n')
+			if err == io.EOF {
+				// keep rereading until more data is added to the file
+				time.Sleep(time.Second)
+				continue
+			}
+			if err != nil {
+				if err.Error() == "use of closed file" {
+					// execution has ended by subprocess failure
+					break
+				}
+				log.Fatal(err)
+			}
+			fmt.Print(line)
+			if line == "Failure detected in experiment.\n" {
+				// execution needs to be cut off, but let the simulation run a little longer before killing it...
+				time.Sleep(time.Second * 10)
+				fmt.Printf("Interrupting all...\n")
+				p.Interrupt()
+				break
+			}
 		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Print(line)
-		if line == "Failure detected in experiment.\n" {
-			break
-		}
-	}
-	// let the simulation run a little longer before killing it...
-	time.Sleep(time.Second * 10)
-	fmt.Printf("Interrupting all...\n")
-	p.Interrupt()
+	}()
 	fmt.Printf("Waiting for all to terminate...\n")
 	p.WaitAll()
 }
