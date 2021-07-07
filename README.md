@@ -1,14 +1,20 @@
 # Scratch files for Hailburst development
 
-# Notes on buildroot
+# Installation/set-up instructions
 
-Extract buildroot to `/home/user/Binary/buildroot-2021.02/`
+First, clone https://github.com/celskeggs/hailburst to your machine.
 
-Configure using:
+Then, download and extract https://buildroot.org/downloads/buildroot-2021.02.tar.bz2 somewhere on
+your system, such as to ~/Binary/buildroot-2021.02/. Make sure to use THIS EXACT VERSION!
+
+In the hailburst repository, copy local.config.template to local.config, and fill in the buildroot
+path where you installed it.
+
+Now, you need to configure buildroot:
 
     $ ./make.sh hailburst_defconfig
 
-Then build:
+And you can kick off the build:
 
     $ ./make.sh
 
