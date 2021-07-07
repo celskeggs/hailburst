@@ -1,6 +1,7 @@
 import csv
 import math
 import random
+import re
 
 import gdb
 
@@ -189,9 +190,48 @@ def inject_bitflip(address, bytewidth):
 
     rnvalue = int.from_bytes(inferior.read_memory(address, bytewidth), "little")
 
-    assert nvalue == rnvalue and nvalue != ovalue, "mismatched values: o=%x n=%x rn=%x" % (ovalue, nvalue, rnvalue)
+    assert nvalue == rnvalue and nvalue != ovalue, "mismatched values: o=0x%x n=0x%x rn=0x%x" % (ovalue, nvalue, rnvalue)
     global_writer.write(address, ovalue, nvalue)
-    print("Injected bitflip into address %x: old value %x -> new value %x" % (address, ovalue, nvalue))
+    print("Injected bitflip into address 0x%x: old value 0x%x -> new value 0x%x" % (address, ovalue, nvalue))
+
+
+cached_reg_list = None
+def list_registers():
+    global cached_reg_list
+    if cached_reg_list is None:
+        # we can avoid needing to handle float and 'union neon_q', because on ARM, there are d# registers that alias
+        # to all of the more specialized registers in question.
+        cached_reg_list = [(r, gdb.selected_frame().read_register(r).type.sizeof)
+                           for r in gdb.selected_frame().architecture().registers()
+                           if str(gdb.selected_frame().read_register(r).type) not in ("float", "union neon_q")]
+    return cached_reg_list[:]
+
+
+def inject_register_bitflip(register_name):
+    value = gdb.selected_frame().read_register(register_name)
+    if str(value.type) in ("long", "long long", "void *", "void (*)()"):
+        lookup = None
+    elif str(value.type) == "union neon_d":
+        lookup = "u64"
+    else:
+        raise RuntimeError("not handled: inject_register_bitflip into register %s of type %s" % (register_name, value.type))
+
+    intval = int(value[lookup] if lookup else value)
+    bitcount = 8 * value.type.sizeof
+    bitmask = (1 << bitcount) - 1
+    newval = intval ^ (1 << random.randint(0, bitcount - 1))
+    gdb.execute("set $%s%s = %d" % (register_name, "." + lookup if lookup else "", newval))
+
+    reread = gdb.selected_frame().read_register(register_name)
+    rrval = int(reread[lookup] if lookup else reread)
+    if (newval & bitmask) == (rrval & bitmask):
+        print("Injected bitflip into register %s: old value 0x%x -> new value 0x%x" % (register_name, intval, rrval))
+        return True
+    elif (intval & bitmask) == (rrval & bitmask):
+        print("Bitflip could not be injected into register %s. (0x%x -> 0x%x ignored.)" % (register_name, intval, newval))
+        return False
+    else:
+        raise RuntimeError("double-mismatched register values on register %s: o=0x%x n=0x%x rr=0x%x" % (register_name, intval, newval, rrval))
 
 
 class BuildCmd(gdb.Command):
@@ -218,6 +258,17 @@ def listram(args):
     for start, end in memory.ram_ranges():
         print("  RAM allocated from %x to %x" % (start, end))
     print("Sampled index: %x" % memory.random_address())
+
+
+@BuildCmd
+def listreg(args):
+    """List all CPU registers available in QEMU."""
+
+    print("QEMU CPU register list:")
+    lr = list_registers()
+    maxlen = max(len(r.name) for r, nb in lr)
+    for register, num_bytes in lr:
+        print("  REG:", register.name.rjust(maxlen), "->", num_bytes)
 
 
 @BuildCmd
@@ -277,6 +328,41 @@ def inject(args):
     inject_bitflip(address, bytewidth)
 
 
+def inject_reg_internal(register_name):
+    registers = [r.name for r, nb in list_registers()]
+    if register_name:
+        regexp = re.compile("^" + ".*".join(re.escape(segment) for segment in register_name.split("*")) + "$")
+        registers = [rname for rname in registers if regexp.match(rname)]
+    if not registers:
+        print("No registers found!")
+        return
+    # this is the order to try them in
+    random.shuffle(registers)
+
+    for reg in registers:
+        # keep retrying until we find a register that we CAN successfully inject into
+        if inject_register_bitflip(reg):
+            break
+
+        print("Trying another register...")
+    else:
+        print("Out of registers to try!")
+
+
+@BuildCmd
+def inject_reg(args):
+    """Inject a bitflip into a register."""
+
+    arg = args.strip()
+    if arg.count(" ") > 0:
+        print("usage: inject_reg [<register name>]")
+        print("if no register specified, will be randomly selected")
+        print("a pattern involving wildcards can be specified if desired")
+        return
+
+    inject_reg_internal(register_name=arg)
+
+
 @BuildCmd
 def stepmtbf(args):
     """Fast-forward to the next sampled injection event."""
@@ -301,29 +387,38 @@ def campaign(args):
     if len(args) < 2 or len(args) > 4:
         print("usage: campaign <iterations> <mtbf> [<address>] [<bytewidth>]")
         print("bytewidth defaults to 4 bytes if address specified")
+        print("if <address> starts with reg, then register injections are performed instead")
+        print("specify address as reg:X to specify register X for the register injection")
         return
 
     iterations = int(args[0])
     mtbf = parse_time(args[1])
     assert mtbf > 0
 
+    is_reg = False
+
     if args[2:]:
         rand_addr = False
-        address = int(gdb.parse_and_eval(args[2]))
-        bytewidth = int(args[3]) if args[3:] else 4
-        if iterations < 1 or mtbf <= 0 or bytewidth < 1 or address < 0:
-            print("Invalid number for argument.")
-            return
+        if args[2].startswith("reg") and args[2][3:4] in (":", ""):
+            is_reg = True
+            address = args[2][4:]
+        else:
+            address = int(gdb.parse_and_eval(args[2]))
+            bytewidth = int(args[3]) if args[3:] else 4
+            if iterations < 1 or mtbf <= 0 or bytewidth < 1 or address < 0:
+                print("Invalid number for argument.")
+                return
     else:
         rand_addr = True
         bytewidth = 1
 
     for i in range(iterations):
-        if rand_addr:
-            address = sample_address()
-        inject_bitflip(address, bytewidth)
+        if is_reg:
+            inject_reg_internal(address)
+        else:
+            if rand_addr:
+                address = sample_address()
+            inject_bitflip(address, bytewidth)
 
         ns_to_failure = sample_geo(mtbf_to_rate(mtbf))
         step_ns(ns_to_failure)
-
-

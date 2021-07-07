@@ -106,12 +106,18 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	gdbCmd := "./gdb.sh -ex 'stepvt 20s'"
-	if hasArg("--irradiate") {
-		gdbCmd = "./gdb.sh -ex 'stepvt 3s' -ex 'campaign 6000 100ms'"
+	gdbCmd := []string{
+		"gdb",
+		"-ex", "target remote :1234",
+		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
+		"-ex", "set pagination off",
+		"-ex", "source ./bare-arm/ctrl.py",
+		"-ex", "log_inject ./injections.csv",
 	}
-	if hasArg("--pause") {
-		gdbCmd = "./gdb.sh"
+	if hasArg("--irradiate") {
+		gdbCmd = append(gdbCmd, "-ex", "campaign 10000 100ms")
+	} else if hasArg("--run") {
+		gdbCmd = append(gdbCmd, "-ex", "stepvt 20s")
 	}
 	fmt.Printf("Launching applications...\n")
 	// remove old sockets; ignore any errors
@@ -133,7 +139,7 @@ func main() {
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal(gdbCmd, "GDB", "./bare-arm")
+	p.LaunchInTerminal("\"" + strings.Join(gdbCmd, "\" \"") + "\"", "GDB", ".")
 	time.Sleep(time.Millisecond * 100)
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",

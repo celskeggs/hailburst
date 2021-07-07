@@ -123,15 +123,14 @@ func main() {
 		time.Sleep(time.Millisecond * 100)
 	}
 	time.Sleep(time.Millisecond * 100)
-	p.Launch("gdb-multiarch", []string{
+	p.Launch("gdb", []string{
 		"-batch",
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
 		"-ex", "source " + path.Join(origDir, "bare-arm/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
-		"-ex", "stepvt 3s",
-		"-ex", "campaign 10000 100ms",
+		"-ex", "campaign 1000 1s reg",
 		"-ex", "printf \"Campaign concluded\n\"",
 		"-ex", "monitor info vtime",
 	}, "gdb.log")

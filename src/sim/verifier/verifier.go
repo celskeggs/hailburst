@@ -266,7 +266,8 @@ func (v *verifier) OnSetMagnetometerPower(powered bool) {
 
 	if powered {
 		// now... after powering up, there needs to be a measurement every tenth of a second
-		lastReading := now
+		// (we need to add a nanosecond here so that searches for future 'power off' events don't accidentally see this event)
+		lastReading := now.Add(time.Nanosecond)
 		v.checkReqProgressive(ReqCollectMagReadings, now.Add(time.Millisecond*105), time.Millisecond*100, func() (passed, cont bool) {
 			pollAt := v.sim.Now()
 			readings := v.tracker.search(pollAt.Add(-time.Millisecond*10), pollAt, func(e Event) bool {
@@ -393,7 +394,7 @@ func MakeActivityVerifier(sim model.SimContext, onFailure func(explanation strin
 		}
 	})
 	v.startPeriodicValidation(0, 0)
-	v.checkExactlyOneTelemetry(ReqInitClock, time.Second * 5, func(t transport.Telemetry) bool {
+	v.checkExactlyOneTelemetry(ReqInitClock, time.Second, func(t transport.Telemetry) bool {
 		_, ok := t.(*transport.ClockCalibrated)
 		return ok
 	}, nil)
