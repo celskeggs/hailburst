@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"time"
 )
 
@@ -18,6 +20,18 @@ type PortAssignment struct {
 const NumThreads = 4
 
 func main() {
+	var maxTrials uint32 = math.MaxUint32
+	if len(os.Args) >= 3 && os.Args[1] == "--max" {
+		maxTrials64, err := strconv.ParseUint(os.Args[2], 10, 32)
+		if err != nil {
+			log.Fatal(err)
+		}
+		maxTrials = uint32(maxTrials64)
+		if maxTrials == 0 {
+			log.Fatal("cannot run only zero trials")
+		}
+	}
+
 	workdir := "trials"
 
 	if err := os.Mkdir(workdir, 0777); err != nil && !os.IsExist(err) {
@@ -44,10 +58,10 @@ func main() {
 		}
 	}
 
-	total := 0
+	var total uint32 = 0
 
 	running := true
-	for running {
+	for running && total < maxTrials {
 		select {
 		case <-halt:
 			running = false
