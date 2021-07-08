@@ -107,7 +107,7 @@ func main() {
 		}
 	}
 	gdbCmd := []string{
-		"../gdbroot/gdb",
+		"../gdbroot/bin/gdb",
 		"-ex", "target remote :1234",
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
