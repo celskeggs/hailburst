@@ -123,7 +123,7 @@ func main() {
 		time.Sleep(time.Millisecond * 100)
 	}
 	time.Sleep(time.Millisecond * 100)
-	p.Launch("gdb", []string{
+	p.Launch("../gdbroot/gdb", []string{
 		"-batch",
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
