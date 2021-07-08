@@ -9,11 +9,19 @@ import (
 	"os/exec"
 	"path"
 	"strconv"
+	"sync"
 	"time"
 )
 
+type void struct{}
+
 type Processes struct {
-	Cmds []*exec.Cmd
+	Cmds         []*exec.Cmd
+	WaitChannels []chan void
+	WaitAnyChannel chan void
+
+	InterruptOnce sync.Once
+	WaitAnyOnce   sync.Once
 }
 
 func (p *Processes) Launch(path string, args []string, logfile string) {
@@ -34,24 +42,45 @@ func (p *Processes) Launch(path string, args []string, logfile string) {
 
 	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
-		log.Printf("Error launching command %q: %v", path, err)
+		log.Fatalf("Error launching command %q: %v", path, err)
 	}
 	p.Cmds = append(p.Cmds, cmd)
+	waitCh := make(chan void)
+	p.WaitChannels = append(p.WaitChannels, waitCh)
+
+	go func() {
+		defer p.WaitAnyOnce.Do(func() {
+			close(p.WaitAnyChannel)
+		})
+		defer close(waitCh)
+		if err := cmd.Wait(); err != nil {
+			log.Printf("Error while waiting: %v", err)
+		}
+	}()
 }
 
 func (p *Processes) Interrupt() {
-	for _, cmd := range p.Cmds {
-		if err := cmd.Process.Signal(os.Interrupt); err != nil {
-			log.Printf("Error when interrupting (%q): %v", cmd.Path, err)
+	p.InterruptOnce.Do(func() {
+		for _, cmd := range p.Cmds {
+			proc := cmd.Process
+			if proc != nil {
+				if err := proc.Signal(os.Interrupt); err != nil {
+					log.Printf("Error when interrupting (%q): %v", cmd.Path, err)
+				}
+			}
 		}
-	}
+	})
+}
+
+func (p *Processes) WaitAny() {
+	// wait until any of the processes terminate
+	_, _ = <- p.WaitAnyChannel
 }
 
 func (p *Processes) WaitAll() {
-	for _, p := range p.Cmds {
-		if err := p.Wait(); err != nil {
-			log.Printf("Error while waiting: %v", err)
-		}
+	// wait until ALL of the processes terminate
+	for _, ch := range p.WaitChannels {
+		_, _ = <- ch
 	}
 }
 
@@ -95,7 +124,9 @@ func main() {
 		}
 	}(f)
 
-	p := Processes{}
+	p := Processes{
+		WaitAnyChannel: make(chan void),
+	}
 	timesyncSocket := "timesync.sock"
 	p.Launch("go", []string{"run", "sim/experiments/requirements"}, "sim.log")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
@@ -161,6 +192,10 @@ func main() {
 			}
 		}
 	}()
-	fmt.Printf("Waiting for all to terminate...\n")
+	fmt.Printf("Waiting for any to terminate...\n")
+	p.WaitAny()
+	fmt.Printf("Interrupting any remaining processes...\n")
+	p.Interrupt()
+	fmt.Printf("Waiting for remaining processes to terminate...\n")
 	p.WaitAll()
 }
