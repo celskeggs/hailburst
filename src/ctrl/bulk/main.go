@@ -80,11 +80,11 @@ func main() {
 				if err != nil {
 					log.Printf("error during trial: %v", err)
 				}
+				// so that all generated timestamps are unique within each worker
+				time.Sleep(time.Millisecond * 1200)
 				// return free thread token to the pool
 				threadFree <- assignment
 			}(assignment)
-			// so that all generated timestamps are unique
-			time.Sleep(time.Millisecond * 1200)
 		}
 	}
 
