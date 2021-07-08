@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -16,8 +17,6 @@ type PortAssignment struct {
 	ThreadNum int
 	PortNum   int
 }
-
-const NumThreads = 4
 
 func main() {
 	var maxTrials uint32 = math.MaxUint32
@@ -50,8 +49,10 @@ func main() {
 		halt <- struct{}{}
 	}()
 
-	threadFree := make(chan PortAssignment, NumThreads)
-	for n := 0; n < NumThreads; n++ {
+	numCPUs := runtime.NumCPU()
+
+	threadFree := make(chan PortAssignment, numCPUs)
+	for n := 0; n < numCPUs; n++ {
 		threadFree <- PortAssignment{
 			ThreadNum: n,
 			PortNum:   51200 + n,
@@ -88,7 +89,7 @@ func main() {
 	}
 
 	log.Printf("tearing down...")
-	for n := 0; n < NumThreads; n++ {
+	for n := 0; n < numCPUs; n++ {
 		<-threadFree
 	}
 	log.Printf("Done! Executed %d batch jobs.", total)
