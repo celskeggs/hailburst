@@ -54,7 +54,9 @@ func (p *Processes) Launch(path string, args []string, logfile string) {
 		})
 		defer close(waitCh)
 		if err := cmd.Wait(); err != nil {
-			log.Printf("Error while waiting: %v", err)
+			log.Printf("Error while waiting for %s: %v", path, err)
+		} else {
+			log.Printf("Finished execution of %s", path)
 		}
 	}()
 }
@@ -64,7 +66,7 @@ func (p *Processes) Interrupt() {
 		for _, cmd := range p.Cmds {
 			proc := cmd.Process
 			if proc != nil {
-				if err := proc.Signal(os.Interrupt); err != nil {
+				if err := proc.Signal(os.Interrupt); err != nil && err.Error() != "os: process already finished" {
 					log.Printf("Error when interrupting (%q): %v", cmd.Path, err)
 				}
 			}
@@ -109,6 +111,14 @@ func main() {
 	if err := os.Chdir(directory); err != nil {
 		log.Fatal(err)
 	}
+
+	out, err := os.Create("batch.log")
+	if err != nil {
+		log.Fatal(err)
+	}
+	os.Stdout = out
+	os.Stderr = out
+	log.SetOutput(out)
 
 	fmt.Printf("Launching applications...\n")
 

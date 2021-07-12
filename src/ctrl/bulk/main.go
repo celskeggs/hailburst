@@ -88,7 +88,7 @@ func main() {
 		}
 	}
 
-	log.Printf("tearing down...")
+	log.Printf("Finished launching all batch jobs; waiting for completion.")
 	for n := 0; n < numCPUs; n++ {
 		<-threadFree
 	}
