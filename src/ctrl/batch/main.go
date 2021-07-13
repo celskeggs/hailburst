@@ -20,7 +20,6 @@ type Processes struct {
 	WaitChannels   []chan void
 	WaitAnyChannel chan void
 
-	InterruptOnce sync.Once
 	WaitAnyOnce   sync.Once
 }
 
@@ -62,18 +61,16 @@ func (p *Processes) Launch(path string, args []string, logfile string) {
 }
 
 func (p *Processes) Signal(signal os.Signal) {
-	p.InterruptOnce.Do(func() {
-		for _, cmd := range p.Cmds {
-			proc := cmd.Process
-			if proc != nil {
-				if err := proc.Signal(signal); err != nil && err.Error() != "os: process already finished" {
-					log.Printf("Error when signaling %q with %v: %v", cmd.Path, signal, err)
-				} else {
-					log.Printf("Signaled %q with %v", cmd.Path, signal)
-				}
+	for _, cmd := range p.Cmds {
+		proc := cmd.Process
+		if proc != nil {
+			if err := proc.Signal(signal); err != nil && err.Error() != "os: process already finished" {
+				log.Printf("Error when signaling %q with %v: %v", cmd.Path, signal, err)
+			} else {
+				log.Printf("Signaled %q with %v", cmd.Path, signal)
 			}
 		}
-	})
+	}
 }
 
 func (p *Processes) WaitAny() {
@@ -154,7 +151,7 @@ func main() {
 		WaitAnyChannel: make(chan void),
 	}
 	timesyncSocket := "timesync.sock"
-	p.Launch("go", []string{"run", "sim/experiments/requirements"}, "sim.log")
+	p.Launch(path.Join(origDir, "experiment-proc"), nil, "sim.log")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}

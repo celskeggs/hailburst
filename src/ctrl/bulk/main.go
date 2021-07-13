@@ -82,7 +82,7 @@ func main() {
 			go func(assignment PortAssignment) {
 				stamp := fmt.Sprintf("W%v-", assignment.ThreadNum) + time.Now().Format("2006-01-02T15:04:05")
 				cmd := exec.Command(
-					"go", "run", "ctrl/batch",
+					"./batch-proc",
 					path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum))
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
