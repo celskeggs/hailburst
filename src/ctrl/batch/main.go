@@ -16,8 +16,8 @@ import (
 type void struct{}
 
 type Processes struct {
-	Cmds         []*exec.Cmd
-	WaitChannels []chan void
+	Cmds           []*exec.Cmd
+	WaitChannels   []chan void
 	WaitAnyChannel chan void
 
 	InterruptOnce sync.Once
@@ -61,13 +61,15 @@ func (p *Processes) Launch(path string, args []string, logfile string) {
 	}()
 }
 
-func (p *Processes) Interrupt() {
+func (p *Processes) Signal(signal os.Signal) {
 	p.InterruptOnce.Do(func() {
 		for _, cmd := range p.Cmds {
 			proc := cmd.Process
 			if proc != nil {
-				if err := proc.Signal(os.Interrupt); err != nil && err.Error() != "os: process already finished" {
-					log.Printf("Error when interrupting (%q): %v", cmd.Path, err)
+				if err := proc.Signal(signal); err != nil && err.Error() != "os: process already finished" {
+					log.Printf("Error when signaling %q with %v: %v", cmd.Path, signal, err)
+				} else {
+					log.Printf("Signaled %q with %v", cmd.Path, signal)
 				}
 			}
 		}
@@ -76,13 +78,27 @@ func (p *Processes) Interrupt() {
 
 func (p *Processes) WaitAny() {
 	// wait until any of the processes terminate
-	_, _ = <- p.WaitAnyChannel
+	_, _ = <-p.WaitAnyChannel
+}
+
+func (p *Processes) WaitAllTimeout(timeout time.Duration) (timedout bool) {
+	// wait until ALL of the processes terminate
+	timeoutCh := time.After(timeout)
+	for _, ch := range p.WaitChannels {
+		select {
+		case <-timeoutCh:
+			return true
+		case _, _ = <-ch:
+			// continue
+		}
+	}
+	return false
 }
 
 func (p *Processes) WaitAll() {
 	// wait until ALL of the processes terminate
 	for _, ch := range p.WaitChannels {
-		_, _ = <- ch
+		_, _ = <-ch
 	}
 }
 
@@ -197,7 +213,7 @@ func main() {
 				// execution needs to be cut off, but let the simulation run a little longer before killing it...
 				time.Sleep(time.Second * 10)
 				fmt.Printf("Interrupting all...\n")
-				p.Interrupt()
+				p.Signal(os.Interrupt)
 				break
 			}
 		}
@@ -205,7 +221,12 @@ func main() {
 	fmt.Printf("Waiting for any to terminate...\n")
 	p.WaitAny()
 	fmt.Printf("Interrupting any remaining processes...\n")
-	p.Interrupt()
-	fmt.Printf("Waiting for remaining processes to terminate...\n")
-	p.WaitAll()
+	p.Signal(os.Interrupt)
+	fmt.Printf("Waiting for remaining processes to terminate normally...\n")
+	if timedout := p.WaitAllTimeout(time.Second); timedout {
+		fmt.Printf("Killing any remaining processes...\n")
+		p.Signal(os.Kill)
+		fmt.Printf("Waiting for remaining processes to terminate abnormally...\n")
+		p.WaitAll()
+	}
 }
