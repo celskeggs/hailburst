@@ -20,14 +20,26 @@ type PortAssignment struct {
 
 func main() {
 	var maxTrials uint32 = math.MaxUint32
-	if len(os.Args) >= 3 && os.Args[1] == "--max" {
-		maxTrials64, err := strconv.ParseUint(os.Args[2], 10, 32)
-		if err != nil {
-			log.Fatal(err)
-		}
-		maxTrials = uint32(maxTrials64)
-		if maxTrials == 0 {
-			log.Fatal("cannot run only zero trials")
+	var numCPUs = runtime.NumCPU()
+	for i := 1; i < len(os.Args); i++ {
+		if os.Args[i] == "--max" {
+			maxTrials64, err := strconv.ParseUint(os.Args[i+1], 10, 32)
+			if err != nil {
+				log.Fatal(err)
+			}
+			maxTrials = uint32(maxTrials64)
+			if maxTrials == 0 {
+				log.Fatal("cannot run only zero trials")
+			}
+		} else if os.Args[i] == "--cpus" {
+			numCPUs64, err := strconv.ParseInt(os.Args[i+1], 10, 0)
+			if err != nil {
+				log.Fatal(err)
+			}
+			numCPUs = int(numCPUs64)
+			if numCPUs <= 0 {
+				log.Fatal("cannot run only positive numbers of CPUs in parallel")
+			}
 		}
 	}
 
@@ -48,8 +60,6 @@ func main() {
 		// otherwise, this indicates that we should stop!
 		halt <- struct{}{}
 	}()
-
-	numCPUs := runtime.NumCPU()
 
 	threadFree := make(chan PortAssignment, numCPUs)
 	for n := 0; n < numCPUs; n++ {
