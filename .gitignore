@@ -6,3 +6,6 @@
 /sim.log
 /trials
 /local.config
+/batch-proc
+/experiment-proc
+/trials

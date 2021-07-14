@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -105,8 +106,8 @@ func Exists(path string) bool {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		log.Fatalf("usage: %s <dir> <port>", os.Args[0])
+	if len(os.Args) != 4 {
+		log.Fatalf("usage: %s <dir> <port> <mode>", os.Args[0])
 	}
 	origDir, err := os.Getwd()
 	if err != nil {
@@ -124,6 +125,7 @@ func main() {
 	if err := os.Chdir(directory); err != nil {
 		log.Fatal(err)
 	}
+	mode := os.Args[3]
 
 	out, err := os.Create("batch.log")
 	if err != nil {
@@ -177,6 +179,16 @@ func main() {
 		time.Sleep(time.Millisecond * 100)
 	}
 	time.Sleep(time.Millisecond * 100)
+
+	var campaignCmd string
+	if mode == "reg" {
+		campaignCmd = "campaign 1000 1s reg"
+	} else if mode == "mem" {
+		campaignCmd = "campaign 10000 100ms"
+	} else {
+		log.Fatalf("unknown mode: %q", mode)
+	}
+
 	p.Launch(path.Join(origDir, "../gdbroot/bin/gdb"), []string{
 		"-batch",
 		"-ex", fmt.Sprintf("target remote :%v", port),
@@ -184,13 +196,15 @@ func main() {
 		"-ex", "set pagination off",
 		"-ex", "source " + path.Join(origDir, "bare-arm/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
-		"-ex", "campaign 1000 1s reg",
+		"-ex", campaignCmd,
 		"-ex", "printf \"Campaign concluded\n\"",
 		"-ex", "monitor info vtime",
 	}, "gdb.log")
 	go func() {
 		log.Printf("Monitoring requirements log...")
 		br := bufio.NewReader(f)
+		ioCeased := false
+		reqFailed := false
 		for {
 			line, err := br.ReadString('\n')
 			if err == io.EOF {
@@ -206,7 +220,13 @@ func main() {
 				log.Fatal(err)
 			}
 			fmt.Print(line)
+			if strings.HasPrefix(line, "Experiment: monitor reported I/O ceased") {
+				ioCeased = true
+			}
 			if line == "Failure detected in experiment.\n" {
+				reqFailed = true
+			}
+			if ioCeased && reqFailed {
 				// execution needs to be cut off, but let the simulation run a little longer before killing it...
 				time.Sleep(time.Second * 10)
 				fmt.Printf("Interrupting all...\n")

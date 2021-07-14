@@ -14,9 +14,10 @@ import (
 )
 
 type Trial struct {
-	TrialName   string
-	TimeElapsed float64
-	ReqFailed   string
+	TrialName     string
+	ReqFailTime   float64
+	CommCeaseTime float64
+	ReqFailed     string
 }
 
 func SaveCSV(rowSlice interface{}, filename string) (errOut error) {
@@ -71,6 +72,7 @@ func LoadTrial(trialdir string) (Trial, error) {
 		return Trial{}, err
 	}
 	var elapsed float64 = -1
+	var ceased float64 = -1
 	failedReq := ""
 	for _, line := range strings.Split(string(lines), "\n") {
 		if strings.Contains(line, "time elapsed is ") && strings.Count(line, " ") == 5 {
@@ -101,12 +103,21 @@ func LoadTrial(trialdir string) (Trial, error) {
 				}
 				failedReq = curReq
 			}
+		} else if strings.HasPrefix(line, "Experiment: monitor reported I/O ceased at ") && strings.HasSuffix(line, " seconds") && strings.Count(line, " ") == 7 {
+			ceased, err = strconv.ParseFloat(strings.Split(line, " ")[6], 64)
+			if err != nil {
+				return Trial{}, err
+			}
+			if ceased < 0 {
+				return Trial{}, fmt.Errorf("invalid ceased time: %v", ceased)
+			}
 		}
 	}
 	return Trial{
-		TrialName:   path.Base(trialdir),
-		TimeElapsed: elapsed,
-		ReqFailed:   failedReq,
+		TrialName:     path.Base(trialdir),
+		ReqFailTime:   elapsed,
+		CommCeaseTime: ceased,
+		ReqFailed:     failedReq,
 	}, nil
 }
 
@@ -122,7 +133,7 @@ func main() {
 	}
 	for _, fi := range fis {
 		name := fi.Name()
-		if name == SummaryName {
+		if name == SummaryName || strings.HasPrefix(name, ".") {
 			continue
 		}
 		if !fi.IsDir() {

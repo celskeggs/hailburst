@@ -21,6 +21,7 @@ type PortAssignment struct {
 func main() {
 	var maxTrials uint32 = math.MaxUint32
 	var numCPUs = runtime.NumCPU()
+	var mode = "mem"
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--max" {
 			maxTrials64, err := strconv.ParseUint(os.Args[i+1], 10, 32)
@@ -39,6 +40,11 @@ func main() {
 			numCPUs = int(numCPUs64)
 			if numCPUs <= 0 {
 				log.Fatal("cannot run only positive numbers of CPUs in parallel")
+			}
+		} else if os.Args[i] == "--mode" {
+			mode = os.Args[i+1]
+			if mode != "mem" && mode != "reg" {
+				log.Fatalf("unrecognized mode option: %q", mode)
 			}
 		}
 	}
@@ -81,9 +87,7 @@ func main() {
 			log.Printf("Launching batch job #%d...", total)
 			go func(assignment PortAssignment) {
 				stamp := fmt.Sprintf("W%v-", assignment.ThreadNum) + time.Now().Format("2006-01-02T15:04:05")
-				cmd := exec.Command(
-					"./batch-proc",
-					path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum))
+				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), mode)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				err := cmd.Run()

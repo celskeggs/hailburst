@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sim/model"
 	"sim/spacecraft"
 	"sim/timesync"
 	"time"
@@ -28,7 +29,7 @@ func main() {
 		log.Fatalf("Encountered error while writing to log file: %v", err)
 	}
 	app := spacecraft.BuildSpacecraft(func(elapsed time.Duration, explanation string) {
-		_, err := logFile.WriteString(fmt.Sprintf("Experiment: time elapsed is %f seconds\n%s\nFailure detected in experiment.\n", elapsed.Seconds(), explanation))
+		_, err := fmt.Fprintf(logFile, "Experiment: time elapsed is %f seconds\n%s\nFailure detected in experiment.\n", elapsed.Seconds(), explanation)
 		if err == nil {
 			err = logFile.Sync()
 		}
@@ -37,7 +38,17 @@ func main() {
 		}
 		log.Printf("Wrote failure information to log file")
 	})
-	profiler, err := MakeProfiler("profile.csv", app)
+	mon := MakeMonitor(app, time.Second, func(lastTxmit model.VirtualTime) {
+		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", lastTxmit.Since(model.TimeZero).Seconds())
+		if err == nil {
+			err = logFile.Sync()
+		}
+		if err != nil {
+			log.Printf("Encountered error while writing to log file: %v", err)
+		}
+		log.Printf("Wrote monitor halt information to log file")
+	})
+	profiler, err := MakeProfiler("profile.csv", mon)
 	if err != nil {
 		log.Fatalf("Cannot initialize profiler: %v", err)
 	}
