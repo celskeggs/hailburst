@@ -8,6 +8,7 @@ import (
 
 type IOMonitor struct {
 	Underlying timesync.ProtocolImpl
+	InitDelay  time.Duration
 	Delay      time.Duration
 	LastIO     model.VirtualTime
 	EndFn      func(lastTxmit model.VirtualTime)
@@ -21,8 +22,8 @@ func (i *IOMonitor) Sync(pendingReadBytes int, now model.VirtualTime, writeData 
 	if i.EndFn != nil {
 		// calculate the expiration point, when no data has been written for a certain amount of time
 		ioExpire := i.LastIO.Add(i.Delay)
-		if ioExpire.Since(model.TimeZero).Seconds() < 5 {
-			ioExpire = model.TimeZero.Add(time.Second * 5)
+		if ioExpire.Since(model.TimeZero) < i.InitDelay {
+			ioExpire = model.TimeZero.Add(i.InitDelay)
 		}
 		// if we've passed that point, and no data has been written, report it.
 		if now.AtOrAfter(ioExpire) {
@@ -41,9 +42,10 @@ func (i *IOMonitor) Sync(pendingReadBytes int, now model.VirtualTime, writeData 
 
 var _ timesync.ProtocolImpl = &IOMonitor{}
 
-func MakeMonitor(impl timesync.ProtocolImpl, delay time.Duration, end func(lastTxmit model.VirtualTime)) timesync.ProtocolImpl {
+func MakeMonitor(impl timesync.ProtocolImpl, initDelay time.Duration, delay time.Duration, end func(lastTxmit model.VirtualTime)) timesync.ProtocolImpl {
 	return &IOMonitor{
 		Underlying: impl,
+		InitDelay:  initDelay,
 		Delay:      delay,
 		LastIO:     model.TimeZero,
 		EndFn:      end,

@@ -38,7 +38,7 @@ func main() {
 		}
 		log.Printf("Wrote failure information to log file")
 	})
-	mon := MakeMonitor(app, time.Second, func(lastTxmit model.VirtualTime) {
+	mon := MakeMonitor(app, time.Second * 2, time.Second, func(lastTxmit model.VirtualTime) {
 		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", lastTxmit.Since(model.TimeZero).Seconds())
 		if err == nil {
 			err = logFile.Sync()
