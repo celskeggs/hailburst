@@ -6,11 +6,8 @@ import (
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
 	"image/color"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"os"
-	"os/exec"
 )
 
 func main() {
@@ -70,36 +67,12 @@ func main() {
 
 	tp := NewTimelinePlot(act, mark, 0, vg.Points(20))
 	p.Add(tp)
-	p.Add(plotter.NewGlyphBoxes())
 
 	// Set the Y axis of the plot to nominal with
 	// the given names for y=0, y=1 and y=2.
 	p.NominalY("Single Plot")
 
-	f, err := ioutil.TempFile("", "output-*.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		err := os.Remove(f.Name())
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-	w, err := p.WriterTo(10*vg.Inch, 2*vg.Inch, "png")
-	if err != nil {
-		log.Panic(err)
-	}
-	_, err = w.WriteTo(f)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = f.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = exec.Command("gpicview", f.Name()).Run()
-	if err != nil {
+	if err := DisplayPlot(p); err != nil {
 		log.Fatal(err)
 	}
 }
