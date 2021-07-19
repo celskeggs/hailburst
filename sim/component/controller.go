@@ -94,7 +94,7 @@ func (sc *SimController) peekNextTimerExpiry() model.VirtualTime {
 	if len(sc.timers) > 0 {
 		return sc.timers[0].expireAt
 	}
-	return model.NeverTimeout
+	return model.TimeNever
 }
 
 func (sc *SimController) popNextTimer() *simTimer {

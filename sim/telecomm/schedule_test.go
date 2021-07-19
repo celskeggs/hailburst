@@ -32,7 +32,7 @@ func TestByteScheduleSimple(t *testing.T) {
 type mapSched map[model.VirtualTime]byte
 
 func (ms mapSched) LastTime() model.VirtualTime {
-	latest := model.NeverTimeout
+	latest := model.TimeNever
 	for k := range ms {
 		if !latest.TimeExists() || k.After(latest) {
 			latest = k

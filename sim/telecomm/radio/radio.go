@@ -111,7 +111,7 @@ func (f *fwRadio) updateTelecommSimulation() {
 		f.CurrentTxStart = txStartAt
 		if remaining == 0 {
 			f.Registers[RegTxState] = TxStateIdle
-			f.CurrentTxStart = model.NeverTimeout
+			f.CurrentTxStart = model.TimeNever
 		}
 	}
 }
@@ -151,7 +151,7 @@ func (f *fwRadio) updateRegister(regNum int, newValue uint32) (status uint8) {
 				f.Registers[RegTxState] = TxStateIdle
 				// cancel the rest of the transmission
 				f.Connection.UpdateTransmission(f.CurrentTxStart, nil)
-				f.CurrentTxStart = model.NeverTimeout
+				f.CurrentTxStart = model.TimeNever
 			}
 			return StatusOk
 		case TxStateActive:

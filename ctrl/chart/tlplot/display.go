@@ -1,4 +1,4 @@
-package main
+package tlplot
 
 import (
 	"gioui.org/app"

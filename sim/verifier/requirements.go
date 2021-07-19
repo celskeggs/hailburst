@@ -1,9 +1,14 @@
 package verifier
 
 import (
+	"encoding/csv"
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/component"
 	"github.com/celskeggs/hailburst/sim/model"
+	"io"
+	"log"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -101,10 +106,13 @@ var requirements = []string{
 }
 
 type ReqTracker struct {
+	sim         model.SimContext
 	outstanding map[string]int
 	succeeded   map[string]int
 	failed      map[string]int
 	disp        *component.EventDispatcher
+	logFile     io.Closer
+	logFileCSV  *csv.Writer
 }
 
 func (rt *ReqTracker) Subscribe(callback func()) (cancel func()) {
@@ -122,12 +130,16 @@ func assertReq(req string) {
 
 func (rt *ReqTracker) Start(req string) (complete func(success bool)) {
 	assertReq(req)
+	origTime := rt.sim.Now().Nanoseconds()
+	rt.log("BEGIN", strconv.FormatUint(origTime, 10), req)
 	rt.outstanding[req] += 1
 	var done bool
 	return func(success bool) {
 		if done {
 			panic("cannot complete twice")
 		}
+		endTime := rt.sim.Now().Nanoseconds()
+		rt.log("RETIRE", strconv.FormatUint(origTime, 10), strconv.FormatUint(endTime, 10), req)
 		rt.outstanding[req] -= 1
 		rt.Immediate(req, success)
 		done = true
@@ -137,8 +149,10 @@ func (rt *ReqTracker) Start(req string) (complete func(success bool)) {
 func (rt *ReqTracker) Immediate(req string, success bool) {
 	assertReq(req)
 	if success {
+		rt.log("SUCCEED", strconv.FormatUint(rt.sim.Now().Nanoseconds(), 10), req)
 		rt.succeeded[req] += 1
 	} else {
+		rt.log("FAIL", strconv.FormatUint(rt.sim.Now().Nanoseconds(), 10), req)
 		rt.failed[req] += 1
 	}
 	rt.disp.DispatchLater()
@@ -185,8 +199,41 @@ func (rt *ReqTracker) ExplainFailure() string {
 	return strings.Join(lines, "\n")
 }
 
+func (rt *ReqTracker) log(parts ...string) {
+	if rt.logFile != nil {
+		err := rt.logFileCSV.Write(parts)
+		if err == nil {
+			rt.logFileCSV.Flush()
+			err = rt.logFileCSV.Error()
+		}
+		if err != nil {
+			log.Printf("Logging error: %v", err)
+			err = rt.logFile.Close()
+			if err != nil {
+				log.Printf("Logfile closing error: %v", err)
+			}
+			rt.logFile = nil
+			rt.logFileCSV = nil
+		}
+	}
+}
+
+func (rt *ReqTracker) LogToPath(outputPath string) {
+	if rt.logFile != nil {
+		panic("already set up for logging")
+	}
+	f, err := os.Create(outputPath)
+	if err != nil {
+		panic(err)
+	}
+	rt.logFile = f
+	rt.logFileCSV = csv.NewWriter(f)
+	rt.log(append([]string{"REQUIREMENTS"}, requirements...)...)
+}
+
 func MakeReqTracker(ctx model.SimContext) *ReqTracker {
 	return &ReqTracker{
+		sim:         ctx,
 		outstanding: map[string]int{},
 		succeeded:   map[string]int{},
 		failed:      map[string]int{},

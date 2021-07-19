@@ -364,13 +364,16 @@ func (v *verifier) startPeriodicValidation(nbe, npe int) {
 	})
 }
 
-func MakeActivityVerifier(sim model.SimContext, onFailure func(explanation string)) collector.ActivityCollector {
+func MakeActivityVerifier(sim model.SimContext, onFailure func(explanation string), logPath string) collector.ActivityCollector {
 	v := &verifier{
 		sim: sim,
 		tracker: tracker{
 			sim: sim,
 		},
 		rqt: MakeReqTracker(sim),
+	}
+	if logPath != "" {
+		v.rqt.LogToPath(logPath)
 	}
 	hasReportedFailure := false
 	var prevExplanation string

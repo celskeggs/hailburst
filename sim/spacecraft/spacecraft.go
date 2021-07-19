@@ -34,12 +34,12 @@ const (
 	KeyClock  = 103
 )
 
-func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string)) timesync.ProtocolImpl {
+func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), reqLogPath string) timesync.ProtocolImpl {
 	return integrate.MakePacketApp(func(sim model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink) {
 		// build the activity collector
 		ac := verifier.MakeActivityVerifier(sim, func(explanation string) {
 			onFailure(sim.Now().Since(model.TimeZero), explanation)
-		})
+		}, reqLogPath)
 
 		// now, build the onboard FakeWire topology
 		ports := router.Router(sim, NumPorts, false, func(address int) (port int, pop bool, drop bool) {

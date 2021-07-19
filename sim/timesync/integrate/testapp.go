@@ -29,7 +29,7 @@ func (t *TestApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte
 		log.Printf("%v: wrote data to timesync leader: %q", now, string(readData))
 	}
 	if now.AtOrAfter(t.lastWrite.Add(time.Second)) {
-		expireAt = model.NeverTimeout
+		expireAt = model.TimeNever
 	} else {
 		expireAt = t.lastWrite.Add(time.Second)
 	}

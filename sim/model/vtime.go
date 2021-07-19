@@ -106,5 +106,5 @@ func FromNanosecondsAssume(t uint64) VirtualTime {
 	return vt
 }
 
-const NeverTimeout VirtualTime = -1
+const TimeNever VirtualTime = -1
 const TimeZero VirtualTime = 0

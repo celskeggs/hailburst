@@ -1,4 +1,4 @@
-package main
+package tlplot
 
 import (
 	"gonum.org/v1/plot"
@@ -111,33 +111,3 @@ func (t *xyconv) XY(i int) (x, y float64) {
 func (t *TimelinePlot) DataRange() (xmin, xmax, ymin, ymax float64) {
 	return plotter.XYRange((*xyconv)(t))
 }
-
-/*
-func (t *TimelinePlot) GlyphBoxes(plt *plot.Plot) (boxes []plot.GlyphBox) {
-	for _, act := range t.Activities {
-		rect := vg.Rectangle{
-			Min: vg.Point{
-				X: -t.BoxStyle.Width,
-				Y: -t.Height / 2,
-			},
-			Max: vg.Point{
-				X: t.BoxStyle.Width,
-				Y: t.Height / 2,
-			},
-		}
-		boxes = append(boxes,
-			plot.GlyphBox{
-				X:         plt.X.Norm(act.Start),
-				Y:         plt.Y.Norm(t.Location),
-				Rectangle: rect,
-			},
-			plot.GlyphBox{
-				X:         plt.X.Norm(act.End),
-				Y:         plt.Y.Norm(t.Location),
-				Rectangle: rect,
-			},
-		)
-	}
-	return boxes
-}
-*/
