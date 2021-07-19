@@ -76,6 +76,9 @@ static void spacecraft_init(void) {
     // initialize magnetometer
     magnetometer_init(&sc.mag, &sc.monitor, &magnetometer_routing);
 
+    // initialize heartbeats
+    heartbeat_init(&sc.heart);
+
     initialized = true;
 }
 

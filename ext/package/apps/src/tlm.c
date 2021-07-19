@@ -35,6 +35,7 @@ enum {
 	TLM_DROPPED_TID           = 0x01000004,
 	PONG_TID                  = 0x01000005,
 	CLOCK_CALIBRATED_TID      = 0x01000006,
+	HEARTBEAT_TID             = 0x01000007,
 	MAG_PWR_STATE_CHANGED_TID = 0x02000001,
 	MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
@@ -230,6 +231,13 @@ void tlm_clock_calibrated(int64_t adjustment) {
     uint32_t *out = (uint32_t*) tlm.data_bytes;
     *out++ = htonl((uint32_t) (adjustment >> 32));
     *out++ = htonl((uint32_t) (adjustment >> 0));
+    telemetry_record_async(&tlm);
+}
+
+void tlm_heartbeat(void) {
+    debug0("Heartbeat");
+
+    tlm_elem_t tlm = { .telemetry_id = HEARTBEAT_TID, .data_len = 0 };
     telemetry_record_async(&tlm);
 }
 

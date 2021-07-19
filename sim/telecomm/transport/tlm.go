@@ -16,6 +16,7 @@ const (
 	TlmDroppedTID         = 0x01000004
 	PongTID               = 0x01000005
 	ClockCalibratedTID    = 0x01000006
+	HeartbeatTID          = 0x01000007
 	MagPwrStateChangedTID = 0x02000001
 	MagReadingsArrayTID   = 0x02000002
 )
@@ -73,6 +74,10 @@ type ClockCalibrated struct {
 	Adjustment int64
 }
 
+type Heartbeat struct {
+	BaseTelemetry
+}
+
 type MagPwrStateChanged struct {
 	BaseTelemetry
 	PowerState bool
@@ -127,6 +132,8 @@ func DecodeTelemetry(cp *CommPacket) (t Telemetry, timestamp model.VirtualTime, 
 		t = &MagPwrStateChanged{}
 	case ClockCalibratedTID:
 		t = &ClockCalibrated{}
+	case HeartbeatTID:
+		t = &Heartbeat{}
 	case MagReadingsArrayTID:
 		t = &MagReadingsArray{}
 	default:

@@ -82,6 +82,10 @@ const (
 	// ReqCmdSuccess requires:
 	// Every command shall succeed.
 	ReqCmdSuccess = "ReqCmdSuccess"
+	// ReqHeartbeat requires:
+	// The flight software shall downlink a heartbeat at least once every 150 milliseconds period after time clock
+	// initialization occurs.
+	ReqHeartbeat = "ReqHeartbeat"
 )
 
 var requirements = []string{
@@ -103,6 +107,7 @@ var requirements = []string{
 	ReqTelemOrdered,
 	ReqTelemRecent,
 	ReqCmdSuccess,
+	ReqHeartbeat,
 }
 
 type ReqTracker struct {

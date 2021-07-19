@@ -3,6 +3,7 @@
 
 #include "comm.h"
 #include "fakewire_exc.h"
+#include "heartbeat.h"
 #include "magnetometer.h"
 #include "radio.h"
 #include "ringbuf.h"
@@ -16,6 +17,9 @@ typedef struct {
     // devices
     radio_t        radio;
     magnetometer_t mag;
+
+    // services
+    heartbeat_t    heart;
 
     // telecomm infrastructure
     ringbuf_t      uplink_ring;

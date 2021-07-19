@@ -241,6 +241,21 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 			v.rqt.Immediate(ReqCorrectMagReadings, matchOk)
 		}
 	}
+
+	// check ReqHeartbeat
+	_, ok1 := telemetry.(*transport.ClockCalibrated)
+	_, ok2 := telemetry.(*transport.Heartbeat)
+	if ok1 || ok2 {
+		v.checkReq(ReqHeartbeat, now.Add(time.Millisecond * 150), func() bool {
+			mostRecent := v.tracker.searchLast(func(event Event) bool {
+				telem, ok1 := event.(TelemetryDownlinkEvent)
+				_, ok2 := telem.Telemetry.(*transport.Heartbeat)
+				return ok1 && ok2
+			})
+			// make sure there's at least one heartbeat within the next 150 milliseconds
+			return mostRecent != nil && mostRecent.Timestamp().AtOrAfter(now)
+		})
+	}
 }
 
 func (v *verifier) OnSetMagnetometerPower(powered bool) {
