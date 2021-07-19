@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft"
+	"github.com/celskeggs/hailburst/sim/timesync"
 	"log"
 	"os"
-	"sim/model"
-	"sim/spacecraft"
-	"sim/timesync"
 	"time"
 )
 

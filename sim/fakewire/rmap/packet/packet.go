@@ -2,7 +2,7 @@ package packet
 
 import (
 	"fmt"
-	"sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 )
 
 type Packet interface {

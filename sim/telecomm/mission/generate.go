@@ -1,14 +1,14 @@
 package mission
 
 import (
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/telecomm/transport"
+	"github.com/celskeggs/hailburst/sim/verifier/collector"
 	"log"
 	"math"
 	"math/rand"
 	"reflect"
-	"sim/model"
-	"sim/telecomm"
-	"sim/telecomm/transport"
-	"sim/verifier/collector"
 	"time"
 )
 

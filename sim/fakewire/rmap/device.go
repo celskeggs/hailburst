@@ -1,10 +1,10 @@
 package rmap
 
 import (
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
+	"github.com/celskeggs/hailburst/sim/model"
 	"log"
-	"sim/fakewire/fwmodel"
-	"sim/fakewire/rmap/packet"
-	"sim/model"
 )
 
 const NoError uint8 = 0

@@ -1,12 +1,12 @@
 package integrate
 
 import (
-	"sim/component"
-	"sim/fakewire/charlink"
-	"sim/fakewire/exchange"
-	"sim/fakewire/fwmodel"
-	"sim/model"
-	"sim/timesync"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/charlink"
+	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/timesync"
 )
 
 type ModelApp struct {

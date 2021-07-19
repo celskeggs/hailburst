@@ -1,9 +1,9 @@
 package charlink
 
 import (
-	"sim/component"
-	"sim/fakewire/fwmodel"
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
 )
 
 type fwBuffer struct {

@@ -1,11 +1,11 @@
 package charlink
 
 import (
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
-	"sim/component"
-	"sim/fakewire/fwmodel"
-	"sim/model"
-	"sim/testpoint"
 	"testing"
 	"time"
 )

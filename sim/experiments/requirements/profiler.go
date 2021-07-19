@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/csv"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/timesync"
 	"os"
-	"sim/model"
-	"sim/timesync"
 	"time"
 )
 

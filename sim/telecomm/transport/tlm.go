@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/model"
 )
 
 const (

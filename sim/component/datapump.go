@@ -1,6 +1,6 @@
 package component
 
-import "sim/model"
+import "github.com/celskeggs/hailburst/sim/model"
 
 func DataPumpBytes(ctx model.SimContext, source model.DataSourceBytes, sink model.DataSinkBytes) {
 	// capacity only really impacts efficiency, so not configurable

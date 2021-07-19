@@ -1,7 +1,7 @@
 package magnetometer
 
 import (
-	"sim/component"
+	"github.com/celskeggs/hailburst/sim/component"
 	"testing"
 	"time"
 )

@@ -2,10 +2,10 @@ package verifier
 
 import (
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm/transport"
+	"github.com/celskeggs/hailburst/sim/verifier/collector"
 	"log"
-	"sim/model"
-	"sim/telecomm/transport"
-	"sim/verifier/collector"
 	"time"
 )
 

@@ -1,11 +1,11 @@
 package router
 
 import (
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
-	"sim/component"
-	"sim/fakewire/exchange"
-	"sim/fakewire/fwmodel"
-	"sim/testpoint"
 	"testing"
 	"time"
 )

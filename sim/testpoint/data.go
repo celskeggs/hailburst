@@ -1,8 +1,8 @@
 package testpoint
 
 import (
-	"sim/component"
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/model"
 )
 
 type DataSink struct {

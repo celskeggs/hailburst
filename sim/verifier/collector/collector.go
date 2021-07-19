@@ -1,8 +1,8 @@
 package collector
 
 import (
-	"sim/model"
-	"sim/telecomm/transport"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm/transport"
 )
 
 type ActivityCollector interface {

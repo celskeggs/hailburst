@@ -1,8 +1,8 @@
 package magnetometer
 
 import (
+	"github.com/celskeggs/hailburst/sim/model"
 	"math"
-	"sim/model"
 	"time"
 )
 

@@ -5,12 +5,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
 	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"sim/model"
 )
 
 type ProtocolImpl interface {

@@ -1,7 +1,7 @@
 package telecomm
 
 import (
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/model"
 	"sort"
 	"time"
 )

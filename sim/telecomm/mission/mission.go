@@ -1,9 +1,9 @@
 package mission
 
 import (
-	"sim/model"
-	"sim/telecomm"
-	"sim/verifier/collector"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/verifier/collector"
 	"time"
 )
 

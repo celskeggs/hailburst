@@ -1,9 +1,9 @@
 package charlink
 
 import (
-	"sim/fakewire/fwmodel"
-	"sim/model"
-	"sim/util"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/util"
 )
 
 const transcodeBufferSize = 4 * 1024 * 8 // 4 KB in bits

@@ -3,9 +3,9 @@ package integrate
 import (
 	"bytes"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/timesync"
 	"log"
-	"sim/model"
-	"sim/timesync"
 	"time"
 )
 

@@ -1,8 +1,8 @@
 package transport
 
 import (
-	"sim/component"
-	"sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/telecomm"
 	"testing"
 	"time"
 )

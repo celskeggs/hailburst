@@ -1,18 +1,18 @@
 package spacecraft
 
 import (
-	"sim/fakewire/exchange"
-	"sim/fakewire/fwmodel"
-	"sim/fakewire/router"
-	"sim/model"
-	"sim/spacecraft/clock"
-	"sim/spacecraft/magnetometer"
-	"sim/telecomm"
-	"sim/telecomm/mission"
-	"sim/telecomm/radio"
-	"sim/timesync"
-	"sim/timesync/integrate"
-	"sim/verifier"
+	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/router"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft/clock"
+	"github.com/celskeggs/hailburst/sim/spacecraft/magnetometer"
+	"github.com/celskeggs/hailburst/sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/telecomm/mission"
+	"github.com/celskeggs/hailburst/sim/telecomm/radio"
+	"github.com/celskeggs/hailburst/sim/timesync"
+	"github.com/celskeggs/hailburst/sim/timesync/integrate"
+	"github.com/celskeggs/hailburst/sim/verifier"
 	"time"
 )
 

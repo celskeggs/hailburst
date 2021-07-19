@@ -2,9 +2,9 @@ package packet
 
 import (
 	"bytes"
+	"github.com/celskeggs/hailburst/sim/fakewire/router"
 	"math/rand"
 	"reflect"
-	"sim/fakewire/router"
 	"testing"
 )
 

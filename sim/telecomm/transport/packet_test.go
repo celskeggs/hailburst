@@ -2,8 +2,8 @@ package transport
 
 import (
 	"bytes"
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
-	"sim/testpoint"
 	"testing"
 )
 

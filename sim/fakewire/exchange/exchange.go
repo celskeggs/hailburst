@@ -2,10 +2,10 @@ package exchange
 
 import (
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
 	"log"
-	"sim/component"
-	"sim/fakewire/fwmodel"
-	"sim/model"
 	"time"
 )
 

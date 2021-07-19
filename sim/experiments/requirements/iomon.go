@@ -1,8 +1,8 @@
 package main
 
 import (
-	"sim/model"
-	"sim/timesync"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/timesync"
 	"time"
 )
 

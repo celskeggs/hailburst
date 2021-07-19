@@ -2,7 +2,7 @@ package component
 
 import (
 	"fmt"
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/model"
 	"sort"
 )
 

@@ -2,12 +2,12 @@ package rmap
 
 import (
 	"bytes"
-	"sim/component"
-	"sim/fakewire/exchange"
-	"sim/fakewire/fwmodel"
-	"sim/fakewire/rmap/packet"
-	"sim/fakewire/router"
-	"sim/testpoint"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
+	"github.com/celskeggs/hailburst/sim/fakewire/router"
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"testing"
 	"time"
 )

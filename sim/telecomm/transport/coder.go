@@ -1,9 +1,9 @@
 package transport
 
 import (
-	"sim/component"
-	"sim/model"
-	"sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm"
 )
 
 func AttachReceiver(ctx model.SimContext, source *telecomm.Connection, callback func(packet *CommPacket), onErrors func(int)) {

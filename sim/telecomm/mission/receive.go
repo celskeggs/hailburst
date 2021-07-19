@@ -1,12 +1,12 @@
 package mission
 
 import (
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/telecomm/transport"
+	"github.com/celskeggs/hailburst/sim/verifier/collector"
 	"log"
 	"reflect"
-	"sim/model"
-	"sim/telecomm"
-	"sim/telecomm/transport"
-	"sim/verifier/collector"
 )
 
 func AttachTelemetryCollector(ctx model.SimContext, input *telecomm.Connection, ac collector.ActivityCollector) {

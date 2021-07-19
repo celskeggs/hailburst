@@ -1,8 +1,8 @@
 package packet
 
 import (
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
-	"sim/testpoint"
 	"testing"
 )
 

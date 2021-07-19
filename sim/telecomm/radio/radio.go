@@ -2,10 +2,10 @@ package radio
 
 import (
 	"encoding/binary"
-	"sim/fakewire/fwmodel"
-	"sim/fakewire/rmap"
-	"sim/model"
-	"sim/telecomm"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/rmap"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm"
 )
 
 const (

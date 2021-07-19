@@ -1,6 +1,6 @@
 package fwmodel
 
-import "sim/model"
+import "github.com/celskeggs/hailburst/sim/model"
 
 type DataSourceFWChar interface {
 	model.EventSource

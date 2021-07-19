@@ -3,7 +3,7 @@ package packet
 import (
 	"encoding/binary"
 	"fmt"
-	"sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 )
 
 type ReadPacket struct {

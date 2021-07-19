@@ -2,10 +2,10 @@ package verifier
 
 import (
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/telecomm/transport"
 	"log"
 	"reflect"
-	"sim/model"
-	"sim/telecomm/transport"
 	"sort"
 )
 

@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 	"encoding/csv"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/timesync"
+	"github.com/celskeggs/hailburst/sim/timesync/integrate"
 	"log"
 	"math/rand"
 	"os"
-	"sim/fakewire/fwmodel"
-	"sim/model"
-	"sim/timesync"
-	"sim/timesync/integrate"
 	"time"
 )
 

@@ -2,8 +2,8 @@ package component
 
 import (
 	"container/heap"
+	"github.com/celskeggs/hailburst/sim/model"
 	"math/rand"
-	"sim/model"
 	"time"
 )
 

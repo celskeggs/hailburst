@@ -1,7 +1,7 @@
 package charlink
 
 import (
-	"sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 )
 
 const minBitsPerFWChar = 4

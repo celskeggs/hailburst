@@ -2,9 +2,9 @@ package telecomm
 
 import (
 	"bytes"
-	"sim/component"
-	"sim/model"
-	"sim/testpoint"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/testpoint"
 	"sort"
 	"testing"
 	"time"

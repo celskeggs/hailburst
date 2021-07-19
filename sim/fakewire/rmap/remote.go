@@ -3,13 +3,13 @@ package rmap
 import (
 	"errors"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
+	"github.com/celskeggs/hailburst/sim/fakewire/router"
+	"github.com/celskeggs/hailburst/sim/model"
 	"log"
 	"reflect"
-	"sim/component"
-	"sim/fakewire/fwmodel"
-	"sim/fakewire/rmap/packet"
-	"sim/fakewire/router"
-	"sim/model"
 )
 
 type RemoteAddressing struct {

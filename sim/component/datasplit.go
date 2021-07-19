@@ -1,7 +1,7 @@
 package component
 
 import (
-	"sim/model"
+	"github.com/celskeggs/hailburst/sim/model"
 )
 
 type teeSinkHelper struct {
