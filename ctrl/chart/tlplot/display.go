@@ -1,6 +1,7 @@
 package tlplot
 
 import (
+	"fmt"
 	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/io/key"
@@ -24,50 +25,123 @@ import (
 	"path"
 )
 
-type PlotWidget struct {
-	Plot      *plot.Plot
-	DPI       int
-	ExportDir string
-	AdjWidth  vg.Length
-	AdjHeight vg.Length
-
-	SliderStart, SliderEnd       float64 // out of 1.0
-	NewSliderStart, NewSliderEnd float64
-
-	Busy  bool
-	Ready chan image.Image
-	Image image.Image
+type imageAndRegion struct {
+	Image     image.Image
+	Rectangle vg.Rectangle
 }
 
-func (p *PlotWidget) GenImage(w, h vg.Length) image.Image {
+type SizeGrabber struct {
+	Rectangle vg.Rectangle
+}
+
+func (s *SizeGrabber) Plot(canvas draw.Canvas, p *plot.Plot) {
+	s.Rectangle = canvas.Rectangle
+}
+
+type PlotWidget struct {
+	Plot        *plot.Plot
+	SizeGrabber *SizeGrabber
+	BaseX       plot.Axis
+	DPI         int
+	ExportDir   string
+	AdjWidth    vg.Length
+	AdjHeight   vg.Length
+
+	SliderMin, SliderMax       float64 // in axis units
+	IsSettingNewSlider         bool
+	NewSliderA, NewSliderB     float64
+	GenSliderMin, GenSliderMax float64
+
+	Busy       bool
+	Ready      chan imageAndRegion
+	Image      image.Image
+	DrawRegion vg.Rectangle
+}
+
+func interpolate(low, high, frac float64) float64 {
+	if frac < 0 || frac > 1 {
+		panic("out of range")
+	}
+	return low*(1-frac) + high*frac
+}
+
+func (p *PlotWidget) GenImage(w, h vg.Length) (image.Image, vg.Rectangle) {
 	c := vgimg.NewWith(vgimg.UseWH(w, h), vgimg.UseDPI(p.DPI))
 	p.Plot.Draw(draw.New(c))
-	return c.Image()
+	return c.Image(), p.SizeGrabber.Rectangle
 }
 
-func (p *PlotWidget) OnReady(ready image.Image) {
+func (p *PlotWidget) OnReady(ready imageAndRegion) {
 	if !p.Busy {
 		panic("should be busy")
 	}
-	p.Image = ready
+	p.Image = ready.Image
+	p.DrawRegion = ready.Rectangle
 	p.Busy = false
+}
+
+func (p *PlotWidget) ForwardTransform(axisX float64) (pixelX float32, ok bool) {
+	fracX := p.Plot.X.Norm(axisX)
+
+	c := p.DrawRegion
+	if c.Min.X >= c.Max.X {
+		return 0, false
+	}
+	lenX := vg.Length(fracX)*(c.Max.X-c.Min.X) + c.Min.X
+
+	return float32(float64(lenX) / vg.Inch.Points() * float64(p.DPI)), true
+}
+
+func (p *PlotWidget) ReverseTransform(pixelX float32) (axisX float64, ok bool) {
+	// first, convert pixels to length units
+	lenX := vg.Points(float64(pixelX) * vg.Inch.Points() / float64(p.DPI))
+
+	// second, convert length units to drawing area fraction
+	c := p.DrawRegion
+	if c.Min.X >= c.Max.X {
+		return 0, false
+	}
+	fracX := float64((lenX - c.Min.X) / (c.Max.X - c.Min.X))
+	fmt.Printf("Fraction: lenX = %f, c.Min.X = %f, c.Max.X = %f\n", lenX, c.Min.X, c.Max.X)
+
+	fracX = math.Max(0, math.Min(1, fracX))
+
+	// finally, convert drawing area fraction to plot units
+	if _, ok := p.Plot.X.Scale.(plot.LinearScale); ok {
+		return fracX*(p.Plot.X.Max-p.Plot.X.Min) + p.Plot.X.Min, true
+	} else {
+		// not implemented for other types of plot scale
+		return 0, false
+	}
 }
 
 func (p *PlotWidget) GetImage(size image.Point) image.Image {
 	wAdjusted := vg.Points(float64(size.X) * vg.Inch.Points() / float64(p.DPI))
 	hAdjusted := vg.Points(float64(size.Y) * vg.Inch.Points() / float64(p.DPI))
 	if p.Image == nil {
-		p.Image = p.GenImage(wAdjusted, hAdjusted)
+		p.Plot.X.Min = p.SliderMin
+		p.Plot.X.Max = p.SliderMax
+		p.Image, p.DrawRegion = p.GenImage(wAdjusted, hAdjusted)
 		p.AdjWidth = wAdjusted
 		p.AdjHeight = hAdjusted
-	} else if p.AdjWidth != wAdjusted || p.AdjHeight != hAdjusted {
+		p.GenSliderMin = p.SliderMin
+		p.GenSliderMax = p.SliderMax
+	} else if p.AdjWidth != wAdjusted || p.AdjHeight != hAdjusted || p.SliderMin != p.GenSliderMin || p.SliderMax != p.GenSliderMax {
 		if !p.Busy {
 			p.Busy = true
+			p.Plot.X.Min = p.SliderMin
+			p.Plot.X.Max = p.SliderMax
 			go func() {
-				p.Ready <- p.GenImage(wAdjusted, hAdjusted)
+				rendered, region := p.GenImage(wAdjusted, hAdjusted)
+				p.Ready <- imageAndRegion{
+					Image:     rendered,
+					Rectangle: region,
+				}
 			}()
 			p.AdjWidth = wAdjusted
 			p.AdjHeight = hAdjusted
+			p.GenSliderMin = p.SliderMin
+			p.GenSliderMax = p.SliderMax
 		}
 	}
 
@@ -75,6 +149,22 @@ func (p *PlotWidget) GetImage(size image.Point) image.Image {
 }
 
 var layoutTag = new(struct{})
+
+func (p *PlotWidget) drawSliderRect(gtx layout.Context, startAxisX, endAxisX float64, color color.NRGBA) {
+	defer op.Save(gtx.Ops).Load()
+
+	minX, ok1 := p.ForwardTransform(startAxisX)
+	maxX, ok2 := p.ForwardTransform(endAxisX)
+	if !ok1 || !ok2 {
+		return
+	}
+	// need to use RRect to avoid integer rounding
+	clip.UniformRRect(f32.Rect(minX, 0, maxX, float32(gtx.Constraints.Max.Y)), 0).Add(gtx.Ops)
+	paint.ColorOp{
+		Color: color,
+	}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+}
 
 func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 	defer op.Save(gtx.Ops).Load()
@@ -89,101 +179,64 @@ func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 	// input for slider
 	for _, ev := range gtx.Queue.Events(layoutTag) {
 		if x, ok := ev.(pointer.Event); ok {
-			frac := math.Max(0, math.Min(1, float64(x.Position.X)/float64(gtx.Constraints.Max.X)))
-			switch x.Type {
-			case pointer.Press:
-				if x.Buttons.Contain(pointer.ButtonSecondary) {
-					p.NewSliderStart = -1
-					p.NewSliderEnd = -1
-					p.SliderStart = 0
-					p.SliderEnd = 1
-				} else {
-					p.NewSliderStart = frac
-					p.NewSliderEnd = -1
-				}
-			case pointer.Drag:
-				if !x.Buttons.Contain(pointer.ButtonSecondary) {
-					p.NewSliderEnd = frac
-				}
-			case pointer.Release:
-				if !x.Buttons.Contain(pointer.ButtonSecondary) {
-					if p.NewSliderEnd != -1 {
-						p.SliderStart = p.NewSliderStart
-						p.SliderEnd = p.NewSliderEnd
+			// frac := math.Max(0, math.Min(1, float64(x.Position.X)/float64(gtx.Constraints.Max.X)))
+			axisX, ok := p.ReverseTransform(x.Position.X)
+			if ok {
+				switch x.Type {
+				case pointer.Press:
+					if x.Buttons.Contain(pointer.ButtonSecondary) {
+						p.IsSettingNewSlider = false
+						p.SliderMin = p.BaseX.Min
+						p.SliderMax = p.BaseX.Max
+					} else {
+						p.IsSettingNewSlider = true
+						p.NewSliderA = axisX
+						p.NewSliderB = axisX
 					}
-					p.NewSliderStart = -1
-					p.NewSliderEnd = -1
+				case pointer.Drag:
+					if !x.Buttons.Contain(pointer.ButtonSecondary) && p.IsSettingNewSlider {
+						p.NewSliderB = axisX
+					}
+				case pointer.Release:
+					if !x.Buttons.Contain(pointer.ButtonSecondary) {
+						if p.IsSettingNewSlider && p.NewSliderA != p.NewSliderB {
+							p.SliderMin = math.Min(p.NewSliderA, p.NewSliderB)
+							p.SliderMax = math.Max(p.NewSliderA, p.NewSliderB)
+						}
+					}
+					p.IsSettingNewSlider = false
 				}
 			}
 		}
 	}
 
 	pointer.Rect(image.Rectangle{
-		Max: image.Point{
-			X: gtx.Constraints.Max.X,
-			Y: sliderY,
-		},
+		Max: gtx.Constraints.Max,
 	}).Add(gtx.Ops)
 	pointer.InputOp{
 		Tag:   layoutTag,
 		Types: pointer.Press | pointer.Drag | pointer.Release,
 	}.Add(gtx.Ops)
 
-	// render slider background
+	// clip entire slider region
 	clip.Rect{
 		Max: image.Point{
 			X: gtx.Constraints.Max.X,
 			Y: sliderY,
 		},
 	}.Add(gtx.Ops)
-	paint.ColorOp{
-		Color: color.NRGBA{192, 192, 192, 255},
-	}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
 
-	base.Load()
+	oldConstraints := gtx.Constraints
+	gtx.Constraints.Max.Y = sliderY
 
-	// render slider foreground
-	clip.Rect{
-		Min: image.Point{
-			X: int(float64(gtx.Constraints.Max.X) * p.SliderStart),
-			Y: 0,
-		},
-		Max: image.Point{
-			X: int(float64(gtx.Constraints.Max.X) * p.SliderEnd),
-			Y: sliderY,
-		},
-	}.Add(gtx.Ops)
-	paint.ColorOp{
-		Color: color.NRGBA{128, 128, 128, 255},
-	}.Add(gtx.Ops)
-	paint.PaintOp{}.Add(gtx.Ops)
-
-	if p.NewSliderStart != -1 {
-		base.Load()
-		// render substitute slider
-		start := p.NewSliderStart
-		end := p.NewSliderEnd
-		if end == -1 {
-			end = math.Min(1, start+0.05)
-			start = math.Max(0, start-0.05)
-		}
-		clip.Rect{
-			Min: image.Point{
-				X: int(float64(gtx.Constraints.Max.X) * start),
-				Y: 0,
-			},
-			Max: image.Point{
-				X: int(float64(gtx.Constraints.Max.X) * end),
-				Y: sliderY,
-			},
-		}.Add(gtx.Ops)
-		paint.ColorOp{
-			Color: color.NRGBA{192, 128, 128, 255},
-		}.Add(gtx.Ops)
-		paint.PaintOp{}.Add(gtx.Ops)
+	p.drawSliderRect(gtx, p.BaseX.Min, p.BaseX.Max, color.NRGBA{192, 192, 192, 255})
+	p.drawSliderRect(gtx, p.SliderMin, p.SliderMax, color.NRGBA{128, 128, 128, 255})
+	if p.IsSettingNewSlider {
+		log.Printf("Comparison: (%v, %v) -- (%v, %v) -- (%v, %v)", p.BaseX.Min, p.BaseX.Max, p.SliderMin, p.SliderMax, p.NewSliderA, p.NewSliderB)
+		p.drawSliderRect(gtx, p.NewSliderA, p.NewSliderB, color.NRGBA{192, 128, 128, 255})
 	}
 
+	gtx.Constraints = oldConstraints
 	base.Load()
 
 	op.Offset(f32.Point{Y: float32(sliderY * 2)}).Add(gtx.Ops)
@@ -233,15 +286,16 @@ func DisplayPlot(p *plot.Plot) error {
 
 func DisplayPlotExportable(p *plot.Plot, exportDir string) error {
 	plotWidget := &PlotWidget{
-		Plot:           p,
-		DPI:            128,
-		ExportDir:      exportDir,
-		Ready:          make(chan image.Image),
-		SliderStart:    0,
-		SliderEnd:      1,
-		NewSliderStart: -1,
-		NewSliderEnd:   -1,
+		Plot:        p,
+		SizeGrabber: &SizeGrabber{},
+		BaseX:       p.X,
+		DPI:         128,
+		ExportDir:   exportDir,
+		SliderMin:   p.X.Min,
+		SliderMax:   p.X.Max,
+		Ready:       make(chan imageAndRegion),
 	}
+	p.Add(plotWidget.SizeGrabber)
 
 	go func() {
 		win := app.NewWindow(
@@ -253,8 +307,6 @@ func DisplayPlotExportable(p *plot.Plot, exportDir string) error {
 		)
 		defer win.Close()
 
-		// var nth = 0
-
 		for {
 			select {
 			case ready := <-plotWidget.Ready:
@@ -263,39 +315,10 @@ func DisplayPlotExportable(p *plot.Plot, exportDir string) error {
 			case e := <-win.Events():
 				switch e := e.(type) {
 				case system.FrameEvent:
-					/*
-						var f io.WriteCloser
-						if nth == 1 {
-							var err error
-							f, err = os.Create("cpu.profile")
-							if err != nil {
-								log.Fatal(err)
-							}
-							err = pprof.StartCPUProfile(f)
-							if err != nil {
-								log.Fatal(err)
-							}
-						}
-						start := time.Now()
-						log.Printf("Start: %v", start)
-					*/
 					ops := new(op.Ops)
 					gtx := layout.NewContext(ops, e)
 					layout.UniformInset(unit.Dp(30)).Layout(gtx, plotWidget.Layout)
 					e.Frame(ops)
-					/*
-						end := time.Now()
-						log.Printf("Duration: %v", end.Sub(start))
-						if nth == 1 {
-							pprof.StopCPUProfile()
-							err := f.Close()
-							if err != nil {
-								log.Fatal(err)
-							}
-							log.Printf("Wrote cpu profile")
-						}
-						nth += 1
-					*/
 				case key.Event:
 					switch e.Name {
 					case "Q", key.NameEscape:
