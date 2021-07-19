@@ -47,7 +47,7 @@ func (rs *ReqScan) LastTime() float64 {
 	return latest
 }
 
-func (rs *ReqScan) BuildPlot(lastTime float64) *tlplot.TimelinePlot {
+func (rs *ReqScan) BuildPlot(lastTime float64, location float64) *tlplot.TimelinePlot {
 	var activities []tlplot.Activity
 	var markers []tlplot.Marker
 
@@ -88,7 +88,7 @@ func (rs *ReqScan) BuildPlot(lastTime float64) *tlplot.TimelinePlot {
 		})
 	}
 
-	return tlplot.NewTimelinePlot(activities, markers, 0, vg.Points(20))
+	return tlplot.NewTimelinePlot(activities, markers, location, vg.Points(20))
 }
 
 func ScanRawReqs(path string) (map[string]*ReqScan, error) {
@@ -207,8 +207,8 @@ func GeneratePlot(dir string) (*plot.Plot, error) {
 		lastTime = math.Max(lastTime, record.LastTime())
 	}
 	sort.Strings(reqs)
-	for _, req := range reqs {
-		p.Add(records[req].BuildPlot(lastTime))
+	for i, req := range reqs {
+		p.Add(records[req].BuildPlot(lastTime, float64(i)))
 	}
 	p.NominalY(reqs...)
 

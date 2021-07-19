@@ -10,8 +10,8 @@ import (
 	"os/exec"
 )
 
-func WritePlot(p *plot.Plot, output io.Writer, format string) error {
-	w, err := p.WriterTo(8*vg.Inch, 6*vg.Inch, format)
+func WritePlot(p *plot.Plot, width, height vg.Length, output io.Writer, format string) error {
+	w, err := p.WriterTo(width, height, format)
 	if err != nil {
 		return err
 	}
@@ -33,23 +33,23 @@ func combineErrors(errors ...error) (err error) {
 	return err
 }
 
-func WriteClosePlot(p *plot.Plot, output io.WriteCloser, format string) (err error) {
+func WriteClosePlot(p *plot.Plot, width, height vg.Length, output io.WriteCloser, format string) (err error) {
 	defer func() {
 		e := output.Close()
 		err = combineErrors(err, e)
 	}()
-	return WritePlot(p, output, format)
+	return WritePlot(p, width, height, output, format)
 }
 
-func SavePlot(p *plot.Plot, path string, format string) error {
+func SavePlot(p *plot.Plot, width, height vg.Length, path string, format string) error {
 	output, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	return WriteClosePlot(p, output, format)
+	return WriteClosePlot(p, width, height, output, format)
 }
 
-func DisplayPlotExternal(p *plot.Plot) (err error) {
+func DisplayPlotExternal(p *plot.Plot, width, height vg.Length) (err error) {
 	f, err := ioutil.TempFile("", "output-*.png")
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func DisplayPlotExternal(p *plot.Plot) (err error) {
 		e := os.Remove(f.Name())
 		err = combineErrors(err, e)
 	}()
-	if err := WriteClosePlot(p, f, "png"); err != nil {
+	if err := WriteClosePlot(p, width, height, f, "png"); err != nil {
 		return err
 	}
 	return exec.Command("gpicview", f.Name()).Run()
