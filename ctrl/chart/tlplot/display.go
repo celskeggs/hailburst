@@ -1,7 +1,6 @@
 package tlplot
 
 import (
-	"fmt"
 	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/io/key"
@@ -102,8 +101,8 @@ func (p *PlotWidget) ReverseTransform(pixelX float32) (axisX float64, ok bool) {
 		return 0, false
 	}
 	fracX := float64((lenX - c.Min.X) / (c.Max.X - c.Min.X))
-	fmt.Printf("Fraction: lenX = %f, c.Min.X = %f, c.Max.X = %f\n", lenX, c.Min.X, c.Max.X)
 
+	// clip to [0,1] range
 	fracX = math.Max(0, math.Min(1, fracX))
 
 	// finally, convert drawing area fraction to plot units
@@ -232,7 +231,6 @@ func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 	p.drawSliderRect(gtx, p.BaseX.Min, p.BaseX.Max, color.NRGBA{192, 192, 192, 255})
 	p.drawSliderRect(gtx, p.SliderMin, p.SliderMax, color.NRGBA{128, 128, 128, 255})
 	if p.IsSettingNewSlider {
-		log.Printf("Comparison: (%v, %v) -- (%v, %v) -- (%v, %v)", p.BaseX.Min, p.BaseX.Max, p.SliderMin, p.SliderMax, p.NewSliderA, p.NewSliderB)
 		p.drawSliderRect(gtx, p.NewSliderA, p.NewSliderB, color.NRGBA{192, 128, 128, 255})
 	}
 

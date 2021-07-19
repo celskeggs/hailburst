@@ -135,7 +135,7 @@ func main() {
 	}
 
 	p := Processes{}
-	p.LaunchInTerminal("go run sim/experiments/requirements |& tee sim.log", "Simulation", ".")
+	p.LaunchInTerminal("go run ./sim/experiments/requirements |& tee sim.log", "Simulation", ".")
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
