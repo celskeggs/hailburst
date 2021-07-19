@@ -139,7 +139,7 @@ func main() {
 	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("\"" + strings.Join(gdbCmd, "\" \"") + "\"", "GDB", ".")
+	p.LaunchInTerminal("\""+strings.Join(gdbCmd, "\" \"")+"\"", "GDB", ".")
 	time.Sleep(time.Millisecond * 100)
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",

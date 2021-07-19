@@ -18,7 +18,7 @@ type Activity struct {
 }
 
 type Marker struct {
-	Time float64
+	Time  float64
 	Glyph draw.GlyphStyle
 }
 
@@ -40,7 +40,7 @@ func NewTimelinePlot(activities []Activity, markers []Marker, loc float64, heigh
 		Location:   loc,
 		Height:     height,
 		BoxStyle:   plotter.DefaultLineStyle,
-		TextStyle:  text.Style{
+		TextStyle: text.Style{
 			Font:     font.From(plotter.DefaultFont, plotter.DefaultFontSize),
 			Rotation: 0,
 			XAlign:   draw.XCenter,
@@ -60,17 +60,17 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 	for _, activity := range t.Activities {
 		xStart, xEnd := trX(activity.Start), trX(activity.End)
 		pts := []vg.Point{
-			{X: xStart, Y: y - t.Height / 2},
-			{X: xEnd, Y: y - t.Height / 2},
-			{X: xEnd, Y: y + t.Height / 2},
-			{X: xStart, Y: y + t.Height / 2},
-			{X: xStart, Y: y - t.Height / 2},
+			{X: xStart, Y: y - t.Height/2},
+			{X: xEnd, Y: y - t.Height/2},
+			{X: xEnd, Y: y + t.Height/2},
+			{X: xStart, Y: y + t.Height/2},
+			{X: xStart, Y: y - t.Height/2},
 		}
 		c.FillPolygon(activity.Color, c.ClipPolygonX(pts[0:4]))
 		c.StrokeLines(t.BoxStyle, c.ClipLinesX(pts)...)
 		if activity.Label != "" {
 			c.FillText(t.TextStyle, vg.Point{
-				X: (xStart+xEnd)/2,
+				X: (xStart + xEnd) / 2,
 				Y: y,
 			}, activity.Label)
 		}
@@ -87,7 +87,7 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 type xyconv TimelinePlot
 
 func (t *xyconv) Len() int {
-	return len(t.Markers) + len(t.Activities) * 2
+	return len(t.Markers) + len(t.Activities)*2
 }
 
 func (t *xyconv) XY(i int) (x, y float64) {
@@ -111,6 +111,7 @@ func (t *xyconv) XY(i int) (x, y float64) {
 func (t *TimelinePlot) DataRange() (xmin, xmax, ymin, ymax float64) {
 	return plotter.XYRange((*xyconv)(t))
 }
+
 /*
 func (t *TimelinePlot) GlyphBoxes(plt *plot.Plot) (boxes []plot.GlyphBox) {
 	for _, act := range t.Activities {

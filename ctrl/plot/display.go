@@ -16,7 +16,7 @@ import (
 
 type PlotWidget struct {
 	Plot *plot.Plot
-	DPI int
+	DPI  int
 }
 
 func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
@@ -31,7 +31,7 @@ func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 func DisplayPlot(p *plot.Plot) error {
 	plotWidget := &PlotWidget{
 		Plot: p,
-		DPI: 128,
+		DPI:  128,
 	}
 
 	go func() {

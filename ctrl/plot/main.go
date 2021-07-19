@@ -48,7 +48,7 @@ func main() {
 
 	mark := []Marker{
 		{
-			Time:  34.0,
+			Time: 34.0,
 			Glyph: draw.GlyphStyle{
 				Color:  color.Black,
 				Radius: vg.Points(5),
@@ -56,7 +56,7 @@ func main() {
 			},
 		},
 		{
-			Time:  40.0,
+			Time: 40.0,
 			Glyph: draw.GlyphStyle{
 				Color:  color.Black,
 				Radius: vg.Points(5),

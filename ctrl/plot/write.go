@@ -63,4 +63,3 @@ func DisplayPlotExternal(p *plot.Plot) (err error) {
 	}
 	return exec.Command("gpicview", f.Name()).Run()
 }
-

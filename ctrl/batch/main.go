@@ -21,7 +21,7 @@ type Processes struct {
 	WaitChannels   []chan void
 	WaitAnyChannel chan void
 
-	WaitAnyOnce   sync.Once
+	WaitAnyOnce sync.Once
 }
 
 func (p *Processes) Launch(path string, args []string, logfile string) {
