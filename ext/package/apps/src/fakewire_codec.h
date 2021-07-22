@@ -12,6 +12,7 @@
 typedef enum {
     FWC_NONE = 0,
 
+    // these need to match the numbers used in Go, and not overlap when XORed with 0x10.
     FWC_HANDSHAKE_1  = 0x80,
     FWC_HANDSHAKE_2  = 0x81,
     FWC_START_PACKET = 0x82,

@@ -154,7 +154,7 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     fakewire_exc_check_invariants(fwe);
 
     if (fwe->state == FW_EXC_DISCONNECTED) {
-        // ignore data character; do nothing
+        // ignore data characters; do nothing
     } else if (fwe->recvid_state == FW_RID_PRIMARY_ID || fwe->recvid_state == FW_RID_SECONDARY_ID) {
         assert(fwe->state == FW_EXC_HANDSHAKING ||
                    (fwe->recvid_state == FW_RID_SECONDARY_ID && fwe->state == FW_EXC_OPERATING));
@@ -267,7 +267,8 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
         case FWC_ERROR_PACKET: // fallthrough
         case FWC_FLOW_CONTROL: // fallthrough
         case FWC_ESCAPE_SYM:
-            debug_printf("hit unexpected control character 0x%x during handshake; resetting.", symbol);
+            debug_printf("hit unexpected control character %s during handshake; resetting.",
+                         fakewire_codec_symbol(symbol));
             fakewire_exc_reset(fwe);
             break;
         default:
@@ -322,7 +323,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
             break;
         case FWC_ERROR_PACKET:
             if (!fwe->recv_in_progress) {
-                debug_puts("hit unexpected end-of-packet before start-of-packet; resetting.");
+                debug_puts("hit unexpected error-end-of-packet before start-of-packet; resetting.");
                 fakewire_exc_reset(fwe);
             } else {
                 assert(fwe->inbound_buffer != NULL); // should always have a buffer if a read is in progress!
@@ -475,8 +476,9 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
             if (fwe->needs_send_secondary_handshake) {
                 handshake_id = fwe->primary_id;
                 handshake = FWC_HANDSHAKE_2;
+                fwe->needs_send_secondary_handshake = false;
             } else if (now >= next_handshake) {
-                // pick something very likely to be distinct
+                // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
                 handshake_id = htonl(0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic()));
                 handshake = FWC_HANDSHAKE_1;
                 fwe->sent_primary_id = handshake_id;
