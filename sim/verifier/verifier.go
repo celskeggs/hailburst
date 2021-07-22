@@ -253,7 +253,7 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 				return ok1 && ok2
 			})
 			// make sure there's at least one heartbeat within the next 150 milliseconds
-			return mostRecent != nil && mostRecent.Timestamp().AtOrAfter(now)
+			return mostRecent != nil && mostRecent.Timestamp().After(now)
 		})
 	}
 }

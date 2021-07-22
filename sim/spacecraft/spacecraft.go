@@ -34,7 +34,7 @@ const (
 	KeyClock  = 103
 )
 
-func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), reqLogPath string) timesync.ProtocolImpl {
+func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), reqLogPath string, injectIOErrors bool) timesync.ProtocolImpl {
 	return integrate.MakePacketApp(func(sim model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink) {
 		// build the activity collector
 		ac := verifier.MakeActivityVerifier(sim, func(explanation string) {
@@ -82,5 +82,5 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), 
 			LogicalAddress: AddrClock,
 			DestinationKey: KeyClock,
 		}.Construct(sim, ports[PortClock])
-	})
+	}, injectIOErrors)
 }

@@ -55,18 +55,24 @@ func MakeModelApp(controller *component.SimController, source model.DataSourceBy
 	}
 }
 
-func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink)) timesync.ProtocolImpl {
+func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink), injectErrors bool) timesync.ProtocolImpl {
 	sim := component.MakeSimControllerSeeded(1)
 
 	// input: bytes -> line characters
 	inputBytesSource, inputBytesSink := component.DataBufferBytes(sim, 1024)
 	inputCharsSource, inputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	if injectErrors {
+		inputBytesSink = InjectErrors(sim, inputBytesSink, 65536)
+	}
 	// inputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[APP->BENCH]"), inputCharsSink)
 	charlink.DecodeFakeWire(sim, inputCharsSink, inputBytesSource)
 
 	// output: line characters -> bytes
 	outputBytesSource, outputBytesSink := component.DataBufferBytes(sim, 1024)
 	outputCharsSource, outputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	if injectErrors {
+		outputBytesSink = InjectErrors(sim, outputBytesSink, 65536)
+	}
 	charlink.EncodeFakeWire(sim, outputBytesSink, outputCharsSource)
 	// outputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[BENCH->APP]"), outputCharsSink)
 

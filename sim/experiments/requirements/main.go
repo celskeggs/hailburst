@@ -28,6 +28,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Encountered error while writing to log file: %v", err)
 	}
+	var injectIOErrors bool
+	if os.Getenv("SIM_INJECT_IO_ERRORS") == "true" {
+		injectIOErrors = true
+		log.Printf("IO error injection enabled by environment variable")
+	}
 	app := spacecraft.BuildSpacecraft(func(elapsed time.Duration, explanation string) {
 		_, err := fmt.Fprintf(logFile, "Experiment: time elapsed is %f seconds\n%s\nFailure detected in experiment.\n", elapsed.Seconds(), explanation)
 		if err == nil {
@@ -37,7 +42,7 @@ func main() {
 			log.Printf("Encountered error while writing to log file: %v", err)
 		}
 		log.Printf("Wrote failure information to log file")
-	}, "reqs-raw.log")
+	}, "reqs-raw.log", injectIOErrors)
 	mon := MakeMonitor(app, time.Second*2, time.Second, func(lastTxmit model.VirtualTime) {
 		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", lastTxmit.Since(model.TimeZero).Seconds())
 		if err == nil {
