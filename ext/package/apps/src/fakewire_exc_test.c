@@ -130,7 +130,14 @@ static void *exchange_controller(void *opaque) {
     fw_exchange_t exc;
     fakewire_exc_init(&exc, ec->name);
     printf("Attaching...\n");
-    fakewire_exc_attach(&exc, ec->path_buf, ec->flags);
+    if (fakewire_exc_attach(&exc, ec->path_buf, ec->flags) < 0) {
+        fakewire_exc_destroy(&exc);
+
+        fprintf(stderr, "could not attach\n");
+        ec->pass = false;
+        ec->chain_out = NULL;
+        return NULL;
+    }
     printf("Attached!\n");
 
     struct reader_config rc = {

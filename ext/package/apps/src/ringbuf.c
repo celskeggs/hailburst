@@ -23,6 +23,22 @@ void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
     rb->read_idx = rb->write_idx = 0;
 }
 
+void ringbuf_destroy(ringbuf_t *rb) {
+    assert(rb != NULL);
+    assert(rb->memory != NULL);
+
+    // free memory
+    free(rb->memory);
+    rb->memory = NULL;
+
+    // tear down pthread objects
+    cond_destroy(&rb->cond);
+    mutex_destroy(&rb->mutex);
+
+    // wipe memory to address use-after-destroy bugs
+    memset(rb, 0, sizeof(ringbuf_t));
+}
+
 // masks an unwrapped index into a valid array offset
 static inline size_t mask(ringbuf_t *rb, size_t index) {
     assert(rb != NULL);

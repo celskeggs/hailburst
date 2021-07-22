@@ -84,7 +84,8 @@ static void *reader_task(void *opaque) {
 void task_scrub_memory(void) {
     fw_exchange_t fwport;
     fakewire_exc_init(&fwport, "scrub");
-    fakewire_exc_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
+    int err = fakewire_exc_attach(&fwport, "/dev/ttyAMA1", FW_FLAG_SERIAL);
+    assert(err == 0);
 
     alloc_memory();
 

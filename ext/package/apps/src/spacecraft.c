@@ -57,7 +57,8 @@ static void spacecraft_init(void) {
 
     // initialize fakewire infrastructure
     fakewire_exc_init(&sc.fwport, "rmap_io");
-    fakewire_exc_attach(&sc.fwport, "/dev/vport0p1", FW_FLAG_VIRTIO);
+    int err = fakewire_exc_attach(&sc.fwport, "/dev/vport0p1", FW_FLAG_VIRTIO);
+    assert(err == 0);
     rmap_init_monitor(&sc.monitor, &sc.fwport, 0x2000);
 
     // initialize telecomm infrastructure

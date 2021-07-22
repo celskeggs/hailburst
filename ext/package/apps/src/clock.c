@@ -45,7 +45,7 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
 
     // sample twice locally and once remotely
     status = rmap_read(&clock_ctx, address, RF_INCREMENT, 0x00, REG_CLOCK, &read_len, &ref_time_sampled_raw[0]);
-    local_time_postsampled = clock_timestamp();
+    local_time_postsampled = clock_timestamp_monotonic();
 
     // make sure we communicated correctly and decode bytes
     assert(status == RS_OK);

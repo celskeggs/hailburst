@@ -14,7 +14,7 @@ app: spacecraft.o fakewire_codec.o fakewire_link.o fakewire_exc.o rmap.o ringbuf
 fakewire_link_test: fakewire_link_test.o test_common.o fakewire_link.o bitbuf.o
 	$(GCC) $(MY_CFLAGS) $^ -o $@
 
-fakewire_exc_test: fakewire_exc_test.o test_common.o fakewire_exc.o fakewire_link.o bitbuf.o
+fakewire_exc_test: fakewire_exc_test.o test_common.o fakewire_exc.o fakewire_link.o fakewire_codec.o clock_stub.o ringbuf.o
 	$(GCC) $(MY_CFLAGS) $^ -o $@
 
 clean:
