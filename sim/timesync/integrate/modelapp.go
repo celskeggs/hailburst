@@ -2,9 +2,9 @@ package integrate
 
 import (
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/charlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/timesync"
 )
@@ -59,26 +59,24 @@ func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.Pac
 	sim := component.MakeSimControllerSeeded(1)
 
 	// input: bytes -> line characters
-	inputBytesSource, inputBytesSink := component.DataBufferBytes(sim, 1024)
-	inputCharsSource, inputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	inputSource, inputSink := component.DataBufferBytes(sim, 1024)
 	if injectErrors {
-		inputBytesSink = InjectErrors(sim, inputBytesSink, 65536)
+		inputSink = InjectErrors(sim, inputSink, 65536)
 	}
 	// inputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[APP->BENCH]"), inputCharsSink)
-	charlink.DecodeFakeWire(sim, inputCharsSink, inputBytesSource)
 
 	// output: line characters -> bytes
-	outputBytesSource, outputBytesSink := component.DataBufferBytes(sim, 1024)
-	outputCharsSource, outputCharsSink := charlink.DataBufferFWChar(sim, 1024)
+	outputSource, outputSink := component.DataBufferBytes(sim, 1024)
 	if injectErrors {
-		outputBytesSink = InjectErrors(sim, outputBytesSink, 65536)
+		outputSink = InjectErrors(sim, outputSink, 65536)
 	}
-	charlink.EncodeFakeWire(sim, outputBytesSink, outputCharsSource)
 	// outputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[BENCH->APP]"), outputCharsSink)
 
 	// packet exchange
-	psink, psource := exchange.FakeWireExchange(sim, outputCharsSink, inputCharsSource, true)
-	main(sim, psource, psink)
+	packetRecv := packetlink.MakePacketNode(sim)
+	packetTxmit := packetlink.MakePacketNode(sim)
+	exchange.FakeWire(sim, outputSink, inputSource, packetRecv.Sink(), packetTxmit.Source(), "App")
+	main(sim, packetRecv.Source(), packetTxmit.Sink())
 
-	return MakeModelApp(sim, outputBytesSource, inputBytesSink)
+	return MakeModelApp(sim, outputSource, inputSink)
 }

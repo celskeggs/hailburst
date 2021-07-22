@@ -1,7 +1,7 @@
 package spacecraft
 
 import (
-	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/fakewire/router"
 	"github.com/celskeggs/hailburst/sim/model"
@@ -59,7 +59,7 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), 
 		// so that ports are properly indexed
 		ports = append([]fwmodel.PacketWire{{nil, nil}}, ports...)
 		// connect the FSW controller to the switch on Port 1
-		exchange.PatchWires(sim, ports[PortFSW], fwmodel.PacketWire{
+		packetlink.PatchWires(sim, ports[PortFSW], fwmodel.PacketWire{
 			Source: source,
 			Sink:   sink,
 		})

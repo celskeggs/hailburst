@@ -1,9 +1,7 @@
 package packet
 
 import (
-	"encoding/binary"
 	"errors"
-	"fmt"
 )
 
 type Path []uint8
@@ -27,27 +25,7 @@ func uint24BE(b []byte) uint32 {
 	return uint32(b[2]) | uint32(b[1])<<8 | uint32(b[0])<<16
 }
 
-func encodeUint16BE(u uint16) []byte {
-	var out [2]byte
-	binary.BigEndian.PutUint16(out[:], u)
-	return out[:]
-}
-
 const MaxUint24 = 0x00FFFFFF
-
-func encodeUint24BE(u uint32) ([]byte, error) {
-	out := encodeUint32BE(u)
-	if out[0] != 0 {
-		return nil, fmt.Errorf("value is too large for 24-bit encoding: %v", u)
-	}
-	return out[1:4], nil
-}
-
-func encodeUint32BE(u uint32) []byte {
-	var out [4]byte
-	binary.BigEndian.PutUint32(out[:], u)
-	return out[:]
-}
 
 func isSourcePathValid(path Path) bool {
 	return len(path) <= 1 || path[0] != 0

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/util"
 )
 
 type WriteReply struct {
@@ -91,7 +92,7 @@ func (wr WriteReply) Encode() ([]byte, error) {
 	ptcspalb |= uint8(sourcePathAddrLen)
 	packet = append(packet, wr.SourceLogicalAddress, fwmodel.IdentifierRMAP, ptcspalb, wr.Status)
 	packet = append(packet, wr.DestinationLogicalAddress)
-	packet = append(packet, encodeUint16BE(wr.TransactionIdentifier)...)
+	packet = append(packet, util.EncodeUint16BE(wr.TransactionIdentifier)...)
 	packet = append(packet, RmapCrc8(packet[len(wr.SourcePath):]))
 	return packet, nil
 }

@@ -1,4 +1,4 @@
-package exchange
+package packetlink
 
 import (
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"

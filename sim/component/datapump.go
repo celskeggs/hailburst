@@ -1,6 +1,8 @@
 package component
 
-import "github.com/celskeggs/hailburst/sim/model"
+import (
+	"github.com/celskeggs/hailburst/sim/model"
+)
 
 func DataPumpBytes(ctx model.SimContext, source model.DataSourceBytes, sink model.DataSinkBytes) {
 	// capacity only really impacts efficiency, so not configurable
@@ -28,4 +30,19 @@ func DataPumpBytes(ctx model.SimContext, source model.DataSourceBytes, sink mode
 	sink.Subscribe(pump)
 	// to get things kicked off
 	ctx.Later("sim.component.DataPumpBytes/begin", pump)
+}
+
+func DataPumpDirect(ctx model.SimContext, source model.DataSourceBytes, sink func([]byte)) {
+	// capacity only really impacts efficiency, so not configurable
+	buffer := make([]byte, 1024)
+
+	pump := func() {
+		count := source.TryRead(buffer)
+		if count > 0 {
+			sink(buffer[:count])
+		}
+	}
+	source.Subscribe(pump)
+	// to get things kicked off
+	ctx.Later("sim.component.DataPumpDirect/begin", pump)
 }

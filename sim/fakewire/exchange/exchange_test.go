@@ -3,33 +3,29 @@ package exchange
 import (
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/charlink"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/testpoint"
+	"log"
 	"math/rand"
 	"testing"
 	"time"
 )
 
 // metered also means "use charlink to encode to bytes"
-func InstantiateLink(ctx model.SimContext, metered bool, name string) (sink fwmodel.DataSinkFWChar, source fwmodel.DataSourceFWChar) {
+func InstantiateLink(ctx model.SimContext, metered bool, name string) (sink model.DataSinkBytes, source model.DataSourceBytes) {
 	if metered {
 		serialOut, serialIn := component.DataBufferBytes(ctx, 160)
 		meteredIn := component.MakeMeteredSink(ctx, serialIn, 100, time.Microsecond*100)
 
-		fwDecodeOut, fwDecodeIn := charlink.DataBufferFWChar(ctx, 16)
 		// fwDecodeIn = charlink.TeeDataSinksFW(ctx, fwDecodeIn, testpoint.MakeLoggerFW(ctx, name + ".OUT"))
-		charlink.DecodeFakeWire(ctx, fwDecodeIn, serialOut)
-		fwEncodeOut, fwEncodeIn := charlink.DataBufferFWChar(ctx, 16)
-		charlink.EncodeFakeWire(ctx, meteredIn, fwEncodeOut)
-
 		// fwEncodeIn = charlink.TeeDataSinksFW(ctx, fwEncodeIn, testpoint.MakeLoggerFW(ctx, name + ".IN"))
 
-		return fwEncodeIn, fwDecodeOut
+		return meteredIn, serialOut
 	} else {
-		source, sink := charlink.DataBufferFWChar(ctx, 16)
-		// sink = charlink.TeeDataSinksFW(ctx, sink, testpoint.MakeLoggerFW(ctx, name))
+		source, sink = component.DataBufferBytes(ctx, 16)
+		// sink = component.TeeDataSinks(ctx, sink, testpoint.MakeLogger(ctx, name, time.Millisecond))
 		return sink, source
 	}
 }
@@ -38,10 +34,15 @@ func InstantiateExchanges(ctx model.SimContext, metered bool) (leftSink, rightSi
 	leftOut, rightIn := InstantiateLink(ctx, metered, "LinkL2R")
 	rightOut, leftIn := InstantiateLink(ctx, metered, "LinkR2L")
 
-	leftSink, leftSource = FakeWireExchange(ctx, leftOut, leftIn, false)
-	rightSink, rightSource = FakeWireExchange(ctx, rightOut, rightIn, false)
+	leftRecv := packetlink.MakePacketNode(ctx)
+	leftSend := packetlink.MakePacketNode(ctx)
+	rightRecv := packetlink.MakePacketNode(ctx)
+	rightSend := packetlink.MakePacketNode(ctx)
+	log.Printf("PACKET NODES: %p %p %p %p", leftRecv, leftSend, rightRecv, rightSend)
+	FakeWire(ctx, leftOut, leftIn, leftRecv.Sink(), leftSend.Source(), "   Left")
+	FakeWire(ctx, rightOut, rightIn, rightRecv.Sink(), rightSend.Source(), "  Right")
 
-	return leftSink, rightSink, leftSource, rightSource
+	return leftSend.Sink(), rightSend.Sink(), leftRecv.Source(), rightRecv.Source()
 }
 
 type StepFunc func() (time.Duration, StepFunc)
@@ -61,10 +62,10 @@ func IterativeStepper(sim model.SimContext, step StepFunc, done func()) (start f
 }
 
 func LogSim(sim model.SimContext, fmtStr string, args ...interface{}) {
-	fmt.Printf("%v %s\n", sim.Now(), fmt.Sprintf(fmtStr, args...))
+	log.Printf("%v [HARNESS] %s", sim.Now(), fmt.Sprintf(fmtStr, args...))
 }
 
-func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSource, onError func(string), done func()) (start func()) {
+func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSource, label string, onError func(string), done func()) (start func()) {
 	var step1, step2, step3, step4 StepFunc
 	packetData := testpoint.RandPacket(sim.Rand())
 	var timeout model.VirtualTime
@@ -81,7 +82,7 @@ func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.Pa
 		}
 	}
 	step2 = func() (time.Duration, StepFunc) {
-		LogSim(sim, "Transmitting packet...")
+		LogSim(sim, "[%s] Transmitting packet...", label)
 		if out.CanAcceptPacket() {
 			out.SendPacket(append([]byte{}, packetData...))
 			timeout = sim.Now().Add(time.Second * 10)
@@ -108,7 +109,7 @@ func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.Pa
 			}
 			return time.Second, step4
 		} else if sim.Now().After(timeout) {
-			onError(fmt.Sprintf("Timed out while waiting for packet"))
+			onError(fmt.Sprintf("Timed out while waiting to receive packet"))
 			return 0, nil
 		} else {
 			return 10 * time.Millisecond, step3
@@ -124,40 +125,44 @@ func ValidatorSingle(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.Pa
 	return IterativeStepper(sim, step1, done)
 }
 
-func Validator(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSource, count int, onError func(int, string), done func()) {
+func Validator(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSource, count int, label string, onError func(int, string), done func()) {
 	nextAction := done
 	var anyErrors bool
 	for i := count - 1; i >= 0; i-- {
 		i := i
 		savedAction := nextAction
-		nextAction = ValidatorSingle(sim, out, in, func(s string) {
-			anyErrors = true
-			onError(i, s)
-		}, func() {
-			if anyErrors {
-				done()
-			} else {
-				savedAction()
-			}
-		})
+		nextAction = ValidatorSingle(
+			sim, out, in, label,
+			func(s string) {
+				anyErrors = true
+				onError(i, s)
+			},
+			func() {
+				if anyErrors {
+					done()
+				} else {
+					savedAction()
+				}
+			},
+		)
 	}
 	sim.Later("sim.fakewire.exchange.Validator/FirstStep", nextAction)
 }
 
-func InnerTestExchanges(t *testing.T, metered bool, singleDir bool) {
+func InnerTestExchanges(t *testing.T, metered bool, count int, singleDir bool, duration time.Duration) {
 	sim := component.MakeSimControllerSeeded(12)
 
 	lsink, rsink, lsource, rsource := InstantiateExchanges(sim, metered)
 
 	var finishedL2R, finishedR2L, errors bool
-	Validator(sim, lsink, rsource, 10, func(i int, s string) {
+	Validator(sim, lsink, rsource, count, "left-to-right", func(i int, s string) {
 		t.Errorf("Error in left-to-right validator packet %d: %s", i, s)
 		errors = true
 	}, func() {
 		finishedL2R = true
 	})
 	if !singleDir {
-		Validator(sim, rsink, lsource, 10, func(i int, s string) {
+		Validator(sim, rsink, lsource, count, "right-to-left", func(i int, s string) {
 			t.Errorf("Error in right-to-left validator packet %d: %s", i, s)
 			errors = true
 		}, func() {
@@ -166,9 +171,9 @@ func InnerTestExchanges(t *testing.T, metered bool, singleDir bool) {
 	}
 
 	// run for ten virtual minutes
-	nextTimer := sim.Advance(model.TimeZero.Add(time.Minute * 10))
+	nextTimer := sim.Advance(model.TimeZero.Add(duration))
 	if nextTimer.TimeExists() {
-		t.Errorf("Unexpectedly found that there was still another timer left after ten minutes: %v", nextTimer)
+		t.Errorf("Unexpectedly found that there was still another timer left after %v: %v", duration, nextTimer)
 	}
 	if !finishedL2R {
 		t.Errorf("Did not finish left-to-right validation")
@@ -181,14 +186,22 @@ func InnerTestExchanges(t *testing.T, metered bool, singleDir bool) {
 	}
 }
 
+func TestExchangesUnmeteredSingleDirectionShort(t *testing.T) {
+	InnerTestExchanges(t, false, 1, true, time.Second*10)
+}
+
 func TestExchangesUnmeteredSingleDirection(t *testing.T) {
-	InnerTestExchanges(t, false, true)
+	InnerTestExchanges(t, false, 10, true, time.Second*30)
 }
 
 func TestExchangesUnmetered(t *testing.T) {
-	InnerTestExchanges(t, false, false)
+	InnerTestExchanges(t, false, 10, false, time.Second*30)
 }
 
 func TestExchangesMetered(t *testing.T) {
-	InnerTestExchanges(t, true, false)
+	InnerTestExchanges(t, true, 10, false, time.Minute)
+}
+
+func TestExchangesLong(t *testing.T) {
+	InnerTestExchanges(t, true, 1000, false, time.Second * 2000)
 }

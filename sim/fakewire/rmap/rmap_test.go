@@ -3,7 +3,7 @@ package rmap
 import (
 	"bytes"
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
 	"github.com/celskeggs/hailburst/sim/fakewire/router"
@@ -303,8 +303,8 @@ func TestRmapReadCorruption(t *testing.T) {
 	// mocked local device
 	testDevice := &TestDevice{T: t}
 	// packet nodes
-	deviceInN, deviceOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
-	terminalInN, terminalOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
+	deviceInN, deviceOutN := packetlink.MakePacketNode(sim), packetlink.MakePacketNode(sim)
+	terminalInN, terminalOutN := packetlink.MakePacketNode(sim), packetlink.MakePacketNode(sim)
 	deviceIn, deviceOut := deviceInN.Sink(), deviceOutN.Source()
 	terminalIn, terminalOut := terminalInN.Sink(), terminalOutN.Source()
 	// attach RMAP device
@@ -474,8 +474,8 @@ func TestRmapWriteCorruption(t *testing.T) {
 	// mocked local device
 	testDevice := &TestDevice{T: t}
 	// packet nodes
-	deviceInN, deviceOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
-	terminalInN, terminalOutN := exchange.MakePacketNode(sim), exchange.MakePacketNode(sim)
+	deviceInN, deviceOutN := packetlink.MakePacketNode(sim), packetlink.MakePacketNode(sim)
+	terminalInN, terminalOutN := packetlink.MakePacketNode(sim), packetlink.MakePacketNode(sim)
 	deviceIn, deviceOut := deviceInN.Sink(), deviceOutN.Source()
 	terminalIn, terminalOut := terminalInN.Sink(), terminalOutN.Source()
 	// attach RMAP device

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/util"
 )
 
 type WritePacket struct {
@@ -110,10 +111,10 @@ func (wp WritePacket) Encode() ([]byte, error) {
 	packet = append(packet, wp.DestinationLogicalAddress, fwmodel.IdentifierRMAP, ptcspalb, wp.DestinationKey)
 	packet = append(packet, encodedPath...)
 	packet = append(packet, wp.SourceLogicalAddress)
-	packet = append(packet, encodeUint16BE(wp.TransactionIdentifier)...)
+	packet = append(packet, util.EncodeUint16BE(wp.TransactionIdentifier)...)
 	packet = append(packet, wp.ExtendedWriteAddress)
-	packet = append(packet, encodeUint32BE(wp.WriteAddress)...)
-	b, err := encodeUint24BE(uint32(len(wp.DataBytes)))
+	packet = append(packet, util.EncodeUint32BE(wp.WriteAddress)...)
+	b, err := util.EncodeUint24BE(uint32(len(wp.DataBytes)))
 	if err != nil {
 		return nil, err
 	}

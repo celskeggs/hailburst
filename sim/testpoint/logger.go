@@ -3,65 +3,55 @@ package testpoint
 import (
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/codec"
 	"github.com/celskeggs/hailburst/sim/model"
+	"log"
 	"strings"
 	"time"
 )
 
-type LoggerFW struct {
+type Logger struct {
 	ctx model.SimContext
 	*component.EventDispatcher
 	chs              string
 	name             string
 	flushTimerCancel func()
+	flushDelay       time.Duration
 }
 
-func (l *LoggerFW) TryWrite(from []fwmodel.FWChar) int {
+func (l *Logger) TryWrite(from []byte) int {
 	if l.flushTimerCancel != nil {
 		l.flushTimerCancel()
 		l.flushTimerCancel = nil
 	}
-	for _, ch := range from {
-		if ch == fwmodel.ParityFail || ch.IsCtrl() {
-			l.chs = fmt.Sprintf("%s\" %v \"", l.chs, ch)
+	for _, u8 := range from {
+		if codec.IsCtrl(u8) {
+			l.chs += codec.ControlChar(u8).String() + " "
 		} else {
-			u8, _ := ch.Data()
-			if u8 == '\n' {
-				l.chs += "\\n"
-			} else if u8 == '\\' {
-				l.chs += "\\\\"
-			} else if u8 == '"' {
-				l.chs += "\\\""
-			} else if u8 >= 32 && u8 <= 126 && u8 != '\\' && u8 != '"' {
-				l.chs += string(rune(u8))
-			} else {
-				l.chs = fmt.Sprintf("%s\\x%02x", l.chs, u8)
-			}
+			l.chs += fmt.Sprintf("%02x ", u8)
 		}
-		if ch == fwmodel.CtrlEOP {
-			l.flush(" (pckt)")
-		} else if len(l.chs) >= 100 {
-			l.flush(" (wrap)")
+		if len(l.chs) >= 100 {
+			l.flush()
 		}
 	}
 	if len(l.chs) > 0 {
-		l.flushTimerCancel = l.ctx.SetTimer(l.ctx.Now().Add(time.Millisecond*500), "sim.testpoint.LoggerFW/Flush", func() {
-			l.flush(" (time)")
+		l.flushTimerCancel = l.ctx.SetTimer(l.ctx.Now().Add(l.flushDelay), "sim.testpoint.Logger/Flush", func() {
+			l.flush()
 		})
 	}
 	return len(from)
 }
 
-func (l *LoggerFW) flush(hint string) {
-	fmt.Printf("%s line%s: %s\n", l.name, hint, strings.ReplaceAll(fmt.Sprintf("\"%s\"", l.chs), " \"\"", ""))
+func (l *Logger) flush() {
+	log.Printf("%v [%s] COMM: %s\n", l.ctx.Now(), l.name, strings.TrimRight(l.chs, " "))
 	l.chs = ""
 }
 
-func MakeLoggerFW(ctx model.SimContext, name string) fwmodel.DataSinkFWChar {
-	return &LoggerFW{
+func MakeLogger(ctx model.SimContext, name string, flushDelay time.Duration) model.DataSinkBytes {
+	return &Logger{
 		ctx:             ctx,
-		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.testpoint.LoggerFW"),
+		EventDispatcher: component.MakeEventDispatcher(ctx, "sim.testpoint.Logger"),
 		name:            name,
+		flushDelay:      flushDelay,
 	}
 }

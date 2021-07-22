@@ -1,4 +1,4 @@
-package exchange
+package packetlink
 
 import (
 	"github.com/celskeggs/hailburst/sim/component"
@@ -46,6 +46,9 @@ func (n *nodeSink) CanAcceptPacket() bool {
 func (n *nodeSink) SendPacket(packetData []byte) {
 	if n.pn.currentPacket != nil {
 		panic("invalid condition for SendPacket")
+	}
+	if packetData == nil {
+		panic("cannot send a nil packet")
 	}
 	n.pn.currentPacket = packetData
 	n.pn.source.DispatchLater()

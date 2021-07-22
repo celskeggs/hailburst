@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/util"
 )
 
 type ReadPacket struct {
@@ -96,10 +97,10 @@ func (rp ReadPacket) Encode() ([]byte, error) {
 	packet = append(packet, rp.DestinationLogicalAddress, fwmodel.IdentifierRMAP, ptcspalb, rp.DestinationKey)
 	packet = append(packet, encodedPath...)
 	packet = append(packet, rp.SourceLogicalAddress)
-	packet = append(packet, encodeUint16BE(rp.TransactionIdentifier)...)
+	packet = append(packet, util.EncodeUint16BE(rp.TransactionIdentifier)...)
 	packet = append(packet, rp.ExtendedReadAddress)
-	packet = append(packet, encodeUint32BE(rp.ReadAddress)...)
-	b, err := encodeUint24BE(rp.DataLength)
+	packet = append(packet, util.EncodeUint32BE(rp.ReadAddress)...)
+	b, err := util.EncodeUint24BE(rp.DataLength)
 	if err != nil {
 		return nil, err
 	}

@@ -2,8 +2,8 @@ package router
 
 import (
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/exchange"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
 	"testing"
@@ -33,13 +33,13 @@ func SubTestRouterN(t *testing.T, numPorts int, hasICP bool, protocol RoutingPro
 	inputs := make([]fwmodel.PacketSink, len(wires))
 	outputs := make([]fwmodel.PacketSource, len(wires))
 	for i, wire := range wires {
-		input := exchange.MakePacketNode(sim)
+		input := packetlink.MakePacketNode(sim)
 		inputs[i] = input.Sink()
-		exchange.PatchLinks(sim, input.Source(), wire.Sink)
+		packetlink.PatchLinks(sim, input.Source(), wire.Sink)
 
-		output := exchange.MakePacketNode(sim)
+		output := packetlink.MakePacketNode(sim)
 		outputs[i] = output.Source()
-		exchange.PatchLinks(sim, wire.Source, output.Sink())
+		packetlink.PatchLinks(sim, wire.Source, output.Sink())
 	}
 
 	type testVector struct {
