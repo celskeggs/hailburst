@@ -173,11 +173,15 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
         if (fwe->recvid_offset == sizeof(uint32_t)) {
             if (fwe->recvid_state == FW_RID_PRIMARY_ID) {
                 // primary handshake
-                debug_printf("Received primary handshake with ID=0x%08x", ntohl(fwe->primary_id));
+                if (fwe->sent_primary_handshake && fwe->primary_id == fwe->sent_primary_id) {
+                    debug_printf("Received the same handshake ID that we sent: 0x%08x; ignoring. (Is there a loop?)", ntohl(fwe->primary_id));
+                } else {
+                    debug_printf("Received primary handshake with ID=0x%08x.", ntohl(fwe->primary_id));
 
-                // have the flowtx thread transmit a secondary handshake
-                fwe->needs_send_secondary_handshake = true;
-                cond_broadcast(&fwe->cond);
+                    // have the flowtx thread transmit a secondary handshake
+                    fwe->needs_send_secondary_handshake = true;
+                    cond_broadcast(&fwe->cond);
+                }
             } else if (!fwe->sent_primary_handshake) {
                 debug_printf("Received secondary handshake with ID=0x%08x when primary had not been sent; resetting.",
                              ntohl(fwe->secondary_id));
