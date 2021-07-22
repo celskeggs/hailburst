@@ -14,6 +14,8 @@ typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t  cond;
 
+    bool shutdown;
+
     uint8_t *memory;
     size_t   elem_size;
     size_t   capacity;
@@ -24,12 +26,16 @@ typedef struct {
 
 // these two functions are not threadsafe, but the others in this file are.
 void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size);
+// shuts down writing to this ring buffer; all current and future write requests are aborted.
+// once the ring buffer is drained, all read requests will terminate immediately, even if set to be blocking.
+void ringbuf_shutdown(ringbuf_t *rb);
 void ringbuf_destroy(ringbuf_t *rb);
 
 size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_flags_t flags);
 size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_flags_t flags);
 
-void ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count);
+// returns 0 if successful; -1 if aborted by ringbuf_shutdown.
+int ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count);
 
 static inline size_t ringbuf_elem_size(ringbuf_t *rb) {
     return rb->elem_size;

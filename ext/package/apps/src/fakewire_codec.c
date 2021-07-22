@@ -4,6 +4,8 @@
 #include "debug.h"
 #include "fakewire_codec.h"
 
+//#define DEBUG
+
 void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output) {
     assert(fwd != NULL && output != NULL);
     fwd->output = output;
@@ -12,6 +14,27 @@ void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output) {
 
 static inline bool fakewire_is_special(uint8_t ch) {
     return ch >= FWC_HANDSHAKE_1 && ch <= FWC_ESCAPE_SYM;
+}
+
+const char *fakewire_codec_symbol(fw_ctrl_t c) {
+    switch (c) {
+    case FWC_HANDSHAKE_1:
+        return "HANDSHAKE_1";
+    case FWC_HANDSHAKE_2:
+        return "HANDSHAKE_2";
+    case FWC_START_PACKET:
+        return "START_PACKET";
+    case FWC_END_PACKET:
+        return "END_PACKET";
+    case FWC_ERROR_PACKET:
+        return "ERROR_PACKET";
+    case FWC_FLOW_CONTROL:
+        return "FLOW_CONTROL";
+    case FWC_ESCAPE_SYM:
+        return "ESCAPE_SYM";
+    default:
+        assert(false);
+    }
 }
 
 void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count) {
@@ -24,7 +47,7 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
         uint8_t cur_byte = bytes_in[byte_i];
 
         fw_ctrl_t ctrl_char = FWC_NONE;
-        bool consumed = false;
+        bool consumed = false, is_decoded = false;
 
         if (fwd->in_escape) {
             fwd->in_escape = false;
@@ -32,12 +55,13 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
             if (fakewire_is_special(decoded)) {
                 // valid escape sequence
                 cur_byte = decoded;
+                is_decoded = true;
             } else {
                 // invalid escape sequence; pass the escape up the line for error handling
                 ctrl_char = FWC_ESCAPE_SYM;
             }
         }
-        if (fakewire_is_special(cur_byte)) {
+        if (!is_decoded && fakewire_is_special(cur_byte)) {
             if (cur_byte == FWC_ESCAPE_SYM) {
                 // handle escape sequence for next byte
                 fwd->in_escape = true;
@@ -75,7 +99,7 @@ void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output) {
     fwe->output = output;
 }
 
-void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
+int fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
     // allocate enough space for byte_count * 2 bytes
@@ -94,13 +118,20 @@ void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_
     assert(j >= byte_count && j <= sizeof(temp));
 
     // write data to ring buffer
-    ringbuf_write_all(fwe->output, temp, j);
+#ifdef DEBUG
+    debugf("[fakewire_codec] Encoded %zu raw data bytes to %zu line bytes.", byte_count, j);
+#endif
+    int err = ringbuf_write_all(fwe->output, temp, j);
+#ifdef DEBUG
+    debugf("[fakewire_codec] Completed write of %zu bytes to ring buffer.", j);
+#endif
+    return err;
 }
 
-void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol) {
+int fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol) {
     assert(fwe != NULL);
     assert(fakewire_is_special(symbol) && symbol != FWC_ESCAPE_SYM);
 
     uint8_t byte = symbol;
-    ringbuf_write_all(fwe->output, &byte, 1);
+    return ringbuf_write_all(fwe->output, &byte, 1);
 }

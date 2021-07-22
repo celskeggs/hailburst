@@ -5,12 +5,18 @@
 #include "thread.h"
 
 // custom exchange protocol
-typedef enum fw_exchange_state_e {
+typedef enum {
     FW_EXC_INVALID = 0,  // should never be set to this value during normal execution
     FW_EXC_DISCONNECTED,
     FW_EXC_HANDSHAKING,
     FW_EXC_OPERATING,
 } fw_exchange_state;
+
+typedef enum {
+    FW_RID_IDLE = 0,
+    FW_RID_PRIMARY_ID,
+    FW_RID_SECONDARY_ID,
+} fw_exchange_recvid_state;
 
 typedef struct fw_exchange_st {
     const char *label;
@@ -32,6 +38,9 @@ typedef struct fw_exchange_st {
     bool needs_send_secondary_handshake;
     bool sent_primary_handshake;
     uint32_t sent_primary_id;
+
+    fw_exchange_recvid_state recvid_state;
+    size_t                   recvid_offset;
 
     uint8_t *inbound_buffer;
     size_t   inbound_buffer_offset;

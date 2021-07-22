@@ -52,6 +52,14 @@ static inline void cond_timedwait_impl(pthread_cond_t *cond, pthread_mutex_t *mu
     }
 }
 
+static inline void thread_cancel_impl(pthread_t thread, const char *nt) {
+    int err = pthread_cancel(thread);
+    if (err != 0 && err != ESRCH) {
+        fprintf(stderr, "thread error: %d in thread_cancel(%s)\n", err, nt);
+        exit(1);
+    }
+}
+
 #define mutex_init(x)    THREAD_CHECK(pthread_mutex_init((x), NULL))
 #define mutex_destroy(x) THREAD_CHECK(pthread_mutex_destroy(x))
 #define mutex_lock(x)    THREAD_CHECK(pthread_mutex_lock(x))
@@ -65,7 +73,7 @@ static inline void cond_timedwait_impl(pthread_cond_t *cond, pthread_mutex_t *mu
 
 #define thread_create(x, entrypoint, param) THREAD_CHECK(pthread_create((x), NULL, (entrypoint), (param)))
 #define thread_join(x)                      THREAD_CHECK(pthread_join((x), NULL))
-#define thread_cancel(x)                    THREAD_CHECK(pthread_cancel(x))
+#define thread_cancel(x)                    (thread_cancel_impl((x), #x))
 #define thread_time_now(x)                  THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
 #define thread_join_timed(x, t)             THREAD_CHECK_OK(pthread_timedjoin_np((x), NULL, (t)), ETIMEDOUT)
 #define thread_disable_cancellation()       THREAD_CHECK(pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL))

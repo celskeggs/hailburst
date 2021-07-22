@@ -21,6 +21,17 @@ void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
     rb->capacity = capacity;
     rb->elem_size = elem_size;
     rb->read_idx = rb->write_idx = 0;
+    rb->shutdown = false;
+}
+
+void ringbuf_shutdown(ringbuf_t *rb) {
+    assert(rb != NULL);
+    assert(rb->memory != NULL);
+    mutex_lock(&rb->mutex);
+    assert(rb->shutdown == false);
+    rb->shutdown = true;
+    cond_broadcast(&rb->cond);
+    mutex_unlock(&rb->mutex);
 }
 
 void ringbuf_destroy(ringbuf_t *rb) {
@@ -64,10 +75,14 @@ size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_fl
     // first, if we're being asked to write more data than we can, limit it.
     size_t space = ringbuf_space_locked(rb);
     if (flags & RB_BLOCKING) {
-        while (space == 0) {
+        while (space == 0 && !rb->shutdown) {
             cond_wait(&rb->cond, &rb->mutex);
             space = ringbuf_space_locked(rb);
         }
+    }
+    if (rb->shutdown) {
+        mutex_unlock(&rb->mutex);
+        return 0;
     }
     if (elem_count > space) {
         elem_count = space;
@@ -100,9 +115,11 @@ size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_fl
     mutex_lock(&rb->mutex);
     // first, if we're being asked to read more data than we have, limit it.
     size_t size = ringbuf_size_locked(rb);
-    while (size == 0 && (flags & RB_BLOCKING)) {
-        cond_wait(&rb->cond, &rb->mutex);
-        size = ringbuf_size_locked(rb);
+    if (flags & RB_BLOCKING) {
+        while (size == 0 && !rb->shutdown) {
+            cond_wait(&rb->cond, &rb->mutex);
+            size = ringbuf_size_locked(rb);
+        }
     }
     if (elem_count > size) {
         elem_count = size;
@@ -146,12 +163,17 @@ size_t ringbuf_space(ringbuf_t *rb) {
     return space;
 }
 
-void ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count) {
+int ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count) {
     assert(rb != NULL);
     while (elem_count > 0) {
         size_t sent = ringbuf_write(rb, data_in, elem_count, RB_BLOCKING);
+        if (sent == 0) {
+            assert(rb->shutdown);
+            return -1;
+        }
         assert(sent > 0 && sent <= elem_count);
         elem_count -= sent;
         data_in += sent * rb->elem_size;
     }
+    return 0;
 }

@@ -18,13 +18,8 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol);
 
 //#define DEBUG
 
-#if 0
-#define debug_puts(str) (debugf("[%s] %s", fwe->label, str))
-#define debug_printf(fmt, ...) (debugf("[%s] " fmt, fwe->label, __VA_ARGS__))
-#else
-#define debug_puts(str) (assert(true))
-#define debug_printf(fmt, ...) (assert(true))
-#endif
+#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->label, str))
+#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->label, __VA_ARGS__))
 
 static inline void fakewire_exc_check_invariants(fw_exchange_t *fwe) {
     assert(fwe->state >= FW_EXC_DISCONNECTED && fwe->state <= FW_EXC_OPERATING);
@@ -61,6 +56,8 @@ static void fakewire_exc_reset(fw_exchange_t *fwe) {
     fwe->sent_primary_handshake = false;
     fwe->needs_send_secondary_handshake = false;
     fwe->primary_id = fwe->secondary_id = fwe->sent_primary_id = 0;
+    fwe->recvid_state = FW_RID_IDLE;
+    fwe->recvid_offset = 0;
 
     fwe->inbound_buffer = NULL;
     fwe->inbound_read_done = false;
@@ -76,7 +73,7 @@ int fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags) {
     assert(fwe->state == FW_EXC_DISCONNECTED);
     assert(!fwe->detaching);
 
-    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, path, flags) < 0) {
+    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, path, flags, fwe->label) < 0) {
         mutex_unlock(&fwe->mutex);
         return -1;
     }
@@ -89,7 +86,13 @@ int fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags) {
 
 void fakewire_exc_detach(fw_exchange_t *fwe) {
     // acquire lock and check assumptions
+#ifdef DEBUG
+    debug_puts("Acquiring lock to tear down exchange...");
+#endif
     mutex_lock(&fwe->mutex);
+#ifdef DEBUG
+    debug_puts("Acquired lock.");
+#endif
     fakewire_exc_check_invariants(fwe);
 
     assert(fwe->state != FW_EXC_DISCONNECTED);
@@ -101,18 +104,32 @@ void fakewire_exc_detach(fw_exchange_t *fwe) {
     fwe->detaching = true;
     cond_broadcast(&fwe->cond);
 
+    fakewire_link_shutdown(&fwe->io_port);
+
     // wait until flowtx thread terminates
     mutex_unlock(&fwe->mutex);
+#ifdef DEBUG
+    debug_puts("Tearing down flowtx_thread...");
+#endif
     thread_join(flowtx_thread);
+#ifdef DEBUG
+    debug_puts("Tore down flowtx_thread.");
+#endif
     mutex_lock(&fwe->mutex);
 
     // clear flowtx thread handle
     assert(fwe->flowtx_thread == flowtx_thread);
 
     // wait until all transmissions complete
+#ifdef DEBUG
+    debug_puts("Waiting for transmissions to complete...");
+#endif
     while (fwe->tx_busy) {
         cond_wait(&fwe->cond, &fwe->mutex);
     }
+#ifdef DEBUG
+    debug_puts("All transmissions completed.");
+#endif
 
     // tear down I/O port
     fakewire_link_destroy(&fwe->io_port);
@@ -130,86 +147,85 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     assert(bytes_count > 0);
 
 #ifdef DEBUG
-    debugf("[fakewire_exc] Received %zu regular bytes.", bytes_count);
+    debug_printf("Received %zu regular data bytes.", bytes_count);
 #endif
 
     mutex_lock(&fwe->mutex);
     fakewire_exc_check_invariants(fwe);
 
     if (fwe->state == FW_EXC_DISCONNECTED) {
-        // ignore data character
-        return;
-    } else if (fwe->state == FW_EXC_HANDSHAKING) {
-        if (fwe->inbound_buffer == NULL) {
-            debug0("[fakewire_exc] Received unexpected data bytes during handshake; resetting.\n");
+        // ignore data character; do nothing
+    } else if (fwe->recvid_state == FW_RID_PRIMARY_ID || fwe->recvid_state == FW_RID_SECONDARY_ID) {
+        assert(fwe->state == FW_EXC_HANDSHAKING ||
+                   (fwe->recvid_state == FW_RID_SECONDARY_ID && fwe->state == FW_EXC_OPERATING));
+        assert(fwe->recvid_offset < sizeof(uint32_t));
+        if (bytes_count > sizeof(uint32_t) - fwe->recvid_offset) {
+            debug_puts("received too many data characters during handshake; resetting.");
             fakewire_exc_reset(fwe);
+            mutex_unlock(&fwe->mutex);
             return;
         }
-        assert(fwe->inbound_buffer == (uint8_t*) &fwe->primary_id || fwe->inbound_buffer == (uint8_t*) &fwe->secondary_id);
-        assert(fwe->inbound_buffer_max == sizeof(uint32_t));
+        uint8_t *out = (fwe->recvid_state == FW_RID_PRIMARY_ID ? (uint8_t*) &fwe->primary_id : (uint8_t*) &fwe->secondary_id);
+        memcpy(out + fwe->recvid_offset, bytes_in, bytes_count);
+        fwe->recvid_offset += bytes_count;
+        assert(fwe->recvid_offset <= sizeof(uint32_t));
+
+        if (fwe->recvid_offset == sizeof(uint32_t)) {
+            if (fwe->recvid_state == FW_RID_PRIMARY_ID) {
+                // primary handshake
+                debug_printf("Received primary handshake with ID=0x%08x", ntohl(fwe->primary_id));
+
+                // have the flowtx thread transmit a secondary handshake
+                fwe->needs_send_secondary_handshake = true;
+                cond_broadcast(&fwe->cond);
+            } else if (!fwe->sent_primary_handshake) {
+                debug_printf("Received secondary handshake with ID=0x%08x when primary had not been sent; resetting.",
+                             ntohl(fwe->secondary_id));
+                fakewire_exc_reset(fwe);
+            } else if (fwe->sent_primary_id != fwe->secondary_id) {
+                debug_printf("Received mismatched secondary ID 0x%08x instead of 0x%08x; resetting.",
+                             ntohl(fwe->secondary_id), ntohl(fwe->sent_primary_id));
+                fakewire_exc_reset(fwe);
+            } else if (fwe->state == FW_EXC_HANDSHAKING) {
+                debug_printf("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                             ntohl(fwe->secondary_id));
+                fwe->state = FW_EXC_OPERATING;
+                cond_broadcast(&fwe->cond);
+            } else {
+                assert(fwe->state == FW_EXC_OPERATING);
+                debug_printf("Received unnecessary secondary handshake with ID=0x%08x; ignoring.",
+                             ntohl(fwe->secondary_id));
+            }
+            fwe->recvid_state = FW_RID_IDLE;
+        }
+    } else if (fwe->state == FW_EXC_HANDSHAKING) {
+        assert(fwe->recvid_state == FW_RID_IDLE);
+        assert(fwe->inbound_buffer == NULL);
+        debug_puts("Received unexpected data bytes during handshake; resetting.");
+        fakewire_exc_reset(fwe);
     } else if (fwe->state == FW_EXC_OPERATING) {
-        if (!fwe->has_sent_fct) {
-            fprintf(stderr, "[%s] fakewire_exc: hit unexpected data character 0x%x before FCT was sent; resetting.\n", fwe->label, bytes_in[0]);
+        if (!fwe->recv_in_progress) {
+            debug_printf("hit unexpected data character 0x%x before start-of-packet; resetting.", bytes_in[0]);
             fakewire_exc_reset(fwe);
+            mutex_unlock(&fwe->mutex);
             return;
         }
         assert(fwe->inbound_buffer != NULL);
-        if (!fwe->recv_in_progress) {
-            fprintf(stderr, "[%s] fakewire_exc: hit unexpected data character 0x%x before start-of-packet; resetting.\n", fwe->label, bytes_in[0]);
-            fakewire_exc_reset(fwe);
-            return;
+        assert(!fwe->inbound_read_done);
+        assert(fwe->inbound_buffer_offset <= fwe->inbound_buffer_max);
+
+        size_t copy_n = fwe->inbound_buffer_max - fwe->inbound_buffer_offset;
+        if (copy_n > bytes_count) {
+            copy_n = bytes_count;
         }
+        if (copy_n > 0) {
+            memcpy(&fwe->inbound_buffer[fwe->inbound_buffer_offset], bytes_in, copy_n);
+        }
+        // keep incrementing even if we overflow so that the reader can tell that the packet was truncated
+        fwe->inbound_buffer_offset += bytes_count;
     } else {
         assert(false);
     }
-    assert(!fwe->inbound_read_done);
-    assert(fwe->inbound_buffer_offset <= fwe->inbound_buffer_max);
-
-    size_t copy_n = fwe->inbound_buffer_max - fwe->inbound_buffer_offset;
-    if (copy_n > bytes_count) {
-        copy_n = bytes_count;
-    }
-    if (copy_n > 0) {
-        memcpy(&fwe->inbound_buffer[fwe->inbound_buffer_offset], bytes_in, copy_n);
-    }
-    // keep incrementing even if we overflow so that the reader can tell that the packet was truncated
-    fwe->inbound_buffer_offset += bytes_count;
-
-    if (fwe->state == FW_EXC_HANDSHAKING) {
-        if (fwe->inbound_buffer_offset > sizeof(uint32_t)) {
-            fprintf(stderr, "[%s] fakewire_exc: received too many data characters during handshake; resetting.\n", fwe->label);
-            fakewire_exc_reset(fwe);
-            return;
-        }
-        if (fwe->inbound_buffer == (uint8_t*) &fwe->primary_id) {
-            fwe->inbound_buffer = NULL;
-            debugf("[fakewire_exc] Received primary handshake with ID=0x%08x\n", ntohl(fwe->primary_id));
-
-            // have the flowtx thread transmit a secondary handshake
-            fwe->needs_send_secondary_handshake = true;
-            cond_broadcast(&fwe->cond);
-        } else if (fwe->inbound_buffer == (uint8_t*) &fwe->secondary_id) {
-            fwe->inbound_buffer = NULL;
-            if (!fwe->sent_primary_handshake) {
-                fprintf(stderr, "[%s] fakewire_exc: received secondary handshake with ID=0x%08x when primary had not been sent; resetting.\n",
-                        fwe->label, ntohl(fwe->secondary_id));
-                fakewire_exc_reset(fwe);
-                return;
-            }
-            if (fwe->sent_primary_id != fwe->secondary_id) {
-                fprintf(stderr, "[%s] fakewire_exc: received mismatched secondary ID 0x%08x instead of 0x%08x; resetting.\n",
-                        fwe->label, ntohl(fwe->secondary_id), ntohl(fwe->sent_primary_id));
-                fakewire_exc_reset(fwe);
-                return;
-            }
-            debugf("[fakewire_exc] Received secondary handshake with ID=0x%08x; transitioning to operating mode.\n", ntohl(fwe->secondary_id));
-            fwe->state = FW_EXC_OPERATING;
-            cond_broadcast(&fwe->cond);
-        } else {
-            assert(false);
-        }
-    }
-
     mutex_unlock(&fwe->mutex);
 }
 
@@ -218,7 +234,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
     assert(fwe != NULL);
 
 #ifdef DEBUG
-    debugf("[fakewire_exc] Received control character: %d.", symbol);
+    debug_printf("Received control character: %s.", fakewire_codec_symbol(symbol));
 #endif
 
     mutex_lock(&fwe->mutex);
@@ -226,35 +242,28 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
 
     if (fwe->state == FW_EXC_DISCONNECTED) {
         // ignore control character
+    } else if (fwe->recvid_state != FW_RID_IDLE && symbol != FWC_HANDSHAKE_1) {
+        debug_printf("hit unexpected control character %s while waiting for handshake ID; resetting.",
+                     fakewire_codec_symbol(symbol));
+        fakewire_exc_reset(fwe);
     } else if (fwe->state == FW_EXC_HANDSHAKING) {
         switch (symbol) {
         case FWC_HANDSHAKE_1:
             // need to receive handshake ID next
-            assert(fwe->inbound_buffer == NULL || fwe->inbound_buffer == (uint8_t*) &fwe->secondary_id || fwe->inbound_buffer == (uint8_t*) &fwe->primary_id);
-            fwe->inbound_buffer = (uint8_t*) &fwe->primary_id;
-            fwe->inbound_buffer_offset = 0;
-            fwe->inbound_buffer_max = sizeof(fwe->primary_id);
-            fwe->inbound_read_done = false;
+            fwe->recvid_state = FW_RID_PRIMARY_ID;
+            fwe->recvid_offset = 0;
             break;
         case FWC_HANDSHAKE_2:
             // need to receive handshake ID next
-            if (fwe->inbound_buffer == (uint8_t*) &fwe->primary_id || fwe->inbound_buffer == (uint8_t*) &fwe->secondary_id) {
-                fprintf(stderr, "[%s] fakewire_exc: hit unexpected secondary handshake while waiting for handshake ID; resetting.\n", fwe->label);
-                fakewire_exc_reset(fwe);
-                break;
-            }
-            assert(fwe->inbound_buffer == NULL);
-            fwe->inbound_buffer = (uint8_t*) &fwe->secondary_id;
-            fwe->inbound_buffer_offset = 0;
-            fwe->inbound_buffer_max = sizeof(fwe->secondary_id);
-            fwe->inbound_read_done = false;
+            fwe->recvid_state = FW_RID_SECONDARY_ID;
+            fwe->recvid_offset = 0;
             break;
         case FWC_START_PACKET: // fallthrough
         case FWC_END_PACKET:   // fallthrough
         case FWC_ERROR_PACKET: // fallthrough
         case FWC_FLOW_CONTROL: // fallthrough
         case FWC_ESCAPE_SYM:
-            fprintf(stderr, "[%s] fakewire_exc: hit unexpected control character 0x%x during handshake; resetting.\n", fwe->label, symbol);
+            debug_printf("hit unexpected control character 0x%x during handshake; resetting.", symbol);
             fakewire_exc_reset(fwe);
             break;
         default:
@@ -264,18 +273,25 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
         switch (symbol) {
         case FWC_HANDSHAKE_1:
             // abort connection and restart everything
-            fprintf(stderr, "[%s] fakewire_exc: received handshake request during operating mode; resetting.\n", fwe->label);
+            debug_puts("received handshake request during operating mode; resetting.");
             fakewire_exc_reset(fwe);
-            fwe->inbound_buffer = (uint8_t*) &fwe->primary_id;
+            fwe->recvid_state = FW_RID_PRIMARY_ID;
+            fwe->recvid_offset = 0;
             break;
         case FWC_HANDSHAKE_2:
-            // abort connection and restart everything
-            fprintf(stderr, "[%s] fakewire_exc: received unexpected secondary handshake during operating mode; resetting.\n", fwe->label);
-            fakewire_exc_reset(fwe);
+            if (fwe->sent_primary_handshake) {
+                // late secondary handshake, likely because handshakes crossed in flight
+                fwe->recvid_state = FW_RID_SECONDARY_ID;
+                fwe->recvid_offset = 0;
+            } else {
+                // abort connection and restart everything
+                debug_puts("received unexpected secondary handshake during operating mode; resetting.");
+                fakewire_exc_reset(fwe);
+            }
             break;
         case FWC_START_PACKET:
             if (!fwe->has_sent_fct) {
-                fprintf(stderr, "[%s] fakewire_exc: received unauthorized start-of-packet; resetting.\n", fwe->label);
+                debug_puts("received unauthorized start-of-packet; resetting.");
                 fakewire_exc_reset(fwe);
             } else {
                 assert(fwe->inbound_buffer != NULL); // should always have a buffer if we sent a FCT!
@@ -288,7 +304,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
             break;
         case FWC_END_PACKET:
             if (!fwe->recv_in_progress) {
-                fprintf(stderr, "[%s] fakewire_exc: hit unexpected end-of-packet before start-of-packet; resetting.\n", fwe->label);
+                debug_puts("hit unexpected end-of-packet before start-of-packet; resetting.");
                 fakewire_exc_reset(fwe);
             } else {
                 assert(fwe->inbound_buffer != NULL); // should always have a buffer if a read is in progress!
@@ -302,7 +318,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
             break;
         case FWC_ERROR_PACKET:
             if (!fwe->recv_in_progress) {
-                fprintf(stderr, "[%s] fakewire_exc: hit unexpected end-of-packet before start-of-packet; resetting.\n", fwe->label);
+                debug_puts("hit unexpected end-of-packet before start-of-packet; resetting.");
                 fakewire_exc_reset(fwe);
             } else {
                 assert(fwe->inbound_buffer != NULL); // should always have a buffer if a read is in progress!
@@ -313,17 +329,16 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
             break;
         case FWC_FLOW_CONTROL:
             if (fwe->remote_sent_fct) {
-                fprintf(stderr, "[%s] fakewire_exc: received duplicate FCT; resetting.\n", fwe->label);
+                debug_puts("received duplicate FCT; resetting.");
                 fakewire_exc_reset(fwe);
             } else {
-                debug_puts("reader: remote_sent_fct = true\n");
                 fwe->remote_sent_fct = true;
                 cond_broadcast(&fwe->cond);
             }
             break;
         case FWC_ESCAPE_SYM:
             // indicates that an invalid escape sequence was received by fakewire_codec
-            fprintf(stderr, "[%s] fakewire_exc: received invalid escape sequence; resetting.\n", fwe->label);
+            debug_puts("received invalid escape sequence; resetting.");
             fakewire_exc_reset(fwe);
             break;
         default:
@@ -350,6 +365,10 @@ ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet
             cond_wait(&fwe->cond, &fwe->mutex);
             continue;
         }
+
+#ifdef DEBUG
+        debug_puts("Registering inbound buffer for receive...");
+#endif
 
         // make sure packet is clear
         memset(packet_out, 0, packet_max);
@@ -425,12 +444,16 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
     return 0;
 }
 
+static uint64_t handshake_period(void) {
+    uint64_t five_ms = 5 * 1000 * 1000;
+    return (rand() % five_ms) + five_ms;
+}
+
 static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
 
-    uint64_t handshake_period = 2 * 1000 * 1000; // every 2 milliseconds
-    uint64_t next_handshake = clock_timestamp_monotonic() + handshake_period;
+    uint64_t next_handshake = clock_timestamp_monotonic() + handshake_period();
 
     mutex_lock(&fwe->mutex);
     while (fwe->state != FW_EXC_DISCONNECTED) {
@@ -470,26 +493,29 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
                 fwe->tx_busy = false;
 
                 if (handshake == FWC_HANDSHAKE_2) {
-                    debugf("[fakewire_exc] Sent secondary handshake with ID=0x%08x; transitioning to operating mode.\n", handshake_id);
+                    debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.", ntohl(handshake_id));
                     fwe->state = FW_EXC_OPERATING;
                 } else {
-                    debugf("[fakewire_exc] Sent primary handshake with ID=0x%08x.\n", handshake_id);
+                    debug_printf("Sent primary handshake with ID=0x%08x.", ntohl(handshake_id));
+                    assert(fwe->sent_primary_handshake == true);
                 }
 
                 cond_broadcast(&fwe->cond);
 
                 now = clock_timestamp_monotonic();
-                next_handshake = now + handshake_period;
+                next_handshake = now + handshake_period();
             }
 
             if (now < next_handshake) {
                 bound_ns = next_handshake - now;
             }
         }
-        if (fwe->state == FW_EXC_OPERATING &&
-               fwe->inbound_buffer != NULL && !fwe->has_sent_fct && !fwe->recv_in_progress && !fwe->inbound_read_done &&
-               !fwe->tx_busy) {
+        if (fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer != NULL && !fwe->tx_busy &&
+               !fwe->has_sent_fct && !fwe->recv_in_progress && !fwe->inbound_read_done) {
             // if we're ready to receive data, but haven't sent a FCT, send one
+#ifdef DEBUG
+            debug_printf("Sending flow control token on inbound_buffer=%p (fwe=%p)", fwe->inbound_buffer, fwe);
+#endif
             fwe->tx_busy = true;
             fwe->has_sent_fct = true;
             mutex_unlock(&fwe->mutex);

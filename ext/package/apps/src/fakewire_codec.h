@@ -21,6 +21,8 @@ typedef enum {
     FWC_ESCAPE_SYM   = 0x86,
 } fw_ctrl_t;
 
+const char *fakewire_codec_symbol(fw_ctrl_t c);
+
 typedef struct {
     void *param;
     void (*recv_data)(void *param, uint8_t *bytes_in, size_t bytes_count);
@@ -42,7 +44,10 @@ typedef struct {
 
 void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output);
 // no destroy function provided because it isn't needed; you can simply stop using the encoder.
-void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
-void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol);
+
+// returns 0 on success, -1 if ring buffer has been shut down
+int fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
+// returns 0 on success, -1 if ring buffer has been shut down
+int fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol);
 
 #endif /* APP_FAKEWIRE_CODEC_H */

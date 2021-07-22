@@ -53,11 +53,12 @@ static void *exchange_reader(void *opaque) {
     while (true) {
         printf("[%s] - Started read of packet\n", rc->name);
         ssize_t actual_len = fakewire_exc_read(rc->exc, receive_buffer, sizeof(receive_buffer));
-        printf("[%s] Completed read of packet with length %ld\n", rc->name, actual_len - 1);
         if (actual_len < 0) {
+            printf("[%s] Packet could not be read (actual_len=%ld); reader finished.\n", rc->name, actual_len);
             rc->chain_out = reverse_chain(chain_out);
             return NULL;
         }
+        printf("[%s] Completed read of packet with length %ld\n", rc->name, actual_len - 1);
         assert(actual_len >= 1 && actual_len <= sizeof(receive_buffer));
 
         int last_packet_marker = receive_buffer[0];
@@ -129,11 +130,11 @@ static void *exchange_controller(void *opaque) {
 
     fw_exchange_t exc;
     fakewire_exc_init(&exc, ec->name);
-    printf("Attaching...\n");
+    printf("[%s] attaching...\n", ec->name);
     if (fakewire_exc_attach(&exc, ec->path_buf, ec->flags) < 0) {
         fakewire_exc_destroy(&exc);
 
-        fprintf(stderr, "could not attach\n");
+        fprintf(stderr, "[%s] could not attach\n", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
         return NULL;
@@ -163,24 +164,30 @@ static void *exchange_controller(void *opaque) {
     bool pass = true;
 
     if (!thread_join_timed(reader_thread, &ts)) {
-        fprintf(stderr, "exchange controller: could not join reader thread by 5 second deadline\n");
+        fprintf(stderr, "[%s] exchange controller: could not join reader thread by 5 second deadline\n", ec->name);
         pass = false;
         // detach to force stop
         fakewire_exc_detach(&exc);
+        fprintf(stderr, "[%s] exchange controller: performed force stop\n", ec->name);
         thread_join(reader_thread);
+        fprintf(stderr, "[%s] exchange controller: joined with reader\n", ec->name);
         thread_join(writer_thread);
+        fprintf(stderr, "[%s] exchange controller: joined with writer\n", ec->name);
     } else if (!thread_join_timed(writer_thread, &ts)) {
-        fprintf(stderr, "exchange controller: could not join reader thread by 5 second deadline\n");
+        fprintf(stderr, "[%s] exchange controller: could not join writer thread by 5 second deadline\n", ec->name);
         pass = false;
         // detach to force stop
         fakewire_exc_detach(&exc);
+        fprintf(stderr, "[%s] exchange controller: performed force stop\n", ec->name);
         thread_join(writer_thread);
+        fprintf(stderr, "[%s] exchange controller: joined with writer\n", ec->name);
     } else {
         // passed! detach to clean up.
+        fprintf(stderr, "[%s] exchange controller: detaching to clean up\n", ec->name);
         fakewire_exc_detach(&exc);
 
         if (!wc.pass) {
-            fprintf(stderr, "exchange controller: failed due to writer failure\n");
+            fprintf(stderr, "[%s] exchange controller: failed due to writer failure\n", ec->name);
             pass = false;
         }
     }
