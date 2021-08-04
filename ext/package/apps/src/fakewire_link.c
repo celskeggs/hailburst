@@ -53,7 +53,10 @@ static void *fakewire_link_output_loop(void *opaque) {
 
     char write_buf[FW_LINK_RING_SIZE];
 
-    while (!fwl->shutdown) {
+    while (true) {
+        // we don't check shutdown on the loop itself; we want to drain all the remaining bytes before we halt, unless
+        // a timeout happens first.
+
         // disable cancellation to simplify ring buffer code
         thread_disable_cancellation();
 
@@ -66,7 +69,7 @@ static void *fakewire_link_output_loop(void *opaque) {
 #ifdef DEBUG
         debug_printf("Preliminary ringbuf_read produced %zu bytes.", count_bytes);
 #endif
-        if (count_bytes < sizeof(write_buf)) {
+        if (count_bytes < sizeof(write_buf) && !fwl->shutdown) {
             usleep(500); // wait half a millisecond to bunch related writes
             count_bytes += ringbuf_read(&fwl->enc_ring, write_buf + count_bytes, sizeof(write_buf) - count_bytes, RB_NONBLOCKING);
 #ifdef DEBUG

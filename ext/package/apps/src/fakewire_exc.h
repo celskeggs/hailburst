@@ -37,7 +37,8 @@ typedef struct fw_exchange_st {
     uint32_t secondary_id;
     bool needs_send_secondary_handshake;
     bool sent_primary_handshake;
-    uint32_t sent_primary_id;
+    bool has_last_sent_primary_id;
+    uint32_t last_sent_primary_id;
 
     fw_exchange_recvid_state recvid_state;
     size_t                   recvid_offset;
