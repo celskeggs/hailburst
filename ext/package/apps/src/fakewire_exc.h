@@ -8,15 +8,10 @@
 typedef enum {
     FW_EXC_INVALID = 0,  // should never be set to this value during normal execution
     FW_EXC_DISCONNECTED,
-    FW_EXC_HANDSHAKING,
-    FW_EXC_OPERATING,
+    FW_EXC_CONNECTING,  // waiting for primary handshake, or, if none received, will send primary handshake
+    FW_EXC_HANDSHAKING, // waiting for secondary handshake, or, if primary received, will reset
+    FW_EXC_OPERATING,   // received a valid non-conflicting handshake
 } fw_exchange_state;
-
-typedef enum {
-    FW_RID_IDLE = 0,
-    FW_RID_PRIMARY_ID,
-    FW_RID_SECONDARY_ID,
-} fw_exchange_recvid_state;
 
 typedef struct fw_exchange_st {
     const char *label;
@@ -32,16 +27,14 @@ typedef struct fw_exchange_st {
 
     pthread_t flowtx_thread;
 
-    // these three are stored in network order, not host order
-    uint32_t primary_id;
-    uint32_t secondary_id;
-    bool needs_send_secondary_handshake;
-    bool sent_primary_handshake;
-    bool has_last_sent_primary_id;
-    uint32_t last_sent_primary_id;
+    // handshake IDs are stored in network order, not host order
 
-    fw_exchange_recvid_state recvid_state;
-    size_t                   recvid_offset;
+    uint32_t send_handshake_id; // generated handshake ID if in HANDSHAKING mode
+
+    bool     is_recv_handshake_id;
+    uint32_t recv_handshake_id; // received handshake ID
+    size_t   recv_handshake_offset;
+    bool     send_secondary_handshake;
 
     uint8_t *inbound_buffer;
     size_t   inbound_buffer_offset;
@@ -50,7 +43,6 @@ typedef struct fw_exchange_st {
     bool     recv_in_progress;
 
     bool     has_sent_fct;
-
     bool     remote_sent_fct;
 } fw_exchange_t;
 

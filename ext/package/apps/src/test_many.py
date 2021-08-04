@@ -3,8 +3,8 @@ import os
 import shutil
 import subprocess
 
-N = 1000
-MAXPROC = 100
+N = 2000
+MAXPROC = 200
 
 processes = []
 failed = []
