@@ -66,7 +66,7 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
 
     // arbitrarily use up_ctx for this initial configuration
     if (!radio_identify(radio, &radio->up_ctx)) {
-        fprintf(stderr, "Radio: could not identify device settings.\n");
+        debug0("Radio: could not identify device settings.");
         exit(1);
     }
 
@@ -81,13 +81,13 @@ static bool radio_read_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_
     size_t actual_read = read_len;
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, rel_address + radio->mem_access_base, &actual_read, read_out);
     if (status != RS_OK) {
-        fprintf(stderr, "Radio: invalid status while reading memory at 0x%x of length 0x%zx: 0x%03x\n",
-                rel_address, read_len, status);
+        debugf("Radio: invalid status while reading memory at 0x%x of length 0x%zx: 0x%03x",
+               rel_address, read_len, status);
         return false;
     }
     if (actual_read != read_len) {
-        fprintf(stderr, "Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx\n",
-                rel_address, read_len, actual_read);
+        debugf("Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx",
+               rel_address, read_len, actual_read);
         return false;
     }
     return true;
@@ -100,8 +100,8 @@ static bool radio_write_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
                         0x00, rel_address + radio->mem_access_base, write_len, write_in);
     if (status != RS_OK) {
-        fprintf(stderr, "Radio: invalid status while writing memory at 0x%x of length 0x%zx: 0x%03x\n",
-                rel_address, write_len, status);
+        debugf("Radio: invalid status while writing memory at 0x%x of length 0x%zx: 0x%03x",
+               rel_address, write_len, status);
         return false;
     }
     return true;
@@ -117,13 +117,13 @@ static bool radio_read_registers(radio_t *radio, rmap_context_t *ctx,
     // fetch the data over the network
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg * 4, &actual_read_len, output);
     if (status != RS_OK) {
-        fprintf(stderr, "Radio: invalid status while querying registers [%u, %u]: 0x%03x\n",
-                first_reg, last_reg, status);
+        debugf("Radio: invalid status while querying registers [%u, %u]: 0x%03x",
+               first_reg, last_reg, status);
         return false;
     }
     if (actual_read_len != expected_read_len) {
-        fprintf(stderr, "Radio: invalid read length while querying registers [%u, %u]: %zu instead of %zu\n",
-                first_reg, last_reg, actual_read_len, expected_read_len);
+        debugf("Radio: invalid read length while querying registers [%u, %u]: %zu instead of %zu",
+               first_reg, last_reg, actual_read_len, expected_read_len);
         return false;
     }
     // now convert from big-endian
@@ -151,8 +151,8 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
     // transmit the data over the network
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg * 4, num_regs * 4, input_copy);
     if (status != RS_OK) {
-        fprintf(stderr, "Radio: invalid status while updating registers [%u, %u]: 0x%03x\n",
-                first_reg, last_reg, status);
+        debugf("Radio: invalid status while updating registers [%u, %u]: 0x%03x",
+               first_reg, last_reg, status);
         return false;
     }
     return true;
@@ -164,7 +164,7 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
         return false;
     }
     if (magic_num != RADIO_MAGIC) {
-        fprintf(stderr, "Radio: invalid magic number 0x%08x when 0x%08x was expected.\n", magic_num, RADIO_MAGIC);
+        debugf("Radio: invalid magic number 0x%08x when 0x%08x was expected.", magic_num, RADIO_MAGIC);
         return false;
     }
     uint32_t mem_base, mem_size;
@@ -176,7 +176,7 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
     if (mem_base % 0x100 != 0 || mem_size % 0x100 != 0 ||
             mem_base < 0x100 || mem_size < 0x100 ||
             mem_base > RMAP_MAX_DATA_LEN || mem_size > RMAP_MAX_DATA_LEN) {
-        fprintf(stderr, "Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.\n", mem_base, mem_size);
+        debugf("Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.", mem_base, mem_size);
         return false;
     }
     radio->mem_access_base = mem_base;
@@ -375,7 +375,7 @@ static void *radio_uplink_loop(void *radio_opaque) {
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
-            fprintf(stderr, "Radio: hit error in uplink loop; halting uplink thread.\n");
+            debug0("Radio: hit error in uplink loop; halting uplink thread.");
             return NULL;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
@@ -457,7 +457,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {
-            fprintf(stderr, "Radio: hit error in downlink loop; halting downlink thread.\n");
+            debug0("Radio: hit error in downlink loop; halting downlink thread.");
             return NULL;
         }
     }
