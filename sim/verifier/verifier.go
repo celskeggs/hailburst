@@ -246,7 +246,7 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 	_, ok1 := telemetry.(*transport.ClockCalibrated)
 	_, ok2 := telemetry.(*transport.Heartbeat)
 	if ok1 || ok2 {
-		v.checkReq(ReqHeartbeat, now.Add(time.Millisecond * 150), func() bool {
+		v.checkReq(ReqHeartbeat, now.Add(time.Millisecond*150), func() bool {
 			mostRecent := v.tracker.searchLast(func(event Event) bool {
 				telem, ok1 := event.(TelemetryDownlinkEvent)
 				_, ok2 := telem.Telemetry.(*transport.Heartbeat)

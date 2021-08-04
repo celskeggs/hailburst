@@ -1,8 +1,8 @@
 package spacecraft
 
 import (
-	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/router"
 	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/spacecraft/clock"

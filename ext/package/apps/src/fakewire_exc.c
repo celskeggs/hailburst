@@ -458,6 +458,21 @@ static uint64_t handshake_period(void) {
     return (rand() % (7 * ms)) + 3 * ms;
 }
 
+static void fakewire_exc_send_handshake(fw_exchange_t *fwe, fw_ctrl_t handshake, uint32_t handshake_id) {
+    assert(fwe->tx_busy == false);
+    fwe->tx_busy = true;
+    mutex_unlock(&fwe->mutex);
+
+    fw_receiver_t *link_write = fakewire_link_interface(&fwe->io_port);
+
+    link_write->recv_ctrl(link_write->param, handshake);
+    link_write->recv_data(link_write->param, (uint8_t*) &handshake_id, sizeof(handshake_id));
+
+    mutex_lock(&fwe->mutex);
+    assert(fwe->tx_busy == true);
+    fwe->tx_busy = false;
+}
+
 static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
@@ -474,55 +489,43 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
             // if we're handshaking... then we need to send primary handshakes on a regular basis
             uint64_t now = clock_timestamp_monotonic();
 
-            uint32_t handshake_id;
-            fw_ctrl_t handshake = FWC_NONE;
-
             if (fwe->send_secondary_handshake) {
                 assert(fwe->state == FW_EXC_CONNECTING);
-                handshake_id = fwe->recv_handshake_id;
-                handshake = FWC_HANDSHAKE_2;
+                uint32_t handshake_id = fwe->recv_handshake_id;
+
+                fakewire_exc_send_handshake(fwe, FWC_HANDSHAKE_2, handshake_id);
+
+                if (!fwe->send_secondary_handshake) {
+                    debug_printf("Sent secondary handshake with ID=0x%08x, but request revoked by reset; not transitioning.",
+                                 ntohl(handshake_id));
+                } else if (handshake_id != fwe->recv_handshake_id) {
+                    debug_printf("Sent secondary handshake with ID=0x%08x, but new primary ID=0x%08x had been received in the meantime; not transitioning.",
+                                 ntohl(handshake_id), ntohl(fwe->recv_handshake_id));
+                } else if (fwe->state != FW_EXC_CONNECTING) {
+                    debug_printf("Sent secondary handshake with ID=0x%08x, but state is now %d instead of CONNECTING; not transitioning.",
+                                 ntohl(handshake_id), fwe->state);
+                } else {
+                    debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                                 ntohl(handshake_id));
+                    fwe->state = FW_EXC_OPERATING;
+                    fwe->send_secondary_handshake = false;
+                }
+
+                cond_broadcast(&fwe->cond);
+
+                now = clock_timestamp_monotonic();
+                next_handshake = now + handshake_period();
             } else if (now >= next_handshake) {
                 // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
-                handshake_id = htonl(0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic()));
-                handshake = FWC_HANDSHAKE_1;
+                uint32_t handshake_id = htonl(0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic()));
                 debug_printf("Timeout expired; attempting primary handshake with ID=0x%08x; transitioning to handshaking mode.",
                              ntohl(handshake_id));
                 fwe->send_handshake_id = handshake_id;
                 fwe->state = FW_EXC_HANDSHAKING;
-            }
 
-            if (handshake != FWC_NONE) {
-                fwe->tx_busy = true;
-                mutex_unlock(&fwe->mutex);
+                fakewire_exc_send_handshake(fwe, FWC_HANDSHAKE_1, handshake_id);
 
-                fw_receiver_t *link_write = fakewire_link_interface(&fwe->io_port);
-
-                link_write->recv_ctrl(link_write->param, handshake);
-                link_write->recv_data(link_write->param, (uint8_t*) &handshake_id, sizeof(handshake_id));
-
-                mutex_lock(&fwe->mutex);
-                assert(fwe->tx_busy == true);
-                fwe->tx_busy = false;
-
-                if (handshake == FWC_HANDSHAKE_2) {
-                    if (!fwe->send_secondary_handshake) {
-                        debug_printf("Sent secondary handshake with ID=0x%08x, but request revoked by reset; not transitioning.",
-                                     ntohl(handshake_id));
-                    } else if (handshake_id != fwe->recv_handshake_id) {
-                        debug_printf("Sent secondary handshake with ID=0x%08x, but new primary ID=0x%08x had been received in the meantime; not transitioning.",
-                                     ntohl(handshake_id), ntohl(fwe->recv_handshake_id));
-                    } else if (fwe->state != FW_EXC_CONNECTING) {
-                        debug_printf("Sent secondary handshake with ID=0x%08x, but state is now %d instead of CONNECTING; not transitioning.",
-                                     ntohl(handshake_id), fwe->state);
-                    } else {
-                        debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
-                                     ntohl(handshake_id));
-                        fwe->state = FW_EXC_OPERATING;
-                        fwe->send_secondary_handshake = false;
-                    }
-                } else {
-                    debug_printf("Sent primary handshake with ID=0x%08x.", ntohl(handshake_id));
-                }
+                debug_printf("Sent primary handshake with ID=0x%08x.", ntohl(handshake_id));
 
                 cond_broadcast(&fwe->cond);
 

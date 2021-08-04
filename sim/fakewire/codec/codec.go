@@ -106,7 +106,7 @@ func (d *Decoder) Decode(raw []byte) {
 }
 
 func EncodeDataBytes(data []byte) []byte {
-	result := make([]byte, len(data) * 2)
+	result := make([]byte, len(data)*2)
 	outIndex := 0
 	for _, b := range data {
 		if IsCtrl(b) {

@@ -3,8 +3,8 @@ package rmap
 import (
 	"bytes"
 	"github.com/celskeggs/hailburst/sim/component"
-	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
+	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
 	"github.com/celskeggs/hailburst/sim/fakewire/router"
 	"github.com/celskeggs/hailburst/sim/testpoint"

@@ -7,7 +7,7 @@ import (
 type marker struct{}
 
 type TwixtIO struct {
-	ctx model.SimContext
+	ctx    model.SimContext
 	waitCh chan marker
 	doneCh chan marker
 	runOk  bool
@@ -68,7 +68,7 @@ type TwixtFunc func(*TwixtIO)
 // BuildTwixt runs a function in an imperative side thread, returning to the simulation on each Yield().
 func BuildTwixt(ctx model.SimContext, events []model.EventSource, main TwixtFunc) {
 	ti := &TwixtIO{
-		ctx: ctx,
+		ctx:    ctx,
 		waitCh: make(chan marker),
 		doneCh: make(chan marker),
 	}
