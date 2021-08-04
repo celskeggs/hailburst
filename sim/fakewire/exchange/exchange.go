@@ -21,6 +21,19 @@ const (
 	StateOperating
 )
 
+func (s ExchangeState) String() string {
+	switch s {
+	case StateConnecting:
+		return "CONNECTING"
+	case StateHandshaking:
+		return "HANDSHAKING"
+	case StateOperating:
+		return "OPERATING"
+	default:
+		return fmt.Sprintf("[UNKNOWN=%d]", uint8(s))
+	}
+}
+
 type U32Receiver struct {
 	Data []byte
 }
