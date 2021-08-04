@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "debug.h"
 #include "rmap.h"
 #include "thread.h"
 
@@ -130,11 +131,19 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     // make sure we didn't get any null pointers
     assert(context != NULL && routing != NULL && data != NULL);
     // make sure we have enough space to buffer this much data in scratch memory
-    assert(data_length <= RMAP_MAX_DATA_LEN && data_length + SCRATCH_MARGIN_WRITE <= context->scratch_size);
+    assert(0 < data_length && data_length <= RMAP_MAX_DATA_LEN && data_length + SCRATCH_MARGIN_WRITE <= context->scratch_size);
     // make sure flags are valid
     assert(flags == (flags & (RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT)));
 
+#ifdef DEBUGTXN
+    debugf("RMAP WRITE START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x LEN=%zu",
+           routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+           flags, ext_addr, main_addr, data_length);
+#endif
     if (context->monitor->hit_recv_err) {
+#ifdef DEBUGTXN
+        debug0("RMAP WRITE  STOP: RECVLOOP_STOPPED");
+#endif
         return RS_RECVLOOP_STOPPED;
     }
 
@@ -265,6 +274,10 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     context->pending_routing = NULL;
     mutex_unlock(&context->monitor->pending_mutex);
 
+#ifdef DEBUGTXN
+    debugf("RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+           routing->destination.logical_address, routing->source.logical_address, routing->dest_key, status_out);
+#endif
     return status_out;
 }
 
@@ -275,11 +288,19 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     assert(context != NULL && routing != NULL && data_length != NULL && data_out != NULL);
     // make sure the monitor has enough space to buffer this much data in scratch memory when receiving
     uint32_t max_data_length = *data_length;
-    assert(max_data_length <= RMAP_MAX_DATA_LEN && max_data_length + SCRATCH_MARGIN_READ <= context->monitor->scratch_size);
+    assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN && max_data_length + SCRATCH_MARGIN_READ <= context->monitor->scratch_size);
     // make sure flags are valid
     assert(flags == (flags & RF_INCREMENT));
 
+#ifdef DEBUGTXN
+    debugf("RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x MAXLEN=%zu",
+           routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+           flags, ext_addr, main_addr, *data_length);
+#endif
     if (context->monitor->hit_recv_err) {
+#ifdef DEBUGTXN
+        debug0("RMAP  READ  STOP: RECVLOOP_STOPPED");
+#endif
         return RS_RECVLOOP_STOPPED;
     }
 
@@ -404,6 +425,11 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     context->pending_txn_id = 0;
     mutex_unlock(&context->monitor->pending_mutex);
 
+#ifdef DEBUGTXN
+    debugf("RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
+           routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+           *data_length, status_out);
+#endif
     return status_out;
 }
 

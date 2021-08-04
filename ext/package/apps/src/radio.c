@@ -77,7 +77,7 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
 static bool radio_read_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_address, size_t read_len, void *read_out) {
     rmap_status_t status;
     assert(radio != NULL && ctx != NULL && read_out != NULL);
-    assert(read_len <= RMAP_MAX_DATA_LEN);
+    assert(0 < read_len && read_len <= RMAP_MAX_DATA_LEN);
     size_t actual_read = read_len;
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, rel_address + radio->mem_access_base, &actual_read, read_out);
     if (status != RS_OK) {
@@ -96,7 +96,7 @@ static bool radio_read_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_
 static bool radio_write_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_address, size_t write_len, void *write_in) {
     rmap_status_t status;
     assert(radio != NULL && ctx != NULL && write_in != NULL);
-    assert(write_len <= RMAP_MAX_DATA_LEN);
+    assert(0 < write_len && write_len <= RMAP_MAX_DATA_LEN);
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
                         0x00, rel_address + radio->mem_access_base, write_len, write_in);
     if (status != RS_OK) {
@@ -114,6 +114,7 @@ static bool radio_read_registers(radio_t *radio, rmap_context_t *ctx,
     assert(0 <= first_reg && first_reg <= last_reg && last_reg < NUM_REGISTERS);
     size_t expected_read_len = (last_reg - first_reg + 1) * 4;
     size_t actual_read_len = expected_read_len;
+    assert(actual_read_len > 0);
     // fetch the data over the network
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg * 4, &actual_read_len, output);
     if (status != RS_OK) {
@@ -148,6 +149,7 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
     for (int i = 0; i < num_regs; i++) {
         input_copy[i] = ntohl(input[i]);
     }
+    assert(num_regs > 0);
     // transmit the data over the network
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg * 4, num_regs * 4, input_copy);
     if (status != RS_OK) {
@@ -295,8 +297,10 @@ static ssize_t radio_uplink_service(radio_t *radio) {
 
     // and perform both the prime and flipped reads as necessary
     assert(read_length >= 0 && read_length <= UPLINK_BUF_LOCAL_SIZE);
-    if (!radio_read_memory(radio, &radio->up_ctx, radio->rx_halves[read_half].base + read_half_offset, read_length, radio->uplink_buf_local)) {
-        return -1;
+    if (read_length > 0) {
+        if (!radio_read_memory(radio, &radio->up_ctx, radio->rx_halves[read_half].base + read_half_offset, read_length, radio->uplink_buf_local)) {
+            return -1;
+        }
     }
 
     assert(read_length_flip >= 0 && read_length_flip <= UPLINK_BUF_LOCAL_SIZE - read_length);
