@@ -23,6 +23,15 @@ enum {
 
     TX_STATE_IDLE   = 0x00,
     TX_STATE_ACTIVE = 0x01,
+
+    TRANSACTION_RETRIES = 5,
+};
+
+enum {
+    RADIO_RS_PACKET_CORRUPTED   = 0x01,
+    RADIO_RS_REGISTER_READ_ONLY = 0x02,
+    RADIO_RS_INVALID_ADDRESS    = 0x03,
+    RADIO_RS_VALUE_OUT_OF_RANGE = 0x04,
 };
 
 typedef enum {
@@ -74,16 +83,59 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
     thread_create(&radio->down_thread, radio_downlink_loop, radio);
 }
 
+static bool radio_is_error_recoverable(rmap_status_t status) {
+    assert(status != RS_OK);
+    switch ((uint32_t) status) {
+    // indicates failure of lower network stack; no point in retrying.
+    case RS_EXCHANGE_DOWN:
+        return false;
+    case RS_RECVLOOP_STOPPED:
+        return false;
+    // indicates likely packet corruption; worth retrying in case it works again.
+    case RS_DATA_TRUNCATED:
+        return true;
+    case RS_TRANSACTION_TIMEOUT:
+        return true;
+    case RADIO_RS_PACKET_CORRUPTED:
+        return true;
+    // indicates programming error or program code corruption; not worth retrying. we want these to be surfaced.
+    case RADIO_RS_REGISTER_READ_ONLY:
+        return false;
+    case RADIO_RS_INVALID_ADDRESS:
+        return false;
+    case RADIO_RS_VALUE_OUT_OF_RANGE:
+        return false;
+    // if not known, assume we can't recover.
+    default:
+        return false;
+    }
+}
+
 static bool radio_read_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel_address, size_t read_len, void *read_out) {
     rmap_status_t status;
     assert(radio != NULL && ctx != NULL && read_out != NULL);
     assert(0 < read_len && read_len <= RMAP_MAX_DATA_LEN);
-    size_t actual_read = read_len;
+    size_t actual_read;
+    int retries = TRANSACTION_RETRIES;
+
+retry:
+    actual_read = read_len;
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, rel_address + radio->mem_access_base, &actual_read, read_out);
+
     if (status != RS_OK) {
-        debugf("Radio: invalid status while reading memory at 0x%x of length 0x%zx: 0x%03x",
-               rel_address, read_len, status);
-        return false;
+        if (!radio_is_error_recoverable(status)) {
+            debugf("Radio: encountered unrecoverable error while reading memory at 0x%x of length 0x%zx: 0x%03x",
+                   rel_address, read_len, status);
+            return false;
+        } else if (retries > 0) {
+            debugf("Radio: retrying memory read at 0x%x of length 0x%zx after recoverable error: 0x%03x",
+                   rel_address, read_len, status);
+            goto retry;
+        } else {
+            debugf("Radio: after %d retries, erroring out during memory read at 0x%x of length 0x%zx: 0x%03x",
+                   TRANSACTION_RETRIES, rel_address, read_len, status);
+            return false;
+        }
     }
     if (actual_read != read_len) {
         debugf("Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx",
@@ -97,12 +149,26 @@ static bool radio_write_memory(radio_t *radio, rmap_context_t *ctx, uint32_t rel
     rmap_status_t status;
     assert(radio != NULL && ctx != NULL && write_in != NULL);
     assert(0 < write_len && write_len <= RMAP_MAX_DATA_LEN);
+    int retries = TRANSACTION_RETRIES;
+
+retry:
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
                         0x00, rel_address + radio->mem_access_base, write_len, write_in);
+
     if (status != RS_OK) {
-        debugf("Radio: invalid status while writing memory at 0x%x of length 0x%zx: 0x%03x",
-               rel_address, write_len, status);
-        return false;
+        if (!radio_is_error_recoverable(status)) {
+            debugf("Radio: encountered unrecoverable error while writing memory at 0x%x of length 0x%zx: 0x%03x",
+                   rel_address, write_len, status);
+            return false;
+        } else if (retries > 0) {
+            debugf("Radio: retrying memory write at 0x%x of length 0x%zx after recoverable error: 0x%03x",
+                   rel_address, write_len, status);
+            goto retry;
+        } else {
+            debugf("Radio: after %d retries, erroring out during memory write at 0x%x of length 0x%zx: 0x%03x",
+                   TRANSACTION_RETRIES, rel_address, write_len, status);
+            return false;
+        }
     }
     return true;
 }
@@ -113,14 +179,28 @@ static bool radio_read_registers(radio_t *radio, rmap_context_t *ctx,
     assert(output != NULL);
     assert(0 <= first_reg && first_reg <= last_reg && last_reg < NUM_REGISTERS);
     size_t expected_read_len = (last_reg - first_reg + 1) * 4;
-    size_t actual_read_len = expected_read_len;
-    assert(actual_read_len > 0);
+    assert(expected_read_len > 0);
+    size_t actual_read_len;
+    int retries = TRANSACTION_RETRIES;
+
+retry:
     // fetch the data over the network
+    actual_read_len = expected_read_len;
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg * 4, &actual_read_len, output);
     if (status != RS_OK) {
-        debugf("Radio: invalid status while querying registers [%u, %u]: 0x%03x",
-               first_reg, last_reg, status);
-        return false;
+        if (!radio_is_error_recoverable(status)) {
+            debugf("Radio: encountered unrecoverable error while querying registers [%u, %u]: 0x%03x",
+                   first_reg, last_reg, status);
+            return false;
+        } else if (retries > 0) {
+            debugf("Radio: retrying register query [%u, %u] after recoverable error: 0x%03x",
+                   first_reg, last_reg, status);
+            goto retry;
+        } else {
+            debugf("Radio: after %d retries, erroring out during register query [%u, %u]: 0x%03x",
+                   TRANSACTION_RETRIES, first_reg, last_reg, status);
+            return false;
+        }
     }
     if (actual_read_len != expected_read_len) {
         debugf("Radio: invalid read length while querying registers [%u, %u]: %zu instead of %zu",
@@ -150,12 +230,25 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
         input_copy[i] = ntohl(input[i]);
     }
     assert(num_regs > 0);
+    int retries = TRANSACTION_RETRIES;
+
+retry:
     // transmit the data over the network
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg * 4, num_regs * 4, input_copy);
     if (status != RS_OK) {
-        debugf("Radio: invalid status while updating registers [%u, %u]: 0x%03x",
-               first_reg, last_reg, status);
-        return false;
+        if (!radio_is_error_recoverable(status)) {
+            debugf("Radio: encountered unrecoverable error while updating registers [%u, %u]: 0x%03x",
+                   first_reg, last_reg, status);
+            return false;
+        } else if (retries > 0) {
+            debugf("Radio: retrying register update [%u, %u] after recoverable error: 0x%03x",
+                   first_reg, last_reg, status);
+            goto retry;
+        } else {
+            debugf("Radio: after %d retries, erroring out during register update [%u, %u]: 0x%03x",
+                   TRANSACTION_RETRIES, first_reg, last_reg, status);
+            return false;
+        }
     }
     return true;
 }

@@ -38,6 +38,7 @@ typedef enum {
     RS_EXCHANGE_DOWN = 0x100,
     RS_RECVLOOP_STOPPED = 0x101,
     RS_DATA_TRUNCATED = 0x102,
+    RS_TRANSACTION_TIMEOUT = 0x103,
 } rmap_status_t;
 
 typedef struct rmap_context_st rmap_context_t;
