@@ -135,7 +135,7 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 	v.tracker.OnTelemetryDownlink(telemetry, remoteTimestamp)
 
 	// check ReqTelemRecent
-	recentOk := now.Add(-10*time.Millisecond).Before(remoteTimestamp) && remoteTimestamp.Before(now)
+	recentOk := now.Add(-15*time.Millisecond).Before(remoteTimestamp) && remoteTimestamp.Before(now)
 	if !recentOk && now.After(remoteTimestamp) {
 		log.Printf("ReqTelemRecent failure: delay=%v", now.Since(remoteTimestamp))
 	}
