@@ -1,10 +1,18 @@
 #include <assert.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "debug.h"
 #include "rmap.h"
 #include "thread.h"
+
+// #define DEBUGTXN
+
+enum {
+    // time out transactions after two milliseconds, which is nearly 4x the average time for a transaction.
+    RMAP_TIMEOUT_NS = 2 * 1000 * 1000,
+};
 
 #define SCRATCH_MARGIN_WRITE (RMAP_MAX_PATH + 4 + RMAP_MAX_PATH + 12 + 1)
 #define SCRATCH_MARGIN_READ (12 + 1)  // for read replies
@@ -229,13 +237,13 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
             // it as an error.
-            __sync_fetch_and_add(&context->monitor->num_corrupted_packets, (uint32_t) 1);
+            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
         }
     } else if (flags & RF_ACKNOWLEDGE) {
         // if we transmitted successfully, and need an acknowledgement, then all we've got to do is wait for a reply!
 
-        // TODO: implement timeouts for the case where messages get lost
-        while (context->has_received == false && context->monitor->hit_recv_err == false) {
+        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
+        while (context->has_received == false && context->monitor->hit_recv_err == false && clock_timestamp_monotonic() < timeout) {
             cond_wait(&context->monitor->pending_cond, &context->monitor->pending_mutex);
     
             assert(context->is_pending == true);
@@ -244,9 +252,11 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         // got a reply!
         if (context->has_received == true) {
             status_out = context->received_status;
-        } else {
-            assert(context->monitor->hit_recv_err == true);
+        } else if (context->monitor->hit_recv_err == true) {
             status_out = RS_RECVLOOP_STOPPED;
+        } else {
+            assert(clock_timestamp_monotonic() > timeout);
+            status_out = RS_TRANSACTION_TIMEOUT;
         }
     } else {
         // if we transmitted successfully, but didn't ask for a reply, we can just assume success!
@@ -256,7 +266,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
             // it as an error.
-            __sync_fetch_and_add(&context->monitor->num_corrupted_packets, (uint32_t) 1);
+            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
         }
     }
 
@@ -379,18 +389,18 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
             // it as an error.
-            __sync_fetch_and_add(&context->monitor->num_corrupted_packets, (uint32_t) 1);
+            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
         }
     } else {
         // if we transmitted successfully, then all we've got to do is wait for a reply!
 
-        // TODO: implement timeouts for the case where messages get lost
-        while (context->has_received == false && context->monitor->hit_recv_err == false) {
+        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
+        while (context->has_received == false && context->monitor->hit_recv_err == false && clock_timestamp_monotonic() < timeout) {
             cond_wait(&context->monitor->pending_cond, &context->monitor->pending_mutex);
-    
+
             assert(context->is_pending == true);
         }
-    
+
         // got a reply!
         if (context->has_received == true) {
             status_out = context->received_status;
@@ -403,9 +413,12 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
             } else {
                 *data_length = context->read_actual_length;
             }
-        } else {
-            assert(context->monitor->hit_recv_err == true);
+        } else if (context->monitor->hit_recv_err == true) {
             status_out = RS_RECVLOOP_STOPPED;
+            *data_length = 0;
+        } else {
+            assert(clock_timestamp_monotonic() > timeout);
+            status_out = RS_TRANSACTION_TIMEOUT;
             *data_length = 0;
         }
     }
@@ -541,11 +554,10 @@ static void *rmap_monitor_recvloop(void *mon_opaque) {
             mon->hit_recv_err = true;
             return NULL;
         }
-        if (count <= mon->scratch_size && rmap_recv_handle(mon, mon->scratch_buffer, count)) {
-            // handled!
-        } else {
-            // packet too long or otherwise corrupted; record this as an error.
-            __sync_fetch_and_add(&mon->num_corrupted_packets, (uint32_t) 1);
+        if (count > mon->scratch_size) {
+            debugf("RMAP packet received was too large for buffer: %zd > %zu; discarding.", count, mon->scratch_size);
+        } else if (!rmap_recv_handle(mon, mon->scratch_buffer, count)) {
+            debug0("RMAP packet received was corrupted or unexpected.");
         }
     }
 }

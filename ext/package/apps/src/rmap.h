@@ -48,8 +48,6 @@ typedef struct {
     fw_exchange_t *exc;
 
     bool hit_recv_err;
-    // atomic!
-    uint32_t num_corrupted_packets;
 
     size_t scratch_size;
     uint8_t *scratch_buffer;
