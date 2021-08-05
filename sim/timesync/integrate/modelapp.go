@@ -61,14 +61,14 @@ func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.Pac
 	// input: bytes -> line characters
 	inputSource, inputSink := component.DataBufferBytes(sim, 1024)
 	if injectErrors {
-		inputSink = InjectErrors(sim, inputSink, 65536)
+		inputSink = InjectErrors(sim, inputSink, 4096)
 	}
 	// inputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[APP->BENCH]"), inputCharsSink)
 
 	// output: line characters -> bytes
 	outputSource, outputSink := component.DataBufferBytes(sim, 1024)
 	if injectErrors {
-		outputSink = InjectErrors(sim, outputSink, 65536)
+		outputSink = InjectErrors(sim, outputSink, 4096)
 	}
 	// outputCharsSink = charlink.TeeDataSinksFW(sim, testpoint.MakeLoggerFW(sim, "[BENCH->APP]"), outputCharsSink)
 
