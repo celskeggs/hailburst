@@ -1,13 +1,11 @@
 package exchange
 
 import (
-	"encoding/binary"
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/component"
 	"github.com/celskeggs/hailburst/sim/fakewire/codec"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/model"
-	"github.com/celskeggs/hailburst/sim/util"
 	"log"
 	"time"
 )
@@ -34,36 +32,6 @@ func (s ExchangeState) String() string {
 	}
 }
 
-type U32Receiver struct {
-	Data []byte
-}
-
-func (u *U32Receiver) Reset() {
-	u.Data = nil
-}
-
-func (u *U32Receiver) Put(d []byte) (ok bool) {
-	if len(u.Data) > 4 {
-		panic("invalid state")
-	}
-	if len(d)+len(u.Data) > 4 {
-		return false
-	}
-	u.Data = append(u.Data, d...)
-	return true
-}
-
-func (u *U32Receiver) Done() bool {
-	return len(u.Data) == 4
-}
-
-func (u *U32Receiver) Decode() uint32 {
-	if !u.Done() {
-		panic("invalid state")
-	}
-	return binary.BigEndian.Uint32(u.Data)
-}
-
 type Exchange struct {
 	Sim   model.SimContext
 	Label string
@@ -71,8 +39,7 @@ type Exchange struct {
 	State ExchangeState
 
 	SendHandshakeId        uint32
-	IsReceivingHandshake   bool
-	RecvHandshakeId        U32Receiver
+	RecvHandshakeId        uint32
 	SendSecondaryHandshake bool
 
 	InboundBuffer   []byte
@@ -90,8 +57,7 @@ func (ex *Exchange) Reset() {
 	ex.State = StateConnecting
 
 	ex.SendHandshakeId = 0
-	ex.IsReceivingHandshake = false
-	ex.RecvHandshakeId.Reset()
+	ex.RecvHandshakeId = 0
 	ex.SendSecondaryHandshake = false
 
 	ex.InboundBuffer = nil
@@ -108,33 +74,7 @@ func (ex *Exchange) Debug(explanation string, args ...interface{}) {
 }
 
 func (ex *Exchange) ReceiveBytes(bytes []byte) {
-	if ex.IsReceivingHandshake {
-		// receive bytes for handshake ID
-		if !ex.RecvHandshakeId.Put(bytes) {
-			ex.Debug("Received too many data characters during handshake; resetting.")
-			ex.Reset()
-		} else if ex.RecvHandshakeId.Done() {
-			ex.IsReceivingHandshake = false
-			if ex.State == StateConnecting {
-				ex.Debug("Received a primary handshake with ID=0x%08x.", ex.RecvHandshakeId.Decode())
-				ex.SendSecondaryHandshake = true
-				ex.CondNotify.DispatchLater()
-			} else if ex.State == StateHandshaking {
-				if ex.RecvHandshakeId.Decode() == ex.SendHandshakeId {
-					ex.Debug("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
-						ex.RecvHandshakeId.Decode())
-					ex.State = StateOperating
-					ex.CondNotify.DispatchLater()
-				} else {
-					ex.Debug("Received mismatched secondary ID 0x%08x instead of 0x%08x; resetting.",
-						ex.RecvHandshakeId.Decode(), ex.SendHandshakeId)
-					ex.Reset()
-				}
-			} else {
-				panic(fmt.Sprintf("invalid state: %v", ex.State))
-			}
-		}
-	} else if ex.State == StateOperating {
+	if ex.State == StateOperating {
 		// receive packet bytes during operating mode
 		if !ex.RecvInProgress {
 			ex.Debug("Hit unexpected data character 0x%x before start-of-packet; resetting.", bytes[0])
@@ -149,18 +89,16 @@ func (ex *Exchange) ReceiveBytes(bytes []byte) {
 	}
 }
 
-func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar) {
-	if ex.IsReceivingHandshake {
-		ex.Debug("Hit unexpected control character %v while waiting for handshake ID; resetting.", symbol)
-		ex.Reset()
-	} else if ex.State == StateConnecting {
+func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar, param uint32) {
+	symbol.Validate(param)
+	if ex.State == StateConnecting {
 		switch symbol {
 		case codec.ChHandshake1:
-			// need to receive handshake ID next
-			ex.IsReceivingHandshake = true
-			ex.RecvHandshakeId.Reset()
-			// abort sending a secondary handshake, in case we're already there
-			ex.SendSecondaryHandshake = false
+			// received primary handshake
+			ex.Debug("Received a primary handshake with ID=0x%08x.", param)
+			ex.RecvHandshakeId = param
+			ex.SendSecondaryHandshake = true
+			ex.CondNotify.DispatchLater()
 		case codec.ChHandshake2:
 			ex.Debug("Received unexpected secondary handshake when no primary handshake had been sent; resetting.")
 			ex.Reset()
@@ -174,9 +112,15 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar) {
 			ex.Debug("Received primary handshake collision while handshaking; resetting.")
 			ex.Reset()
 		case codec.ChHandshake2:
-			// need to receive handshake ID next
-			ex.IsReceivingHandshake = true
-			ex.RecvHandshakeId.Reset()
+			// received secondary handshake
+			if param == ex.SendHandshakeId {
+				ex.Debug("Received secondary handshake with ID=0x%08x; transitioning to operating mode.", param)
+				ex.State = StateOperating
+				ex.CondNotify.DispatchLater()
+			} else {
+				ex.Debug("Received mismatched secondary ID 0x%08x instead of 0x%08x; resetting.", param, ex.SendHandshakeId)
+				ex.Reset()
+			}
 		default:
 			ex.Debug("Hit unexpected control character %v while HANDSHAKING; resetting.", symbol)
 			ex.Reset()
@@ -184,11 +128,12 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar) {
 	} else if ex.State == StateOperating {
 		switch symbol {
 		case codec.ChHandshake1:
-			// abort connection and restart everything
-			ex.Debug("Received primary handshake request during operating mode; resetting.")
+			// abort connection and restart everything; handle primary handshake
+			ex.Debug("Received a primary handshake with ID=0x%08x during operating mode; resetting.", param)
 			ex.Reset()
-			ex.IsReceivingHandshake = true
-			ex.RecvHandshakeId.Reset()
+			ex.RecvHandshakeId = param
+			ex.SendSecondaryHandshake = true
+			ex.CondNotify.DispatchLater()
 		case codec.ChHandshake2:
 			// abort connection and restart everything
 			ex.Debug("Received secondary handshake request during operating mode; resetting.")
@@ -315,7 +260,7 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 
 			ex.HasSentFCT = true
 
-			ex.Transmit(io, lsink, codec.EncodeCtrlChar(codec.ChFlowControl))
+			ex.Transmit(io, lsink, codec.EncodeCtrlChar(codec.ChFlowControl, 0))
 
 			for ex.State == StateOperating {
 				if ex.InboundReadDone && psink.CanAcceptPacket() {
@@ -346,9 +291,9 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 			packet := psource.ReceivePacket()
 			ex.RemoteSentFCT = false
 			ex.Transmit(io, lsink, concat(
-				codec.EncodeCtrlChar(codec.ChStartPacket),
+				codec.EncodeCtrlChar(codec.ChStartPacket, 0),
 				codec.EncodeDataBytes(packet),
-				codec.EncodeCtrlChar(codec.ChEndPacket),
+				codec.EncodeCtrlChar(codec.ChEndPacket, 0),
 			))
 		}
 	})
@@ -357,8 +302,7 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 		// requires that TxBusy is false
 		sendHandshake := func(handshake codec.ControlChar, handshakeId uint32) {
 			ex.Transmit(io, lsink, concat(
-				codec.EncodeCtrlChar(handshake),
-				codec.EncodeDataBytes(util.EncodeUint32BE(handshakeId)),
+				codec.EncodeCtrlChar(handshake, handshakeId),
 			))
 			nextHandshake = ctx.Now().Add(ex.HandshakePeriod())
 		}
@@ -371,15 +315,15 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 					panic("invalid state")
 				}
 				// if indicated, send secondary handshake
-				handshakeId := ex.RecvHandshakeId.Decode()
+				handshakeId := ex.RecvHandshakeId
 
 				sendHandshake(codec.ChHandshake2, handshakeId)
 
 				if !ex.SendSecondaryHandshake {
 					ex.Debug("Sent secondary handshake with ID=0x%08x, but request revoked by reset; not transitioning.", handshakeId)
-				} else if handshakeId != ex.RecvHandshakeId.Decode() {
+				} else if handshakeId != ex.RecvHandshakeId {
 					ex.Debug("Sent secondary handshake with ID=0x%08x, but new primary ID=0x%08x had been received in the meantime; not transitioning.",
-						handshakeId, ex.RecvHandshakeId.Decode())
+						handshakeId, ex.RecvHandshakeId)
 				} else if ex.State != StateConnecting {
 					ex.Debug("Sent secondary handshake with ID=0x%08x, but state is now %v instead of CONNECTING; not transitioning.",
 						handshakeId, ex.State)
