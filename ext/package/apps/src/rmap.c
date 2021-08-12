@@ -243,8 +243,12 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         // if we transmitted successfully, and need an acknowledgement, then all we've got to do is wait for a reply!
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (context->has_received == false && context->monitor->hit_recv_err == false && clock_timestamp_monotonic() < timeout) {
-            cond_wait(&context->monitor->pending_cond, &context->monitor->pending_mutex);
+        while (context->has_received == false && context->monitor->hit_recv_err == false) {
+            uint64_t now = clock_timestamp_monotonic();
+            if (now >= timeout) {
+                break;
+            }
+            cond_timedwait(&context->monitor->pending_cond, &context->monitor->pending_mutex, timeout - now);
     
             assert(context->is_pending == true);
         }
@@ -395,8 +399,12 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
         // if we transmitted successfully, then all we've got to do is wait for a reply!
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (context->has_received == false && context->monitor->hit_recv_err == false && clock_timestamp_monotonic() < timeout) {
-            cond_wait(&context->monitor->pending_cond, &context->monitor->pending_mutex);
+        while (context->has_received == false && context->monitor->hit_recv_err == false) {
+            uint64_t now = clock_timestamp_monotonic();
+            if (now >= timeout) {
+                break;
+            }
+            cond_timedwait(&context->monitor->pending_cond, &context->monitor->pending_mutex, timeout - now);
 
             assert(context->is_pending == true);
         }
