@@ -33,15 +33,16 @@ static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t byte
     }
 }
 
-static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
+static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param) {
     assert(opaque != NULL);
+    assert(param == 0 || fakewire_is_parametrized(symbol));
     fw_link_t *fwl = (fw_link_t*) opaque;
 
 #ifdef DEBUG
-    debug_printf("Transmitting control character: %s.", fakewire_codec_symbol(symbol));
+    debug_printf("Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
-    if (fakewire_enc_encode_ctrl(&fwl->encoder, symbol) < 0) {
+    if (fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param) < 0) {
         // drop data; we're shutting down.
         assert(fwl->shutdown);
     }

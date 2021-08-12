@@ -27,13 +27,8 @@ typedef struct fw_exchange_st {
 
     pthread_t flowtx_thread;
 
-    // handshake IDs are stored in network order, not host order
-
     uint32_t send_handshake_id; // generated handshake ID if in HANDSHAKING mode
-
-    bool     is_recv_handshake_id;
     uint32_t recv_handshake_id; // received handshake ID
-    size_t   recv_handshake_offset;
     bool     send_secondary_handshake;
 
     uint8_t *inbound_buffer;
