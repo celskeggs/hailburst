@@ -16,6 +16,7 @@ fakewire_exc_test: fakewire_exc_test.o test_common.o fakewire_exc.o fakewire_lin
 
 clean:
 	rm -f app fakewire_link_test fakewire_exc_test *.o
+	rm -rf test_scratch/ testdir/
 
 exc_test: fakewire_exc_test
 	rm -rf $(SCRATCHDIR)
