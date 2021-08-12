@@ -19,7 +19,8 @@ typedef enum {
     FWC_END_PACKET   = 0x83,
     FWC_ERROR_PACKET = 0x84,
     FWC_FLOW_CONTROL = 0x85,
-    FWC_ESCAPE_SYM   = 0x86,
+    FWC_KEEP_ALIVE   = 0x86,
+    FWC_ESCAPE_SYM   = 0x87,
 
     // alias, because ESCAPE_SYM never needs to be passed to an upper layer
     FWC_CODEC_ERROR  = FWC_ESCAPE_SYM,
@@ -33,7 +34,7 @@ static inline bool fakewire_is_special(uint8_t ch) {
 
 static inline bool fakewire_is_parametrized(fw_ctrl_t ch) {
     assert(fakewire_is_special(ch));
-    return ch == FWC_HANDSHAKE_1 || ch == FWC_HANDSHAKE_2;
+    return ch == FWC_HANDSHAKE_1 || ch == FWC_HANDSHAKE_2 || ch == FWC_FLOW_CONTROL || ch == FWC_KEEP_ALIVE;
 }
 
 typedef struct {

@@ -31,14 +31,16 @@ typedef struct fw_exchange_st {
     uint32_t recv_handshake_id; // received handshake ID
     bool     send_secondary_handshake;
 
+    uint32_t fcts_sent;
+    uint32_t fcts_rcvd;
+    uint32_t pkts_sent;
+    uint32_t pkts_rcvd;
+
     uint8_t *inbound_buffer;
     size_t   inbound_buffer_offset;
     size_t   inbound_buffer_max;
     bool     inbound_read_done;
     bool     recv_in_progress;
-
-    bool     has_sent_fct;
-    bool     remote_sent_fct;
 } fw_exchange_t;
 
 // these two functions are not threadsafe; the current thread must be the only thread accessing fwe

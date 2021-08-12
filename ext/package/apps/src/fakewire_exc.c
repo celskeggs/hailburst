@@ -23,6 +23,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
 
 static inline void fakewire_exc_check_invariants(fw_exchange_t *fwe) {
     assert(fwe->state >= FW_EXC_DISCONNECTED && fwe->state <= FW_EXC_OPERATING);
+    assert(fwe->pkts_sent == fwe->fcts_rcvd || fwe->pkts_sent + 1 == fwe->fcts_rcvd);
 }
 
 void fakewire_exc_init(fw_exchange_t *fwe, const char *label) {
@@ -57,10 +58,10 @@ static void fakewire_exc_reset(fw_exchange_t *fwe) {
     fwe->send_secondary_handshake = false;
     fwe->recv_handshake_id = 0;
 
+    fwe->fcts_sent = fwe->fcts_rcvd = fwe->pkts_sent = fwe->pkts_rcvd = 0;
+
     fwe->inbound_buffer = NULL;
     fwe->inbound_read_done = false;
-    fwe->has_sent_fct = false;
-    fwe->remote_sent_fct = false;
     fwe->recv_in_progress = false;
 
     cond_broadcast(&fwe->cond);
@@ -212,6 +213,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
         case FWC_END_PACKET:   // fallthrough
         case FWC_ERROR_PACKET: // fallthrough
         case FWC_FLOW_CONTROL: // fallthrough
+        case FWC_KEEP_ALIVE:   // fallthrough
         case FWC_CODEC_ERROR:
             debug_printf("Hit unexpected control character %s while CONNECTING; resetting.",
                          fakewire_codec_symbol(symbol));
@@ -242,6 +244,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
         case FWC_END_PACKET:   // fallthrough
         case FWC_ERROR_PACKET: // fallthrough
         case FWC_FLOW_CONTROL: // fallthrough
+        case FWC_KEEP_ALIVE:   // fallthrough
         case FWC_CODEC_ERROR:
             debug_printf("Hit unexpected control character %s while HANDSHAKING; resetting.",
                          fakewire_codec_symbol(symbol));
@@ -267,16 +270,17 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
             fakewire_exc_reset(fwe);
             break;
         case FWC_START_PACKET:
-            if (!fwe->has_sent_fct) {
-                debug_puts("Received unauthorized start-of-packet; resetting.");
+            if (fwe->fcts_sent != fwe->pkts_rcvd + 1) {
+                debug_printf("Received unauthorized start-of-packet (fcts_sent=%u, pkts_rcvd=%u); resetting.",
+                             fwe->fcts_sent, fwe->pkts_rcvd);
                 fakewire_exc_reset(fwe);
             } else {
                 assert(fwe->inbound_buffer != NULL); // should always have a buffer if we sent a FCT!
                 assert(!fwe->inbound_read_done);     // if done hasn't been reset to false, we shouldn't have sent a FCT!
                 assert(!fwe->recv_in_progress);
 
-                fwe->has_sent_fct = false;
                 fwe->recv_in_progress = true;
+                fwe->pkts_rcvd += 1;
             }
             break;
         case FWC_END_PACKET:
@@ -305,12 +309,28 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
             }
             break;
         case FWC_FLOW_CONTROL:
-            if (fwe->remote_sent_fct) {
-                debug_puts("Received duplicate FCT; resetting.");
+            if (param == fwe->fcts_rcvd + 1) {
+                // make sure this FCT matches our send state
+                if (fwe->pkts_sent != fwe->fcts_rcvd) {
+                    debug_printf("Received incremented FCT(%u) when no packet had been sent (%u, %u); resetting.",
+                                 param, fwe->pkts_sent, fwe->fcts_rcvd);
+                    fakewire_exc_reset(fwe);
+                } else {
+                    // received FCT; can send another packet
+                    fwe->fcts_rcvd = param;
+                    cond_broadcast(&fwe->cond);
+                }
+            } else if (param != fwe->fcts_rcvd) {
+                // FCT number should always either stay the same or increment by one.
+                debug_printf("Received unexpected FCT(%u) when last count was %u; resetting.", param, fwe->fcts_rcvd);
                 fakewire_exc_reset(fwe);
-            } else {
-                fwe->remote_sent_fct = true;
-                cond_broadcast(&fwe->cond);
+            }
+            break;
+        case FWC_KEEP_ALIVE:
+            if (fwe->pkts_rcvd != param) {
+                debug_printf("KAT mismatch: received %u packets, but supposed to have received %u; resetting.",
+                             fwe->pkts_rcvd, param);
+                fakewire_exc_reset(fwe);
             }
             break;
         case FWC_CODEC_ERROR:
@@ -354,7 +374,7 @@ ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet
         memset(packet_out, 0, packet_max);
         // set up receive buffers
         assert(!fwe->recv_in_progress);
-        assert(!fwe->has_sent_fct);
+        assert(fwe->pkts_rcvd == fwe->fcts_sent);
         fwe->inbound_buffer = packet_out;
         fwe->inbound_buffer_offset = 0;
         fwe->inbound_buffer_max = packet_max;
@@ -400,7 +420,7 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
 
     mutex_lock(&fwe->mutex);
     // wait until handshake completes and transmit is possible
-    while (fwe->state != FW_EXC_OPERATING || !fwe->remote_sent_fct || fwe->tx_busy) {
+    while (fwe->state != FW_EXC_OPERATING || fwe->pkts_sent == fwe->fcts_rcvd || fwe->tx_busy) {
         fakewire_exc_check_invariants(fwe);
 
         if (fwe->state == FW_EXC_DISCONNECTED) {
@@ -413,16 +433,16 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
         }
 
 #ifdef APIDEBUG
-        debug_printf("API write(%zu bytes): WAIT(state=%d, flow=%d, busy=%d)",
-                     packet_len, fwe->state, fwe->remote_sent_fct, fwe->tx_busy);
+        debug_printf("API write(%zu bytes): WAIT(state=%d, pkts_sent=%u, fcts_rcvd=%u, busy=%d)",
+                     packet_len, fwe->state, fwe->pkts_sent, fwe->fcts_rcvd, fwe->tx_busy);
 #endif
         cond_wait(&fwe->cond, &fwe->mutex);
     }
 
     assert(fwe->tx_busy == false);
-    assert(fwe->remote_sent_fct == true);
+    assert(fwe->pkts_sent == fwe->fcts_rcvd - 1);
     fwe->tx_busy = true;
-    fwe->remote_sent_fct = false;
+    fwe->pkts_sent += 1;
 
     mutex_unlock(&fwe->mutex);
 
@@ -454,14 +474,14 @@ static uint64_t handshake_period(void) {
     return (rand() % (7 * ms)) + 3 * ms;
 }
 
-static void fakewire_exc_send_handshake(fw_exchange_t *fwe, fw_ctrl_t handshake, uint32_t handshake_id) {
+static void fakewire_exc_send_ctrl_char(fw_exchange_t *fwe, fw_ctrl_t ctrl, uint32_t param) {
     assert(fwe->tx_busy == false);
     fwe->tx_busy = true;
     mutex_unlock(&fwe->mutex);
 
     fw_receiver_t *link_write = fakewire_link_interface(&fwe->io_port);
 
-    link_write->recv_ctrl(link_write->param, handshake, handshake_id);
+    link_write->recv_ctrl(link_write->param, ctrl, param);
 
     mutex_lock(&fwe->mutex);
     assert(fwe->tx_busy == true);
@@ -472,7 +492,8 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
 
-    uint64_t next_handshake = clock_timestamp_monotonic() + handshake_period();
+    // tracking for both handshakes and heartbeats
+    uint64_t next_interval = clock_timestamp_monotonic() + handshake_period();
 
     mutex_lock(&fwe->mutex);
     while (fwe->state != FW_EXC_DISCONNECTED) {
@@ -480,15 +501,18 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
 
         uint64_t bound_ns = 0;
 
-        if ((fwe->state == FW_EXC_CONNECTING || fwe->state == FW_EXC_HANDSHAKING) && !fwe->tx_busy) {
+        if (!fwe->tx_busy) {
+            // if we received a primary handshake... then we need to send a secondary handshake in response
             // if we're handshaking... then we need to send primary handshakes on a regular basis
+            // if we're ready to receive... then we need to send a FCT to permit the remote end to transmit
+            // if we're operating... then we need to send FCTs and KATs on a regular basis
             uint64_t now = clock_timestamp_monotonic();
 
             if (fwe->send_secondary_handshake) {
                 assert(fwe->state == FW_EXC_CONNECTING);
                 uint32_t handshake_id = fwe->recv_handshake_id;
 
-                fakewire_exc_send_handshake(fwe, FWC_HANDSHAKE_2, handshake_id);
+                fakewire_exc_send_ctrl_char(fwe, FWC_HANDSHAKE_2, handshake_id);
 
                 if (!fwe->send_secondary_handshake) {
                     debug_printf("Sent secondary handshake with ID=0x%08x, but request revoked by reset; not transitioning.",
@@ -509,8 +533,9 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
                 cond_broadcast(&fwe->cond);
 
                 now = clock_timestamp_monotonic();
-                next_handshake = now + handshake_period();
-            } else if (now >= next_handshake) {
+                next_interval = now + handshake_period();
+            } else if (now >= next_interval && fwe->state != FW_EXC_OPERATING) {
+                assert(fwe->state == FW_EXC_HANDSHAKING || fwe->state == FW_EXC_CONNECTING);
                 // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
                 uint32_t handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
                 debug_printf("Timeout expired; attempting primary handshake with ID=0x%08x; transitioning to handshaking mode.",
@@ -518,38 +543,44 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
                 fwe->send_handshake_id = handshake_id;
                 fwe->state = FW_EXC_HANDSHAKING;
 
-                fakewire_exc_send_handshake(fwe, FWC_HANDSHAKE_1, handshake_id);
+                fakewire_exc_send_ctrl_char(fwe, FWC_HANDSHAKE_1, handshake_id);
 
                 debug_printf("Sent primary handshake with ID=0x%08x.", handshake_id);
 
                 cond_broadcast(&fwe->cond);
 
                 now = clock_timestamp_monotonic();
-                next_handshake = now + handshake_period();
-            }
-
-            if (now < next_handshake) {
-                bound_ns = next_handshake - now;
-            }
-        }
-        if (fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer != NULL && !fwe->tx_busy &&
-               !fwe->has_sent_fct && !fwe->recv_in_progress && !fwe->inbound_read_done) {
-            // if we're ready to receive data, but haven't sent a FCT, send one
+                next_interval = now + handshake_period();
+            } else if (fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer != NULL
+                        && fwe->fcts_sent == fwe->pkts_rcvd && !fwe->recv_in_progress && !fwe->inbound_read_done) {
+                // if we're ready to receive data, but haven't sent a FCT, send one
+                fwe->fcts_sent += 1;
 #ifdef DEBUG
-            debug_printf("Sending flow control token on inbound_buffer=%p (fwe=%p)", fwe->inbound_buffer, fwe);
+                debug_printf("Sending FCT(%u) and KAT(%u) on inbound_buffer=%p (fwe=%p)", fwe->fcts_sent, fwe->pkts_sent, fwe->inbound_buffer, fwe);
 #endif
-            fwe->tx_busy = true;
-            fwe->has_sent_fct = true;
-            mutex_unlock(&fwe->mutex);
+                fakewire_exc_send_ctrl_char(fwe, FWC_FLOW_CONTROL, fwe->fcts_sent);
+                fakewire_exc_send_ctrl_char(fwe, FWC_KEEP_ALIVE, fwe->pkts_sent);
+                cond_broadcast(&fwe->cond);
 
-            fw_receiver_t *link_write = fakewire_link_interface(&fwe->io_port);
+                now = clock_timestamp_monotonic();
+                next_interval = now + handshake_period();
+            } else if (now >= next_interval) {
+                assert(fwe->state == FW_EXC_OPERATING);
+#ifdef DEBUG
+                debug_printf("Interval expired: transmitting reminder FCT(%u) and KAT(%u) tokens.",
+                             fwe->fcts_sent, fwe->pkts_sent);
+#endif
+                fakewire_exc_send_ctrl_char(fwe, FWC_FLOW_CONTROL, fwe->fcts_sent);
+                fakewire_exc_send_ctrl_char(fwe, FWC_KEEP_ALIVE, fwe->pkts_sent);
+                cond_broadcast(&fwe->cond);
 
-            link_write->recv_ctrl(link_write->param, FWC_FLOW_CONTROL, 0);
+                now = clock_timestamp_monotonic();
+                next_interval = now + handshake_period();
+            }
 
-            mutex_lock(&fwe->mutex);
-            assert(fwe->tx_busy == true);
-            fwe->tx_busy = false;
-            cond_broadcast(&fwe->cond);
+            if (now < next_interval) {
+                bound_ns = next_interval - now;
+            }
         }
 
         if (bound_ns) {

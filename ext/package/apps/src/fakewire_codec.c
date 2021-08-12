@@ -27,6 +27,8 @@ const char *fakewire_codec_symbol(fw_ctrl_t c) {
         return "ERROR_PACKET";
     case FWC_FLOW_CONTROL:
         return "FLOW_CONTROL";
+    case FWC_KEEP_ALIVE:
+        return "KEEP_ALIVE";
     case FWC_CODEC_ERROR:
         return "CODEC_ERROR";
     default:
