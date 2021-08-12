@@ -42,15 +42,27 @@ type Exchange struct {
 	RecvHandshakeId        uint32
 	SendSecondaryHandshake bool
 
+	FctsSent uint32
+	FctsRcvd uint32
+	PktsSent uint32
+	PktsRcvd uint32
+
 	InboundBuffer   []byte
 	InboundReadDone bool
-	HasSentFCT      bool
-	RemoteSentFCT   bool
 	RecvInProgress  bool
 
 	CondNotify *component.EventDispatcher
 
 	TxBusy bool
+}
+
+func (ex *Exchange) CheckInvariants() {
+	if ex.State < StateConnecting || ex.State > StateOperating {
+		log.Panicf("invalid state: %v", ex.State)
+	}
+	if ex.FctsRcvd < ex.PktsSent || ex.FctsRcvd > ex.PktsSent+1 {
+		log.Panicf("invalid pkts_sent=%v fcts_rcvd=%v", ex.PktsSent, ex.FctsRcvd)
+	}
 }
 
 func (ex *Exchange) Reset() {
@@ -60,11 +72,16 @@ func (ex *Exchange) Reset() {
 	ex.RecvHandshakeId = 0
 	ex.SendSecondaryHandshake = false
 
+	ex.FctsSent = 0
+	ex.FctsRcvd = 0
+	ex.PktsSent = 0
+	ex.PktsRcvd = 0
+
 	ex.InboundBuffer = nil
 	ex.InboundReadDone = false
-	ex.HasSentFCT = false
-	ex.RemoteSentFCT = false
 	ex.RecvInProgress = false
+
+	ex.CheckInvariants()
 
 	ex.CondNotify.DispatchLater()
 }
@@ -74,6 +91,8 @@ func (ex *Exchange) Debug(explanation string, args ...interface{}) {
 }
 
 func (ex *Exchange) ReceiveBytes(bytes []byte) {
+	ex.CheckInvariants()
+
 	if ex.State == StateOperating {
 		// receive packet bytes during operating mode
 		if !ex.RecvInProgress {
@@ -90,6 +109,7 @@ func (ex *Exchange) ReceiveBytes(bytes []byte) {
 }
 
 func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar, param uint32) {
+	ex.CheckInvariants()
 	symbol.Validate(param)
 	if ex.State == StateConnecting {
 		switch symbol {
@@ -139,24 +159,25 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar, param uint32) {
 			ex.Debug("Received secondary handshake request during operating mode; resetting.")
 			ex.Reset()
 		case codec.ChStartPacket:
-			if !ex.HasSentFCT {
-				ex.Debug("Received unauthorized start-of-packet; resetting.")
+			if ex.FctsSent != ex.PktsRcvd+1 {
+				ex.Debug("Received unauthorized start-of-packet (fcts_sent=%v, pkts_rcvd=%v); resetting.",
+					ex.FctsSent, ex.PktsRcvd)
 				ex.Reset()
 			} else {
 				if ex.InboundReadDone || ex.RecvInProgress {
 					panic("inconsistent state with HasSentFCT")
 				}
-				ex.HasSentFCT = false
 				ex.RecvInProgress = true
+				ex.PktsRcvd += 1
 			}
 		case codec.ChEndPacket:
 			if !ex.RecvInProgress {
 				ex.Debug("Hit unexpected end-of-packet before start-of-packet; resetting.")
 				ex.Reset()
 			} else {
-				if ex.InboundReadDone || ex.HasSentFCT {
-					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tHasSentFCT=%v\n",
-						ex.RecvInProgress, ex.InboundReadDone, ex.HasSentFCT)
+				if ex.InboundReadDone || ex.PktsRcvd != ex.FctsSent {
+					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tPktsRcvd=%v\n\tFctsSent=%v\n",
+						ex.RecvInProgress, ex.InboundReadDone, ex.PktsRcvd, ex.FctsSent)
 				}
 				ex.InboundReadDone = true
 				ex.RecvInProgress = false
@@ -167,30 +188,45 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar, param uint32) {
 				ex.Debug("Hit unexpected error-end-of-packet before start-of-packet; resetting.")
 				ex.Reset()
 			} else {
-				if !ex.InboundReadDone || ex.HasSentFCT {
-					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tHasSentFCT=%v\n",
-						ex.RecvInProgress, ex.InboundReadDone, ex.HasSentFCT)
+				if !ex.InboundReadDone || ex.PktsRcvd != ex.FctsSent {
+					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tPktsRcvd=%v\n\tFctsSent=%v\n",
+						ex.RecvInProgress, ex.InboundReadDone, ex.PktsRcvd, ex.FctsSent)
 				}
 				// discard the data in the current packet
 				ex.InboundBuffer = nil
 			}
 		case codec.ChFlowControl:
-			if ex.RemoteSentFCT {
-				ex.Debug("Received duplicate FCT; resetting.")
+			if param == ex.FctsRcvd+1 {
+				// make sure this FCT matches our send state
+				if ex.PktsSent != ex.FctsRcvd {
+					ex.Debug("Received incremented FCT(%v) when no packet had been sent (%v, %v); resetting.",
+						param, ex.PktsSent, ex.FctsRcvd)
+					ex.Reset()
+				} else {
+					// received FCT; can send another packet
+					ex.FctsRcvd = param
+					ex.CondNotify.DispatchLater()
+				}
+			} else if param != ex.FctsRcvd {
+				// FCT number should always either stay the same or increment by one
+				ex.Debug("Received unexpected FCT(%v) when last count was %v; resetting.", param, ex.FctsRcvd)
 				ex.Reset()
-			} else {
-				ex.RemoteSentFCT = true
-				ex.CondNotify.DispatchLater()
+			}
+		case codec.ChKeepAlive:
+			if ex.PktsRcvd != param {
+				ex.Debug("KAT mismatch: received %v packets, but supposed to have received %v; resetting.",
+					ex.PktsRcvd, param)
+				ex.Reset()
 			}
 		case codec.ChEscapeSym:
 			// indicates that an invalid escape sequence was received by the codec
 			ex.Debug("Received invalid escape sequence; resetting.")
 			ex.Reset()
 		default:
-			panic(fmt.Sprintf("invalid control character: %v", symbol))
+			log.Panicf("invalid control character: %v", symbol)
 		}
 	} else {
-		panic(fmt.Sprintf("Invalid state: %v", ex.State))
+		log.Panicf("Invalid state: %v", ex.State)
 	}
 }
 
@@ -205,6 +241,7 @@ func (ex *Exchange) Transmit(io *component.TwixtIO, sink model.DataSinkBytes, da
 		data = data[count:]
 		if len(data) > 0 {
 			io.Yield()
+			ex.CheckInvariants()
 		}
 	}
 	if !ex.TxBusy {
@@ -245,22 +282,24 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 	decoder := codec.MakeDecoder(ex.ReceiveBytes, ex.ReceiveCtrlChar)
 	component.DataPumpDirect(ctx, lsource, decoder.Decode)
 
+	// Receiver Thread
 	component.BuildTwixt(ctx, []model.EventSource{psink, ex.CondNotify}, func(io *component.TwixtIO) {
+		ex.CheckInvariants()
 		for {
 			for ex.State != StateOperating || ex.TxBusy || !psink.CanAcceptPacket() {
 				io.Yield()
+				ex.CheckInvariants()
 			}
-			if ex.RecvInProgress || ex.HasSentFCT || ex.InboundReadDone || ex.InboundBuffer != nil {
+			if ex.RecvInProgress || ex.PktsRcvd != ex.FctsSent || ex.InboundReadDone || ex.InboundBuffer != nil {
 				log.Panicf("Inconsistent state:\n"+
 					"\tState=%v\n\tTxBusy=%v\n\tRecvInProgress=%v\n"+
-					"\tHasSentFCT=%v\n\tInboundReadDone=%v\n\tInboundBuffer=%v",
+					"\tPktsRcvd=%v\n\tFctsSent=%v\n\tInboundReadDone=%v\n\tInboundBuffer=%v",
 					ex.State, ex.TxBusy, ex.RecvInProgress,
-					ex.HasSentFCT, ex.InboundReadDone, ex.InboundBuffer)
+					ex.PktsRcvd, ex.FctsSent, ex.InboundReadDone, ex.InboundBuffer)
 			}
 
-			ex.HasSentFCT = true
-
-			ex.Transmit(io, lsink, codec.EncodeCtrlChar(codec.ChFlowControl, 0))
+			ex.FctsSent += 1
+			ex.Transmit(io, lsink, codec.EncodeCtrlChar(codec.ChFlowControl, ex.FctsSent))
 
 			for ex.State == StateOperating {
 				if ex.InboundReadDone && psink.CanAcceptPacket() {
@@ -276,20 +315,28 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 					break
 				}
 				io.Yield()
+				ex.CheckInvariants()
 			}
-			if ex.HasSentFCT {
+			if ex.PktsRcvd != ex.FctsSent {
 				panic("should have been reset by this point")
 			}
 		}
 	})
+	// Transmitter thread
 	component.BuildTwixt(ctx, []model.EventSource{psource, lsink, ex.CondNotify}, func(io *component.TwixtIO) {
+		ex.CheckInvariants()
 		for {
 			// wait until handshake completes, transmit is possible, and a packet is ready to be sent
-			for ex.State != StateOperating || !ex.RemoteSentFCT || ex.TxBusy || !psource.HasPacketAvailable() {
+			for ex.State != StateOperating || ex.PktsSent == ex.FctsRcvd || ex.TxBusy || !psource.HasPacketAvailable() {
 				io.Yield()
+				ex.CheckInvariants()
 			}
 			packet := psource.ReceivePacket()
-			ex.RemoteSentFCT = false
+			if ex.PktsSent != ex.FctsRcvd - 1 {
+				log.Panicf("invalid combination of pkts_sent and fcts_rcvd at this point: %v, %v",
+					ex.PktsSent, ex.FctsRcvd)
+			}
+			ex.PktsSent += 1
 			ex.Transmit(io, lsink, concat(
 				codec.EncodeCtrlChar(codec.ChStartPacket, 0),
 				codec.EncodeDataBytes(packet),
@@ -297,18 +344,21 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 			))
 		}
 	})
+	// Flow token thread
 	component.BuildTwixt(ctx, []model.EventSource{lsink, ex.CondNotify}, func(io *component.TwixtIO) {
-		nextHandshake := ctx.Now().Add(ex.HandshakePeriod())
+		ex.CheckInvariants()
+		nextInterval := ctx.Now().Add(ex.HandshakePeriod())
 		// requires that TxBusy is false
-		sendHandshake := func(handshake codec.ControlChar, handshakeId uint32) {
+		sendCtrlChar := func(ctrlChar codec.ControlChar, param uint32) {
 			ex.Transmit(io, lsink, concat(
-				codec.EncodeCtrlChar(handshake, handshakeId),
+				codec.EncodeCtrlChar(ctrlChar, param),
 			))
-			nextHandshake = ctx.Now().Add(ex.HandshakePeriod())
+			nextInterval = ctx.Now().Add(ex.HandshakePeriod())
 		}
 		for {
-			for ex.State == StateOperating || ex.TxBusy {
+			for ex.TxBusy {
 				io.Yield()
+				ex.CheckInvariants()
 			}
 			if ex.SendSecondaryHandshake {
 				if ex.State != StateConnecting {
@@ -317,7 +367,7 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 				// if indicated, send secondary handshake
 				handshakeId := ex.RecvHandshakeId
 
-				sendHandshake(codec.ChHandshake2, handshakeId)
+				sendCtrlChar(codec.ChHandshake2, handshakeId)
 
 				if !ex.SendSecondaryHandshake {
 					ex.Debug("Sent secondary handshake with ID=0x%08x, but request revoked by reset; not transitioning.", handshakeId)
@@ -334,10 +384,20 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 				}
 
 				ex.CondNotify.DispatchLater()
+			} else if ex.State == StateOperating {
+				// if we're operating... then we need to send FCTs and KATs on a regular basis
+				if ctx.Now().Before(nextInterval) {
+					io.YieldUntil(nextInterval)
+					ex.CheckInvariants()
+					continue
+				}
+				sendCtrlChar(codec.ChFlowControl, ex.FctsSent)
+				sendCtrlChar(codec.ChKeepAlive, ex.PktsSent)
 			} else {
 				// if we're in the handshaking state... then we need to send primary handshakes on a regular basis
-				if ctx.Now().Before(nextHandshake) {
-					io.YieldUntil(nextHandshake)
+				if ctx.Now().Before(nextInterval) {
+					io.YieldUntil(nextInterval)
+					ex.CheckInvariants()
 					continue
 				}
 				// pick something very likely to be distinct (Go picks msb unset, C picks msb set)
@@ -345,7 +405,7 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 				ex.SendHandshakeId = handshakeId
 				ex.State = StateHandshaking
 
-				sendHandshake(codec.ChHandshake1, handshakeId)
+				sendCtrlChar(codec.ChHandshake1, handshakeId)
 
 				ex.Debug("Sent primary handshake with ID=0x%08x.", handshakeId)
 			}

@@ -13,7 +13,8 @@ const (
 	ChEndPacket   ControlChar = 0x83
 	ChErrorPacket ControlChar = 0x84
 	ChFlowControl ControlChar = 0x85
-	ChEscapeSym   ControlChar = 0x86
+	ChKeepAlive   ControlChar = 0x86
+	ChEscapeSym   ControlChar = 0x87
 
 	// ChCodecError is an alias, because EscapeSym never needs to be passed to an upper layer
 	ChCodecError  = ChEscapeSym
@@ -35,6 +36,8 @@ func (cc ControlChar) String() string {
 		return "ErrorPacket"
 	case ChFlowControl:
 		return "FlowControl"
+	case ChKeepAlive:
+		return "KeepAlive"
 	case ChCodecError:
 		return "CodecError"
 	default:
@@ -43,7 +46,7 @@ func (cc ControlChar) String() string {
 }
 
 func (cc ControlChar) IsParametrized() bool {
-	return cc == ChHandshake1 || cc == ChHandshake2
+	return cc == ChHandshake1 || cc == ChHandshake2 || cc == ChFlowControl || cc == ChKeepAlive
 }
 
 func (cc ControlChar) Validate(param uint32) {
