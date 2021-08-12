@@ -17,6 +17,7 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
 static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol);
 
 //#define DEBUG
+//#define APIDEBUG
 
 #define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->label, str))
 #define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->label, __VA_ARGS__))
@@ -362,6 +363,10 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol) {
 ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet_max) {
     assert(fwe != NULL);
 
+#ifdef APIDEBUG
+    debug_printf("API read(%zu bytes) start", packet_max);
+#endif
+
     ssize_t actual_len = -1;
 
     mutex_lock(&fwe->mutex);
@@ -408,11 +413,23 @@ ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet
     }
     mutex_unlock(&fwe->mutex);
 
+#ifdef APIDEBUG
+    if (actual_len >= 0) {
+        debug_printf("API read(%zu bytes) success(%zd bytes)", packet_max, actual_len);
+    } else {
+        debug_printf("API read(%zu bytes) ERROR: disconnected", packet_max);
+    }
+#endif
+
     return actual_len;
 }
 
 int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
     assert(fwe != NULL);
+
+#ifdef APIDEBUG
+    debug_printf("API write(%zu bytes) start", packet_len);
+#endif
 
     mutex_lock(&fwe->mutex);
     // wait until handshake completes and transmit is possible
@@ -421,9 +438,17 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
 
         if (fwe->state == FW_EXC_DISCONNECTED) {
             mutex_unlock(&fwe->mutex);
+
+#ifdef APIDEBUG
+            debug_printf("API write(%zu bytes) ERROR: disconnected", packet_len);
+#endif
             return -1;
         }
 
+#ifdef APIDEBUG
+        debug_printf("API write(%zu bytes): WAIT(state=%d, flow=%d, busy=%d)",
+                     packet_len, fwe->state, fwe->remote_sent_fct, fwe->tx_busy);
+#endif
         cond_wait(&fwe->cond, &fwe->mutex);
     }
 
@@ -448,6 +473,10 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
     fwe->tx_busy = false;
     cond_broadcast(&fwe->cond);
     mutex_unlock(&fwe->mutex);
+
+#ifdef APIDEBUG
+    debug_printf("API write(%zu bytes) success", packet_len);
+#endif
 
     return 0;
 }

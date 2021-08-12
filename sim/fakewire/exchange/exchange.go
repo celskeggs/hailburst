@@ -210,7 +210,7 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar) {
 				ex.Reset()
 			} else {
 				if ex.InboundReadDone || ex.HasSentFCT {
-					log.Panicf("inconsistent state: {RecvInProgress=%v, InboundReadDone=%v, HasSentFCT=%v}",
+					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tHasSentFCT=%v\n",
 						ex.RecvInProgress, ex.InboundReadDone, ex.HasSentFCT)
 				}
 				ex.InboundReadDone = true
@@ -223,7 +223,8 @@ func (ex *Exchange) ReceiveCtrlChar(symbol codec.ControlChar) {
 				ex.Reset()
 			} else {
 				if !ex.InboundReadDone || ex.HasSentFCT {
-					panic("inconsistent state with RecvInProgress")
+					log.Panicf("inconsistent state:\n\tRecvInProgress=%v\n\tInboundReadDone=%v\n\tHasSentFCT=%v\n",
+						ex.RecvInProgress, ex.InboundReadDone, ex.HasSentFCT)
 				}
 				// discard the data in the current packet
 				ex.InboundBuffer = nil
@@ -305,7 +306,11 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 				io.Yield()
 			}
 			if ex.RecvInProgress || ex.HasSentFCT || ex.InboundReadDone || ex.InboundBuffer != nil {
-				panic("inconsistent state")
+				log.Panicf("Inconsistent state:\n"+
+					"\tState=%v\n\tTxBusy=%v\n\tRecvInProgress=%v\n"+
+					"\tHasSentFCT=%v\n\tInboundReadDone=%v\n\tInboundBuffer=%v",
+					ex.State, ex.TxBusy, ex.RecvInProgress,
+					ex.HasSentFCT, ex.InboundReadDone, ex.InboundBuffer)
 			}
 
 			ex.HasSentFCT = true
