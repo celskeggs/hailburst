@@ -100,8 +100,9 @@ func (ex *Exchange) ReceiveBytes(bytes []byte) {
 			ex.Reset()
 		} else if ex.InboundReadDone {
 			panic("inconsistent state")
+		} else {
+			ex.InboundBuffer = append(ex.InboundBuffer, bytes...)
 		}
-		ex.InboundBuffer = append(ex.InboundBuffer, bytes...)
 	} else {
 		ex.Debug("Received unexpected data character 0x%x during handshake mode %v; resetting.", bytes[0], ex.State)
 		ex.Reset()
