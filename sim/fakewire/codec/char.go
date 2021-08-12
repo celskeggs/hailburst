@@ -17,7 +17,7 @@ const (
 	ChEscapeSym   ControlChar = 0x87
 
 	// ChCodecError is an alias, because EscapeSym never needs to be passed to an upper layer
-	ChCodecError  = ChEscapeSym
+	ChCodecError = ChEscapeSym
 )
 
 func (cc ControlChar) String() string {

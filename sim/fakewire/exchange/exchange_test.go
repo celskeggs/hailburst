@@ -170,11 +170,11 @@ func InnerTestExchanges(t *testing.T, metered bool, count int, singleDir bool, d
 		})
 	}
 
-	// run for ten virtual minutes
-	nextTimer := sim.Advance(model.TimeZero.Add(duration))
-	if nextTimer.TimeExists() {
-		t.Errorf("Unexpectedly found that there was still another timer left after %v: %v", duration, nextTimer)
-	}
+	// run for test duration
+	_ = sim.Advance(model.TimeZero.Add(duration))
+	// NOTE: we can't check for whether a timer is still running,
+	// because we DO expect regular transmissions of FCTs and KATs,
+	// so there will definitely be a timer still running.
 	if !finishedL2R {
 		t.Errorf("Did not finish left-to-right validation")
 	}

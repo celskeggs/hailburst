@@ -332,7 +332,7 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 				ex.CheckInvariants()
 			}
 			packet := psource.ReceivePacket()
-			if ex.PktsSent != ex.FctsRcvd - 1 {
+			if ex.PktsSent != ex.FctsRcvd-1 {
 				log.Panicf("invalid combination of pkts_sent and fcts_rcvd at this point: %v, %v",
 					ex.PktsSent, ex.FctsRcvd)
 			}
