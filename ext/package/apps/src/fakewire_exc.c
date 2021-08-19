@@ -257,7 +257,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
         switch (symbol) {
         case FWC_HANDSHAKE_1:
             // abort connection and restart everything
-            debug_puts("Received primary handshake with ID=0x%08x during operating mode; resetting.");
+            debug_printf("Received primary handshake with ID=0x%08x during operating mode; resetting.", param);
             fakewire_exc_reset(fwe);
 
             // actually act on handshake
