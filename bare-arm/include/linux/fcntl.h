@@ -1,0 +1,9 @@
+#ifndef BARE_ARM_LINUX_FCNTL_H
+#define BARE_ARM_LINUX_FCNTL_H
+
+#define __ARCH_FLOCK64_PAD int __unused;
+
+#define O_CREAT		00000100
+#define O_TMPFILE	020000000
+
+#endif /* BARE_ARM_LINUX_FCNTL_H */

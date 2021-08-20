@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/celskeggs/hailburst/ctrl/util"
 	"io"
 	"log"
 	"os"
@@ -11,69 +12,12 @@ import (
 	"time"
 )
 
-type void struct{}
-
-type Processes struct {
-	Processes    []*os.Process
-	DoneChannels []<-chan void
-}
-
-func (p *Processes) LaunchInTerminal(path string, title string, cwd string) (wait func()) {
-	cmd := exec.Command("xterm", "-fa", "Monospace", "-T", title, "-fs", "10", "-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", path))
-	cmd.Dir = cwd
-	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
-	if err := cmd.Start(); err != nil {
-		log.Printf("Error launching command %q: %v", path, err)
-	}
-	p.Processes = append(p.Processes, cmd.Process)
-	done := make(chan void)
-	p.DoneChannels = append(p.DoneChannels, done)
-	go func() {
-		defer close(done)
-		if err := cmd.Wait(); err != nil {
-			log.Printf("Error on command %q: %v", path, err)
-		}
-	}()
-	return func() {
-		<-done
-	}
-}
-
-func (p *Processes) Interrupt() {
-	for _, proc := range p.Processes {
-		if err := proc.Signal(os.Interrupt); err != nil {
-			log.Printf("Error when interrupting: %v", err)
-		}
-	}
-	p.Processes = nil
-}
-
-func (p *Processes) WaitAll() {
-	for _, donech := range p.DoneChannels {
-		<-donech
-	}
-}
-
-func Exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-func hasArg(name string) bool {
-	for _, a := range os.Args[1:] {
-		if a == name {
-			return true
-		}
-	}
-	return false
-}
-
 func main() {
-	if hasArg("--help") {
+	if util.HasArg("--help") {
 		fmt.Printf("Usage: ./ctrl.sh [--rebuild]\n")
 		return
 	}
-	if hasArg("--rebuild") {
+	if util.HasArg("--rebuild") {
 		// first part is just to confirm that the code IS compilable (using the host toolchain)
 		fmt.Printf("Running make app/make clean as a precheck\n")
 		cmd := exec.Command("bash", "-c", "make app && make clean")
@@ -114,9 +58,9 @@ func main() {
 		"-ex", "source ./bare-arm/ctrl.py",
 		"-ex", "log_inject ./injections.csv",
 	}
-	if hasArg("--irradiate") {
+	if util.HasArg("--irradiate") {
 		gdbCmd = append(gdbCmd, "-ex", "campaign 10000 100ms")
-	} else if hasArg("--run") {
+	} else if util.HasArg("--run") {
 		gdbCmd = append(gdbCmd, "-ex", "stepvt 20s")
 	}
 	fmt.Printf("Launching applications...\n")
@@ -134,9 +78,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	p := Processes{}
+	p := util.Processes{}
 	p.LaunchInTerminal("go run ./sim/experiments/requirements |& tee sim.log", "Simulation", ".")
-	for i := 0; i < 10 && !Exists(timesyncSocket); i++ {
+	for i := 0; i < 10 && !util.Exists(timesyncSocket); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
 	p.LaunchInTerminal("\""+strings.Join(gdbCmd, "\" \"")+"\"", "GDB", ".")
@@ -158,11 +102,11 @@ func main() {
 		"-nographic",
 	}
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), "QEMU", ".")
-	for i := 0; i < 10 && !Exists(guestLog); i++ {
+	for i := 0; i < 10 && !util.Exists(guestLog); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
 	p.LaunchInTerminal("tail -f "+guestLog, "Guest Log", ".")
-	if hasArg("--monitor") {
+	if util.HasArg("--monitor") {
 		log.Printf("Monitoring requirements log...")
 		br := bufio.NewReader(f)
 		for {

@@ -1,3 +1,2 @@
-main.o
-start.o
+*.o
 kernel

@@ -12,6 +12,6 @@ interrupt_vector_table:
 _start:
     .globl _start
     ldr sp, =stack+0x10000 @ Set up the stack
-    bl main @ Jump to the main function
+    bl entrypoint @ Jump to the entrypoint function
 1:
     b 1b @ Halt

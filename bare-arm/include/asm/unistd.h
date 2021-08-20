@@ -1,0 +1,4 @@
+#ifndef BARE_ARM_ASM_UNISTD_H
+#define BARE_ARM_ASM_UNISTD_H
+
+#endif /* BARE_ARM_ASM_UNISTD_H */
