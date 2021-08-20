@@ -85,6 +85,10 @@ void _exit(int status) {
     __builtin_trap();
 }
 
+void abort(void) {
+    __builtin_trap();
+}
+
 extern __noreturn __libc_init(uintptr_t * elfdata, void (*onexit) (void));
 
 static struct {
@@ -107,4 +111,8 @@ static struct {
 
 void entrypoint(void) {
     __libc_init((uintptr_t*) &fixed_elfdata, NULL);
+}
+
+void vConfigureTickInterrupt(void) {
+    // TODO
 }
