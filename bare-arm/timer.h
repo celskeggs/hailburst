@@ -15,7 +15,6 @@ enum {
 };
 
 static inline uint64_t timer_now_ns(void) {
-    // TODO: I may want to consider hardcoding or caching the scale value...
     return arm_get_cntpct() * CLOCK_PERIOD_NS;
 }
 
