@@ -30,7 +30,7 @@ CFLAGS=$(COMMON_FLAGS) -Wall -Wextra -Werror -nostdlib -nostartfiles -ffreestand
 
 KLIBC_FILES=fputs lseek printf puts vfprintf vsnprintf \
       stdio/fdopen stdio/fflush stdio/fseek stdio/fwrite \
-      __static_init assert exit \
+      assert exit \
       memcpy memrchr memset strlen zalloc
 
 FREERTOS_FILES=tasks queue list portable/GCC/ARM_CA9/port portable/GCC/ARM_CA9/portASM portable/MemMang/heap_1

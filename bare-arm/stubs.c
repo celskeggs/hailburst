@@ -1,7 +1,10 @@
+#include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <sys/elf32.h>
+#include <FreeRTOS.h>
+#include <task.h>
+#include "gic.h"
 
 int errno = 0;
 
@@ -63,34 +66,39 @@ void free(void *addr) {
 }
 
 void _exit(int status) {
-    (void) status;
+    printf("EXIT called with status=%d\n", status);
     abort();
 }
 
 void abort(void) {
-    while (1) {}
+    asm volatile("CPSID i");
+    shutdown_gic();
+    while (1) {
+        asm volatile("WFI");
+    }
 }
 
-extern __noreturn __libc_init(uintptr_t * elfdata, void (*onexit) (void));
+extern void __libc_init_stdio(void);
+extern int main(int argc, char **argv, char **envp);
 
-static struct {
-    uintptr_t argc;
-    char *argv[2];
-    char *envp[1];
-    struct {
-        unsigned long type;
-        unsigned long v;
-    } auxentries[2];
-} fixed_elfdata = {
-    .argc = 1,
-    .argv = { "kernel", NULL },
-    .envp = { NULL },
-    .auxentries = {
-        { AT_PAGESZ, 4096 },
-        { AT_NULL },
-    },
-};
+static void main_entrypoint(void *opaque) {
+    (void) opaque;
+
+    char *argv[] = {"kernel", NULL};
+    char *envp[] = {NULL};
+    exit(main(1, argv, envp));
+}
 
 void entrypoint(void) {
-    __libc_init((uintptr_t*) &fixed_elfdata, NULL);
+    // we don't call __libc_init because we don't actually NEED all of that machinery
+    __libc_init_stdio();
+    configure_gic();
+    BaseType_t status = xTaskCreate(main_entrypoint, "main", 200, NULL, 1, NULL);
+    if (status != pdPASS) {
+        puts("Error: could not create main task.");
+        abort();
+    }
+    vTaskStartScheduler();
+    printf("Scheduler halted.\n");
+    abort();
 }

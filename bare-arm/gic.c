@@ -82,6 +82,11 @@ void enable_irq(uint32_t irq, gic_callback_t callback) {
     callbacks[irq] = callback;
 }
 
+void shutdown_gic(void) {
+    dist->gicd_ctlr = 0;
+    cpu->gicc_ctlr = 0;
+}
+
 void configure_gic(void) {
     num_interrupts = ((dist->gicd_typer & 0x1F) + 1) * 32;
 

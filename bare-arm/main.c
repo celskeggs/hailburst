@@ -36,14 +36,7 @@ void scrub_loop(void *param) {
     }
 }
 
-int main(int argc, char *argv[0])
-{
-    printf("Initialized: argc=%d, argv[0]=%s\n", argc, argv[0]);
-
-    configure_gic();
-
-    printf("Initialized GIC.\n");
-
+int main(void) {
     BaseType_t status;
     status = xTaskCreate(timer_loop, "timer_loop", 100, NULL, 4, NULL);
     if (status != pdPASS) {
@@ -57,10 +50,6 @@ int main(int argc, char *argv[0])
         return 1;
     }
 
-    puts("Starting scheduler...");
-
-    vTaskStartScheduler();
-
-    puts("Error: ran out of RAM before scheduler was initialized");
-    return 1;
+    vTaskSuspend(NULL);
+    return 0;
 }
