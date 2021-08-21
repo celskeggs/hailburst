@@ -22,7 +22,7 @@ typedef struct {
 static uint8_t zero[8] = {0};
 
 static uint8_t *cmd_parser_consume(cmd_parser_t *parser, ssize_t n_bytes) {
-    assert(n_bytes > 0 && n_bytes <= sizeof(zero));
+    assert(n_bytes > 0 && n_bytes <= (ssize_t) sizeof(zero));
     parser->bytes_remaining -= n_bytes;
     if (parser->bytes_remaining >= 0) {
         uint8_t *ptr_out = parser->bytes_ptr;
@@ -64,6 +64,7 @@ typedef struct {
 } cmd_t;
 
 static cmd_status_t cmd_ping(spacecraft_t *sc, cmd_parser_t *p) {
+    (void) sc;
     // parse
     uint32_t ping_id = cmd_parse_u32(p);
     if (!cmd_parser_wrapup(p)) {

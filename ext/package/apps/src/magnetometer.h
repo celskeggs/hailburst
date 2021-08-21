@@ -14,8 +14,8 @@ typedef struct {
     rmap_addr_t address;
 
     // synchronization
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    mutex_t mutex;
+    cond_t cond;
 
     // protected control flag
     bool should_be_powered;
@@ -24,8 +24,8 @@ typedef struct {
     size_t num_readings;
     tlm_mag_reading_t readings[MAGNETOMETER_MAX_READINGS];
 
-    pthread_t query_thread;
-    pthread_t telem_thread;
+    thread_t query_thread;
+    thread_t telem_thread;
 } magnetometer_t;
 
 void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address);

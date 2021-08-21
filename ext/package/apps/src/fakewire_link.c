@@ -93,7 +93,7 @@ static void *fakewire_link_output_loop(void *opaque) {
 #ifdef DEBUG
         debug_printf("Finished writing %zd bytes to file descriptor.", actual);
 #endif
-        if (actual != count_bytes) {
+        if (actual != (ssize_t) count_bytes) {
             debug_printf("Write failed: %zd bytes instead of %zu bytes", actual, count_bytes);
             return NULL;
         }
@@ -127,7 +127,7 @@ static void *fakewire_link_input_loop(void *opaque) {
 #ifdef DEBUG
         debug_printf("Read %zd bytes from file descriptor.", actual);
 #endif
-        assert(actual > 0 && actual <= sizeof(read_buf));
+        assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
 
         if (fwl->shutdown) {
             break;
@@ -149,6 +149,9 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
     // first, let's open the file descriptors for our I/O backend of choice
 
     if (flags == FW_FLAG_FIFO_CONS || flags == FW_FLAG_FIFO_PROD) {
+#ifdef __FREERTOS__
+        assert(!"no FIFOs on FreeRTOS");
+#else
         // alternate mode for host testing via pipe
 
         if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
@@ -168,6 +171,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
         }
         fwl->fd_in = (flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
         fwl->fd_out = (flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
+#endif
     } else if (flags == FW_FLAG_VIRTIO) {
         fwl->fd_out = fwl->fd_in = open(path, O_RDWR | O_NOCTTY);
         if (fwl->fd_in < 0) {
@@ -175,6 +179,9 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
             return -1;
         }
     } else {
+#ifdef __FREERTOS__
+        assert(!"no serial on FreeRTOS");
+#else
         assert(flags == FW_FLAG_SERIAL);
         fwl->fd_out = fwl->fd_in = open(path, O_RDWR | O_NOCTTY | O_NDELAY);
         if (fwl->fd_in < 0) {
@@ -211,6 +218,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
             perror("tcsetattr");
             return -1;
         }
+#endif
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
 

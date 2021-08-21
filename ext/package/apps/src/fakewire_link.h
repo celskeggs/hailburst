@@ -18,8 +18,8 @@ typedef struct {
     fw_encoder_t  encoder;
     fw_decoder_t  decoder;
 
-    pthread_t output_thread;
-    pthread_t input_thread;
+    thread_t output_thread;
+    thread_t input_thread;
 } fw_link_t;
 
 enum {

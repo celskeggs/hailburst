@@ -84,8 +84,13 @@ static void spacecraft_init(void) {
 }
 
 int main(int argc, char *argv[]) {
+    (void) argc;
+    (void) argv;
+
+#ifndef __FREERTOS__
 	freopen("/dev/console", "w", stdout);
 	freopen("/dev/console", "w", stderr);
+#endif
 
     debug0("Initializing...");
 

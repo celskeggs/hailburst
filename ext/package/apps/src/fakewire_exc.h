@@ -20,12 +20,12 @@ typedef struct fw_exchange_st {
     fw_link_t         io_port;
     fw_receiver_t     link_interface;
 
-    pthread_mutex_t mutex;
-    pthread_cond_t  cond;
+    mutex_t mutex;
+    cond_t  cond;
     bool tx_busy;
     bool detaching;
 
-    pthread_t flowtx_thread;
+    thread_t flowtx_thread;
 
     uint32_t send_handshake_id; // generated handshake ID if in HANDSHAKING mode
     uint32_t recv_handshake_id; // received handshake ID

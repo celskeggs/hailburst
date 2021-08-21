@@ -45,12 +45,12 @@ static ringbuf_t telemetry_ring;
 // atomic
 static uint32_t telemetry_dropped = 0;
 // to protect sync flags
-static pthread_mutex_t sync_flag_mutex;
-static pthread_cond_t sync_flag_cond;
+static mutex_t sync_flag_mutex;
+static cond_t sync_flag_cond;
 // to hold scratch buffers
 static ringbuf_t scratch_buffers;
 
-static pthread_t telemetry_mainloop_thread;
+static thread_t telemetry_mainloop_thread;
 
 static void *telemetry_mainloop(void *encoder_opaque);
 
@@ -274,7 +274,7 @@ void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_reading
         *out++ = htons(readings[i].mag_y);
         *out++ = htons(readings[i].mag_z);
     }
-    assert((uint8_t*) out - scratch_buf == num_readings * 14);
+    assert((uint8_t*) out - scratch_buf == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream
     telemetry_record_sync(MAG_READINGS_ARRAY_TID, scratch_buf, num_readings * 14);

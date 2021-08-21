@@ -4,7 +4,7 @@
 #include "arm.h"
 #include "gic.h"
 #include "io.h"
-#include "timer.h"
+#include <timer.h>
 
 volatile unsigned int scan_buffer[64 * 1024];
 

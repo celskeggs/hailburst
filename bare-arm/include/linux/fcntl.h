@@ -3,7 +3,9 @@
 
 #define __ARCH_FLOCK64_PAD int __unused;
 
-#define O_CREAT		00000100
+#define O_RDWR		000000002
+#define O_CREAT		000000100
+#define O_NOCTTY    000000400
 #define O_TMPFILE	020000000
 
 #endif /* BARE_ARM_LINUX_FCNTL_H */

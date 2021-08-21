@@ -4,12 +4,25 @@
 #include <assert.h>
 #include <stdint.h>
 #include <time.h>
-
 #include "rmap.h"
 
-extern int64_t clock_offset_adj;
-
 void clock_init(rmap_monitor_t *mon, rmap_addr_t *address);
+
+#ifdef __FREERTOS__
+
+#include <timer.h>
+
+static inline uint64_t clock_timestamp_monotonic(void) {
+    return timer_now_ns();
+}
+
+static inline uint64_t clock_timestamp(void) {
+    return timer_now_ns();
+}
+
+#else
+
+extern int64_t clock_offset_adj;
 
 static inline uint64_t clock_timestamp_monotonic(void) {
     struct timespec ct;
@@ -21,5 +34,7 @@ static inline uint64_t clock_timestamp_monotonic(void) {
 static inline uint64_t clock_timestamp(void) {
     return clock_timestamp_monotonic() + clock_offset_adj;
 }
+
+#endif
 
 #endif /* APP_CLOCK_H */

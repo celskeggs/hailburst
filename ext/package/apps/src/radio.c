@@ -177,7 +177,7 @@ static bool radio_read_registers(radio_t *radio, rmap_context_t *ctx,
                                  radio_register_t first_reg, radio_register_t last_reg, uint32_t *output) {
     rmap_status_t status;
     assert(output != NULL);
-    assert(0 <= first_reg && first_reg <= last_reg && last_reg < NUM_REGISTERS);
+    assert(first_reg <= last_reg && last_reg < NUM_REGISTERS);
     size_t expected_read_len = (last_reg - first_reg + 1) * 4;
     assert(expected_read_len > 0);
     size_t actual_read_len;
@@ -222,11 +222,11 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
                                   radio_register_t first_reg, radio_register_t last_reg, uint32_t *input) {
     rmap_status_t status;
     assert(input != NULL);
-    assert(0 <= first_reg && first_reg <= last_reg && last_reg < NUM_REGISTERS);
+    assert(first_reg <= last_reg && last_reg < NUM_REGISTERS);
     size_t num_regs = last_reg - first_reg + 1;
     uint32_t input_copy[num_regs];
     // convert to big-endian
-    for (int i = 0; i < num_regs; i++) {
+    for (size_t i = 0; i < num_regs; i++) {
         input_copy[i] = ntohl(input[i]);
     }
     assert(num_regs > 0);
@@ -377,8 +377,8 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         read_length = (reg[REG_RX_PTR] - radio->rx_halves[read_half].base) - read_half_offset;
         read_length_flip = 0;
     }
-    assert(read_length >= 0 && read_half_offset + read_length <= radio->rx_halves[read_half].size);
-    assert(read_length_flip >= 0 && read_length_flip <= radio->rx_halves[read_half ? 0 : 1].size);
+    assert(read_half_offset + read_length <= radio->rx_halves[read_half].size);
+    assert(read_length_flip <= radio->rx_halves[read_half ? 0 : 1].size);
 
     // constrain the read to the actual size of the temporary buffer
     if (read_length > UPLINK_BUF_LOCAL_SIZE) {
@@ -389,14 +389,14 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     // and perform both the prime and flipped reads as necessary
-    assert(read_length >= 0 && read_length <= UPLINK_BUF_LOCAL_SIZE);
+    assert(read_length <= UPLINK_BUF_LOCAL_SIZE);
     if (read_length > 0) {
         if (!radio_read_memory(radio, &radio->up_ctx, radio->rx_halves[read_half].base + read_half_offset, read_length, radio->uplink_buf_local)) {
             return -1;
         }
     }
 
-    assert(read_length_flip >= 0 && read_length_flip <= UPLINK_BUF_LOCAL_SIZE - read_length);
+    assert(read_length_flip <= UPLINK_BUF_LOCAL_SIZE - read_length);
     if (read_length_flip > 0) {
         if (!radio_read_memory(radio, &radio->up_ctx, radio->rx_halves[read_half ? 0 : 1].base, read_length_flip, radio->uplink_buf_local + read_length)) {
             return -1;

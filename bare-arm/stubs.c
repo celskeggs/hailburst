@@ -42,9 +42,13 @@ __noreturn __assert_fail(const char *expr, const char *file, unsigned int line) 
     abort();
 }
 
-void _exit(int status) {
+__noreturn _exit(int status) {
     printk("system exit status %d\n", status);
     abort();
+}
+
+__noreturn exit(int status) {
+    _exit(status);
 }
 
 void abort(void) {
@@ -53,6 +57,26 @@ void abort(void) {
     while (1) {
         asm volatile("WFI");
     }
+}
+
+void usleep(unsigned long usec) {
+    TickType_t ticks = pdMS_TO_TICKS(usec / 1000);
+    if (usec > 0 && ticks == 0) {
+        ticks = 1;
+    }
+    vTaskDelay(ticks);
+}
+
+void *malloc(size_t size) {
+    return pvPortMalloc(size);
+}
+
+void free(void *ptr) {
+    vPortFree(ptr);
+}
+
+void perror(const char *s) {
+    printk("perror: %s\n", s);
 }
 
 extern int main(int argc, char **argv, char **envp);

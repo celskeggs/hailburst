@@ -4,6 +4,10 @@
 struct timezone;
 struct timeval;
 struct itimerval;
-struct timespec;
+
+struct timespec {
+    long tv_sec;
+    long tv_nsec;
+};
 
 #endif /* BARE_ARM_LINUX_TIME_H */

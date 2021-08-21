@@ -1,0 +1,4 @@
+#ifndef BARE_ARM_ASM_SOCKET_H
+#define BARE_ARM_ASM_SOCKET_H
+
+#endif /* BARE_ARM_ASM_SOCKET_H */

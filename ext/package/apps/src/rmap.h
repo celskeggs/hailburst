@@ -52,11 +52,11 @@ typedef struct {
     size_t scratch_size;
     uint8_t *scratch_buffer;
 
-    pthread_mutex_t pending_mutex;
-    pthread_cond_t  pending_cond;
+    mutex_t pending_mutex;
+    cond_t  pending_cond;
     rmap_context_t *pending_first;
 
-    pthread_t monitor_thread;
+    thread_t monitor_thread;
 } rmap_monitor_t;
 
 typedef struct rmap_context_st {

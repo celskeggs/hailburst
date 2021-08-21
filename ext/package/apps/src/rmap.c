@@ -562,7 +562,7 @@ static void *rmap_monitor_recvloop(void *mon_opaque) {
             mon->hit_recv_err = true;
             return NULL;
         }
-        if (count > mon->scratch_size) {
+        if (count > (ssize_t) mon->scratch_size) {
             debugf("RMAP packet received was too large for buffer: %zd > %zu; discarding.", count, mon->scratch_size);
         } else if (!rmap_recv_handle(mon, mon->scratch_buffer, count)) {
             debug0("RMAP packet received was corrupted or unexpected.");

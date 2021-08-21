@@ -1,6 +1,10 @@
 #ifndef BARE_ARM_LINUX_POSIX_TYPES_H
 #define BARE_ARM_LINUX_POSIX_TYPES_H
 
+#include <bitsize/stdint.h>
+
+typedef uintptr_t __kernel_size_t;
+
 // stub types because these aren't usable on bare metal
 typedef void __kernel_clock_t;
 typedef void __kernel_caddr_t;

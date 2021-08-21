@@ -96,7 +96,7 @@ void fakewire_exc_detach(fw_exchange_t *fwe) {
 
     assert(fwe->state != FW_EXC_DISCONNECTED);
     assert(!fwe->detaching);
-    pthread_t flowtx_thread = fwe->flowtx_thread;
+    thread_t flowtx_thread = fwe->flowtx_thread;
 
     // set state to cause teardown
     fwe->state = FW_EXC_DISCONNECTED;

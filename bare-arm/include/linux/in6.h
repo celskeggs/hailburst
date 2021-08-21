@@ -1,0 +1,4 @@
+#ifndef BARE_ARM_LINUX_IN6_H
+#define BARE_ARM_LINUX_IN6_H
+
+#endif /* BARE_ARM_LINUX_IN6_H */

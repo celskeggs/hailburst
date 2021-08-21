@@ -2,7 +2,7 @@
 #include <FreeRTOS.h>
 #include "arm.h"
 #include "gic.h"
-#include "timer.h"
+#include <timer.h>
 
 extern void FreeRTOS_Tick_Handler(void);
 

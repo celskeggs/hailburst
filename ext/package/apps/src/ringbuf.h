@@ -11,8 +11,8 @@ typedef enum {
 
 // implementation based on the "good option" from here: https://www.snellman.net/blog/archive/2016-12-13-ring-buffers/
 typedef struct {
-    pthread_mutex_t mutex;
-    pthread_cond_t  cond;
+    mutex_t mutex;
+    cond_t  cond;
 
     bool shutdown;
 

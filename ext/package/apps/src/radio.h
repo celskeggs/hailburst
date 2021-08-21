@@ -19,8 +19,8 @@ typedef struct {
     uint32_t       bytes_extracted;
     ringbuf_t     *up_ring;
     ringbuf_t     *down_ring;
-    pthread_t      up_thread;
-    pthread_t      down_thread;
+    thread_t       up_thread;
+    thread_t       down_thread;
     uint8_t       *uplink_buf_local;
     uint8_t       *downlink_buf_local;
 } radio_t;

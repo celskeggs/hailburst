@@ -2,7 +2,8 @@
 #define BARE_ARM_TIMER_H
 
 #include <stdint.h>
-#include "arm.h"
+#include <arm.h>
+#include <FreeRTOS.h>
 
 enum {
     TIMER_NS_PER_SEC = 1000000000,

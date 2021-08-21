@@ -6,7 +6,7 @@
 #include "thread.h"
 
 typedef struct {
-    pthread_t thread;
+    thread_t thread;
 } heartbeat_t;
 
 void heartbeat_init(heartbeat_t *heart);

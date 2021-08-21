@@ -1,7 +1,6 @@
 #ifndef BARE_ARM_ASM_IOCTLS_H
 #define BARE_ARM_ASM_IOCTLS_H
 
-/*
 #define TCGETS		0x5401
 #define TCSBRK		0x5409
 #define TCXONC		0x540A
@@ -10,6 +9,5 @@
 #define TIOCSPGRP	0x5410
 #define TCSBRKP		0x5425
 #define TIOCGSID	0x5429
-*/
 
 #endif /* BARE_ARM_ASM_IOCTLS_H */
