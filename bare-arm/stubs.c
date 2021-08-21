@@ -55,7 +55,6 @@ void abort(void) {
     }
 }
 
-extern void __libc_init_stdio(void);
 extern int main(int argc, char **argv, char **envp);
 
 static void main_entrypoint(void *opaque) {
