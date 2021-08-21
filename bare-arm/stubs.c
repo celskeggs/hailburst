@@ -33,7 +33,7 @@ ssize_t write(int fd, const void *buf, size_t size) {
         }
         return size;
     } else {
-        __builtin_trap();
+        abort();
     }
 }
 
@@ -43,7 +43,7 @@ int __llseek(int fd, unsigned long offset_high, unsigned long offset_low, off_t 
     (void) offset_low;
     (void) result;
     (void) whence;
-    __builtin_trap();
+    abort();
 }
 
 static uint8_t static_heap[65536];
@@ -62,31 +62,13 @@ void free(void *addr) {
     (void) addr;
 }
 
-/*
-void *mmap(void *addr, size_t length, int prot, int flags, int fd, long offset) {
-    (void) addr;
-    (void) length;
-    (void) prot;
-    (void) flags;
-    (void) fd;
-    (void) offset;
-    __builtin_trap();
-}
-
-void *munmap(void *addr, size_t length) {
-    (void) addr;
-    (void) length;
-    __builtin_trap();
-}
-*/
-
 void _exit(int status) {
     (void) status;
-    __builtin_trap();
+    abort();
 }
 
 void abort(void) {
-    __builtin_trap();
+    while (1) {}
 }
 
 extern __noreturn __libc_init(uintptr_t * elfdata, void (*onexit) (void));
@@ -111,8 +93,4 @@ static struct {
 
 void entrypoint(void) {
     __libc_init((uintptr_t*) &fixed_elfdata, NULL);
-}
-
-void vConfigureTickInterrupt(void) {
-    // TODO
 }

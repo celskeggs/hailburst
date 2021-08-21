@@ -6,8 +6,7 @@
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configUSE_TICKLESS_IDLE                 0
-// #define configCPU_CLOCK_HZ                      60000000
-// #define configSYSTICK_CLOCK_HZ                  1000000
+// configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      250
 #define configMAX_PRIORITIES                    5
 #define configMINIMAL_STACK_SIZE                128
@@ -89,7 +88,7 @@ extern void vConfigureTickInterrupt(void);
 #define INCLUDE_vTaskSuspend                    0
 #define INCLUDE_xResumeFromISR                  0
 #define INCLUDE_vTaskDelayUntil                 0
-#define INCLUDE_vTaskDelay                      0
+#define INCLUDE_vTaskDelay                      1
 #define INCLUDE_xTaskGetSchedulerState          0
 #define INCLUDE_xTaskGetCurrentTaskHandle       0
 #define INCLUDE_uxTaskGetStackHighWaterMark     0

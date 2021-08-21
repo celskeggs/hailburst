@@ -55,7 +55,7 @@ freertos-build/%.o: $(FREERTOS_ROOT)/%.S
 %.o: %.c
 	$(GCC) $(CFLAGS) -o $@ -c $<
 
-kernel: start.o main.o stubs.o $(foreach f,$(KLIBC_FILES),klibc-build/$(f).o) $(foreach f,$(FREERTOS_FILES),freertos-build/$(f).o)
+kernel: start.o main.o stubs.o timer.o gic.o $(foreach f,$(KLIBC_FILES),klibc-build/$(f).o) $(foreach f,$(FREERTOS_FILES),freertos-build/$(f).o)
 	$(LD) -T link.ld -o $@ $^ $(LIBGCC_LIBRARY_PATH)
 
 clean:

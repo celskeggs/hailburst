@@ -57,6 +57,7 @@ func main() {
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
+		"-d", "guest_errors",
 		"-vga", "none",
 		// "-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-serial", "file:" + guestLog,
