@@ -28,10 +28,7 @@ CFLAGS=$(COMMON_FLAGS) -Wall -Wextra -Werror -nostdlib -nostartfiles -ffreestand
        -D__KLIBC__=$(shell cut -d. -f1 $(KLIBC_VERSION_FILE)) \
        -D_BITSIZE=32
 
-KLIBC_FILES=fputs lseek printf puts vfprintf vsnprintf \
-      stdio/fdopen stdio/fflush stdio/fseek stdio/fwrite \
-      assert exit \
-      memcpy memrchr memset strlen zalloc
+KLIBC_FILES=vsnprintf memcpy memrchr memset strlen
 
 FREERTOS_FILES=tasks queue list portable/GCC/ARM_CA9/port portable/GCC/ARM_CA9/portASM portable/MemMang/heap_1
 

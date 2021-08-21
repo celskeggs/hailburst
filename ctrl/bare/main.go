@@ -15,9 +15,20 @@ func main() {
 		fmt.Printf("Usage: go run ./ctrl/bare [--rebuild]\n")
 		return
 	}
+	if util.HasArg("--clean") {
+		// build the image
+		fmt.Printf("Cleaning makefile...\n")
+		cmd := exec.Command("make", "clean")
+		cmd.Dir = "bare-arm"
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+	}
 	if util.HasArg("--rebuild") {
 		// build the image
-		fmt.Printf("Running makefile...\n")
+		fmt.Printf("Rebuilding makefile...\n")
 		cmd := exec.Command("make", "kernel")
 		cmd.Dir = "bare-arm"
 		cmd.Stdout = os.Stdout
