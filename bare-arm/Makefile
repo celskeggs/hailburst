@@ -29,8 +29,8 @@ CFLAGS=$(COMMON_FLAGS) -Wall -Wextra -Werror -nostdlib -nostartfiles -ffreestand
        -D_BITSIZE=32
 
 KLIBC_FILES=fputs lseek printf puts vfprintf vsnprintf \
-	  stdio/fdopen stdio/fflush stdio/fseek stdio/fwrite \
-	  __static_init assert exit \
+      stdio/fdopen stdio/fflush stdio/fseek stdio/fwrite \
+      __static_init assert exit \
       memcpy memrchr memset strlen zalloc
 
 FREERTOS_FILES=tasks queue list portable/GCC/ARM_CA9/port portable/GCC/ARM_CA9/portASM portable/MemMang/heap_1
@@ -38,8 +38,6 @@ FREERTOS_FILES=tasks queue list portable/GCC/ARM_CA9/port portable/GCC/ARM_CA9/p
 klibc-build/%.o: $(KLIBC_SRC)/%.c
 	mkdir -p $$(dirname $@)
 	$(GCC) $(CFLAGS) -o $@ -c $<
-
-klibc-build/malloc.o: CFLAGS+=-Wno-unused-parameter
 
 freertos-build/%.o: $(FREERTOS_ROOT)/%.c
 	mkdir -p $$(dirname $@)
