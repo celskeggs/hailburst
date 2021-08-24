@@ -11,7 +11,8 @@ enum {
     IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
 };
 
-static void timer_callback(void) {
+static void timer_callback(void *opaque) {
+    (void) opaque;
     // update the next callback time to the next timing tick
     arm_set_cntp_cval(arm_get_cntp_cval() + TICK_RATE_IN_CLOCK_UNITS);
     // call tick handler
@@ -33,5 +34,5 @@ void vConfigureTickInterrupt(void) {
     arm_set_cntp_ctl(ARM_TIMER_ENABLE);
 
     // enable the IRQ
-    enable_irq(IRQ_PHYS_TIMER, timer_callback);
+    enable_irq(IRQ_PHYS_TIMER, timer_callback, NULL);
 }

@@ -38,7 +38,7 @@ void printk(const char *format, ...) {
 }
 
 __noreturn __assert_fail(const char *expr, const char *file, unsigned int line) {
-    printk("ASSERT FAILED at %s:%u: %s\n", expr, file, line);
+    printk("ASSERT FAILED at %s:%u: %s\n", file, line, expr);
     abort();
 }
 

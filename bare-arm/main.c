@@ -4,6 +4,7 @@
 #include "arm.h"
 #include "gic.h"
 #include "io.h"
+#include "virtio.h"
 #include <timer.h>
 
 volatile unsigned int scan_buffer[64 * 1024];
@@ -37,8 +38,20 @@ void scrub_loop(void *param) {
     }
 }
 
+static struct virtio_console console;
+
 int main(void) {
+    if (!virtio_init(&console, VIRTIO_MMIO_ADDRESS, VIRTIO_MMIO_IRQ)) {
+        printk("Failed to initialize virtio device.\n");
+        return 1;
+    }
+    printk("Initialization on main thread complete. Suspending main thread to let others run.\n");
+    vTaskSuspend(NULL);
+    return 0;
+
+/*
     BaseType_t status;
+
     status = xTaskCreate(timer_loop, "timer_loop", 1000, NULL, 4, NULL);
     if (status != pdPASS) {
         printk("Error: could not create timer_loop task: error %d\n", status);
@@ -51,6 +64,6 @@ int main(void) {
         return 1;
     }
 
-    vTaskSuspend(NULL);
     return 0;
+*/
 }

@@ -64,8 +64,9 @@ static struct gic_cpu_reg  *cpu  = (struct gic_cpu_reg *)  GIC_CPU_ADDR;
 
 static uint32_t num_interrupts = 0;
 static gic_callback_t callbacks[1020] = { NULL };
+static void *callback_params[1020] = { NULL };
 
-void enable_irq(uint32_t irq, gic_callback_t callback) {
+void enable_irq(uint32_t irq, gic_callback_t callback, void *param) {
     assert(irq < sizeof(callbacks) / sizeof(callbacks[0]));
     assert(irq < num_interrupts);
 
@@ -79,7 +80,9 @@ void enable_irq(uint32_t irq, gic_callback_t callback) {
     dist->gicd_isenabler[off]  = mask;  // enable IRQ
 
     assert(callbacks[irq] == NULL);
+    assert(callback_params[irq] == NULL);
     callbacks[irq] = callback;
+    callback_params[irq] = param;
 }
 
 void shutdown_gic(void) {
@@ -128,5 +131,5 @@ void configure_gic(void) {
 void vApplicationIRQHandler(uint32_t irq) {
     asm volatile("CPSIE I");
     assert(callbacks[irq] != NULL);
-    callbacks[irq]();
+    callbacks[irq](callback_params[irq]);
 }

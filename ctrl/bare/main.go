@@ -70,11 +70,12 @@ func main() {
 		"-icount", "shift=1,sleep=off",
 		"-d", "guest_errors",
 		"-vga", "none",
-		// "-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-serial", "file:" + guestLog,
-		// "-device", "virtio-serial-device",
-		// "-device", "virtserialport,name=tsvc0,chardev=ts0",
-		"-nographic",
+		"-chardev", "vc,id=ts0",
+		"-device", "virtio-serial-device",
+		"-device", "virtserialport,name=tsvc0,chardev=ts0",
+		"-global", "virtio-mmio.force-legacy=false",
+		// "-nographic",
 	}
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), "QEMU", ".")
 	for i := 0; i < 10 && !util.Exists(guestLog); i++ {
