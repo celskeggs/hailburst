@@ -260,7 +260,7 @@ static void virtio_monitor(struct virtq *vq) {
     // only monitor if initialized
     if (vq->num > 0) {
         assert(vq->desc != NULL && vq->used != NULL);
-        if (vq->last_used_idx != CPU_TO_LE32(vq->used->idx)) {
+        while (vq->last_used_idx != CPU_TO_LE32(vq->used->idx)) {
             struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
             chain_bytes = elem->len;
             size_t desc = elem->id;
@@ -337,7 +337,7 @@ static void transmit_ready_cb(struct virtio_console *con, void *opaque, size_t c
     (void) con;
 
     printk("completed transmit of ready message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
-    assert(chain_bytes == sizeof(struct virtio_console_control));
+    assert(chain_bytes == 0);
 }
 
 static void receive_ctrl_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
@@ -463,6 +463,20 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
     struct virtq *ctrl_rx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE);
     struct virtq *ctrl_tx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT);
 
+    // initialize receive request for control queue first, so that replies don't get dropped
+    struct virtio_console_control *ctrl_recv = zalloc(sizeof(struct virtio_console_control));
+    assert(ctrl_recv != NULL);
+    struct vector_entry ents_recv = {
+        .data_buffer = ctrl_recv,
+        .length = sizeof(struct virtio_console_control),
+        .is_receive = true,
+    };
+
+    bool ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
+    assert(ok);
+    // TODO: have more than one receive request buffer in flight, so that multiple messages in a row won't get dropped
+
+    // now request initialization
     struct virtio_console_control *ctrl = malloc(sizeof(struct virtio_console_control));
     assert(ctrl != NULL);
     ctrl->id = 0xFFFFFFFF;
@@ -474,18 +488,7 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
         .length = sizeof(struct virtio_console_control),
         .is_receive = false,
     };
-    bool ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_ready_cb, ctrl);
-    assert(ok);
-
-    struct virtio_console_control *ctrl_recv = zalloc(sizeof(struct virtio_console_control));
-    assert(ctrl_recv != NULL);
-    struct vector_entry ents_recv = {
-        .data_buffer = ctrl_recv,
-        .length = sizeof(struct virtio_console_control),
-        .is_receive = true,
-    };
-
-    ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
+    ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_ready_cb, ctrl);
     assert(ok);
 
     return true;

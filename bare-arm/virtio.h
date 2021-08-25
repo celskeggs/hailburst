@@ -6,7 +6,8 @@
 
 enum {
     VIRTIO_MMIO_ADDRESS   = 0x0A003E00,
-    VIRTIO_MMIO_IRQ       = 47,
+    VIRTIO_MMIO_IRQS_BASE = IRQ_SPI_BASE + 16,          // base of the MMIO region IRQs
+    VIRTIO_MMIO_IRQ       = VIRTIO_MMIO_IRQS_BASE + 31, // IRQ for MMIO region #31
 };
 
 struct virtio_console {

@@ -64,7 +64,7 @@
 #define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET 0x00010000
 // 256 external interrupts + 32 internal interrupts
 #define configUNIQUE_INTERRUPT_PRIORITIES               (256)
-#define configMAX_API_CALL_INTERRUPT_PRIORITY           (256) // no idea if this is the right value
+#define configMAX_API_CALL_INTERRUPT_PRIORITY           (129) // no idea if this is the right value
 
 /* Define to trap errors during development. */
 //#define configASSERT( ( x ) ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )

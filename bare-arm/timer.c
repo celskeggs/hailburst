@@ -7,7 +7,6 @@
 extern void FreeRTOS_Tick_Handler(void);
 
 enum {
-    IRQ_PPI_BASE = 16,
     IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
 };
 

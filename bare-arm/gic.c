@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <FreeRTOS.h>
 #include "arm.h"
 #include "gic.h"
 
@@ -76,7 +77,7 @@ void enable_irq(uint32_t irq, gic_callback_t callback, void *param) {
     dist->gicd_icfgr[off]     &= ~mask; // set level-sensitive
     dist->gicd_icactiver[off]  = mask;  // clear active bit
     dist->gicd_icpendr[off]    = mask;  // clear pending bit
-    dist->gicd_ipriorityr[irq] = 0x80;  // set medium priority
+    dist->gicd_ipriorityr[irq] = 0xF0;  // set priority allowing FreeRTOS calls
     dist->gicd_isenabler[off]  = mask;  // enable IRQ
 
     assert(callbacks[irq] == NULL);
