@@ -114,6 +114,11 @@ struct virtio_console_control {
 };
 _Static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
 
+enum {
+    // max handled length of received console names
+    VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
+};
+
 static void *zalloc_aligned(size_t size, size_t align) {
     assert(size > 0 && align > 0);
     uint8_t *out = zalloc(size + align - 1);
@@ -165,11 +170,11 @@ static struct virtq *virtio_get_vq(struct virtio_console *con, size_t vqn) {
     if (con->mmio->queue_num_max == 0) {
         printk("VIRTIO device queue %d was unexpectedly nonexistent; failing.\n", vqn);
         mutex_unlock(&vq->mutex);
-        return false;
+        return NULL;
     }
     size_t num = con->mmio->queue_num_max;
-    if (num > 2) {
-        num = 2;
+    if (num > 4) {
+        num = 4;
     }
     vq->con = con;
     vq->vq_index = vqn;
@@ -187,18 +192,14 @@ static struct virtq *virtio_get_vq(struct virtio_console *con, size_t vqn) {
     return vq;
 }
 
-struct vector_entry {
-    void *data_buffer;
-    size_t length;
-    bool is_receive;
-};
-
 // TODO: go back through and add all the missing conversions from LE32 to CPU
 bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_count, transact_cb cb, void *param) {
     assert(vq != NULL);
     assert(ents != NULL);
     assert(ent_count > 0);
     assert(cb != NULL);
+
+    // printk("beginning transaction on vq=%u...\n", vq->vq_index);
 
     mutex_lock(&vq->mutex);
     assert(vq->num > 0);
@@ -215,7 +216,7 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
         }
     }
     if (filled < ent_count) {
-        printk("VIRTIO: no more descriptors to use in ring buffer\n");
+        printk("VIRTIO: no more descriptors to use in ring buffer for vq=%u\n", vq->vq_index);
         mutex_unlock(&vq->mutex);
         return false;
     }
@@ -234,8 +235,8 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
         vq->desc[desc].flags = (i < ent_count - 1 ? VIRTQ_DESC_F_NEXT : 0) | (ents[i].is_receive ? VIRTQ_DESC_F_WRITE : 0);
         vq->desc[desc].next = (i < ent_count - 1 ? descriptors[i+1] : 0xFFFF);
     }
-    vq->desc_meta[0].callback = cb;
-    vq->desc_meta[0].callback_param = param;
+    vq->desc_meta[descriptors[0]].callback = cb;
+    vq->desc_meta[descriptors[0]].callback_param = param;
     vq->avail->ring[vq->avail->idx % vq->num] = descriptors[0];
     asm volatile("dsb");
     vq->avail->idx++;
@@ -245,58 +246,97 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
     }
 
     mutex_unlock(&vq->mutex);
+    printk("dispatched transaction on vq=%u.\n", vq->vq_index);
     return true;
+}
+
+struct virtio_transact_sync_status {
+    TaskHandle_t wake;
+    ssize_t total_length;
+};
+
+static void virtio_transact_sync_done(struct virtio_console *con, void *opaque, size_t chain_bytes) {
+    (void) con;
+
+    struct virtio_transact_sync_status *status = (struct virtio_transact_sync_status *) opaque;
+    assert(status->total_length == -1);
+    status->total_length = chain_bytes;
+    assert(status->total_length >= 0);
+    xTaskNotifyGive(status->wake);
+}
+
+ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count) {
+    struct virtio_transact_sync_status status = {
+        .wake         = xTaskGetCurrentTaskHandle(),
+        .total_length = -1,
+    };
+    if (!virtio_transact(vq, ents, ent_count, virtio_transact_sync_done, &status)) {
+        return -1;
+    }
+
+    // wait until transaction completes
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    assert(status.total_length >= 0);
+    return status.total_length;
 }
 
 static void virtio_monitor(struct virtq *vq) {
     assert(vq != NULL);
 
-    transact_cb callback = NULL;
-    void *callback_param = NULL;
-    size_t chain_bytes = 0;
-
     mutex_lock(&vq->mutex);
-
     // only monitor if initialized
-    if (vq->num > 0) {
-        assert(vq->desc != NULL && vq->used != NULL);
-        while (vq->last_used_idx != CPU_TO_LE32(vq->used->idx)) {
-            struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
-            chain_bytes = elem->len;
-            size_t desc = elem->id;
-            for (;;) {
-                assert(desc < vq->num);
-                assert(vq->desc_meta[desc].in_use == true);
-                vq->desc_meta[desc].in_use = false;
-                if (callback == NULL) {
-                    callback = vq->desc_meta[desc].callback;
-                    callback_param = vq->desc_meta[desc].callback_param;
-                    assert(callback != NULL);
-                    // zero out state for safety
-                    vq->desc_meta[desc].callback = NULL;
-                    vq->desc_meta[desc].callback_param = NULL;
-                } else {
-                    assert(vq->desc_meta[desc].callback == NULL);
-                    assert(vq->desc_meta[desc].callback_param == NULL);
-                }
-                // zero out state for safety
-                vq->desc[desc].addr = 0xFFFFFFFF;
-                vq->desc[desc].len = 0;
-                // continue if additional elements in chain
-                if (vq->desc[desc].flags & VIRTQ_DESC_F_NEXT) {
-                    desc = vq->desc[desc].next;
-                } else {
-                    break;
-                }
-            }
-            vq->last_used_idx++;
-            assert(callback != NULL);
-        }
+    if (vq->num == 0) {
+        mutex_unlock(&vq->mutex);
+        return;
     }
-
     mutex_unlock(&vq->mutex);
 
-    if (callback != NULL) {
+    // this section doesn't need to be locked (except descriptor manipulation, inside) because it only accesses
+    // vq->last_used_idx (only accessed by this function anyway) and vq->used (only accessed here and by the device)
+    printk("processing monitor for virtqueue %u\n", vq->vq_index);
+    assert(vq->desc != NULL && vq->used != NULL);
+    while (vq->last_used_idx != CPU_TO_LE32(vq->used->idx)) {
+        struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
+        printk("received used entry %u for virtqueue %u: id=%u, len=%u\n", vq->last_used_idx, vq->vq_index, elem->id, elem->len);
+        size_t chain_bytes = elem->len;
+        size_t desc = elem->id;
+
+        transact_cb callback = NULL;
+        void *callback_param = NULL;
+
+        mutex_lock(&vq->mutex);
+        for (;;) {
+            assert(desc < vq->num);
+            assert(vq->desc_meta[desc].in_use == true);
+            vq->desc_meta[desc].in_use = false;
+            if (callback == NULL) {
+                callback = vq->desc_meta[desc].callback;
+                callback_param = vq->desc_meta[desc].callback_param;
+                assert(callback != NULL);
+                // zero out state for safety
+                vq->desc_meta[desc].callback = NULL;
+                vq->desc_meta[desc].callback_param = NULL;
+            } else {
+                assert(vq->desc_meta[desc].callback == NULL);
+                assert(vq->desc_meta[desc].callback_param == NULL);
+            }
+            // zero out state for safety
+            vq->desc[desc].addr = 0xFFFFFFFF;
+            vq->desc[desc].len = 0;
+            // continue if additional elements in chain
+            if (vq->desc[desc].flags & VIRTQ_DESC_F_NEXT) {
+                desc = vq->desc[desc].next;
+            } else {
+                break;
+            }
+        }
+        mutex_unlock(&vq->mutex);
+
+        vq->last_used_idx++;
+        assert(callback != NULL);
+
+        printk("calling monitor callback.\n");
         callback(vq->con, callback_param, chain_bytes);
     }
 }
@@ -307,11 +347,13 @@ static void virtio_monitor_loop(void *opaque_con) {
 
     for (;;) {
         // wait for event
+        printk("waiting for monitor event...\n");
         BaseType_t value;
         value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         assert(value != 0);
 
         // process event
+        printk("processing monitor event...\n");
         for (size_t i = 0; i < con->num_queues; i++) {
             virtio_monitor(&con->virtqueues[i]);
         }
@@ -331,21 +373,43 @@ static void virtio_irq_callback(void *opaque_con) {
     portYIELD_FROM_ISR(was_woken);
 }
 
-static void transmit_ready_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
-    assert(opaque != NULL);
-    free(opaque);
-    (void) con;
-
-    printk("completed transmit of ready message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
-    assert(chain_bytes == 0);
-}
-
 static void receive_ctrl_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
     assert(opaque != NULL);
     struct virtio_console_control *ctrl_recv = (struct virtio_console_control *) opaque;
 
     printk("received CTRL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)\n", ctrl_recv->id, ctrl_recv->event, ctrl_recv->value, chain_bytes);
-    assert(chain_bytes == sizeof(struct virtio_console_control));
+
+    if (ctrl_recv->event == VIRTIO_CONSOLE_DEVICE_ADD) {
+        assert(chain_bytes == sizeof(struct virtio_console_control));
+
+        struct virtio_console_port *port = malloc(sizeof(struct virtio_console_port));
+        assert(port != NULL);
+        size_t base_queue = (ctrl_recv->id == 0 ? 0 : 2 + ctrl_recv->id * 2);
+        port->console   = con;
+        port->port_num  = ctrl_recv->id;
+        port->receiveq  = virtio_get_vq(con, base_queue + 0);
+        port->transmitq = virtio_get_vq(con, base_queue + 1);
+
+        con->callback(con->callback_param, port);
+    } else if (ctrl_recv->event == VIRTIO_CONSOLE_PORT_NAME) {
+        assert(chain_bytes > sizeof(struct virtio_console_control));
+        size_t n = chain_bytes - sizeof(struct virtio_console_control);
+        if (n > VIRTIO_CONSOLE_CTRL_RECV_MARGIN) {
+            n = VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
+        }
+
+        char name[VIRTIO_CONSOLE_CTRL_RECV_MARGIN + 1];
+        memcpy(name, ctrl_recv + 1, n);
+        name[n] = '\0';
+
+        printk("device name: '%s' (%u)\n", name, n);
+    } else if (ctrl_recv->event == VIRTIO_CONSOLE_PORT_OPEN) {
+        assert(chain_bytes == sizeof(struct virtio_console_control));
+        assert(ctrl_recv->value == 1);
+    } else {
+        printk("UNHANDLED event: ctrl event %u\n", ctrl_recv->event);
+    }
+
     memset(ctrl_recv, 0, sizeof(struct virtio_console_control));
 
     struct vector_entry ents_recv = {
@@ -359,35 +423,80 @@ static void receive_ctrl_cb(struct virtio_console *con, void *opaque, size_t cha
     assert(ok);
 }
 
-bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
+static void transmit_port_ready_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
+    assert(opaque != NULL);
+    free(opaque);
+    (void) con;
+
+    printk("completed transmit of PORT_READY message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
+    assert(chain_bytes == 0);
+}
+
+void virtio_serial_ready(struct virtio_console_port *port) {
+    assert(port != NULL);
+
+    struct virtq *ctrl_tx_q = virtio_get_vq(port->console, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT);
+
+    for (int event = 0; event < 2; event++) {
+        struct virtio_console_control *ctrl = malloc(sizeof(struct virtio_console_control));
+        assert(ctrl != NULL);
+        ctrl->id = port->port_num;
+        ctrl->event = (event == 0) ? VIRTIO_CONSOLE_PORT_READY : VIRTIO_CONSOLE_PORT_OPEN;
+        ctrl->value = 1;
+
+        struct vector_entry ents = {
+            .data_buffer = ctrl,
+            .length = sizeof(struct virtio_console_control),
+            .is_receive = false,
+        };
+        bool ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_port_ready_cb, ctrl);
+        assert(ok);
+    }
+}
+
+static void transmit_ready_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
+    assert(opaque != NULL);
+    free(opaque);
+    (void) con;
+
+    printk("completed transmit of ready message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
+    assert(chain_bytes == 0);
+}
+
+void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_addr, uint32_t irq) {
     struct virtio_mmio_registers *mmio = (struct virtio_mmio_registers *) mem_addr;
+    struct virtio_console *con = malloc(sizeof(struct virtio_console));
+    assert(con != NULL);
+
     con->mmio = mmio;
     con->config = (struct virtio_console_config *) (mmio + 1);
     con->irq = irq;
+    con->callback = callback;
+    con->callback_param = param;
 
     printk("VIRTIO device: addr=%x, irq=%u\n", mem_addr, irq);
 
     if (LE32_TO_CPU(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
         printk("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; not initializing.\n",
                LE32_TO_CPU(mmio->magic_value), VIRTIO_MAGIC_VALUE);
-        return false;
+        return;
     }
 
     if (LE32_TO_CPU(mmio->version) == VIRTIO_LEGACY_VERSION) {
         printk("VIRTIO device configured as legacy-only; cannot initialize.\n"
                "Set -global virtio-mmio.force-legacy=false to fix this.\n");
-        return false;
+        return;
     } else if (LE32_TO_CPU(mmio->version) != VIRTIO_VERSION) {
         printk("VIRTIO device version not recognized: found %u instead of %u\n",
                LE32_TO_CPU(mmio->version), VIRTIO_VERSION);
-        return false;
+        return;
     }
 
     // make sure this is a serial port
     if (LE32_TO_CPU(mmio->device_id) != VIRTIO_CONSOLE_ID) {
         printk("VIRTIO device ID=%u instead of CONSOLE (%u)\n",
                LE32_TO_CPU(mmio->device_id), VIRTIO_CONSOLE_ID);
-        return false;
+        return;
     }
 
     // reset the device
@@ -408,13 +517,13 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
         printk("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x).\n"
                "Legacy devices are not supported.\n", features, VIRTIO_F_VERSION_1);
         mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        return;
     }
     if (!(features & VIRTIO_CONSOLE_F_MULTIPORT)) {
         printk("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x).\n"
                "This configuration is not yet supported.\n", features, VIRTIO_CONSOLE_F_MULTIPORT);
         mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        return;
     }
 
     // write selected bits back
@@ -429,7 +538,7 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
     if (!(LE32_TO_CPU(mmio->status) & VIRTIO_DEVSTAT_FEATURES_OK)) {
         printk("VIRTIO device did not set FEATURES_OK: read back status=%08x.\n", mmio->status);
         mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        return;
     }
 
     printk("number of ports: %d\n", con->config->max_nr_ports);
@@ -450,7 +559,7 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
     if (status != pdPASS) {
         printk("could not initialize virtio-monitor task; failed.\n");
         mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        return;
     }
     assert(con->monitor_task != NULL);
 
@@ -464,17 +573,18 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
     struct virtq *ctrl_tx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT);
 
     // initialize receive request for control queue first, so that replies don't get dropped
-    struct virtio_console_control *ctrl_recv = zalloc(sizeof(struct virtio_console_control));
-    assert(ctrl_recv != NULL);
-    struct vector_entry ents_recv = {
-        .data_buffer = ctrl_recv,
-        .length = sizeof(struct virtio_console_control),
-        .is_receive = true,
-    };
+    for (int i = 0; i < 4; i++) {
+        struct virtio_console_control *ctrl_recv = zalloc(sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN);
+        assert(ctrl_recv != NULL);
+        struct vector_entry ents_recv = {
+            .data_buffer = ctrl_recv,
+            .length = sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN,
+            .is_receive = true,
+        };
 
-    bool ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
-    assert(ok);
-    // TODO: have more than one receive request buffer in flight, so that multiple messages in a row won't get dropped
+        bool ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
+        assert(ok);
+    }
 
     // now request initialization
     struct virtio_console_control *ctrl = malloc(sizeof(struct virtio_console_control));
@@ -488,8 +598,19 @@ bool virtio_init(struct virtio_console *con, uintptr_t mem_addr, uint32_t irq) {
         .length = sizeof(struct virtio_console_control),
         .is_receive = false,
     };
-    ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_ready_cb, ctrl);
+    bool ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_ready_cb, ctrl);
     assert(ok);
+}
 
-    return true;
+static bool virtio_initialized = false;
+
+void virtio_init(virtio_port_cb callback, void *param) {
+    assert(!virtio_initialized);
+    virtio_initialized = true;
+
+    for (size_t n = 0; n < VIRTIO_MMIO_REGION_NUM; n++) {
+        virtio_init_console(callback, param,
+                            VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * n,
+                            VIRTIO_MMIO_IRQS_BASE + n);
+    }
 }

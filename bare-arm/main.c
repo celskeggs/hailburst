@@ -6,6 +6,7 @@
 #include "io.h"
 #include "virtio.h"
 #include <timer.h>
+#include <thread_freertos.h>
 
 volatile unsigned int scan_buffer[64 * 1024];
 
@@ -38,13 +39,48 @@ void scrub_loop(void *param) {
     }
 }
 
-static struct virtio_console console;
+static void *mainloop_run(void *opaque) {
+    struct virtio_console_port *port = (struct virtio_console_port *) opaque;
+
+    virtio_serial_ready(port);
+
+    char data_buffer[] = "Hello, World!\n";
+    struct vector_entry txv = {
+        .data_buffer = data_buffer,
+        .length      = sizeof(data_buffer) - 1,
+        .is_receive  = false,
+    };
+    printk("Transacting...\n");
+    ssize_t actual = virtio_transact_sync(port->transmitq, &txv, 1);
+    printk("Transacted: %zd!\n", actual);
+    assert(actual == 0);
+
+    char rdata[1024];
+    struct vector_entry rxv = {
+        .data_buffer = rdata,
+        .length      = sizeof(rdata),
+        .is_receive  = true,
+    };
+    printk("Transacting read...\n");
+    actual = virtio_transact_sync(port->receiveq, &rxv, 1);
+    printk("Transacted: %zd: %s!\n", actual, rdata);
+
+    return NULL;
+}
+
+static void console_initialize(void *opaque, struct virtio_console_port *con) {
+    (void) opaque;
+
+    printk("Initialized console... starting thread.\n");
+    thread_t ptr;
+    thread_create(&ptr, mainloop_run, con);
+    // discard ptr
+}
 
 int main(void) {
-    if (!virtio_init(&console, VIRTIO_MMIO_ADDRESS, VIRTIO_MMIO_IRQ)) {
-        printk("Failed to initialize virtio device.\n");
-        return 1;
-    }
+    printk("Initializing all virtio ports...\n");
+    virtio_init(console_initialize, NULL);
+
     printk("Initialization on main thread complete. Suspending main thread to let others run.\n");
     vTaskSuspend(NULL);
     return 0;

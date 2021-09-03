@@ -6,6 +6,25 @@
 
 #include "fakewire_codec.h"
 
+#ifdef __FREERTOS__
+#include <virtio.h>
+
+typedef struct {
+    mutex_t                     port_mutex;
+    SemaphoreHandle_t           port_acquired;
+    struct virtio_console_port *port;
+
+    const char *label;
+
+    fw_receiver_t interface;
+    ringbuf_t     enc_ring;
+    fw_encoder_t  encoder;
+    fw_decoder_t  decoder;
+
+    thread_t output_thread;
+    thread_t input_thread;
+} fw_link_t;
+#else
 typedef struct {
     int fd_in;
     int fd_out;
@@ -21,6 +40,7 @@ typedef struct {
     thread_t output_thread;
     thread_t input_thread;
 } fw_link_t;
+#endif
 
 enum {
     FW_FLAG_SERIAL    = 0,

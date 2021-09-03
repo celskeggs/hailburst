@@ -83,6 +83,7 @@ int fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags) {
     return 0;
 }
 
+#ifndef __FREERTOS__
 void fakewire_exc_detach(fw_exchange_t *fwe) {
     // acquire lock and check assumptions
 #ifdef DEBUG
@@ -139,6 +140,7 @@ void fakewire_exc_detach(fw_exchange_t *fwe) {
     fwe->detaching = false;
     mutex_unlock(&fwe->mutex);
 }
+#endif
 
 static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;

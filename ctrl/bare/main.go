@@ -55,10 +55,18 @@ func main() {
 	// remove old logs; ignore any errors
 	guestLog := "guest.log"
 	_ = os.Remove(guestLog)
+	f, err := os.Create(guestLog)
+	if err == nil {
+		err = f.Close()
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	p := util.Processes{}
 	p.LaunchInTerminal("\""+strings.Join(gdbCmd, "\" \"")+"\"", "GDB", ".")
 	time.Sleep(time.Millisecond * 100)
+	p.LaunchInTerminal("tail -f "+guestLog, "Guest Log", ".")
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
@@ -69,6 +77,10 @@ func main() {
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
 		"-d", "guest_errors",
+		"--trace", "virtio_serial*",
+		"--trace", "virtio_console*",
+		"--trace", "virtio_queue*",
+		"--trace", "virtio_notify*",
 		"-vga", "none",
 		"-serial", "file:" + guestLog,
 		"-chardev", "vc,id=ts0",
@@ -81,7 +93,6 @@ func main() {
 	for i := 0; i < 10 && !util.Exists(guestLog); i++ {
 		time.Sleep(time.Millisecond * 100)
 	}
-	p.LaunchInTerminal("tail -f "+guestLog, "Guest Log", ".")
 	waitMain()
 	fmt.Printf("Interrupting all...\n")
 	p.Interrupt()

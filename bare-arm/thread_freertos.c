@@ -1,5 +1,6 @@
 #include <FreeRTOS.h>
 #include "thread_freertos.h"
+#include "io.h"
 
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
@@ -31,6 +32,9 @@ void thread_create(thread_t *out, void *(*start_routine)(void*), void *arg) {
     state->handle = NULL;
 
     status = xTaskCreate(thread_entrypoint, "anonymous_thread", 1000, state, 3, &state->handle);
+    if (status == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY) {
+        printk("Out of memory while allocating anonymous task.\n");
+    }
     assert(status == pdPASS);
 
     *out = state;

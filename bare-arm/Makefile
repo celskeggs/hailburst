@@ -31,10 +31,10 @@ CFLAGS=$(COMMON_FLAGS) -Wall -Wextra -Werror -nostdlib -nostartfiles -ffreestand
        -D_BITSIZE=32 \
        -D__FREERTOS__
 
-LOCAL_FILES=start stubs timer gic thread_freertos main virtio
+LOCAL_FILES=start stubs timer gic thread_freertos virtio main
 KLIBC_FILES=vsnprintf memcpy memrchr memset memmove strlen zlib/crc32 lrand48 jrand48 zalloc
 FREERTOS_FILES=tasks queue list portable/GCC/ARM_CA9/port portable/GCC/ARM_CA9/portASM portable/MemMang/heap_4
-# APP_FILES=spacecraft clock_freertos ringbuf cmd fakewire_codec fakewire_link fakewire_exc rmap tlm comm magnetometer heartbeat radio
+# APP_FILES=spacecraft clock_freertos ringbuf cmd fakewire_codec fakewire_link_freertos fakewire_exc rmap tlm comm magnetometer heartbeat radio
 
 klibc-build/%.o: $(KLIBC_SRC)/%.c
 	mkdir -p $$(dirname $@)
