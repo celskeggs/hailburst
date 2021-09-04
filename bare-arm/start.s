@@ -1,12 +1,12 @@
 interrupt_vector_table:
     b .                         @ Reset
-    b .
-    b FreeRTOS_SWI_Handler      @ SWI instruction
-    b .
-    b .
-    b .
-    b FreeRTOS_IRQ_Handler      @ IRQ request
-    b .
+    b .                         @ Undefined Instruction
+    b FreeRTOS_SWI_Handler      @ Supervisor Call (SWI instruction)
+    b .                         @ Prefetch Abort
+    b .                         @ Data Abort
+    b .                         @ (unused)
+    b FreeRTOS_IRQ_Handler      @ IRQ interrupt
+    b .                         @ FIQ interrupt
 
 .comm stack,     0x1000         @ Reserve 4k stack in the BSS
 .comm irq_stack, 0x1000         @ Reserve 4k stack in the BSS

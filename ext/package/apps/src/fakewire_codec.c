@@ -1,5 +1,5 @@
-#include <arpa/inet.h>
 #include <assert.h>
+#include <endian.h>
 #include <string.h>
 
 #include "debug.h"

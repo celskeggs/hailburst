@@ -9,6 +9,13 @@ enum {
     ARM_TIMER_ISTATUS = 0x00000004,
 };
 
+enum {
+    ARM_FPEXC_EN = 0x40000000, // enable bit
+
+    ARM_CPACR_CP10_FULL_ACCESS = 0x300000, // enable CP10 with full access
+    ARM_CPACR_CP11_FULL_ACCESS = 0xC00000, // enable CP11 with full access
+};
+
 /** Physical Timer Control Register (CNTP_CTL) **/
 static inline void arm_set_cntp_ctl(uint32_t v) {
     asm("MCR p15, 0, %0, c14, c2, 1" : : "r" (v));
@@ -46,6 +53,28 @@ static inline uint64_t arm_get_cntpct(void) {
     uint32_t v_low, v_high;
     asm("MRRC p15, 0, %0, %1, c14" : "=r" (v_low), "=r" (v_high));
     return ((uint64_t) v_high << 32) | v_low;
+}
+
+/** Coprocessor Access Control Register (CPACR) **/
+static inline void arm_set_cpacr(uint32_t v) {
+    asm("MCR p15, 0, %0, c1, c0, 2" : : "r" (v));
+}
+
+static inline uint32_t arm_get_cpacr(void) {
+    uint32_t v;
+    asm("MRC p15, 0, %0, c1, c0, 2" : "=r" (v));
+    return v;
+}
+
+/** Floating-Point Exception Control register (FPEXC) **/
+static inline void arm_set_fpexc(uint32_t v) {
+    asm("VMSR FPEXC, %0" : : "r" (v));
+}
+
+static inline uint32_t arm_get_fpexc(void) {
+    uint32_t v;
+    asm("VMRS %0, FPEXC" : "=r" (v));
+    return v;
 }
 
 #endif /* BARE_ARM_ARM_H */

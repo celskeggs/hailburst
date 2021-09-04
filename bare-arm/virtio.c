@@ -121,10 +121,11 @@ enum {
 
 static void *zalloc_aligned(size_t size, size_t align) {
     assert(size > 0 && align > 0);
-    uint8_t *out = zalloc(size + align - 1);
+    uint8_t *out = malloc(size + align - 1);
     if (out == NULL) {
         return NULL;
     }
+    memset(out, 0, size + align - 1);
     size_t misalignment = (size_t) out % align;
     if (misalignment != 0) {
         out += align - misalignment;
@@ -138,7 +139,7 @@ static void virtqueue_init(struct virtq *vq, size_t num) {
     assert(num > 0);
 
     vq->num = num;
-    vq->desc_meta = zalloc(sizeof(struct virtq_desc_meta) * num);
+    vq->desc_meta = zalloc_aligned(sizeof(struct virtq_desc_meta) * num, 1);
     assert(vq->desc_meta != NULL);
     vq->desc = zalloc_aligned(sizeof(struct virtq_desc) * num, 16);
     assert(vq->desc != NULL);
@@ -574,7 +575,7 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
 
     // initialize receive request for control queue first, so that replies don't get dropped
     for (int i = 0; i < 4; i++) {
-        struct virtio_console_control *ctrl_recv = zalloc(sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN);
+        struct virtio_console_control *ctrl_recv = zalloc_aligned(sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 1);
         assert(ctrl_recv != NULL);
         struct vector_entry ents_recv = {
             .data_buffer = ctrl_recv,
