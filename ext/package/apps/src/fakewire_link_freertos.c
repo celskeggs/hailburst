@@ -143,11 +143,11 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
     virtio_init(fakewire_link_setup, fwl);
 
     // port
-    printk("Waiting for VIRTIO port to be configured...\n");
+    debug0("Waiting for VIRTIO port to be configured...");
     BaseType_t status = xSemaphoreTake(fwl->port_acquired, portMAX_DELAY);
     assert(status == pdTRUE);
     assert(fwl->port != NULL);
-    printk("VIRTIO port identified! Proceeding with fakewire initialization.\n");
+    debug0("VIRTIO port identified! Proceeding with fakewire initialization.");
 
     // next, let's configure all the data structures and interfaces
     fwl->interface = (fw_receiver_t) {

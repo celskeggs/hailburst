@@ -1,4 +1,0 @@
-#ifndef BARE_ARM_LINUX_SOCKET_H
-#define BARE_ARM_LINUX_SOCKET_H
-
-#endif /* BARE_ARM_LINUX_SOCKET_H */

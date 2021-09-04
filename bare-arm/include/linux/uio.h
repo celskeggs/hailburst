@@ -1,4 +1,0 @@
-#ifndef BARE_ARM_LINUX_UIO_H
-#define BARE_ARM_LINUX_UIO_H
-
-#endif /* BARE_ARM_LINUX_UIO_H */

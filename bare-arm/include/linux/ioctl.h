@@ -1,4 +1,0 @@
-#ifndef BARE_ARM_LINUX_IOCTL_H
-#define BARE_ARM_LINUX_IOCTL_H
-
-#endif /* BARE_ARM_LINUX_IOCTL_H */

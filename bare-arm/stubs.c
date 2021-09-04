@@ -4,8 +4,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <arm.h>
-#include "gic.h"
-#include "io.h"
+#include <gic.h>
 
 int errno = 0;
 
@@ -21,7 +20,7 @@ void _putchar(char c) {
 }
 
 __attribute__((noreturn)) void _Exit(int status) {
-    printk("system exit status %d\n", status);
+    printf("system exit status %d\n", status);
     abort();
 }
 
@@ -50,7 +49,7 @@ void free(void *ptr) {
 }
 
 void perror(const char *s) {
-    printk("perror: %s\n", s);
+    printf("perror: %s\n", s);
 }
 
 extern int main(int argc, char **argv, char **envp);
@@ -74,10 +73,10 @@ void entrypoint(void) {
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, 1, NULL);
     if (status != pdPASS) {
-        printk("Error: could not create main task.\n");
+        printf("Error: could not create main task.\n");
         abort();
     }
     vTaskStartScheduler();
-    printk("Scheduler halted.\n");
+    printf("Scheduler halted.\n");
     abort();
 }

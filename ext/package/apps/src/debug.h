@@ -1,22 +1,16 @@
 #ifndef APP_DEBUG_H
 #define APP_DEBUG_H
 
+#include <stdio.h>
 #include "clock.h"
 
 #ifdef __FREERTOS__
-
-#include <io.h>
-
-#define debug0(str)      (printk("[%3.9f] %s\n", clock_timestamp() / 1000000000.0, str))
-#define debugf(fmt, ...) (printk("[%3.9f] " fmt "\n", clock_timestamp() / 1000000000.0, __VA_ARGS__))
-
+#define _AND_FLUSH
 #else
-
-#include <stdio.h>
-
-#define debug0(str)      (printf("[%3.9f] %s\n", clock_timestamp() / 1000000000.0, str), fflush(stdout))
-#define debugf(fmt, ...) (printf("[%3.9f] " fmt "\n", clock_timestamp() / 1000000000.0, __VA_ARGS__), fflush(stdout))
-
+#define _AND_FLUSH , fflush(stdout)
 #endif
+
+#define debug0(str)      (printf("[%3.9f] %s\n", clock_timestamp() / 1000000000.0, str) _AND_FLUSH)
+#define debugf(fmt, ...) (printf("[%3.9f] " fmt "\n", clock_timestamp() / 1000000000.0, __VA_ARGS__) _AND_FLUSH)
 
 #endif /* APP_DEBUG_H */
