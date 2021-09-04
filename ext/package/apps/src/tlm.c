@@ -134,7 +134,7 @@ static void *telemetry_mainloop(void *encoder_opaque) {
             debugf("Telemetry dropped: MessagesLost=%u", drop_count);
 
             // convert to big-endian
-            drop_count = htonl(drop_count);
+            drop_count = htobe32(drop_count);
 
             // fill in telemetry packet
             packet.cmd_tlm_id = TLM_DROPPED_TID;
@@ -183,9 +183,9 @@ void tlm_cmd_received(uint64_t original_timestamp, uint32_t original_command_id)
 
     tlm_elem_t tlm = { .telemetry_id = CMD_RECEIVED_TID, .data_len = 12 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
-    *out++ = htonl((uint32_t) (original_timestamp >> 32));
-    *out++ = htonl((uint32_t) original_timestamp);
-    *out++ = htonl(original_command_id);
+    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
+    *out++ = htobe32((uint32_t) original_timestamp);
+    *out++ = htobe32(original_command_id);
     telemetry_record_async(&tlm);
 }
 
@@ -195,9 +195,9 @@ void tlm_cmd_completed(uint64_t original_timestamp, uint32_t original_command_id
 
     tlm_elem_t tlm = { .telemetry_id = CMD_COMPLETED_TID, .data_len = 13 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
-    *out++ = htonl((uint32_t) (original_timestamp >> 32));
-    *out++ = htonl((uint32_t) original_timestamp);
-    *out++ = htonl(original_command_id);
+    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
+    *out++ = htobe32((uint32_t) original_timestamp);
+    *out++ = htobe32(original_command_id);
     tlm.data_bytes[12] = (success ? 1 : 0);
     telemetry_record_async(&tlm);
 }
@@ -208,10 +208,10 @@ void tlm_cmd_not_recognized(uint64_t original_timestamp, uint32_t original_comma
 
     tlm_elem_t tlm = { .telemetry_id = CMD_NOT_RECOGNIZED_TID, .data_len = 16 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
-    *out++ = htonl((uint32_t) (original_timestamp >> 32));
-    *out++ = htonl((uint32_t) original_timestamp);
-    *out++ = htonl(original_command_id);
-    *out++ = htonl(length);
+    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
+    *out++ = htobe32((uint32_t) original_timestamp);
+    *out++ = htobe32(original_command_id);
+    *out++ = htobe32(length);
     telemetry_record_async(&tlm);
 }
 
@@ -220,7 +220,7 @@ void tlm_pong(uint32_t ping_id) {
 
     tlm_elem_t tlm = { .telemetry_id = PONG_TID, .data_len = 4 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
-    *out++ = htonl(ping_id);
+    *out++ = htobe32(ping_id);
     telemetry_record_async(&tlm);
 }
 
@@ -229,8 +229,8 @@ void tlm_clock_calibrated(int64_t adjustment) {
 
     tlm_elem_t tlm = { .telemetry_id = CLOCK_CALIBRATED_TID, .data_len = 8 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
-    *out++ = htonl((uint32_t) (adjustment >> 32));
-    *out++ = htonl((uint32_t) (adjustment >> 0));
+    *out++ = htobe32((uint32_t) (adjustment >> 32));
+    *out++ = htobe32((uint32_t) (adjustment >> 0));
     telemetry_record_async(&tlm);
 }
 
@@ -265,14 +265,14 @@ void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_reading
         debugf("  Readings[%zu]={%"PRIu64", %d, %d, %d}",
             i, readings[i].reading_time, readings[i].mag_x, readings[i].mag_y, readings[i].mag_z);
 
-        *out++ = htons((uint16_t) (readings[i].reading_time >> 48));
-        *out++ = htons((uint16_t) (readings[i].reading_time >> 32));
-        *out++ = htons((uint16_t) (readings[i].reading_time >> 16));
-        *out++ = htons((uint16_t) (readings[i].reading_time >> 0));
+        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 48));
+        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 32));
+        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 16));
+        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 0));
 
-        *out++ = htons(readings[i].mag_x);
-        *out++ = htons(readings[i].mag_y);
-        *out++ = htons(readings[i].mag_z);
+        *out++ = htobe16(readings[i].mag_x);
+        *out++ = htobe16(readings[i].mag_y);
+        *out++ = htobe16(readings[i].mag_z);
     }
     assert((uint8_t*) out - scratch_buf == (ssize_t) (num_readings * 14));
 

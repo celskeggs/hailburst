@@ -73,21 +73,20 @@ static bool comm_packet_decode(comm_packet_t *out, uint8_t *buffer, size_t lengt
         return false;
     }
     // decode header fields
-    uint32_t magic_number = ntohl(*(uint32_t*) (buffer + 0));
-    uint32_t command_id   = ntohl(*(uint32_t*) (buffer + 4));
-    uint32_t timestamp_hl = ntohl(*(uint32_t*) (buffer + 8));
-    uint32_t timestamp_ll = ntohl(*(uint32_t*) (buffer + 12));
+    uint32_t magic_number = be32toh(*(uint32_t*) (buffer + 0));
+    uint32_t command_id   = be32toh(*(uint32_t*) (buffer + 4));
+    uint64_t timestamp_ns = be64toh(*(uint64_t*) (buffer + 8));
     if (magic_number != COMM_CMD_MAGIC_NUM) {
         return false;
     }
     // check the CRC32
-    uint32_t header_crc32   = ntohl(*(uint32_t*) (buffer + length - 4));
+    uint32_t header_crc32   = be32toh(*(uint32_t*) (buffer + length - 4));
     uint32_t computed_crc32 = crc32(0, buffer, length - 4);
     if (header_crc32 != computed_crc32) {
         return false;
     }
     out->cmd_tlm_id = command_id;
-    out->timestamp_ns = (((uint64_t) timestamp_hl) << 32) | timestamp_ll;
+    out->timestamp_ns = timestamp_ns;
     out->data_len = length - 20;
     out->data_bytes = buffer + 16;
     return true;
@@ -162,10 +161,10 @@ void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in) {
 
     // encode header fields
     uint32_t fields[] = {
-        htonl(COMM_TLM_MAGIC_NUM),
-        htonl(in->cmd_tlm_id),
-        htonl((uint32_t) (in->timestamp_ns >> 32)),
-        htonl((uint32_t) (in->timestamp_ns >> 0)),
+        htobe32(COMM_TLM_MAGIC_NUM),
+        htobe32(in->cmd_tlm_id),
+        htobe32((uint32_t) (in->timestamp_ns >> 32)),
+        htobe32((uint32_t) (in->timestamp_ns >> 0)),
     };
     uint32_t crc;
     comm_enc_escape(enc, (uint8_t*) fields, sizeof(fields));
@@ -176,7 +175,7 @@ void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in) {
     crc = crc32(crc, in->data_bytes, in->data_len);
 
     // encode trailing CRC
-    crc = htonl(crc);
+    crc = htobe32(crc);
     comm_enc_escape(enc, (uint8_t*) &crc, sizeof(crc));
 
     // end of packet

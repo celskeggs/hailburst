@@ -209,7 +209,7 @@ retry:
     }
     // now convert from big-endian
     for (int i = 0; i <= last_reg - first_reg; i++) {
-        output[i] = ntohl(output[i]);
+        output[i] = be32toh(output[i]);
     }
     return true;
 }
@@ -227,7 +227,7 @@ static bool radio_write_registers(radio_t *radio, rmap_context_t *ctx,
     uint32_t input_copy[num_regs];
     // convert to big-endian
     for (size_t i = 0; i < num_regs; i++) {
-        input_copy[i] = ntohl(input[i]);
+        input_copy[i] = be32toh(input[i]);
     }
     assert(num_regs > 0);
     int retries = TRANSACTION_RETRIES;

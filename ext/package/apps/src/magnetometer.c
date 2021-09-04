@@ -61,7 +61,7 @@ static bool magnetometer_is_error_recoverable(rmap_status_t status) {
 
 static bool magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_t value) {
     rmap_status_t status;
-    value = htons(value);
+    value = htobe16(value);
     int retries = TRANSACTION_RETRIES;
 
 retry:
@@ -132,7 +132,7 @@ retry:
         }
 
         for (int i = 0; i < 4; i++) {
-            registers[i] = ntohs(registers[i]);
+            registers[i] = be16toh(registers[i]);
         }
 
         assert(registers[0] == LATCH_OFF || registers[0] == LATCH_ON);

@@ -35,22 +35,22 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     status = rmap_read(&clock_ctx, address, RF_INCREMENT, 0x00, REG_MAGIC, &read_len, &magic_num);
     assert(status == RS_OK);
     assert(read_len == sizeof(magic_num));
-    magic_num = ntohl(magic_num);
+    magic_num = be32toh(magic_num);
     assert(magic_num == CLOCK_MAGIC_NUM);
 
     // prepare for a fast set of samples
-    uint32_t ref_time_sampled_raw[2];
+    uint64_t ref_time_sampled_raw;
     read_len = sizeof(ref_time_sampled_raw);
     uint64_t local_time_postsampled;
 
     // sample twice locally and once remotely
-    status = rmap_read(&clock_ctx, address, RF_INCREMENT, 0x00, REG_CLOCK, &read_len, &ref_time_sampled_raw[0]);
+    status = rmap_read(&clock_ctx, address, RF_INCREMENT, 0x00, REG_CLOCK, &read_len, &ref_time_sampled_raw);
     local_time_postsampled = clock_timestamp_monotonic();
 
     // make sure we communicated correctly and decode bytes
     assert(status == RS_OK);
     assert(read_len == sizeof(ref_time_sampled_raw));
-    uint64_t ref_time_sampled = ((uint64_t) ntohl(ref_time_sampled_raw[0]) << 32) | ntohl(ref_time_sampled_raw[1]);
+    uint64_t ref_time_sampled = be64toh(ref_time_sampled_raw);
 
     // debugf("Timing details: local_pre=%"PRIu64" ref=%"PRIu64" local_post=%"PRIu64, local_time_presampled, ref_time_sampled, local_time_postsampled);
 

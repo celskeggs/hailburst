@@ -53,7 +53,7 @@ static void fakewire_dec_raw_data(fw_decoder_t *fwd, uint8_t *bytes_in, size_t b
         byte_count -= count;
         bytes_in += count;
         if (fwd->recv_count == sizeof(fwd->recv_param)) {
-            fwd->output->recv_ctrl(fwd->output->param, fwd->recv_current, ntohl(fwd->recv_param));
+            fwd->output->recv_ctrl(fwd->output->param, fwd->recv_current, be32toh(fwd->recv_param));
             fwd->recv_current = FWC_NONE;
         }
     }
@@ -184,7 +184,7 @@ int fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param
         return -1;
     }
     if (fakewire_is_parametrized(symbol)) {
-        uint32_t netparam = htonl(param);
+        uint32_t netparam = htobe32(param);
         if (fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam)) < 0) {
             return -1;
         }

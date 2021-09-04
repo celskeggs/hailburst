@@ -50,10 +50,10 @@ static volatile uint32_t marker = 0;
 
 static void send_packet(fw_exchange_t *exc, uint32_t iteration, uint32_t total) {
     uint32_t packet[4] = {
-        htonl(MAGIC_HEADER),
-        htonl(iteration),
-        htonl(total),
-        htonl(marker),
+        htobe32(MAGIC_HEADER),
+        htobe32(iteration),
+        htobe32(total),
+        htobe32(marker),
     };
     if (fakewire_exc_write(exc, (uint8_t*) packet, sizeof(packet)) < 0) {
         fprintf(stderr, "writer task hit error; stopping.\n");
@@ -77,7 +77,7 @@ static void *reader_task(void *opaque) {
             run_ok = false;
             return NULL;
         }
-        marker = ntohl(output);
+        marker = be32toh(output);
     }
 }
 
