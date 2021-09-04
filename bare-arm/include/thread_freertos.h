@@ -76,10 +76,10 @@ static inline void cond_wait_freertos_ticks(cond_t *cond, mutex_t *mutex, TickTy
     cond->queue = &wait_entry;
 
     mutex_unlock(mutex);
+    mutex_unlock(&cond->state_mutex);
 
     ulTaskNotifyTake(pdTRUE, ticks);
 
-    mutex_unlock(&cond->state_mutex);
     mutex_lock(mutex);
 }
 

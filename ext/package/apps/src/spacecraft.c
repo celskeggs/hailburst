@@ -55,29 +55,29 @@ static spacecraft_t sc;
 static void spacecraft_init(void) {
     assert(!initialized);
 
-    // initialize fakewire infrastructure
+    debug0("Initializing fakewire infrastructure...");
     fakewire_exc_init(&sc.fwport, "rmap_io");
     int err = fakewire_exc_attach(&sc.fwport, "/dev/vport0p1", FW_FLAG_VIRTIO);
     assert(err == 0);
     rmap_init_monitor(&sc.monitor, &sc.fwport, 0x2000);
 
-    // initialize telecomm infrastructure
+    debug0("Initializing telecomm infrastructure...");
     ringbuf_init(&sc.uplink_ring, 0x4000, 1);
     ringbuf_init(&sc.downlink_ring, 0x4000, 1);
     comm_dec_init(&sc.comm_decoder, &sc.uplink_ring);
     comm_enc_init(&sc.comm_encoder, &sc.downlink_ring);
     telemetry_init(&sc.comm_encoder);
 
-    // initialize clock
+    debug0("Initializing clock...");
     clock_init(&sc.monitor, &clock_routing);
 
-    // initialize radio
+    debug0("Initializing radio...");
     radio_init(&sc.radio, &sc.monitor, &radio_routing, &sc.uplink_ring, &sc.downlink_ring);
 
-    // initialize magnetometer
+    debug0("Initializing magnetometer...");
     magnetometer_init(&sc.mag, &sc.monitor, &magnetometer_routing);
 
-    // initialize heartbeats
+    debug0("Initializing heartbeats...");
     heartbeat_init(&sc.heart);
 
     initialized = true;
