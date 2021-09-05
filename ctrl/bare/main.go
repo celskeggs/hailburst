@@ -85,7 +85,7 @@ func main() {
 		"-serial", "file:" + guestLog,
 		"-chardev", "vc,id=ts0",
 		"-device", "virtio-serial-device",
-		"-device", "virtserialport,name=tsvc0,chardev=ts0",
+		"-device", "virtserialport,name=tsvp0,chardev=ts0",
 		"-global", "virtio-mmio.force-legacy=false",
 		// "-nographic",
 	}

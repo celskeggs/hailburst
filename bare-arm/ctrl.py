@@ -158,6 +158,7 @@ class CSVWriter:
         self.flushable = open(pathname, 'w', newline='')
         self.writer = csv.writer(self.flushable)
         self.writer.writerow(['Injection #', 'Injection Time', 'Address', 'Old Value', 'New Value'])
+        self.flushable.flush()
         print("Writing log of injections to", pathname)
 
     def write(self, address, old_value, new_value):

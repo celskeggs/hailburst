@@ -17,47 +17,81 @@ func main() {
 		fmt.Printf("Usage: ./ctrl.sh [--rebuild]\n")
 		return
 	}
-	if util.HasArg("--rebuild") {
-		// first part is just to confirm that the code IS compilable (using the host toolchain)
-		fmt.Printf("Running make app/make clean as a precheck\n")
-		cmd := exec.Command("bash", "-c", "make app && make clean")
-		cmd.Dir = "ext/package/apps/src"
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
+	var imagePath string
+	isBare := util.HasArg("--bare")
+	if isBare {
+		imagePath = "bare-arm/kernel"
+		if util.HasArg("--clean") {
+			// build the image
+			fmt.Printf("Cleaning makefile...\n")
+			cmd := exec.Command("make", "clean")
+			cmd.Dir = "bare-arm"
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
 		}
-		// then actually build the real image, with the target toolchain
-		fmt.Printf("Running apps-dirclean...\n")
-		cmd0 := exec.Command("./make.sh", "apps-dirclean")
-		cmd0.Stdout = os.Stdout
-		cmd0.Stderr = os.Stderr
-		if err := cmd0.Run(); err != nil {
-			log.Fatal(err)
+		if util.HasArg("--rebuild") {
+			// build the image
+			fmt.Printf("Rebuilding makefile...\n")
+			cmd := exec.Command("make", "kernel")
+			cmd.Dir = "bare-arm"
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
 		}
-		fmt.Printf("Running apps-rebuild...\n")
-		cmd1 := exec.Command("./make.sh", "apps-rebuild")
-		cmd1.Stdout = os.Stdout
-		cmd1.Stderr = os.Stderr
-		if err := cmd1.Run(); err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Running make...\n")
-		cmd2 := exec.Command("./make.sh")
-		cmd2.Stdout = os.Stdout
-		cmd2.Stderr = os.Stderr
-		if err := cmd2.Run(); err != nil {
-			log.Fatal(err)
+	} else {
+		imagePath = "tree/images/zImage"
+		if util.HasArg("--rebuild") {
+			// first part is just to confirm that the code IS compilable (using the host toolchain)
+			fmt.Printf("Running make app/make clean as a precheck\n")
+			cmd := exec.Command("bash", "-c", "make app && make clean")
+			cmd.Dir = "ext/package/apps/src"
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
+			// then actually build the real image, with the target toolchain
+			fmt.Printf("Running apps-dirclean...\n")
+			cmd0 := exec.Command("./make.sh", "apps-dirclean")
+			cmd0.Stdout = os.Stdout
+			cmd0.Stderr = os.Stderr
+			if err := cmd0.Run(); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("Running apps-rebuild...\n")
+			cmd1 := exec.Command("./make.sh", "apps-rebuild")
+			cmd1.Stdout = os.Stdout
+			cmd1.Stderr = os.Stderr
+			if err := cmd1.Run(); err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("Running make...\n")
+			cmd2 := exec.Command("./make.sh")
+			cmd2.Stdout = os.Stdout
+			cmd2.Stderr = os.Stderr
+			if err := cmd2.Run(); err != nil {
+				log.Fatal(err)
+			}
 		}
 	}
 	gdbCmd := []string{
 		"../gdbroot/bin/gdb",
+	}
+	if isBare {
+		gdbCmd = append(gdbCmd, "-ex", "symbol-file bare-arm/kernel")
+	}
+	gdbCmd = append(gdbCmd,
 		"-ex", "target remote :1234",
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
 		"-ex", "source ./bare-arm/ctrl.py",
 		"-ex", "log_inject ./injections.csv",
-	}
+	)
 	if util.HasArg("--irradiate") {
 		gdbCmd = append(gdbCmd, "-ex", "campaign 10000 100ms")
 	} else if util.HasArg("--run") {
@@ -90,15 +124,17 @@ func main() {
 		"-S", "-s",
 		"-M", "virt",
 		"-m", "20",
-		"-kernel", "tree/images/zImage",
+		"-kernel", imagePath,
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
+		"-d", "guest_errors",
 		"-vga", "none",
 		"-serial", "file:" + guestLog,
 		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-device", "virtio-serial-device",
-		"-device", "virtserialport,name=tsvc0,chardev=ts0",
+		"-device", "virtserialport,name=tsvp0,chardev=ts0",
+		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
 	}
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), "QEMU", ".")

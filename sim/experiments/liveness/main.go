@@ -128,7 +128,7 @@ func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.
 }
 
 func main() {
-	app := integrate.MakePacketApp(packetMain, false)
+	app := integrate.MakePacketApp(packetMain, false, "")
 	err := timesync.Simple("./timesync-test.sock", app)
 	if err != nil {
 		log.Fatalf("Encountered top-level error: %v", err)
