@@ -73,7 +73,7 @@ void telemetry_init(comm_enc_t *encoder) {
 
     telemetry_initialized = true;
 
-    thread_create(&telemetry_mainloop_thread, telemetry_mainloop, encoder);
+    thread_create(&telemetry_mainloop_thread, "tlm_mainloop", telemetry_mainloop, encoder);
 }
 
 static void telemetry_record_async(tlm_elem_t *insert) {

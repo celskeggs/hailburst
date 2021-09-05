@@ -34,7 +34,7 @@ void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_
     mutex_init(&mon->pending_mutex);
     cond_init(&mon->pending_cond);
 
-    thread_create(&mon->monitor_thread, rmap_monitor_recvloop, mon);
+    thread_create(&mon->monitor_thread, "rmap_monitor", rmap_monitor_recvloop, mon);
 }
 
 static bool rmap_has_txn_in_progress(rmap_monitor_t *mon, uint16_t txn_id) {

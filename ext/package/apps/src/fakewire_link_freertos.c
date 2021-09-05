@@ -160,8 +160,8 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
     fakewire_dec_init(&fwl->decoder, receiver);
 
     // and now let's set up the I/O threads
-    thread_create(&fwl->output_thread, fakewire_link_output_loop, fwl);
-    thread_create(&fwl->input_thread, fakewire_link_input_loop, fwl);
+    thread_create(&fwl->output_thread, "fw_out_loop", fakewire_link_output_loop, fwl);
+    thread_create(&fwl->input_thread, "fw_in_loop", fakewire_link_input_loop, fwl);
 
     return 0;
 }

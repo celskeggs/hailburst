@@ -80,3 +80,36 @@ void entrypoint(void) {
     printf("Scheduler halted.\n");
     abort();
 }
+
+struct reg_state {
+    uint32_t r0;
+    uint32_t r1;
+    uint32_t r2;
+    uint32_t r3;
+    uint32_t r4;
+    uint32_t r5;
+    uint32_t r6;
+    uint32_t r7;
+    uint32_t r8;
+    uint32_t r9;
+    uint32_t r10;
+    uint32_t r11;
+    uint32_t r12;
+    uint32_t r14;
+    uint32_t lr;
+    uint32_t spsr;
+};
+_Static_assert(sizeof(struct reg_state) == 16 * 4, "invalid sizeof(struct reg_state)");
+
+void data_abort_report(struct reg_state *state) {
+    printf("DATA ABORT\n");
+    TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
+    const char *name = pcTaskGetName(failed_task);
+    printf("Data abort occurred in task '%s' at PC=0x%08x SP=0x%08x SPSR=0x%08x\n", name, state->lr, (uint32_t) (state + 1), state->spsr);
+    printf("Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x\n", state->r0, state->r1, state->r2, state->r3);
+    printf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x\n", state->r4, state->r5, state->r6, state->r7);
+    printf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x\n", state->r8, state->r9, state->r10, state->r11);
+    printf("Registers: R12=0x%08x R14=0x%08x\n", state->r12, state->r14);
+    printf("HALTING IN REACTION TO DATA ABORT\n");
+    abort();
+}

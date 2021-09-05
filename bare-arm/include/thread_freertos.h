@@ -28,7 +28,7 @@ typedef struct {
     struct cond_local_wait *queue;
 } cond_t;
 
-extern void thread_create(thread_t *out, void *(*start_routine)(void*), void *arg);
+extern void thread_create(thread_t *out, const char *name, void *(*start_routine)(void*), void *arg);
 extern void thread_join(thread_t thread);
 extern void thread_cancel(thread_t thread);
 extern void thread_time_now(struct timespec *tp);
@@ -60,6 +60,7 @@ extern void cond_destroy(cond_t *cond);
 static inline void cond_broadcast(cond_t *cond) {
     mutex_lock(&cond->state_mutex);
     for (struct cond_local_wait *entry = cond->queue; entry != NULL; entry = entry->next) {
+        assert(entry->thread != NULL);
         xTaskNotifyGive(entry->thread);
     }
     cond->queue = NULL;
@@ -69,16 +70,34 @@ static inline void cond_broadcast(cond_t *cond) {
 static inline void cond_wait_freertos_ticks(cond_t *cond, mutex_t *mutex, TickType_t ticks) {
     mutex_lock(&cond->state_mutex);
 
+    // insert ourselves into the wait queue
     struct cond_local_wait wait_entry = {
         .thread = xTaskGetCurrentTaskHandle(),
         .next   = cond->queue,
     };
     cond->queue = &wait_entry;
 
-    mutex_unlock(mutex);
     mutex_unlock(&cond->state_mutex);
+    mutex_unlock(mutex);
 
-    ulTaskNotifyTake(pdTRUE, ticks);
+    if (ulTaskNotifyTake(pdTRUE, ticks) == 0) {
+        // not woken up; remove ourselves from the wait queue
+        mutex_lock(&cond->state_mutex);
+
+        bool ok = false;
+        for (struct cond_local_wait **entry_ptr = &cond->queue; *entry_ptr != NULL; entry_ptr = &(*entry_ptr)->next) {
+            if (*entry_ptr == &wait_entry) {
+                *entry_ptr = wait_entry.next;
+                wait_entry.thread = NULL;
+                wait_entry.next = NULL;
+                ok = true;
+                break;
+            }
+        }
+        assert(ok);
+
+        mutex_unlock(&cond->state_mutex);
+    }
 
     mutex_lock(mutex);
 }
