@@ -13,7 +13,7 @@ type ModelApp struct {
 	controller *component.SimController
 	source     model.DataSourceBytes
 	sink       model.DataSinkBytes
-	recorder   *Recorder
+	recorder   *component.CSVByteRecorder
 }
 
 func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte) {
@@ -29,7 +29,7 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 			panic("UNIMPLEMENTED: back pressure on writes!")
 		}
 		if t.recorder != nil {
-			t.recorder.Record(ToHardware, writeData)
+			t.recorder.Record("Timesync:ToHardware", writeData)
 		}
 	}
 	// then allow the data to be received in the proper nanosecond
@@ -41,7 +41,7 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 		if actual > 0 {
 			readData = outputData[:actual]
 			if t.recorder != nil {
-				t.recorder.Record(ToSoftware, readData)
+				t.recorder.Record("Timesync:ToSoftware", readData)
 			}
 		}
 	}
@@ -51,13 +51,9 @@ func (t *ModelApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byt
 	return expireAt, readData
 }
 
-func MakeModelApp(controller *component.SimController, source model.DataSourceBytes, sink model.DataSinkBytes, recordPath string) timesync.ProtocolImpl {
+func MakeModelApp(controller *component.SimController, source model.DataSourceBytes, sink model.DataSinkBytes, recorder *component.CSVByteRecorder) timesync.ProtocolImpl {
 	if controller.Now() != model.VirtualTime(0) {
 		panic("invalid starting time in MakeModelApp")
-	}
-	var recorder *Recorder
-	if recordPath != "" {
-		recorder = MakeRecorder(controller, recordPath)
 	}
 	return &ModelApp{
 		controller: controller,
@@ -67,8 +63,15 @@ func MakeModelApp(controller *component.SimController, source model.DataSourceBy
 	}
 }
 
-func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink), injectErrors bool, recordPath string) timesync.ProtocolImpl {
+func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.PacketSink, *component.CSVByteRecorder), injectErrors bool, recordPath string) timesync.ProtocolImpl {
 	sim := component.MakeSimControllerSeeded(1)
+
+	var recorder *component.CSVByteRecorder
+	if recordPath != "" {
+		recorder = component.MakeCSVRecorder(sim, recordPath)
+	} else {
+		recorder = component.MakeNullCSVRecorder()
+	}
 
 	// input: bytes -> line characters
 	inputSource, inputSink := component.DataBufferBytes(sim, 1024)
@@ -88,7 +91,7 @@ func MakePacketApp(main func(model.SimContext, fwmodel.PacketSource, fwmodel.Pac
 	packetRecv := packetlink.MakePacketNode(sim)
 	packetTxmit := packetlink.MakePacketNode(sim)
 	exchange.FakeWire(sim, outputSink, inputSource, packetRecv.Sink(), packetTxmit.Source(), "App")
-	main(sim, packetRecv.Source(), packetTxmit.Sink())
+	main(sim, packetRecv.Source(), packetTxmit.Sink(), recorder)
 
-	return MakeModelApp(sim, outputSource, inputSink, recordPath)
+	return MakeModelApp(sim, outputSource, inputSink, recorder)
 }

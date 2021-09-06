@@ -85,7 +85,7 @@ func ScanIORecord(path string) ([]*IORecords, error) {
 		}
 		return nil, err
 	}
-	if len(firstRow) != 3 || firstRow[0] != "Nanoseconds" || firstRow[1] != "Direction" || firstRow[2] != "Hex Bytes" {
+	if len(firstRow) != 3 || firstRow[0] != "Nanoseconds" || firstRow[1] != "Channel" || firstRow[2] != "Hex Bytes" {
 		return nil, fmt.Errorf("invalid first row: %v", firstRow)
 	}
 
@@ -106,10 +106,10 @@ func ScanIORecord(path string) ([]*IORecords, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid timestamp: %v", eventNs)
 		}
-		// decode direction
-		direction := row[1]
-		if direction == "" {
-			return nil, errors.New("invalid empty string for direction")
+		// decode channel
+		channel := row[1]
+		if channel == "" {
+			return nil, errors.New("invalid empty string for channel")
 		}
 		// decode data
 		hexBytes, err := hex.DecodeString(row[2])
@@ -117,7 +117,7 @@ func ScanIORecord(path string) ([]*IORecords, error) {
 			return nil, err
 		}
 		// insert into scan
-		scans[direction] = append(scans[direction], IORec{
+		scans[channel] = append(scans[channel], IORec{
 			Timestamp: eventTime,
 			Body:      hexBytes,
 		})

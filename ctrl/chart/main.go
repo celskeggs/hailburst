@@ -11,10 +11,29 @@ import (
 	"path"
 )
 
+// This rendering didn't actually turn out to be useful...
+const ShowIORecords = false
+
 func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 	records, err := scans.ScanRawReqs(path.Join(dir, "reqs-raw.log"))
 	if err != nil {
 		return nil, errors.Wrap(err, "while scanning requirements")
+	}
+	for _, record := range records {
+		out = append(out, record)
+	}
+	if ShowIORecords {
+		ioRecs, err := scans.ScanIORecord(path.Join(dir, "io-dump.csv"))
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning io dump records")
+		}
+		for _, ioRec := range ioRecs {
+			out = append(out, ioRec)
+		}
+	}
+	schedule, err := scans.ScanScheduler(path.Join(dir, "guest.log"))
+	if err != nil {
+		return nil, errors.Wrap(err, "while scanning guest.log for schedule")
 	}
 	injections, err := scans.ScanInjections(path.Join(dir, "injections.csv"))
 	if err != nil {
@@ -24,18 +43,8 @@ func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "while scanning timesync log")
 	}
-	// This rendering didn't actually turn out to be useful...
-	//ioRecs, err := scans.ScanIORecord(path.Join(dir, "io-dump.csv"))
-	//if err != nil {
-	//	return nil, errors.Wrap(err, "while scanning io dump records")
-	//}
-	for _, record := range records {
-		out = append(out, record)
-	}
-	//for _, ioRec := range ioRecs {
-	//	out = append(out, ioRec)
-	//}
 	out = append(out,
+		schedule,
 		injections,
 		ioLog,
 	)
