@@ -71,7 +71,7 @@ void entrypoint(void) {
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
 
-    BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, 1, NULL);
+    BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
     if (status != pdPASS) {
         printf("Error: could not create main task.\n");
         abort();

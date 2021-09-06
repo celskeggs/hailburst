@@ -18,9 +18,11 @@ static void thread_entrypoint(void *opaque) {
     }
 }
 
-void thread_create(thread_t *out, const char *name, void *(*start_routine)(void*), void *arg) {
+void thread_create(thread_t *out, const char *name, unsigned int priority, void *(*start_routine)(void*), void *arg) {
     BaseType_t status;
     assert(out != NULL);
+
+    assert(priority < configMAX_PRIORITIES);
 
     thread_t state = malloc(sizeof(*state));
     assert(state != NULL);
@@ -35,7 +37,7 @@ void thread_create(thread_t *out, const char *name, void *(*start_routine)(void*
         name = "anonymous_thread";
     }
 
-    status = xTaskCreate(thread_entrypoint, name, 1000, state, 3, &state->handle);
+    status = xTaskCreate(thread_entrypoint, name, 1000, state, priority, &state->handle);
     if (status == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY) {
         printf("Out of memory while allocating anonymous task.\n");
     }

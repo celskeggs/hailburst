@@ -584,7 +584,7 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
 
     assert(con->monitor_task == NULL);
     BaseType_t status;
-    status = xTaskCreate(virtio_monitor_loop, "virtio-monitor", 1000, con, 2, &con->monitor_task);
+    status = xTaskCreate(virtio_monitor_loop, "virtio-monitor", 1000, con, PRIORITY_DRIVERS, &con->monitor_task);
     if (status != pdPASS) {
         printf("could not initialize virtio-monitor task; failed.\n");
         mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);

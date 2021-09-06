@@ -28,7 +28,7 @@ typedef struct {
     struct cond_local_wait *queue;
 } cond_t;
 
-extern void thread_create(thread_t *out, const char *name, void *(*start_routine)(void*), void *arg);
+extern void thread_create(thread_t *out, const char *name, unsigned int priority, void *(*start_routine)(void*), void *arg);
 extern void thread_join(thread_t thread);
 extern void thread_cancel(thread_t thread);
 extern void thread_time_now(struct timespec *tp);

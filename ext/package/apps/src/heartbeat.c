@@ -21,5 +21,5 @@ static void *heartbeat_mainloop(void *opaque) {
 
 void heartbeat_init(heartbeat_t *heart) {
     debug0("Calling heartbeat_init");
-    thread_create(&heart->thread, "heartbeat_loop", heartbeat_mainloop, NULL);
+    thread_create(&heart->thread, "heartbeat_loop", PRIORITY_WORKERS, heartbeat_mainloop, NULL);
 }

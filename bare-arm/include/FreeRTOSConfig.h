@@ -30,6 +30,13 @@
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
+enum {
+    PRIORITY_DRIVERS = 4,
+    PRIORITY_SERVERS = 3,
+    PRIORITY_WORKERS = 2,
+    PRIORITY_INIT    = 1,
+};
+
 /* Memory allocation related definitions. */
 #define configSUPPORT_STATIC_ALLOCATION             0
 #define configSUPPORT_DYNAMIC_ALLOCATION            1

@@ -78,7 +78,7 @@ int fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags) {
     }
     fakewire_exc_reset(fwe);
 
-    thread_create(&fwe->flowtx_thread, "fw_flowtx_loop", fakewire_exc_flowtx_loop, fwe);
+    thread_create(&fwe->flowtx_thread, "fw_flowtx_loop", PRIORITY_WORKERS, fakewire_exc_flowtx_loop, fwe);
     mutex_unlock(&fwe->mutex);
     return 0;
 }
