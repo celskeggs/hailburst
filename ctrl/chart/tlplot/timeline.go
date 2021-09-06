@@ -125,7 +125,7 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 		}
 		c.FillPolygon(activity.Color, c.ClipPolygonX(pts[0:4]))
 		c.StrokeLines(t.BoxStyle, c.ClipLinesX(pts)...)
-		if activity.Label != "" && t.TextStyle.Width(activity.Label) + xStart <= xEnd {
+		if activity.Label != "" && t.TextStyle.Width(activity.Label) + xStart <= xEnd && c.ContainsX(xStart) {
 			c.FillText(t.TextStyle, vg.Point{
 				X: (xStart + xEnd) / 2,
 				Y: y,

@@ -35,6 +35,9 @@ func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "while scanning guest.log for schedule")
 	}
+	for _, priority := range schedule {
+		out = append(out, priority)
+	}
 	injections, err := scans.ScanInjections(path.Join(dir, "injections.csv"))
 	if err != nil {
 		return nil, errors.Wrap(err, "while scanning injections")
@@ -44,7 +47,6 @@ func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 		return nil, errors.Wrap(err, "while scanning timesync log")
 	}
 	out = append(out,
-		schedule,
 		injections,
 		ioLog,
 	)
