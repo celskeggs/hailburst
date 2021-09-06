@@ -49,7 +49,7 @@ static void *fakewire_link_output_loop(void *opaque) {
 
     struct vector_entry entry = {
         .data_buffer = write_buf,
-        .length      = sizeof(write_buf),
+        .length      = 0 /* will be filled in later */,
         .is_receive  = false,
     };
 
@@ -73,6 +73,7 @@ static void *fakewire_link_output_loop(void *opaque) {
 #ifdef DEBUG
         debug_printf("Writing %zu bytes to VIRTIO port...", count_bytes);
 #endif
+        entry.length = count_bytes;
         ssize_t status = virtio_transact_sync(fwl->port->transmitq, &entry, 1);
         if (status != 0) {
             debug_printf("Write failed: status=%zd", status);
@@ -158,6 +159,9 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
     ringbuf_init(&fwl->enc_ring, FW_LINK_RING_SIZE, 1);
     fakewire_enc_init(&fwl->encoder, &fwl->enc_ring);
     fakewire_dec_init(&fwl->decoder, receiver);
+
+    // tell the serial port device that we're ready to receive
+    virtio_serial_ready(fwl->port);
 
     // now let's start the I/O threads
     thread_create(&fwl->output_thread, "fw_out_loop", PRIORITY_SERVERS, fakewire_link_output_loop, fwl);
