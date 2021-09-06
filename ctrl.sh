@@ -1,2 +1,2 @@
 #!/bin/bash
-go run ./ctrl "$@"
+go run ./ctrl/interactive "$@"

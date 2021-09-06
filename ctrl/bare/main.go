@@ -19,7 +19,7 @@ func main() {
 		// build the image
 		fmt.Printf("Cleaning makefile...\n")
 		cmd := exec.Command("make", "clean")
-		cmd.Dir = "bare-arm"
+		cmd.Dir = "fsw/freertos"
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -30,7 +30,7 @@ func main() {
 		// build the image
 		fmt.Printf("Rebuilding makefile...\n")
 		cmd := exec.Command("make", "kernel")
-		cmd.Dir = "bare-arm"
+		cmd.Dir = "fsw/freertos"
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -39,11 +39,11 @@ func main() {
 	}
 	gdbCmd := []string{
 		"../gdbroot/bin/gdb",
-		"-ex", "symbol-file bare-arm/kernel",
+		"-ex", "symbol-file fsw/freertos/kernel",
 		"-ex", "target remote :1234",
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
-		"-ex", "source ./bare-arm/ctrl.py",
+		"-ex", "source ./ctrl/script/ctrl.py",
 		"-ex", "log_inject ./injections.csv",
 	}
 	if util.HasArg("--irradiate") {
@@ -72,7 +72,7 @@ func main() {
 		"-S", "-s",
 		"-M", "virt",
 		"-m", "20",
-		"-kernel", "bare-arm/kernel",
+		"-kernel", "fsw/freertos/kernel",
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",

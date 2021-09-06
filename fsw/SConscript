@@ -1,0 +1,111 @@
+import os
+import subprocess
+
+AddOption(
+    '--prefix',
+    dest='prefix',
+    type='string',
+    nargs=1,
+    action='store',
+    metavar='DIR',
+    help='installation prefix',
+)
+
+PLAT_FREERTOS = "freertos"
+PLAT_LINUX = "linux"
+
+AddOption(
+    '--platform',
+    dest='platform',
+    type='string',
+    nargs=1,
+    action='store',
+    help='target platform',
+    default=PLAT_LINUX,
+)
+
+PLATFORM = GetOption("platform")
+
+INCLUDE = ["include/"]
+FAKEWIRE_CORE_SRC = ["fakewire/codec.c", "fakewire/exchange.c", "main/ringbuf.c"]
+MAIN_SRC = ["main/spacecraft.c", "main/radio.c", "main/comm.c", "main/cmd.c", "main/tlm.c", "main/magnetometer.c",
+            "main/heartbeat.c", "fakewire/rmap.c"]
+EXTERNAL_SRC = []
+
+BUILD_EXTRAS = True
+
+if PLATFORM == PLAT_LINUX:
+    env = Environment(CCFLAGS=['-ggdb', '-Wall', '-Werror', '-D_GNU_SOURCE'], LIBS=['pthread', 'z'],
+                      PREFIX=GetOption('prefix'))
+
+    for inherit in ["AR", "AS", "LD", "NM", "CC", "CPP", "CXX", "RANLIB", "READELF", "STRIP", "OBJCOPY", "OBJDUMP"]:
+        if inherit in os.environ:
+            env[inherit] = os.environ[inherit]
+
+    INCLUDE += ["linux/include/"]
+    FAKEWIRE_CORE_SRC += ["fakewire/link_linux.c"]
+    MAIN_SRC += ["linux/clock.c"]
+elif PLATFORM == PLAT_FREERTOS:
+    COMMON_FLAGS = ['-ggdb', '-mcpu=cortex-a15', '-mfpu=vfpv4', '-mfloat-abi=softfp']
+    env = Environment(
+        CC="arm-none-eabi-gcc",
+        AS="arm-none-eabi-as",
+        LINK="arm-none-eabi-ld",
+        LINKFLAGS=["-T", "freertos/link.ld", "--fatal-warnings"],
+        CCFLAGS=COMMON_FLAGS + ["-Wall", "-Wextra", "-Werror",
+                                "-Wno-unknown-pragmas",  # because ealibc uses #pragma mark, and that causes trouble
+                                "-nostdlib", "-nostdinc", "-nostartfiles", "-ffreestanding",
+                                "-std=gnu99",
+                                "-D_BITSIZE=32", "-D__FREERTOS__"],
+        ASFLAGS=COMMON_FLAGS + ["--fatal-warnings"],
+    )
+    # TODO: is this actually necessary?
+    env["ASPPCOM"] = env["ASPPCOM"].replace("$CC", "$AS")
+    LIBGCC_LIBRARY_PATH = subprocess.check_output([env['CC'], "-print-libgcc-file-name"]).strip()
+    # TODO: ensure that ASFLAGS is actually used
+    ROOT_DIR = "../../.."
+    # embedded artistry's libc
+    EALIBC_ROOT = os.path.join(ROOT_DIR, "ealibc")
+    EALIBC_INC = os.path.join(EALIBC_ROOT, "include")
+
+    ZLIB_ROOT = os.path.join(ROOT_DIR, "zlib-1.2.11")
+
+    FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS/FreeRTOS/Source")
+    FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
+    FREERTOS_ARCH_INC = os.path.join(FREERTOS_ROOT, "portable/GCC/ARM_CA9")
+
+    INCLUDE += [
+        "freertos/include/",
+        FREERTOS_INC, FREERTOS_ARCH_INC,
+        EALIBC_INC, EALIBC_ROOT + "/printf", EALIBC_ROOT + "/arch/arm/include", ZLIB_ROOT
+    ]
+    FAKEWIRE_CORE_SRC += ["fakewire/link_freertos.c"]
+    MAIN_SRC += ["freertos/start.s", "freertos/stubs.c", "freertos/timer.c", "freertos/gic.c", "freertos/thread.c",
+                 "freertos/virtio.c", "freertos/clock.c"]
+    EXTERNAL_SRC += [
+        LIBGCC_LIBRARY_PATH,
+        os.path.join(EALIBC_ROOT, "printf/printf.c"),
+        os.path.join(ZLIB_ROOT, "crc32.c")
+    ]
+    EXTERNAL_SRC += [os.path.join(EALIBC_ROOT, "src", x) for x in
+                     ["assert/assert.c", "string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c",
+                      "stdlib/rand.c"]]
+    EXTERNAL_SRC += [os.path.join(FREERTOS_ROOT, x) for x in
+                     ["tasks.c", "queue.c", "list.c",
+                      "portable/GCC/ARM_CA9/port.c", "portable/GCC/ARM_CA9/portASM.S", "portable/MemMang/heap_4.c"]]
+    BUILD_EXTRAS = False
+else:
+    print("Invalid platform: %r" % PLATFORM)
+    Exit(1)
+
+app = env.Program("app", MAIN_SRC + FAKEWIRE_CORE_SRC + EXTERNAL_SRC, CPPPATH=INCLUDE)
+env.Default(app)
+
+if BUILD_EXTRAS:
+    env.Program("fakewire_exc_test",
+                ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + FAKEWIRE_CORE_SRC,
+                CPPPATH=INCLUDE)
+
+    env.Alias("install",
+              [env.Install('$PREFIX/usr/bin', app),
+               env.Install('$PREFIX/etc/init.d', "linux/S80app")])

@@ -1,13 +1,5 @@
 /tree
 /.idea
-/guest.log
-/*.csv
-/requirements.log
-/sim.log
 /trials
 /local.config
-/batch-proc
-/experiment-proc
-/trials
 /timeline.png
-/timesync.sock.log

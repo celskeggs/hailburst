@@ -1,6 +1,0 @@
-#ifndef BARE_ARM_SYS_TYPES_H
-#define BARE_ARM_SYS_TYPES_H
-
-
-
-#endif /* BARE_ARM_SYS_TYPES_H */

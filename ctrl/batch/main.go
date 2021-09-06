@@ -194,7 +194,7 @@ func main() {
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
-		"-ex", "source " + path.Join(origDir, "bare-arm/ctrl.py"),
+		"-ex", "source " + path.Join(origDir, "ctrl/script/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
 		"-ex", campaignCmd,
 		"-ex", "printf \"Campaign concluded\n\"",

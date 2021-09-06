@@ -6,17 +6,16 @@
 
 APPS_VERSION = 1.0
 APPS_SOURCE = src
-APPS_SITE = $(APPS_PKGDIR)/src
+APPS_SITE = $(BR2_EXTERNAL_thesis_PATH)/../fsw
 APPS_SITE_METHOD = local
 APPS_DEPENDENCIES = zlib
 
 define APPS_BUILD_CMDS
-    $(MAKE) $(TARGET_CONFIGURE_OPTS) -C $(@D) app
+    env $(TARGET_CONFIGURE_OPTS) scons -C $(@D) build/app build/S80app
 endef
 
 define APPS_INSTALL_TARGET_CMDS
-    $(INSTALL) -D -m 0755 $(@D)/app $(TARGET_DIR)/usr/bin
-    $(INSTALL) -D -m 0755 $(@D)/S80app $(TARGET_DIR)/etc/init.d
+    env $(TARGET_CONFIGURE_OPTS) scons -C $(@D) install --prefix=$(TARGET_DIR)
 endef
 
 $(eval $(generic-package))
