@@ -1,9 +1,9 @@
 .align 4
 interrupt_vector_table:
     b .                         @ Reset
-    b .                         @ Undefined Instruction
+    b undef_insn_handler        @ Undefined Instruction
     b FreeRTOS_SWI_Handler      @ Supervisor Call (SWI instruction)
-    b .                         @ Prefetch Abort
+    b prefetch_abort_handler    @ Prefetch Abort
     b data_abort_handler        @ Data Abort
     b .                         @ (unused)
     b FreeRTOS_IRQ_Handler      @ IRQ interrupt
@@ -13,6 +13,8 @@ interrupt_vector_table:
 .comm stack,     0x1000         @ Reserve 4k stack in the BSS
 .align 8
 .comm irq_stack, 0x1000         @ Reserve 4k stack in the BSS
+.align 8
+.comm abort_stack, 0x1000       @ Reserve 4k stack in the BSS
 
 .align 4
 _start:
@@ -20,6 +22,12 @@ _start:
 
     cps #0x12                   @ Transition to IRQ mode
     ldr sp, =irq_stack+0x1000   @ Set up the IRQ stack
+
+    cps #0x17                   @ Transition to ABORT mode
+    ldr sp, =abort_stack+0x1000 @ Set up the ABORT stack (shared with UNDEFINED)
+
+    cps #0x1B                   @ Transition to UNDEFINED mode
+    ldr sp, =abort_stack+0x1000 @ Set up the UNDEFINED stack (shared with ABORT)
 
     cps #0x13                   @ Transition to supervisor mode
     ldr sp, =stack+0x1000       @ Set up the supervisor stack
@@ -30,12 +38,25 @@ _start:
     bl entrypoint               @ Jump to the entrypoint function
 
 .align 4
-data_abort_handler:
-	/* Save the LR and SPSR onto the system mode stack before switching to
-	system mode to save the remaining system mode registers. */
-	srsdb	sp!, #0x1f
-	cps		#0x1f
-	push	{R0-R12, R14}
+undef_insn_handler:
+    push   {r0-r12, r14}
+    mrs    r0, spsr
+    mov    r1, sp
+    mov    r2, #0
+    bl     exception_report
 
-    mov    r0, sp
-    bl     data_abort_report
+.align 4
+prefetch_abort_handler:
+    push   {r0-r12, r14}
+    mrs    r0, spsr
+    mov    r1, sp
+    mov    r2, #1
+    bl     exception_report
+
+.align 4
+data_abort_handler:
+    push   {r0-r12, r14}
+    mrs    r0, spsr
+    mov    r1, sp
+    mov    r2, #2
+    bl     exception_report

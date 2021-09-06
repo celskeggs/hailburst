@@ -1,5 +1,7 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include <errno.h>
 #include <FreeRTOS.h>
 #include <task.h>
@@ -95,21 +97,41 @@ struct reg_state {
     uint32_t r10;
     uint32_t r11;
     uint32_t r12;
-    uint32_t r14;
     uint32_t lr;
-    uint32_t spsr;
 };
-_Static_assert(sizeof(struct reg_state) == 16 * 4, "invalid sizeof(struct reg_state)");
+_Static_assert(sizeof(struct reg_state) == 14 * 4, "invalid sizeof(struct reg_state)");
 
-void data_abort_report(struct reg_state *state) {
-    printf("DATA ABORT\n");
+static const char *aborts[3] = {
+    "UNDEFINED INSTRUCTION",
+    "PREFETCH ABORT",
+    "DATA ABORT",
+};
+
+static bool recurse = false;
+
+void exception_report(uint32_t spsr, struct reg_state *state, unsigned int mode) {
+    if (recurse) {
+        abort();
+    }
+    recurse = true;
+
+    uint64_t now = timer_now_ns();
+
+    const char *abort_type = mode < 3 ? aborts[mode] : "???????";
+    printf("%s\n", abort_type);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     const char *name = pcTaskGetName(failed_task);
-    printf("Data abort occurred in task '%s' at PC=0x%08x SP=0x%08x SPSR=0x%08x\n", name, state->lr, (uint32_t) (state + 1), state->spsr);
+    printf("%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x\n", abort_type, name, state->lr, spsr);
     printf("Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x\n", state->r0, state->r1, state->r2, state->r3);
     printf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x\n", state->r4, state->r5, state->r6, state->r7);
     printf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x\n", state->r8, state->r9, state->r10, state->r11);
-    printf("Registers: R12=0x%08x R14=0x%08x\n", state->r12, state->r14);
-    printf("HALTING IN REACTION TO DATA ABORT\n");
+    printf("Registers: R12=0x%08x\n", state->r12);
+    printf("HALTING IN REACTION TO DATA ABORT AT TIME=%" PRIu64 "\n", now);
+    abort();
+}
+
+void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
+    (void) task;
+    (void) pcTaskName;
     abort();
 }
