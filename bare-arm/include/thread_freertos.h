@@ -94,9 +94,16 @@ static inline void cond_wait_freertos_ticks(cond_t *cond, mutex_t *mutex, TickTy
                 break;
             }
         }
-        assert(ok);
 
         mutex_unlock(&cond->state_mutex);
+
+        // if we couldn't find ourselves, that means we must have been notified after our wakeup.
+        if (!ok) {
+            // make sure to clear the task notification!
+            // TODO: is this actually necessary?
+            BaseType_t cleared = xTaskNotifyStateClear(NULL);
+            assert(cleared == pdTRUE);
+        }
     }
 
     mutex_lock(mutex);
@@ -107,7 +114,11 @@ static inline void cond_wait(cond_t *cond, mutex_t *mutex) {
 }
 
 static inline void cond_timedwait(cond_t *cond, mutex_t *mutex, uint64_t nanoseconds) {
-    cond_wait_freertos_ticks(cond, mutex, pdMS_TO_TICKS(nanoseconds / 1000000));
+    TickType_t ticks = pdMS_TO_TICKS(nanoseconds / 1000000);
+    if (ticks == 0 && nanoseconds > 0) {
+        ticks = 1;
+    }
+    cond_wait_freertos_ticks(cond, mutex, ticks);
 }
 
 #endif /* BARE_ARM_THREAD_FREERTOS_H */
