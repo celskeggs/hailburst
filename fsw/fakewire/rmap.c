@@ -32,7 +32,6 @@ void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_
     assert(mon->scratch_buffer != NULL);
 
     mutex_init(&mon->pending_mutex);
-    cond_init(&mon->pending_cond);
 
     thread_create(&mon->monitor_thread, "rmap_monitor", PRIORITY_SERVERS, rmap_monitor_recvloop, mon);
 }
@@ -75,6 +74,7 @@ void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_
     assert(context->scratch_buffer != NULL);
     context->is_pending = false;
     context->pending_next = NULL;
+    semaphore_init(&context->on_complete);
 }
 
 static void rmap_encode_source_path(uint8_t **out, rmap_path_t *path) {
@@ -248,11 +248,13 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
             if (now >= timeout) {
                 break;
             }
-            cond_timedwait(&context->monitor->pending_cond, &context->monitor->pending_mutex, timeout - now);
+            mutex_unlock(&context->monitor->pending_mutex);
+            semaphore_take_timed(&context->on_complete, timeout - now);
+            mutex_lock(&context->monitor->pending_mutex);
     
             assert(context->is_pending == true);
         }
-    
+
         // got a reply!
         if (context->has_received == true) {
             status_out = context->received_status;
@@ -404,7 +406,9 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
             if (now >= timeout) {
                 break;
             }
-            cond_timedwait(&context->monitor->pending_cond, &context->monitor->pending_mutex, timeout - now);
+            mutex_unlock(&context->monitor->pending_mutex);
+            semaphore_take_timed(&context->on_complete, timeout - now);
+            mutex_lock(&context->monitor->pending_mutex);
 
             assert(context->is_pending == true);
         }
@@ -502,8 +506,8 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
         }
         ctx->has_received = true;
         ctx->received_status = in[3];
-        cond_broadcast(&mon->pending_cond);
         mutex_unlock(&mon->pending_mutex);
+        semaphore_give(&ctx->on_complete);
         return true;
     } else {
         // read reply
@@ -545,8 +549,8 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
             copy_len = ctx->read_max_length;
         }
         memcpy(ctx->read_output, &in[12], copy_len);
-        cond_broadcast(&mon->pending_cond);
         mutex_unlock(&mon->pending_mutex);
+        semaphore_give(&ctx->on_complete);
         return true;
     }
 }

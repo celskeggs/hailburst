@@ -163,10 +163,25 @@ static inline bool semaphore_give(semaphore_t *sema) {
     return given;
 }
 
+// not for generic code; only for internal Linux wakeup code implementation
+static inline void semaphore_reset_linuxonly(semaphore_t *sema) {
+    mutex_lock(&sema->mut);
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+}
+
 extern wakeup_t wakeup_open(void);
 
 static inline void wakeup_take(wakeup_t wakeup) {
     semaphore_take(wakeup);
+}
+
+// returns true if taken, false if timed out
+// NOTE: on a timeout, the caller MUST ensure that the wakeup is never given in the future!
+// (It is OK for the wakeup to be given immediately after return, as long as the thread calling wakeup_take_timed does
+//  not perform any operations that could potentially use the thread-specific notification pathway.)
+static inline bool wakeup_take_timed(wakeup_t wakeup, uint64_t nanoseconds) {
+    return semaphore_take_timed(wakeup, nanoseconds);
 }
 
 static inline void wakeup_give(wakeup_t wakeup) {

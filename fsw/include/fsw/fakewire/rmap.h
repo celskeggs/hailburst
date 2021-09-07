@@ -54,7 +54,6 @@ typedef struct {
     uint8_t *scratch_buffer;
 
     mutex_t pending_mutex;
-    cond_t  pending_cond;
     rmap_context_t *pending_first;
 
     thread_t monitor_thread;
@@ -63,23 +62,26 @@ typedef struct {
 typedef struct rmap_context_st {
     rmap_monitor_t *monitor;
 
-    size_t scratch_size;
+    size_t   scratch_size;
     uint8_t *scratch_buffer;
 
-    bool is_pending;
-    uint8_t txn_flags;
-    void *read_output;
-    uint32_t read_max_length;
-    uint32_t read_actual_length;
-    bool has_received;
-    uint8_t received_status;
-    uint16_t pending_txn_id;
-    rmap_addr_t *pending_routing;
+    bool        is_pending;
+    semaphore_t on_complete;
+    uint8_t     txn_flags;
+    void       *read_output;
+    uint32_t    read_max_length;
+    uint32_t    read_actual_length;
+    bool        has_received;
+    uint8_t     received_status;
+    uint16_t    pending_txn_id;
+
+    rmap_addr_t    *pending_routing;
     rmap_context_t *pending_next;
 } rmap_context_t;
 
 void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_length);
 void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_write_length);
+// contract with caller: only one thread attempts to read or write using a single rmap_context_t at a time.
 rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
                          uint8_t ext_addr, uint32_t main_addr, size_t data_length, void *data);
 rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,

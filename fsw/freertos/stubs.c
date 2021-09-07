@@ -9,6 +9,7 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <rtos/timer.h>
 #include <hal/platform.h>
 
 int errno = 0;
@@ -141,4 +142,11 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
     (void) task;
     (void) pcTaskName;
     abort();
+}
+
+void trace_task_switch(const char *task_name, unsigned int priority) {
+    uint64_t now = timer_now_ns();
+    printf("[%u.%09u] FreeRTOS scheduling %15s at priority %u\n",
+           (uint32_t) (now / TIMER_NS_PER_SEC), (uint32_t) (now % TIMER_NS_PER_SEC),
+           task_name, priority);
 }

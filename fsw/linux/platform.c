@@ -19,6 +19,7 @@ wakeup_t wakeup_open(void) {
         THREAD_CHECK(pthread_setspecific(wakeup_semaphore_key, sema));
         assert(sema == (semaphore_t *) pthread_getspecific(wakeup_semaphore_key));
     }
+    semaphore_reset_linuxonly(sema);
     return sema;
 }
 

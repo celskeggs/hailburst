@@ -110,8 +110,9 @@ extern void vConfigureTickInterrupt(void);
 #define INCLUDE_xTaskResumeFromISR              0
 
 /* A header file that defines trace macro can be included here. */
-#include <stdio.h>  // for printf, needed by trace handler
-#include <rtos/timer.h>  // for timer_now_ns, needed by trace handler
-#define traceTASK_SWITCHED_IN() do { uint64_t now = timer_now_ns(); printf("[%u.%09u] FreeRTOS scheduling %15s at priority %u\n", (uint32_t) (now / TIMER_NS_PER_SEC), (uint32_t) (now % TIMER_NS_PER_SEC), pxCurrentTCB->pcTaskName, pxCurrentTCB->uxPriority); } while(0)
+
+extern void trace_task_switch(const char *task_name, unsigned int priority);
+
+#define traceTASK_SWITCHED_IN() trace_task_switch(pxCurrentTCB->pcTaskName, pxCurrentTCB->uxPriority)
 
 #endif /* FSW_FREERTOS_FREERTOS_CONFIG_H */

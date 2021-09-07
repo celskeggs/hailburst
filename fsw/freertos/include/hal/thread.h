@@ -7,8 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
 #include <FreeRTOS.h>
-#include "semphr.h"
+#include <semphr.h>
+
+#include <rtos/timer.h>
 
 typedef struct {
     TaskHandle_t      handle;
@@ -118,11 +121,7 @@ static inline void cond_wait(cond_t *cond, mutex_t *mutex) {
 }
 
 static inline void cond_timedwait(cond_t *cond, mutex_t *mutex, uint64_t nanoseconds) {
-    TickType_t ticks = pdMS_TO_TICKS(nanoseconds / 1000000);
-    if (ticks == 0 && nanoseconds > 0) {
-        ticks = 1;
-    }
-    cond_wait_freertos_ticks(cond, mutex, ticks);
+    cond_wait_freertos_ticks(cond, mutex, timer_ns_to_ticks(nanoseconds));
 }
 
 // semaphores are created empty, such that an initial take will block
@@ -139,13 +138,7 @@ static inline void semaphore_take(semaphore_t *sema) {
 // returns true if taken, false if timed out
 static inline bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds) {
     assert(sema != NULL && *sema != NULL);
-    TickType_t ticks = pdMS_TO_TICKS(nanoseconds / 1000000);
-    if (ticks == 0 && nanoseconds > 0) {
-        ticks = 1;
-    } else if (ticks >= portMAX_DELAY) {
-        ticks = portMAX_DELAY - 1;
-    }
-    return xSemaphoreTake(*sema, ticks) == pdTRUE;
+    return xSemaphoreTake(*sema, timer_ns_to_ticks(nanoseconds)) == pdTRUE;
 }
 
 static inline bool semaphore_give(semaphore_t *sema) {
@@ -164,6 +157,17 @@ static inline void wakeup_take(wakeup_t wakeup) {
     assert(wakeup != NULL && wakeup == xTaskGetCurrentTaskHandle());
     BaseType_t status = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     assert(status == 1);
+}
+
+// returns true if taken, false if timed out
+// NOTE: on a timeout, the caller MUST ensure that the wakeup is never given in the future!
+// (It is OK for the wakeup to be given immediately after return, as long as the thread calling wakeup_take_timed does
+//  not perform any operations that could potentially use the thread-specific notification pathway.)
+static inline bool wakeup_take_timed(wakeup_t wakeup, uint64_t nanoseconds) {
+    assert(wakeup != NULL && wakeup == xTaskGetCurrentTaskHandle());
+    BaseType_t status = ulTaskNotifyTake(pdTRUE, timer_ns_to_ticks(nanoseconds));
+    assert(status == 0 || status == 1);
+    return status == 1;
 }
 
 static inline void wakeup_give(wakeup_t wakeup) {
