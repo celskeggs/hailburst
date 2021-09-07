@@ -14,8 +14,8 @@ typedef struct {
     rmap_addr_t address;
 
     // synchronization
-    mutex_t mutex;
-    cond_t cond;
+    mutex_t     mutex;
+    semaphore_t flag_change;
 
     // protected control flag
     bool should_be_powered;

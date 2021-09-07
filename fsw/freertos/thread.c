@@ -92,3 +92,15 @@ void cond_destroy(cond_t *cond) {
     mutex_destroy(&cond->state_mutex);
     assert(cond->queue == NULL);
 }
+
+void semaphore_init(semaphore_t *sema) {
+    assert(sema != NULL);
+    *sema = xSemaphoreCreateBinary();
+    assert(*sema != NULL);
+}
+
+void semaphore_destroy(semaphore_t *sema) {
+    assert(sema != NULL && *sema != NULL);
+    vSemaphoreDelete(*sema);
+    *sema = NULL;
+}

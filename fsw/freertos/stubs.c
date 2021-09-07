@@ -9,6 +9,7 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <hal/platform.h>
 
 int errno = 0;
 
@@ -83,6 +84,10 @@ void entrypoint(void) {
     vTaskStartScheduler();
     printf("Scheduler halted.\n");
     abort();
+}
+
+void platform_init(void) {
+    // nothing additional to do on FreeRTOS
 }
 
 struct reg_state {

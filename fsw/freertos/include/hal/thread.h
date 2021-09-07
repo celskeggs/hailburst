@@ -28,6 +28,10 @@ typedef struct {
     struct cond_local_wait *queue;
 } cond_t;
 
+typedef SemaphoreHandle_t semaphore_t;
+
+typedef TaskHandle_t wakeup_t;
+
 extern void thread_create(thread_t *out, const char *name, unsigned int priority, void *(*start_routine)(void*), void *arg);
 extern void thread_join(thread_t thread);
 extern void thread_cancel(thread_t thread);
@@ -119,6 +123,52 @@ static inline void cond_timedwait(cond_t *cond, mutex_t *mutex, uint64_t nanosec
         ticks = 1;
     }
     cond_wait_freertos_ticks(cond, mutex, ticks);
+}
+
+// semaphores are created empty, such that an initial take will block
+extern void semaphore_init(semaphore_t *sema);
+extern void semaphore_destroy(semaphore_t *sema);
+
+static inline void semaphore_take(semaphore_t *sema) {
+    BaseType_t status;
+    assert(sema != NULL && *sema != NULL);
+    status = xSemaphoreTake(*sema, portMAX_DELAY);
+    assert(status == pdTRUE);
+}
+
+// returns true if taken, false if timed out
+static inline bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds) {
+    assert(sema != NULL && *sema != NULL);
+    TickType_t ticks = pdMS_TO_TICKS(nanoseconds / 1000000);
+    if (ticks == 0 && nanoseconds > 0) {
+        ticks = 1;
+    } else if (ticks >= portMAX_DELAY) {
+        ticks = portMAX_DELAY - 1;
+    }
+    return xSemaphoreTake(*sema, ticks) == pdTRUE;
+}
+
+static inline bool semaphore_give(semaphore_t *sema) {
+    assert(sema != NULL && *sema != NULL);
+    return xSemaphoreGive(*sema) == pdTRUE;
+}
+
+static inline wakeup_t wakeup_open(void) {
+    TaskHandle_t task = xTaskGetCurrentTaskHandle();
+    assert(task != NULL);
+    xTaskNotifyStateClear(task);
+    return task;
+}
+
+static inline void wakeup_take(wakeup_t wakeup) {
+    assert(wakeup != NULL && wakeup == xTaskGetCurrentTaskHandle());
+    BaseType_t status = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    assert(status == 1);
+}
+
+static inline void wakeup_give(wakeup_t wakeup) {
+    assert(wakeup != NULL);
+    xTaskNotifyGive(wakeup);
 }
 
 #endif /* FSW_FREERTOS_HAL_THREAD_H */

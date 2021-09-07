@@ -158,8 +158,10 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         mutex_lock(&mag->mutex);
         // wait for magnetometer power command
         while (!mag->should_be_powered) {
+            mutex_unlock(&mag->mutex);
             debug0("Waiting for magnetometer power command...");
-            cond_wait(&mag->cond, &mag->mutex);
+            semaphore_take(&mag->flag_change);
+            mutex_lock(&mag->mutex);
         }
         assert(mag->should_be_powered == true);
         mutex_unlock(&mag->mutex);
@@ -248,7 +250,7 @@ static void *magnetometer_telemloop(void *mag_opaque) {
 void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(mag != NULL && mon != NULL && address != NULL);
     mutex_init(&mag->mutex);
-    cond_init(&mag->cond);
+    semaphore_init(&mag->flag_change);
     mag->should_be_powered = false;
     rmap_init_context(&mag->rctx, mon, 4);
     memcpy(&mag->address, address, sizeof(rmap_addr_t));
@@ -261,8 +263,8 @@ void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     mutex_lock(&mag->mutex);
     if (powered != mag->should_be_powered) {
         mag->should_be_powered = powered;
-        debugf("Broadcasting &mag->cond with should_be_powered=%d", mag->should_be_powered);
-        cond_broadcast(&mag->cond);
+        debugf("Notifying loop that should_be_powered=%d", mag->should_be_powered);
+        semaphore_give(&mag->flag_change);
     }
     mutex_unlock(&mag->mutex);
 }

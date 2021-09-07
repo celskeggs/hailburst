@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include <hal/platform.h>
 #include <fsw/clock.h>
 #include <fsw/cmd.h>
 #include <fsw/debug.h>
@@ -87,10 +88,7 @@ int main(int argc, char *argv[]) {
     (void) argc;
     (void) argv;
 
-#ifndef __FREERTOS__
-	freopen("/dev/console", "w", stdout);
-	freopen("/dev/console", "w", stderr);
-#endif
+    platform_init();
 
     debug0("Initializing...");
 
