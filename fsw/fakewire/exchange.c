@@ -11,44 +11,45 @@
 #include <fsw/fakewire/exchange.h>
 
 static void *fakewire_exc_flowtx_loop(void *fwe_opaque);
+static void fakewire_exc_reset(fw_exchange_t *fwe);
 
 static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count);
 static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param);
 
 //#define DEBUG
-#define APIDEBUG
+//#define APIDEBUG
 
 #define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->label, str))
 #define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->label, __VA_ARGS__))
 
 static inline void fakewire_exc_check_invariants(fw_exchange_t *fwe) {
-    assert(fwe->state >= FW_EXC_DISCONNECTED && fwe->state <= FW_EXC_OPERATING);
+    assert(fwe->state >= FW_EXC_CONNECTING && fwe->state <= FW_EXC_OPERATING);
     assert(fwe->pkts_sent == fwe->fcts_rcvd || fwe->pkts_sent + 1 == fwe->fcts_rcvd);
 }
 
-void fakewire_exc_init(fw_exchange_t *fwe, const char *label) {
+int fakewire_exc_init(fw_exchange_t *fwe, const char *label, const char *path, int flags) {
     memset(fwe, 0, sizeof(fw_exchange_t));
-    fwe->state = FW_EXC_DISCONNECTED;
-    fwe->label = label;
+    mutex_init(&fwe->mutex);
+    cond_init(&fwe->cond);
 
+    fwe->label = label;
     fwe->link_interface = (fw_receiver_t) {
         .param = fwe,
         .recv_data = fakewire_exc_on_recv_data,
         .recv_ctrl = fakewire_exc_on_recv_ctrl,
     };
 
-    mutex_init(&fwe->mutex);
-    cond_init(&fwe->cond);
-}
+    fakewire_exc_reset(fwe);
 
-void fakewire_exc_destroy(fw_exchange_t *fwe) {
-    assert(fwe->state == FW_EXC_DISCONNECTED);
+    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, path, flags, fwe->label) < 0) {
+        cond_destroy(&fwe->cond);
+        mutex_destroy(&fwe->mutex);
+        fwe->state = FW_EXC_INVALID;
+        return -1;
+    }
 
-    cond_destroy(&fwe->cond);
-    mutex_destroy(&fwe->mutex);
-
-    memset(fwe, 0, sizeof(fw_exchange_t));
-    fwe->state = FW_EXC_INVALID;
+    thread_create(&fwe->flowtx_thread, "fw_flowtx_loop", PRIORITY_WORKERS, fakewire_exc_flowtx_loop, fwe);
+    return 0;
 }
 
 static void fakewire_exc_reset(fw_exchange_t *fwe) {
@@ -67,81 +68,6 @@ static void fakewire_exc_reset(fw_exchange_t *fwe) {
     cond_broadcast(&fwe->cond);
 }
 
-int fakewire_exc_attach(fw_exchange_t *fwe, const char *path, int flags) {
-    mutex_lock(&fwe->mutex);
-    assert(fwe->state == FW_EXC_DISCONNECTED);
-    assert(!fwe->detaching);
-
-    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, path, flags, fwe->label) < 0) {
-        mutex_unlock(&fwe->mutex);
-        return -1;
-    }
-    fakewire_exc_reset(fwe);
-
-    thread_create(&fwe->flowtx_thread, "fw_flowtx_loop", PRIORITY_WORKERS, fakewire_exc_flowtx_loop, fwe);
-    mutex_unlock(&fwe->mutex);
-    return 0;
-}
-
-#ifndef __FREERTOS__
-void fakewire_exc_detach(fw_exchange_t *fwe) {
-    // acquire lock and check assumptions
-#ifdef DEBUG
-    debug_puts("Acquiring lock to tear down exchange...");
-#endif
-    mutex_lock(&fwe->mutex);
-#ifdef DEBUG
-    debug_puts("Acquired lock.");
-#endif
-    fakewire_exc_check_invariants(fwe);
-
-    assert(fwe->state != FW_EXC_DISCONNECTED);
-    assert(!fwe->detaching);
-    thread_t flowtx_thread = fwe->flowtx_thread;
-
-    // set state to cause teardown
-    fwe->state = FW_EXC_DISCONNECTED;
-    fwe->detaching = true;
-    cond_broadcast(&fwe->cond);
-
-    fakewire_link_shutdown(&fwe->io_port);
-
-    // wait until flowtx thread terminates
-    mutex_unlock(&fwe->mutex);
-#ifdef DEBUG
-    debug_puts("Tearing down flowtx_thread...");
-#endif
-    thread_join(flowtx_thread);
-#ifdef DEBUG
-    debug_puts("Tore down flowtx_thread.");
-#endif
-    mutex_lock(&fwe->mutex);
-
-    // clear flowtx thread handle
-    assert(fwe->flowtx_thread == flowtx_thread);
-
-    // wait until all transmissions complete
-#ifdef DEBUG
-    debug_puts("Waiting for transmissions to complete...");
-#endif
-    while (fwe->tx_busy) {
-        cond_wait(&fwe->cond, &fwe->mutex);
-    }
-#ifdef DEBUG
-    debug_puts("All transmissions completed.");
-#endif
-
-    // tear down I/O port
-    fakewire_link_destroy(&fwe->io_port);
-
-    // clean up detach state
-    assert(fwe->state == FW_EXC_DISCONNECTED);
-    assert(fwe->detaching == true);
-    fwe->detaching = false;
-    mutex_unlock(&fwe->mutex);
-}
-#endif
-
 static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL && bytes_in != NULL);
@@ -154,9 +80,7 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     mutex_lock(&fwe->mutex);
     fakewire_exc_check_invariants(fwe);
 
-    if (fwe->state == FW_EXC_DISCONNECTED) {
-        // ignore data characters; do nothing
-    } else if (fwe->state == FW_EXC_OPERATING) {
+    if (fwe->state == FW_EXC_OPERATING) {
         if (!fwe->recv_in_progress) {
             debug_printf("Hit unexpected data character 0x%x before start-of-packet; resetting.", bytes_in[0]);
             fakewire_exc_reset(fwe);
@@ -196,9 +120,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
     mutex_lock(&fwe->mutex);
     fakewire_exc_check_invariants(fwe);
 
-    if (fwe->state == FW_EXC_DISCONNECTED) {
-        // ignore control character
-    } else if (fwe->state == FW_EXC_CONNECTING) {
+    if (fwe->state == FW_EXC_CONNECTING) {
         switch (symbol) {
         case FWC_HANDSHAKE_1:
             // received a primary handshake
@@ -349,7 +271,7 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
     mutex_unlock(&fwe->mutex);
 }
 
-ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet_max) {
+size_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet_max) {
     assert(fwe != NULL);
 
 #ifdef APIDEBUG
@@ -359,7 +281,7 @@ ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet
     ssize_t actual_len = -1;
 
     mutex_lock(&fwe->mutex);
-    while (fwe->state != FW_EXC_DISCONNECTED) {
+    while (true) {
         fakewire_exc_check_invariants(fwe);
 
         // wait until handshake completes and receive is possible
@@ -402,18 +324,15 @@ ssize_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet
     }
     mutex_unlock(&fwe->mutex);
 
+    assert(actual_len >= 0);
 #ifdef APIDEBUG
-    if (actual_len >= 0) {
-        debug_printf("API read(%zu bytes) success(%zd bytes)", packet_max, actual_len);
-    } else {
-        debug_printf("API read(%zu bytes) ERROR: disconnected", packet_max);
-    }
+    debug_printf("API read(%zu bytes) success(%zd bytes)", packet_max, actual_len);
 #endif
 
     return actual_len;
 }
 
-int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
+void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
     assert(fwe != NULL);
 
 #ifdef APIDEBUG
@@ -424,15 +343,6 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
     // wait until handshake completes and transmit is possible
     while (fwe->state != FW_EXC_OPERATING || fwe->pkts_sent == fwe->fcts_rcvd || fwe->tx_busy) {
         fakewire_exc_check_invariants(fwe);
-
-        if (fwe->state == FW_EXC_DISCONNECTED) {
-            mutex_unlock(&fwe->mutex);
-
-#ifdef APIDEBUG
-            debug_printf("API write(%zu bytes) ERROR: disconnected", packet_len);
-#endif
-            return -1;
-        }
 
 #ifdef APIDEBUG
         debug_printf("API write(%zu bytes): WAIT(state=%d, pkts_sent=%u, fcts_rcvd=%u, busy=%d)",
@@ -466,8 +376,6 @@ int fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len
 #ifdef APIDEBUG
     debug_printf("API write(%zu bytes) success", packet_len);
 #endif
-
-    return 0;
 }
 
 // random interval in the range [3ms, 10ms)
@@ -498,7 +406,7 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
     uint64_t next_interval = clock_timestamp_monotonic() + handshake_period();
 
     mutex_lock(&fwe->mutex);
-    while (fwe->state != FW_EXC_DISCONNECTED) {
+    while (true) {
         fakewire_exc_check_invariants(fwe);
 
         uint64_t bound_ns = 0;
@@ -591,6 +499,4 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
             cond_wait(&fwe->cond, &fwe->mutex);
         }
     }
-    mutex_unlock(&fwe->mutex);
-    return NULL;
 }

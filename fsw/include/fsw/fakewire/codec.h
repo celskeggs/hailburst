@@ -63,9 +63,7 @@ typedef struct {
 void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output);
 // no destroy function provided because it isn't needed; you can simply stop using the encoder.
 
-// returns 0 on success, -1 if ring buffer has been shut down
-int fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
-// returns 0 on success, -1 if ring buffer has been shut down
-int fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
+void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
+void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
 
 #endif /* FSW_FAKEWIRE_CODEC_H */

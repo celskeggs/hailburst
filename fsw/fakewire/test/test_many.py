@@ -3,7 +3,7 @@ import os
 import shutil
 import subprocess
 
-N = 10000
+N = 2000
 MAXPROC = 200
 
 processes = []

@@ -22,18 +22,6 @@ void ringbuf_init(ringbuf_t *rb, size_t capacity, size_t elem_size) {
     rb->capacity = capacity;
     rb->elem_size = elem_size;
     rb->read_idx = rb->write_idx = 0;
-    rb->shutdown = false;
-}
-
-void ringbuf_shutdown(ringbuf_t *rb) {
-    assert(rb != NULL);
-    assert(rb->memory != NULL);
-    mutex_lock(&rb->mutex);
-    assert(rb->shutdown == false);
-    rb->shutdown = true;
-    semaphore_give(&rb->unblock_read);
-    semaphore_give(&rb->unblock_write);
-    mutex_unlock(&rb->mutex);
 }
 
 void ringbuf_destroy(ringbuf_t *rb) {
@@ -81,7 +69,7 @@ size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_fl
         assert(!rb->blocked_write);
         rb->blocked_write = true;
 
-        while (space == 0 && !rb->shutdown) {
+        while (space == 0) {
             mutex_unlock(&rb->mutex);
             semaphore_take(&rb->unblock_write);
             mutex_lock(&rb->mutex);
@@ -90,10 +78,6 @@ size_t ringbuf_write(ringbuf_t *rb, void *data_in, size_t elem_count, ringbuf_fl
 
         assert(rb->blocked_write == true);
         rb->blocked_write = false;
-    }
-    if (rb->shutdown) {
-        mutex_unlock(&rb->mutex);
-        return 0;
     }
     if (elem_count > space) {
         elem_count = space;
@@ -136,7 +120,7 @@ size_t ringbuf_read(ringbuf_t *rb, void *data_out, size_t elem_count, ringbuf_fl
         assert(!rb->blocked_read);
         rb->blocked_read = true;
 
-        while (size == 0 && !rb->shutdown) {
+        while (size == 0) {
             mutex_unlock(&rb->mutex);
             semaphore_take(&rb->unblock_read);
             mutex_lock(&rb->mutex);
@@ -194,17 +178,12 @@ size_t ringbuf_space(ringbuf_t *rb) {
     return space;
 }
 
-int ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count) {
+void ringbuf_write_all(ringbuf_t *rb, void *data_in, size_t elem_count) {
     assert(rb != NULL);
     while (elem_count > 0) {
         size_t sent = ringbuf_write(rb, data_in, elem_count, RB_BLOCKING);
-        if (sent == 0) {
-            assert(rb->shutdown);
-            return -1;
-        }
         assert(sent > 0 && sent <= elem_count);
         elem_count -= sent;
         data_in += sent * rb->elem_size;
     }
-    return 0;
 }

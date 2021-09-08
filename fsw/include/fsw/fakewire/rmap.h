@@ -33,13 +33,11 @@ typedef enum {
 } rmap_flags_t;
 
 typedef enum {
-    RS_OK = 0x00,
-    RS_REMOTE_ERR_MIN = 0x01,
-    RS_REMOTE_ERR_MAX = 0xFF,
-    RS_EXCHANGE_DOWN = 0x100,
-    RS_RECVLOOP_STOPPED = 0x101,
-    RS_DATA_TRUNCATED = 0x102,
-    RS_TRANSACTION_TIMEOUT = 0x103,
+    RS_OK                  = 0x000,
+    RS_REMOTE_ERR_MIN      = 0x001,
+    RS_REMOTE_ERR_MAX      = 0x0FF,
+    RS_DATA_TRUNCATED      = 0x100,
+    RS_TRANSACTION_TIMEOUT = 0x101,
 } rmap_status_t;
 
 typedef struct rmap_context_st rmap_context_t;
@@ -47,8 +45,6 @@ typedef struct rmap_context_st rmap_context_t;
 typedef struct {
     uint16_t next_txn_id;
     fw_exchange_t *exc;
-
-    bool hit_recv_err;
 
     size_t scratch_size;
     uint8_t *scratch_buffer;

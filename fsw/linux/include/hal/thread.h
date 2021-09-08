@@ -87,12 +87,8 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
 // name and priority go unused on POSIX; these are only used on FreeRTOS
 #define thread_create(x, name, priority, entrypoint, param) THREAD_CHECK(pthread_create((x), NULL, (entrypoint), (param)))
 #define thread_join(x)                                      THREAD_CHECK(pthread_join((x), NULL))
-#define thread_cancel(x)                                    (thread_cancel_impl((x), #x))
 #define thread_time_now(x)                                  THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
 #define thread_join_timed(x, t)                             THREAD_CHECK_OK(pthread_timedjoin_np((x), NULL, (t)), ETIMEDOUT)
-#define thread_disable_cancellation()                       THREAD_CHECK(pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL))
-#define thread_enable_cancellation()                        THREAD_CHECK(pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL))
-#define thread_testcancel()                                 (pthread_testcancel())
 
 // semaphores are created empty, such that an initial take will block
 static inline void semaphore_init(semaphore_t *sema) {

@@ -25,7 +25,6 @@ void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_
     mon->next_txn_id = 1;
     mon->exc = exc;
     mon->pending_first = NULL;
-    mon->hit_recv_err = false;
 
     mon->scratch_size = max_read_length + SCRATCH_MARGIN_READ;
     mon->scratch_buffer = malloc(mon->scratch_size);
@@ -148,12 +147,6 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, data_length);
 #endif
-    if (context->monitor->hit_recv_err) {
-#ifdef DEBUGTXN
-        debug0("RMAP WRITE  STOP: RECVLOOP_STOPPED");
-#endif
-        return RS_RECVLOOP_STOPPED;
-    }
 
     // use scratch buffer
     uint8_t *out = context->scratch_buffer;
@@ -219,31 +212,20 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
 
     assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    int wstatus = fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
     assert(context->is_pending == true);
 
-    // exactly how we determine the final status depends on whether the network write was successful,
-    // and whether we expect a reply from the remote device.
+    // exactly how we determine the final status depends on whether we expect a reply from the remote device.
     rmap_status_t status_out;
 
-    if (wstatus < 0) {
-        // oops! network error!
-
-        status_out = RS_EXCHANGE_DOWN;
-
-        if (context->has_received) {
-            // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
-            // it as an error.
-            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
-        }
-    } else if (flags & RF_ACKNOWLEDGE) {
+    if (flags & RF_ACKNOWLEDGE) {
         // if we transmitted successfully, and need an acknowledgement, then all we've got to do is wait for a reply!
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (context->has_received == false && context->monitor->hit_recv_err == false) {
+        while (context->has_received == false) {
             uint64_t now = clock_timestamp_monotonic();
             if (now >= timeout) {
                 break;
@@ -258,8 +240,6 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         // got a reply!
         if (context->has_received == true) {
             status_out = context->received_status;
-        } else if (context->monitor->hit_recv_err == true) {
-            status_out = RS_RECVLOOP_STOPPED;
         } else {
             assert(clock_timestamp_monotonic() > timeout);
             status_out = RS_TRANSACTION_TIMEOUT;
@@ -313,12 +293,6 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, *data_length);
 #endif
-    if (context->monitor->hit_recv_err) {
-#ifdef DEBUGTXN
-        debug0("RMAP  READ  STOP: RECVLOOP_STOPPED");
-#endif
-        return RS_RECVLOOP_STOPPED;
-    }
 
     // use scratch buffer
     uint8_t *out = context->scratch_buffer;
@@ -376,63 +350,44 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
 
     assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    int wstatus = fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
     assert(context->is_pending == true);
 
-    // exactly how we determine the final status depends on whether the network write was successful,
-    // and whether we expect a reply from the remote device.
+    // next: wait for a reply!
+    uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
+    while (context->has_received == false) {
+        uint64_t now = clock_timestamp_monotonic();
+        if (now >= timeout) {
+            break;
+        }
+        mutex_unlock(&context->monitor->pending_mutex);
+        semaphore_take_timed(&context->on_complete, timeout - now);
+        mutex_lock(&context->monitor->pending_mutex);
+
+        assert(context->is_pending == true);
+    }
+
     rmap_status_t status_out;
 
-    if (wstatus < 0) {
-        // oops! network error!
-
-        status_out = RS_EXCHANGE_DOWN;
-        *data_length = 0;
-
-        if (context->has_received) {
-            // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
-            // it as an error.
-            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
+    // got a reply!
+    if (context->has_received == true) {
+        status_out = context->received_status;
+        assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
+        if (context->read_actual_length > max_data_length) {
+            if (status_out == RS_OK) {
+                status_out = RS_DATA_TRUNCATED;
+            }
+            *data_length = max_data_length;
+        } else {
+            *data_length = context->read_actual_length;
         }
     } else {
-        // if we transmitted successfully, then all we've got to do is wait for a reply!
-
-        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (context->has_received == false && context->monitor->hit_recv_err == false) {
-            uint64_t now = clock_timestamp_monotonic();
-            if (now >= timeout) {
-                break;
-            }
-            mutex_unlock(&context->monitor->pending_mutex);
-            semaphore_take_timed(&context->on_complete, timeout - now);
-            mutex_lock(&context->monitor->pending_mutex);
-
-            assert(context->is_pending == true);
-        }
-
-        // got a reply!
-        if (context->has_received == true) {
-            status_out = context->received_status;
-            assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
-            if (context->read_actual_length > max_data_length) {
-                if (status_out == RS_OK) {
-                    status_out = RS_DATA_TRUNCATED;
-                }
-                *data_length = max_data_length;
-            } else {
-                *data_length = context->read_actual_length;
-            }
-        } else if (context->monitor->hit_recv_err == true) {
-            status_out = RS_RECVLOOP_STOPPED;
-            *data_length = 0;
-        } else {
-            assert(clock_timestamp_monotonic() > timeout);
-            status_out = RS_TRANSACTION_TIMEOUT;
-            *data_length = 0;
-        }
+        assert(clock_timestamp_monotonic() > timeout);
+        status_out = RS_TRANSACTION_TIMEOUT;
+        *data_length = 0;
     }
 
     // and now we can remove our pending entry from the linked list, so that the transaction ID can be reused by others
@@ -558,15 +513,10 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
 static void *rmap_monitor_recvloop(void *mon_opaque) {
     rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
     assert(mon != NULL && mon->scratch_buffer != NULL);
-    assert(mon->hit_recv_err == false);
 
     for (;;) {
-        ssize_t count = fakewire_exc_read(mon->exc, mon->scratch_buffer, mon->scratch_size);
-        if (count < 0) {
-            mon->hit_recv_err = true;
-            return NULL;
-        }
-        if (count > (ssize_t) mon->scratch_size) {
+        size_t count = fakewire_exc_read(mon->exc, mon->scratch_buffer, mon->scratch_size);
+        if (count > mon->scratch_size) {
             debugf("RMAP packet received was too large for buffer: %zd > %zu; discarding.", count, mon->scratch_size);
         } else if (!rmap_recv_handle(mon, mon->scratch_buffer, count)) {
             debug0("RMAP packet received was corrupted or unexpected.");

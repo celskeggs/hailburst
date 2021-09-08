@@ -27,10 +27,7 @@ static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t byte
     debug_printf("Transmitting %zu regular bytes.", bytes_count);
 #endif
 
-    if (fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count) < 0) {
-        // drop data; we're shutting down.
-        assert(fwl->shutdown);
-    }
+    fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
 }
 
 static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param) {
@@ -42,10 +39,7 @@ static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t par
     debug_printf("Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
-    if (fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param) < 0) {
-        // drop data; we're shutting down.
-        assert(fwl->shutdown);
-    }
+    fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param);
 }
 
 static void *fakewire_link_output_loop(void *opaque) {
@@ -55,22 +49,13 @@ static void *fakewire_link_output_loop(void *opaque) {
     char write_buf[FW_LINK_RING_SIZE];
 
     while (true) {
-        // we don't check shutdown on the loop itself; we want to drain all the remaining bytes before we halt, unless
-        // a timeout happens first.
-
-        // disable cancellation to simplify ring buffer code
-        thread_disable_cancellation();
-
         // read as many bytes as possible from ring buffer in one chunk
         size_t count_bytes = ringbuf_read(&fwl->enc_ring, write_buf, sizeof(write_buf), RB_BLOCKING);
-        if (count_bytes == 0 && fwl->shutdown) {
-            break;
-        }
         assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
 #ifdef DEBUG
         debug_printf("Preliminary ringbuf_read produced %zu bytes.", count_bytes);
 #endif
-        if (count_bytes < sizeof(write_buf) && !fwl->shutdown) {
+        if (count_bytes < sizeof(write_buf)) {
             usleep(500); // wait half a millisecond to bunch related writes
             count_bytes += ringbuf_read(&fwl->enc_ring, write_buf + count_bytes, sizeof(write_buf) - count_bytes, RB_NONBLOCKING);
 #ifdef DEBUG
@@ -78,12 +63,6 @@ static void *fakewire_link_output_loop(void *opaque) {
 #endif
         }
         assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
-
-        // we don't check shutdown here, because we want to write any last bytes if we can... we'll wait for the
-        // cancellation signal to arrive in 'write'.
-
-        // enable cancellation to simplify termination
-        thread_enable_cancellation();
 
         // write one large chunk to the output port
 #ifdef DEBUG
@@ -98,7 +77,6 @@ static void *fakewire_link_output_loop(void *opaque) {
             return NULL;
         }
     }
-    return NULL;
 }
 
 static void *fakewire_link_input_loop(void *opaque) {
@@ -107,19 +85,10 @@ static void *fakewire_link_input_loop(void *opaque) {
 
     uint8_t read_buf[1024];
 
-    while (!fwl->shutdown) {
-        // enable cancellation to simplify termination
-        thread_enable_cancellation();
-
+    while (true) {
         // read as many bytes as possible from the input port at once
         ssize_t actual = read(fwl->fd_in, read_buf, sizeof(read_buf));
 
-        // disable cancellation so that the callback code we run doesn't have to be aware of cancellation
-        thread_disable_cancellation();
-
-        if (actual == 0 && fwl->shutdown) {
-            return NULL;
-        }
         if (actual <= 0) { // 0 means EOF, <0 means error
             debug_printf("Read failed: %zd when maximum was %zu", actual, sizeof(read_buf));
             return NULL;
@@ -129,14 +98,9 @@ static void *fakewire_link_input_loop(void *opaque) {
 #endif
         assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
 
-        if (fwl->shutdown) {
-            break;
-        }
-
         // write as many bytes at once as possible
         fakewire_dec_decode(&fwl->decoder, read_buf, actual);
     }
-    return NULL;
 }
 
 int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path, int flags, const char *label) {
@@ -225,7 +189,6 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
     fakewire_dec_init(&fwl->decoder, receiver);
 
     // and now let's set up the I/O threads
-    fwl->shutdown = false;
     thread_create(&fwl->output_thread, "fw_out_loop", PRIORITY_SERVERS, fakewire_link_output_loop, fwl);
     thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl);
 
@@ -236,85 +199,4 @@ fw_receiver_t *fakewire_link_interface(fw_link_t *fwl) {
     assert(fwl != NULL);
 
     return &fwl->interface;
-}
-
-void fakewire_link_shutdown(fw_link_t *fwl) {
-    if (!fwl->shutdown) {
-#ifdef DEBUG
-        debug_puts("Shutting down link gracefully...");
-#endif
-
-        // first, attempt to shut down threads gracefully
-        fwl->shutdown = true;
-
-        // now shut down the ring buffer so that all further communication ceases... once the data currently in the
-        // buffer has drained.
-        ringbuf_shutdown(&fwl->enc_ring);
-    }
-}
-
-void fakewire_link_destroy(fw_link_t *fwl) {
-    assert(fwl != NULL);
-
-    fakewire_link_shutdown(fwl);
-
-    struct timespec ts;
-    thread_time_now(&ts);
-    // wait up to two seconds
-    ts.tv_sec += 2;
-
-#ifdef DEBUG
-    debug_puts("Trying to join input thread nicely...");
-#endif
-
-    // make sure both threads end... forcefully, if necessary
-    if (!thread_join_timed(fwl->input_thread, &ts)) {
-#ifdef DEBUG
-        debug_puts("Could not join input thread nicely; cancelling.");
-#endif
-        thread_cancel(fwl->input_thread);
-#ifdef DEBUG
-        debug_puts("Joining cancelled input thread.");
-#endif
-        thread_join(fwl->input_thread);
-    }
-
-#ifdef DEBUG
-    debug_puts("Trying to join output thread nicely...");
-#endif
-
-    if (!thread_join_timed(fwl->output_thread, &ts)) {
-#ifdef DEBUG
-        debug_puts("Could not join output thread nicely; cancelling.");
-#endif
-        thread_cancel(fwl->output_thread);
-#ifdef DEBUG
-        debug_puts("Joining cancelled output thread.");
-#endif
-        thread_join(fwl->output_thread);
-    }
-
-#ifdef DEBUG
-    debug_puts("All threads joined.");
-#endif
-
-    // close file descriptors
-    assert(fwl->fd_in != 0 && fwl->fd_out != 0);
-    if (close(fwl->fd_in) != 0) {
-        perror("close");
-    }
-    if (fwl->fd_out != fwl->fd_in) {
-        if (close(fwl->fd_out) != 0) {
-            perror("close");
-        }
-    }
-    fwl->fd_in = fwl->fd_out = -1;
-
-    // no code needed here to destroy codecs... they're just structs
-
-    // tear down ring buffer
-    ringbuf_destroy(&fwl->enc_ring);
-
-    // wipe memory to help mitigate use-after-destroy bugs
-    memset(fwl, 0, sizeof(fw_link_t));
 }

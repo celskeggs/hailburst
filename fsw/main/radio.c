@@ -86,11 +86,6 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
 static bool radio_is_error_recoverable(rmap_status_t status) {
     assert(status != RS_OK);
     switch ((uint32_t) status) {
-    // indicates failure of lower network stack; no point in retrying.
-    case RS_EXCHANGE_DOWN:
-        return false;
-    case RS_RECVLOOP_STOPPED:
-        return false;
     // indicates likely packet corruption; worth retrying in case it works again.
     case RS_DATA_TRUNCATED:
         return true;
@@ -208,7 +203,7 @@ retry:
         return false;
     }
     // now convert from big-endian
-    for (int i = 0; i <= last_reg - first_reg; i++) {
+    for (int i = 0; i <= (int) last_reg - (int) first_reg; i++) {
         output[i] = be32toh(output[i]);
     }
     return true;

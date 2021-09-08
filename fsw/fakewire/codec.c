@@ -145,7 +145,7 @@ void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output) {
     fwe->output = output;
 }
 
-int fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
+void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
     // allocate enough space for byte_count * 2 bytes
@@ -167,27 +167,21 @@ int fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_c
 #ifdef DEBUG
     debugf("[fakewire_codec] Encoded %zu raw data bytes to %zu line bytes.", byte_count, j);
 #endif
-    int err = ringbuf_write_all(fwe->output, temp, j);
+    ringbuf_write_all(fwe->output, temp, j);
 #ifdef DEBUG
     debugf("[fakewire_codec] Completed write of %zu bytes to ring buffer.", j);
 #endif
-    return err;
 }
 
-int fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param) {
+void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param) {
     assert(fwe != NULL);
     assert(fakewire_is_special(symbol) && symbol != FWC_ESCAPE_SYM);
     assert(param == 0 || fakewire_is_parametrized(symbol));
 
     uint8_t byte = symbol;
-    if (ringbuf_write_all(fwe->output, &byte, 1) < 0) {
-        return -1;
-    }
+    ringbuf_write_all(fwe->output, &byte, 1);
     if (fakewire_is_parametrized(symbol)) {
         uint32_t netparam = htobe32(param);
-        if (fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam)) < 0) {
-            return -1;
-        }
+        fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam));
     }
-    return 0;
 }

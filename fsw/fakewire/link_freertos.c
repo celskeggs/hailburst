@@ -24,8 +24,7 @@ static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t byte
     debug_printf("Transmitting %zu regular bytes.", bytes_count);
 #endif
 
-    int status = fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
-    assert(status == 0); // make sure no data is dropped; FreeRTOS never shuts down
+    fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
 }
 
 static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param) {
@@ -37,8 +36,7 @@ static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t par
     debug_printf("Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
-    int status = fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param);
-    assert(status == 0); // make sure no data is dropped; FreeRTOS never shuts down
+    fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param);
 }
 
 static void *fakewire_link_output_loop(void *opaque) {
@@ -83,7 +81,6 @@ static void *fakewire_link_output_loop(void *opaque) {
         debug_printf("Finished writing data to VIRTIO port.", actual);
 #endif
     }
-    return NULL;
 }
 
 static void *fakewire_link_input_loop(void *opaque) {
@@ -114,7 +111,6 @@ static void *fakewire_link_input_loop(void *opaque) {
         // write as many bytes at once as possible
         fakewire_dec_decode(&fwl->decoder, read_buf, actual);
     }
-    return NULL;
 }
 
 static void fakewire_link_setup(void *opaque, struct virtio_console_port *port) {

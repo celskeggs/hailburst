@@ -12,7 +12,6 @@ typedef struct {
     int fd_out;
 
     const char *label;
-    bool shutdown;
 
     fw_receiver_t interface;
     ringbuf_t     enc_ring;

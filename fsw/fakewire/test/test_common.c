@@ -33,21 +33,21 @@ void test_common_get_fifo(const char *infix, char *out, size_t len) {
     assert(test_common_scratch_dir != NULL);
 
     int actual = snprintf(out, len, "%s/%s", test_common_scratch_dir, infix);
-    assert(actual < len); // no overflow
+    assert(actual < (ssize_t) len); // no overflow
 }
 
 void test_common_get_fifo_p2c(const char *infix, char *out, size_t len) {
     assert(test_common_scratch_dir != NULL);
 
     int actual = snprintf(out, len, "%s/%s-p2c.pipe", test_common_scratch_dir, infix);
-    assert(actual < len); // no overflow
+    assert(actual < (ssize_t) len); // no overflow
 }
 
 void test_common_get_fifo_c2p(const char *infix, char *out, size_t len) {
     assert(test_common_scratch_dir != NULL);
 
     int actual = snprintf(out, len, "%s/%s-c2p.pipe", test_common_scratch_dir, infix);
-    assert(actual < len); // no overflow
+    assert(actual < (ssize_t) len); // no overflow
 }
 
 int main(int argc, char *argv[]) {

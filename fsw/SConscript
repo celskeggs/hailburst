@@ -35,7 +35,7 @@ EXTERNAL_SRC = []
 BUILD_EXTRAS = True
 
 if PLATFORM == PLAT_LINUX:
-    env = Environment(CCFLAGS=['-ggdb', '-Wall', '-Werror', '-D_GNU_SOURCE'], LIBS=['pthread', 'z'],
+    env = Environment(CCFLAGS=['-ggdb', '-Wall', '-Wextra', '-Werror', '-D_GNU_SOURCE'], LIBS=['pthread', 'z'],
                       PREFIX=GetOption('prefix'))
 
     for inherit in ["AR", "AS", "LD", "NM", "CC", "CPP", "CXX", "RANLIB", "READELF", "STRIP", "OBJCOPY", "OBJDUMP"]:

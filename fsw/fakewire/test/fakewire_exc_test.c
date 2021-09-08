@@ -55,11 +55,7 @@ static void *exchange_reader(void *opaque) {
 
     while (true) {
         debugf("[%s] - Started read of packet", rc->name);
-        ssize_t actual_len = fakewire_exc_read(rc->exc, receive_buffer, sizeof(receive_buffer));
-        if (actual_len < 0) {
-            debugf("[%s] Packet could not be read (actual_len=%ld); reader finished.", rc->name, actual_len);
-            return NULL;
-        }
+        size_t actual_len = fakewire_exc_read(rc->exc, receive_buffer, sizeof(receive_buffer));
         debugf("[%s] Completed read of packet with length %ld", rc->name, actual_len - 1);
         assert(actual_len >= 1 && actual_len <= sizeof(receive_buffer));
 
@@ -107,10 +103,7 @@ static void *exchange_writer(void *opaque) {
         memcpy(send_buffer+1, chain->packet_data, chain->packet_len);
 
         debugf("[%s] - Started write of packet with length %lu", wc->name, chain->packet_len);
-        if (fakewire_exc_write(wc->exc, send_buffer, chain->packet_len + 1) < 0) {
-            debug0("failed during fakewire_exc_write");
-            return NULL;
-        }
+        fakewire_exc_write(wc->exc, send_buffer, chain->packet_len + 1);
         debugf("[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
         chain = chain->next;
@@ -134,10 +127,9 @@ static void *exchange_controller(void *opaque) {
 
     fw_exchange_t *exc = malloc(sizeof(fw_exchange_t));
     assert(exc != NULL);
-    fakewire_exc_init(exc, ec->name);
-    debugf("[%s] attaching...", ec->name);
-    if (fakewire_exc_attach(exc, ec->path_buf, ec->flags) < 0) {
-        debugf("[%s] could not attach", ec->name);
+    debugf("[%s] initializing exchange...", ec->name);
+    if (fakewire_exc_init(exc, ec->name, ec->path_buf, ec->flags) < 0) {
+        debugf("[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
         return NULL;
