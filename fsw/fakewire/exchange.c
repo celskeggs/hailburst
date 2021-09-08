@@ -277,67 +277,6 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
     mutex_unlock(&fwe->mutex);
 }
 
-size_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet_max) {
-    assert(fwe != NULL);
-
-#ifdef APIDEBUG
-    debug_printf("API read(%zu bytes) start", packet_max);
-#endif
-
-    ssize_t actual_len = -1;
-
-    mutex_lock(&fwe->mutex);
-    while (true) {
-        fakewire_exc_check_invariants(fwe);
-
-        // wait until handshake completes and receive is possible
-        if (fwe->state != FW_EXC_OPERATING || fwe->inbound_buffer != NULL) {
-            cond_wait(&fwe->cond, &fwe->mutex);
-            continue;
-        }
-
-#ifdef DEBUG
-        debug_puts("Registering inbound buffer for receive...");
-#endif
-
-        // make sure packet is clear
-        memset(packet_out, 0, packet_max);
-        // set up receive buffers
-        assert(!fwe->recv_in_progress);
-        assert(fwe->pkts_rcvd == fwe->fcts_sent);
-        fwe->inbound_buffer = packet_out;
-        fwe->inbound_buffer_offset = 0;
-        fwe->inbound_buffer_max = packet_max;
-        fwe->inbound_read_done = false;
-        cond_broadcast(&fwe->cond);
-
-        while (!fwe->inbound_read_done && fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer == packet_out) {
-            cond_wait(&fwe->cond, &fwe->mutex);
-        }
-        if (fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer == packet_out) {
-            assert(fwe->inbound_read_done == true);
-            assert(fwe->inbound_buffer_max == packet_max);
-            fwe->inbound_buffer = NULL;
-            fwe->inbound_read_done = false;
-            cond_broadcast(&fwe->cond);
-
-            actual_len = fwe->inbound_buffer_offset;
-            assert(actual_len >= 0);
-            break;
-        }
-
-        // the connection must have gotten reset... let's try again
-    }
-    mutex_unlock(&fwe->mutex);
-
-    assert(actual_len >= 0);
-#ifdef APIDEBUG
-    debug_printf("API read(%zu bytes) success(%zd bytes)", packet_max, actual_len);
-#endif
-
-    return actual_len;
-}
-
 void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
     assert(fwe != NULL);
 
@@ -511,12 +450,63 @@ static void *fakewire_exc_reader_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
 
+    uint8_t *buffer = fwe->receive_buffer;
+    size_t   buf_max = fwe->options.recv_max_size;
+
+    mutex_lock(&fwe->mutex);
     while (true) {
-        size_t count = fakewire_exc_read(fwe, fwe->receive_buffer, fwe->options.recv_max_size);
-        if (count > fwe->options.recv_max_size) {
-            debug_printf("Packet length %zd could not fit within buffer of size %zu; discarding.", count, fwe->options.recv_max_size);
-        } else {
-            fwe->options.recv_callback(fwe->options.recv_param, fwe->receive_buffer, count);
+        fakewire_exc_check_invariants(fwe);
+
+        // wait until handshake completes and receive is possible
+        if (fwe->state != FW_EXC_OPERATING || fwe->inbound_buffer != NULL) {
+            cond_wait(&fwe->cond, &fwe->mutex);
+            continue;
         }
+
+#ifdef DEBUG
+        debug_printf("Attempting read of up to %u bytes.", buf_max);
+#endif
+
+        // make sure packet is clear
+        memset(buffer, 0, buf_max);
+        // set up receive buffers
+        assert(!fwe->recv_in_progress);
+        assert(fwe->pkts_rcvd == fwe->fcts_sent);
+        fwe->inbound_buffer = buffer;
+        fwe->inbound_buffer_offset = 0;
+        fwe->inbound_buffer_max = buf_max;
+        fwe->inbound_read_done = false;
+        cond_broadcast(&fwe->cond);
+
+        while (!fwe->inbound_read_done && fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer == buffer) {
+            cond_wait(&fwe->cond, &fwe->mutex);
+        }
+        if (fwe->state != FW_EXC_OPERATING || fwe->inbound_buffer != buffer) {
+            // the connection must have gotten reset... let's try again
+            continue;
+        }
+        assert(fwe->inbound_read_done == true);
+        assert(fwe->inbound_buffer_max == buf_max);
+        fwe->inbound_buffer = NULL;
+        fwe->inbound_read_done = false;
+        cond_broadcast(&fwe->cond);
+
+        size_t actual_len = fwe->inbound_buffer_offset;
+
+        mutex_unlock(&fwe->mutex);
+
+        if (actual_len > fwe->options.recv_max_size) {
+            debug_printf("Packet length %zd could not fit within buffer of size %zu; discarding.", actual_len, buf_max);
+        } else {
+#ifdef APIDEBUG
+            debug_printf("API callback for read(%zd bytes/%zu bytes) starting...", actual_len, buf_max);
+#endif
+            fwe->options.recv_callback(fwe->options.recv_param, buffer, actual_len);
+#ifdef APIDEBUG
+            debug_puts("API callback for read completed.");
+#endif
+        }
+
+        mutex_lock(&fwe->mutex);
     }
 }
