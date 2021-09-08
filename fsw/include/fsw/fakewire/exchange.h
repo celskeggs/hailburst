@@ -12,6 +12,14 @@ typedef enum {
     FW_EXC_OPERATING,   // received a valid non-conflicting handshake
 } fw_exchange_state;
 
+typedef enum {
+    FW_RECV_PREPARING = 0, // waiting for operating mode to be reached and for FCT to be sent
+    FW_RECV_LISTENING,     // waiting for Start-of-Packet character
+    FW_RECV_RECEIVING,     // receiving data body of packet
+    FW_RECV_OVERFLOWED,    // received data too large for buffer; waiting for end before discarding
+    FW_RECV_CALLBACK,      // full packet has been received; waiting for callback to complete
+} fw_exchange_recv_state;
+
 typedef void (*fakewire_exc_read_cb)(void *param, uint8_t *packet_data, size_t packet_length);
 
 typedef struct {
@@ -45,13 +53,9 @@ typedef struct fw_exchange_st {
     uint32_t pkts_sent;
     uint32_t pkts_rcvd;
 
-    uint8_t *receive_buffer;
-
-    uint8_t *inbound_buffer;
-    size_t   inbound_buffer_offset;
-    size_t   inbound_buffer_max;
-    bool     inbound_read_done;
-    bool     recv_in_progress;
+    uint8_t               *recv_buffer; // allocated size: options.recv_max_size
+    fw_exchange_recv_state recv_state;
+    size_t                 recv_offset;
 } fw_exchange_t;
 
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization

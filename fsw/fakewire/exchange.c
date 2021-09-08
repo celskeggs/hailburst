@@ -41,9 +41,10 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     };
 
     assert(opts.recv_max_size >= 1);
-    fwe->receive_buffer = malloc(opts.recv_max_size);
-    assert(fwe->receive_buffer != NULL);
+    fwe->recv_buffer = malloc(opts.recv_max_size);
+    assert(fwe->recv_buffer != NULL);
 
+    fwe->recv_state = FW_RECV_PREPARING;
     fakewire_exc_reset(fwe);
 
     if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, opts.link_options) < 0) {
@@ -60,16 +61,15 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
 
 static void fakewire_exc_reset(fw_exchange_t *fwe) {
     fwe->state = FW_EXC_CONNECTING;
+    if (fwe->recv_state != FW_RECV_CALLBACK) {
+        fwe->recv_state = FW_RECV_PREPARING;
+    }
 
     fwe->send_handshake_id = 0;
     fwe->send_secondary_handshake = false;
     fwe->recv_handshake_id = 0;
 
     fwe->fcts_sent = fwe->fcts_rcvd = fwe->pkts_sent = fwe->pkts_rcvd = 0;
-
-    fwe->inbound_buffer = NULL;
-    fwe->inbound_read_done = false;
-    fwe->recv_in_progress = false;
 
     cond_broadcast(&fwe->cond);
 }
@@ -86,30 +86,27 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     mutex_lock(&fwe->mutex);
     fakewire_exc_check_invariants(fwe);
 
-    if (fwe->state == FW_EXC_OPERATING) {
-        if (!fwe->recv_in_progress) {
-            debug_printf("Hit unexpected data character 0x%x before start-of-packet; resetting.", bytes_in[0]);
-            fakewire_exc_reset(fwe);
-            mutex_unlock(&fwe->mutex);
-            return;
-        }
-        assert(fwe->inbound_buffer != NULL);
-        assert(!fwe->inbound_read_done);
-        assert(fwe->inbound_buffer_offset <= fwe->inbound_buffer_max);
-
-        size_t copy_n = fwe->inbound_buffer_max - fwe->inbound_buffer_offset;
-        if (copy_n > bytes_count) {
-            copy_n = bytes_count;
-        }
-        if (copy_n > 0) {
-            memcpy(&fwe->inbound_buffer[fwe->inbound_buffer_offset], bytes_in, copy_n);
-        }
-        // keep incrementing even if we overflow so that the reader can tell that the packet was truncated
-        fwe->inbound_buffer_offset += bytes_count;
-    } else {
-        assert(fwe->inbound_buffer == NULL);
+    if (fwe->state != FW_EXC_OPERATING) {
+        assert(fwe->recv_state == FW_RECV_PREPARING || fwe->recv_state == FW_RECV_CALLBACK);
         debug_printf("Received unexpected data character 0x%x during handshake mode %d; resetting.", bytes_in[0], fwe->state);
         fakewire_exc_reset(fwe);
+    } else if (fwe->recv_state == FW_RECV_OVERFLOWED) {
+        // discard extraneous bytes and do nothing
+    } else if (fwe->recv_state != FW_RECV_RECEIVING) {
+        debug_printf("Hit unexpected data character 0x%x during receive state %d; resetting.", bytes_in[0], fwe->recv_state);
+        fakewire_exc_reset(fwe);
+    } else if (fwe->recv_offset + bytes_count > fwe->options.recv_max_size) {
+        debug_printf("Packet exceeded buffer size %zu; discarding.", fwe->options.recv_max_size);
+        fwe->recv_state = FW_RECV_OVERFLOWED;
+    } else {
+        // actually collect the received data and put it into the buffer
+        assert(fwe->recv_buffer != NULL);
+        assert(fwe->recv_offset < fwe->options.recv_max_size);
+
+        memcpy(&fwe->recv_buffer[fwe->recv_offset], bytes_in, bytes_count);
+        fwe->recv_offset += bytes_count;
+
+        assert(fwe->recv_offset <= fwe->options.recv_max_size);
     }
     mutex_unlock(&fwe->mutex);
 }
@@ -139,18 +136,11 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
             debug_puts("Received unexpected secondary handshake when no primary handshake had been sent; resetting.");
             fakewire_exc_reset(fwe);
             break;
-        case FWC_START_PACKET: // fallthrough
-        case FWC_END_PACKET:   // fallthrough
-        case FWC_ERROR_PACKET: // fallthrough
-        case FWC_FLOW_CONTROL: // fallthrough
-        case FWC_KEEP_ALIVE:   // fallthrough
-        case FWC_CODEC_ERROR:
+        default:
             debug_printf("Hit unexpected control character %s while CONNECTING; resetting.",
                          fakewire_codec_symbol(symbol));
             fakewire_exc_reset(fwe);
             break;
-        default:
-            assert(false);
         }
     } else if (fwe->state == FW_EXC_HANDSHAKING) {
         switch (symbol) {
@@ -170,18 +160,11 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
                 fakewire_exc_reset(fwe);
             }
             break;
-        case FWC_START_PACKET: // fallthrough
-        case FWC_END_PACKET:   // fallthrough
-        case FWC_ERROR_PACKET: // fallthrough
-        case FWC_FLOW_CONTROL: // fallthrough
-        case FWC_KEEP_ALIVE:   // fallthrough
-        case FWC_CODEC_ERROR:
+        default:
             debug_printf("Hit unexpected control character %s while HANDSHAKING; resetting.",
                          fakewire_codec_symbol(symbol));
             fakewire_exc_reset(fwe);
             break;
-        default:
-            assert(false);
         }
     } else if (fwe->state == FW_EXC_OPERATING) {
         switch (symbol) {
@@ -205,37 +188,37 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
                              fwe->fcts_sent, fwe->pkts_rcvd);
                 fakewire_exc_reset(fwe);
             } else {
-                assert(fwe->inbound_buffer != NULL); // should always have a buffer if we sent a FCT!
-                assert(!fwe->inbound_read_done);     // if done hasn't been reset to false, we shouldn't have sent a FCT!
-                assert(!fwe->recv_in_progress);
-
-                fwe->recv_in_progress = true;
+                assert(fwe->recv_state == FW_RECV_LISTENING);
+                fwe->recv_state = FW_RECV_RECEIVING;
                 fwe->pkts_rcvd += 1;
+                // reset receive buffer before proceeding
+                memset(fwe->recv_buffer, 0, fwe->options.recv_max_size);
+                fwe->recv_offset = 0;
             }
             break;
         case FWC_END_PACKET:
-            if (!fwe->recv_in_progress) {
-                debug_puts("Hit unexpected end-of-packet before start-of-packet; resetting.");
-                fakewire_exc_reset(fwe);
-            } else {
-                assert(fwe->inbound_buffer != NULL); // should always have a buffer if a read is in progress!
-                assert(!fwe->inbound_read_done);
-
+            if (fwe->recv_state == FW_RECV_OVERFLOWED) {
+                // discard state and get ready for another packet
+                fwe->recv_state = FW_RECV_PREPARING;
+            } else if (fwe->recv_state == FW_RECV_RECEIVING) {
                 // confirm completion
-                fwe->inbound_read_done = true;
-                fwe->recv_in_progress = false;
+                fwe->recv_state = FW_RECV_CALLBACK;
                 cond_broadcast(&fwe->cond);
+            } else {
+                debug_printf("Hit unexpected end-of-packet in receive state %d; resetting.", fwe->recv_state);
+                fakewire_exc_reset(fwe);
             }
             break;
         case FWC_ERROR_PACKET:
-            if (!fwe->recv_in_progress) {
-                debug_puts("Hit unexpected error-end-of-packet before start-of-packet; resetting.");
-                fakewire_exc_reset(fwe);
+            if (fwe->recv_state == FW_RECV_OVERFLOWED) {
+                // discard state and get ready for another packet
+                fwe->recv_state = FW_RECV_PREPARING;
+            } else if (fwe->recv_state == FW_RECV_RECEIVING) {
+                // discard state and get ready for another packet
+                fwe->recv_state = FW_RECV_PREPARING;
             } else {
-                assert(fwe->inbound_buffer != NULL); // should always have a buffer if a read is in progress!
-                assert(!fwe->inbound_read_done);
-                // discard the data in the current packet
-                fwe->inbound_buffer_offset = 0;
+                debug_printf("Hit unexpected error-in-packet in receive state %d; resetting.", fwe->recv_state);
+                fakewire_exc_reset(fwe);
             }
             break;
         case FWC_FLOW_CONTROL:
@@ -389,7 +372,26 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
 
                 now = clock_timestamp_monotonic();
                 next_interval = now + handshake_period();
-            } else if (now >= next_interval && fwe->state != FW_EXC_OPERATING) {
+            } else if (fwe->state == FW_EXC_OPERATING &&
+                           (now >= next_interval || fwe->recv_state == FW_RECV_PREPARING)) {
+                if (fwe->recv_state == FW_RECV_PREPARING) {
+#ifdef DEBUG
+                    debug_puts("Sending FCT.");
+#endif
+                    fwe->fcts_sent += 1;
+                    fwe->recv_state = FW_RECV_LISTENING;
+                }
+#ifdef DEBUG
+                debug_printf("Transmitting reminder FCT(%u) and KAT(%u) tokens.",
+                             fwe->fcts_sent, fwe->pkts_sent);
+#endif
+                fakewire_exc_send_ctrl_char(fwe, FWC_FLOW_CONTROL, fwe->fcts_sent);
+                fakewire_exc_send_ctrl_char(fwe, FWC_KEEP_ALIVE, fwe->pkts_sent);
+                cond_broadcast(&fwe->cond);
+
+                now = clock_timestamp_monotonic();
+                next_interval = now + handshake_period();
+            } else if (now >= next_interval) {
                 assert(fwe->state == FW_EXC_HANDSHAKING || fwe->state == FW_EXC_CONNECTING);
                 // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
                 uint32_t handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
@@ -402,31 +404,6 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
 
                 debug_printf("Sent primary handshake with ID=0x%08x.", handshake_id);
 
-                cond_broadcast(&fwe->cond);
-
-                now = clock_timestamp_monotonic();
-                next_interval = now + handshake_period();
-            } else if (fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer != NULL
-                        && fwe->fcts_sent == fwe->pkts_rcvd && !fwe->recv_in_progress && !fwe->inbound_read_done) {
-                // if we're ready to receive data, but haven't sent a FCT, send one
-                fwe->fcts_sent += 1;
-#ifdef DEBUG
-                debug_printf("Sending FCT(%u) and KAT(%u) on inbound_buffer=%p (fwe=%p)", fwe->fcts_sent, fwe->pkts_sent, fwe->inbound_buffer, fwe);
-#endif
-                fakewire_exc_send_ctrl_char(fwe, FWC_FLOW_CONTROL, fwe->fcts_sent);
-                fakewire_exc_send_ctrl_char(fwe, FWC_KEEP_ALIVE, fwe->pkts_sent);
-                cond_broadcast(&fwe->cond);
-
-                now = clock_timestamp_monotonic();
-                next_interval = now + handshake_period();
-            } else if (now >= next_interval) {
-                assert(fwe->state == FW_EXC_OPERATING);
-#ifdef DEBUG
-                debug_printf("Interval expired: transmitting reminder FCT(%u) and KAT(%u) tokens.",
-                             fwe->fcts_sent, fwe->pkts_sent);
-#endif
-                fakewire_exc_send_ctrl_char(fwe, FWC_FLOW_CONTROL, fwe->fcts_sent);
-                fakewire_exc_send_ctrl_char(fwe, FWC_KEEP_ALIVE, fwe->pkts_sent);
                 cond_broadcast(&fwe->cond);
 
                 now = clock_timestamp_monotonic();
@@ -449,64 +426,34 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
 static void *fakewire_exc_reader_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
-
-    uint8_t *buffer = fwe->receive_buffer;
-    size_t   buf_max = fwe->options.recv_max_size;
+    assert(fwe->recv_buffer != NULL);
 
     mutex_lock(&fwe->mutex);
     while (true) {
         fakewire_exc_check_invariants(fwe);
 
-        // wait until handshake completes and receive is possible
-        if (fwe->state != FW_EXC_OPERATING || fwe->inbound_buffer != NULL) {
+        // wait until we have a callback to handle
+        if (fwe->recv_state != FW_RECV_CALLBACK) {
             cond_wait(&fwe->cond, &fwe->mutex);
             continue;
         }
 
-#ifdef DEBUG
-        debug_printf("Attempting read of up to %u bytes.", buf_max);
-#endif
-
-        // make sure packet is clear
-        memset(buffer, 0, buf_max);
-        // set up receive buffers
-        assert(!fwe->recv_in_progress);
-        assert(fwe->pkts_rcvd == fwe->fcts_sent);
-        fwe->inbound_buffer = buffer;
-        fwe->inbound_buffer_offset = 0;
-        fwe->inbound_buffer_max = buf_max;
-        fwe->inbound_read_done = false;
-        cond_broadcast(&fwe->cond);
-
-        while (!fwe->inbound_read_done && fwe->state == FW_EXC_OPERATING && fwe->inbound_buffer == buffer) {
-            cond_wait(&fwe->cond, &fwe->mutex);
-        }
-        if (fwe->state != FW_EXC_OPERATING || fwe->inbound_buffer != buffer) {
-            // the connection must have gotten reset... let's try again
-            continue;
-        }
-        assert(fwe->inbound_read_done == true);
-        assert(fwe->inbound_buffer_max == buf_max);
-        fwe->inbound_buffer = NULL;
-        fwe->inbound_read_done = false;
-        cond_broadcast(&fwe->cond);
-
-        size_t actual_len = fwe->inbound_buffer_offset;
+        assert(fwe->recv_offset <= fwe->options.recv_max_size);
 
         mutex_unlock(&fwe->mutex);
 
-        if (actual_len > fwe->options.recv_max_size) {
-            debug_printf("Packet length %zd could not fit within buffer of size %zu; discarding.", actual_len, buf_max);
-        } else {
 #ifdef APIDEBUG
-            debug_printf("API callback for read(%zd bytes/%zu bytes) starting...", actual_len, buf_max);
+        debug_printf("API callback for read(%zd bytes/%zu bytes) starting...", fwe->recv_offset, fwe->options.recv_max_size);
 #endif
-            fwe->options.recv_callback(fwe->options.recv_param, buffer, actual_len);
+        fwe->options.recv_callback(fwe->options.recv_param, fwe->recv_buffer, fwe->recv_offset);
 #ifdef APIDEBUG
-            debug_puts("API callback for read completed.");
+        debug_puts("API callback for read completed.");
 #endif
-        }
 
         mutex_lock(&fwe->mutex);
+
+        assert(fwe->recv_state == FW_RECV_CALLBACK);
+        fwe->recv_state = FW_RECV_PREPARING;
+        cond_broadcast(&fwe->cond);
     }
 }
