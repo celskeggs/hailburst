@@ -125,18 +125,19 @@ static void fakewire_link_setup(void *opaque, struct virtio_console_port *port) 
     mutex_unlock(&fwl->port_mutex);
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path, int flags, const char *label) {
-    assert(fwl != NULL && receiver != NULL && path != NULL);
-    assert(flags == FW_FLAG_VIRTIO); // only flags supported on FreeRTOS
-    (void) path; // ignore path
+int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts) {
+    assert(fwl != NULL && receiver != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // set up debug info real quick
-    fwl->label = label;
+    fwl->label = opts.label;
+    (void) opts.path; // ignore path
+    assert(opts.flags == FW_FLAG_VIRTIO); // only flags supported on FreeRTOS
+
+    // first, let's discover the VIRTIO port to use
     mutex_init(&fwl->port_mutex);
     fwl->port_acquired = xSemaphoreCreateBinary();
 
-    // first, let's open the file descriptors for the VIRTIO backend
     virtio_init(fakewire_link_setup, fwl);
 
     // port

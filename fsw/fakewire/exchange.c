@@ -11,6 +11,7 @@
 #include <fsw/fakewire/exchange.h>
 
 static void *fakewire_exc_flowtx_loop(void *fwe_opaque);
+static void *fakewire_exc_reader_loop(void *fwe_opaque);
 static void fakewire_exc_reset(fw_exchange_t *fwe);
 
 static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count);
@@ -19,29 +20,33 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->label, str))
-#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->label, __VA_ARGS__))
+#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->options.link_options.label, str))
+#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->options.link_options.label, __VA_ARGS__))
 
 static inline void fakewire_exc_check_invariants(fw_exchange_t *fwe) {
     assert(fwe->state >= FW_EXC_CONNECTING && fwe->state <= FW_EXC_OPERATING);
     assert(fwe->pkts_sent == fwe->fcts_rcvd || fwe->pkts_sent + 1 == fwe->fcts_rcvd);
 }
 
-int fakewire_exc_init(fw_exchange_t *fwe, const char *label, const char *path, int flags) {
+int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     memset(fwe, 0, sizeof(fw_exchange_t));
     mutex_init(&fwe->mutex);
     cond_init(&fwe->cond);
 
-    fwe->label = label;
+    fwe->options = opts;
     fwe->link_interface = (fw_receiver_t) {
         .param = fwe,
         .recv_data = fakewire_exc_on_recv_data,
         .recv_ctrl = fakewire_exc_on_recv_ctrl,
     };
 
+    assert(opts.recv_max_size >= 1);
+    fwe->receive_buffer = malloc(opts.recv_max_size);
+    assert(fwe->receive_buffer != NULL);
+
     fakewire_exc_reset(fwe);
 
-    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, path, flags, fwe->label) < 0) {
+    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, opts.link_options) < 0) {
         cond_destroy(&fwe->cond);
         mutex_destroy(&fwe->mutex);
         fwe->state = FW_EXC_INVALID;
@@ -49,6 +54,7 @@ int fakewire_exc_init(fw_exchange_t *fwe, const char *label, const char *path, i
     }
 
     thread_create(&fwe->flowtx_thread, "fw_flowtx_loop", PRIORITY_WORKERS, fakewire_exc_flowtx_loop, fwe);
+    thread_create(&fwe->reader_thread, "fw_reader_loop", PRIORITY_SERVERS, fakewire_exc_reader_loop, fwe);
     return 0;
 }
 
@@ -497,6 +503,20 @@ static void *fakewire_exc_flowtx_loop(void *fwe_opaque) {
             cond_timedwait(&fwe->cond, &fwe->mutex, bound_ns);
         } else {
             cond_wait(&fwe->cond, &fwe->mutex);
+        }
+    }
+}
+
+static void *fakewire_exc_reader_loop(void *fwe_opaque) {
+    fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
+    assert(fwe != NULL);
+
+    while (true) {
+        size_t count = fakewire_exc_read(fwe, fwe->receive_buffer, fwe->options.recv_max_size);
+        if (count > fwe->options.recv_max_size) {
+            debug_printf("Packet length %zd could not fit within buffer of size %zu; discarding.", count, fwe->options.recv_max_size);
+        } else {
+            fwe->options.recv_callback(fwe->options.recv_param, fwe->receive_buffer, count);
         }
     }
 }

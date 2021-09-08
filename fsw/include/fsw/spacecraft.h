@@ -11,7 +11,6 @@
 
 typedef struct {
     // fakewire infrastructure
-    fw_exchange_t  fwport;
     rmap_monitor_t monitor;
 
     // devices

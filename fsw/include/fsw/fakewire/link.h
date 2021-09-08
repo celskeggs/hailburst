@@ -10,8 +10,14 @@ enum {
     FW_FLAG_FIFO_CONS = 3,
 };
 
+typedef struct {
+    const char *label;
+    const char *path;
+    int         flags;
+} fw_link_options_t;
+
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path, int flags, const char *label);
+int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts);
 
 fw_receiver_t *fakewire_link_interface(fw_link_t *fwl);
 

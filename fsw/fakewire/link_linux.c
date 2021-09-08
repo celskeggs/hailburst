@@ -103,16 +103,16 @@ static void *fakewire_link_input_loop(void *opaque) {
     }
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path, int flags, const char *label) {
-    assert(fwl != NULL && receiver != NULL && path != NULL);
+int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts) {
+    assert(fwl != NULL && receiver != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // set up debug info real quick
-    fwl->label = label;
+    fwl->label = opts.label;
 
     // first, let's open the file descriptors for our I/O backend of choice
 
-    if (flags == FW_FLAG_FIFO_CONS || flags == FW_FLAG_FIFO_PROD) {
+    if (opts.flags == FW_FLAG_FIFO_CONS || opts.flags == FW_FLAG_FIFO_PROD) {
         // alternate mode for host testing via pipe
 
         if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
@@ -120,27 +120,27 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, const char *path
             return -1;
         }
 
-        char path_buf[strlen(path) + 10];
-        snprintf(path_buf, sizeof(path_buf), "%s-c2p.pipe", path);
-        int fd_c2p = open(path_buf, (flags == FW_FLAG_FIFO_CONS) ? O_WRONLY : O_RDONLY);
-        snprintf(path_buf, sizeof(path_buf), "%s-p2c.pipe", path);
-        int fd_p2c = open(path_buf, (flags == FW_FLAG_FIFO_PROD) ? O_WRONLY : O_RDONLY);
+        char path_buf[strlen(opts.path) + 10];
+        snprintf(path_buf, sizeof(path_buf), "%s-c2p.pipe", opts.path);
+        int fd_c2p = open(path_buf, (opts.flags == FW_FLAG_FIFO_CONS) ? O_WRONLY : O_RDONLY);
+        snprintf(path_buf, sizeof(path_buf), "%s-p2c.pipe", opts.path);
+        int fd_p2c = open(path_buf, (opts.flags == FW_FLAG_FIFO_PROD) ? O_WRONLY : O_RDONLY);
 
         if (fd_c2p < 0 || fd_p2c < 0) {
             perror("open");
             return -1;
         }
-        fwl->fd_in = (flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
-        fwl->fd_out = (flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
-    } else if (flags == FW_FLAG_VIRTIO) {
-        fwl->fd_out = fwl->fd_in = open(path, O_RDWR | O_NOCTTY);
+        fwl->fd_in = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
+        fwl->fd_out = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
+    } else if (opts.flags == FW_FLAG_VIRTIO) {
+        fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY);
         if (fwl->fd_in < 0) {
             perror("open");
             return -1;
         }
     } else {
-        assert(flags == FW_FLAG_SERIAL);
-        fwl->fd_out = fwl->fd_in = open(path, O_RDWR | O_NOCTTY | O_NDELAY);
+        assert(opts.flags == FW_FLAG_SERIAL);
+        fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY | O_NDELAY);
         if (fwl->fd_in < 0) {
             perror("open");
             return -1;

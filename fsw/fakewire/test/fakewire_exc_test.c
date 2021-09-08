@@ -42,43 +42,36 @@ static struct packet_chain *reverse_chain(struct packet_chain *chain) {
 
 struct reader_config {
     const char *name;
-    fw_exchange_t *exc;
     mutex_t out_mutex;
     struct packet_chain *chain_out;
+    semaphore_t finished;
 };
 
-static void *exchange_reader(void *opaque) {
+static void exchange_recv(void *opaque, uint8_t *packet_data, size_t packet_length) {
     struct reader_config *rc = (struct reader_config *) opaque;
-    uint8_t receive_buffer[4096];
 
-    assert(rc->chain_out == NULL);
+    debugf("[%s] Completed read of packet with length %ld", rc->name, packet_length - 1);
+    assert(packet_length >= 1);
 
-    while (true) {
-        debugf("[%s] - Started read of packet", rc->name);
-        size_t actual_len = fakewire_exc_read(rc->exc, receive_buffer, sizeof(receive_buffer));
-        debugf("[%s] Completed read of packet with length %ld", rc->name, actual_len - 1);
-        assert(actual_len >= 1 && actual_len <= sizeof(receive_buffer));
+    int last_packet_marker = packet_data[0];
+    assert(last_packet_marker == 0 || last_packet_marker == 1);
 
-        int last_packet_marker = receive_buffer[0];
-        assert(last_packet_marker == 0 || last_packet_marker == 1);
+    struct packet_chain *new_link = check_malloc(sizeof(struct packet_chain));
+    if (packet_length > 0) {
+        new_link->packet_data = check_malloc(packet_length - 1);
+    } else {
+        new_link->packet_data = NULL;
+    }
+    memcpy(new_link->packet_data, packet_data + 1, packet_length - 1);
+    new_link->packet_len = packet_length - 1;
+    // add to linked list
+    mutex_lock(&rc->out_mutex);
+    new_link->next = rc->chain_out;
+    rc->chain_out = new_link;
+    mutex_unlock(&rc->out_mutex);
 
-        struct packet_chain *new_link = check_malloc(sizeof(struct packet_chain));
-        if (actual_len > 0) {
-            new_link->packet_data = check_malloc(actual_len - 1);
-        } else {
-            new_link->packet_data = NULL;
-        }
-        memcpy(new_link->packet_data, receive_buffer + 1, actual_len - 1);
-        new_link->packet_len = actual_len - 1;
-        // add to linked list
-        mutex_lock(&rc->out_mutex);
-        new_link->next = rc->chain_out;
-        rc->chain_out = new_link;
-        mutex_unlock(&rc->out_mutex);
-
-        if (last_packet_marker == 0) {
-            return NULL;
-        }
+    if (last_packet_marker == 0) {
+        semaphore_give(&rc->finished);
     }
 }
 
@@ -125,23 +118,33 @@ struct exchange_config {
 static void *exchange_controller(void *opaque) {
     struct exchange_config *ec = (struct exchange_config *) opaque;
 
+    struct reader_config *rc = malloc(sizeof(struct reader_config));
+    assert(rc != NULL);
+    rc->name = ec->name;
+    mutex_init(&rc->out_mutex);
+    rc->chain_out = NULL;
+    semaphore_init(&rc->finished);
+
+    fw_exchange_options_t options = {
+        .link_options = {
+            .label = ec->name,
+            .path  = ec->path_buf,
+            .flags = ec->flags,
+        },
+        .recv_max_size = 4096,
+        .recv_callback = exchange_recv,
+        .recv_param    = rc,
+    };
     fw_exchange_t *exc = malloc(sizeof(fw_exchange_t));
     assert(exc != NULL);
     debugf("[%s] initializing exchange...", ec->name);
-    if (fakewire_exc_init(exc, ec->name, ec->path_buf, ec->flags) < 0) {
+    if (fakewire_exc_init(exc, options) < 0) {
         debugf("[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
         return NULL;
     }
     debug0("Attached!");
-
-    struct reader_config *rc = malloc(sizeof(struct reader_config));
-    assert(rc != NULL);
-    rc->name = ec->name;
-    rc->exc = exc;
-    mutex_init(&rc->out_mutex);
-    rc->chain_out = NULL;
 
     struct writer_config *wc = malloc(sizeof(struct writer_config));
     assert(wc != NULL);
@@ -150,9 +153,7 @@ static void *exchange_controller(void *opaque) {
     wc->chain_in = ec->chain_in;
     wc->pass = false;
 
-    pthread_t reader_thread;
     pthread_t writer_thread;
-    thread_create(&reader_thread, "exc_reader", 1, exchange_reader, rc);
     thread_create(&writer_thread, "exc_writer", 1, exchange_writer, wc);
 
     struct timespec ts;
@@ -162,8 +163,8 @@ static void *exchange_controller(void *opaque) {
 
     bool pass = true;
 
-    if (!thread_join_timed(reader_thread, &ts)) {
-        debugf("[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
+    if (!semaphore_take_timed(&rc->finished, 5ull * NS_PER_SEC)) {
+        debugf("[%s] exchange controller: did not receive completion notification from reader by 5 second deadline", ec->name);
         pass = false;
     }
     if (!thread_join_timed(writer_thread, &ts)) {

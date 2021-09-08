@@ -44,7 +44,7 @@ typedef struct rmap_context_st rmap_context_t;
 
 typedef struct {
     uint16_t next_txn_id;
-    fw_exchange_t *exc;
+    fw_exchange_t exc;
 
     size_t scratch_size;
     uint8_t *scratch_buffer;
@@ -75,7 +75,7 @@ typedef struct rmap_context_st {
     rmap_context_t *pending_next;
 } rmap_context_t;
 
-void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_length);
+int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length);
 void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_write_length);
 // contract with caller: only one thread attempts to read or write using a single rmap_context_t at a time.
 rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,

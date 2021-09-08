@@ -18,12 +18,12 @@ enum {
 #define SCRATCH_MARGIN_READ (12 + 1)  // for read replies
 #define PROTOCOL_RMAP (0x01)
 
-static void *rmap_monitor_recvloop(void *mon_opaque);
+static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length);
 
-void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_length) {
+int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length) {
     assert(max_read_length <= RMAP_MAX_DATA_LEN);
+
     mon->next_txn_id = 1;
-    mon->exc = exc;
     mon->pending_first = NULL;
 
     mon->scratch_size = max_read_length + SCRATCH_MARGIN_READ;
@@ -32,7 +32,14 @@ void rmap_init_monitor(rmap_monitor_t *mon, fw_exchange_t *exc, size_t max_read_
 
     mutex_init(&mon->pending_mutex);
 
-    thread_create(&mon->monitor_thread, "rmap_monitor", PRIORITY_SERVERS, rmap_monitor_recvloop, mon);
+    fw_exchange_options_t options = {
+        .link_options  = link_options,
+        .recv_max_size = max_read_length,
+        .recv_callback = rmap_monitor_recv,
+        .recv_param    = mon,
+    };
+
+    return fakewire_exc_init(&mon->exc, options);
 }
 
 static bool rmap_has_txn_in_progress(rmap_monitor_t *mon, uint16_t txn_id) {
@@ -212,7 +219,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
 
     assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    fakewire_exc_write(&context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
@@ -350,7 +357,7 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
 
     assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    fakewire_exc_write(context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    fakewire_exc_write(&context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
@@ -510,16 +517,11 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
     }
 }
 
-static void *rmap_monitor_recvloop(void *mon_opaque) {
+static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length) {
     rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
-    assert(mon != NULL && mon->scratch_buffer != NULL);
+    assert(mon != NULL && mon->scratch_buffer != NULL && packet_data != NULL);
 
-    for (;;) {
-        size_t count = fakewire_exc_read(mon->exc, mon->scratch_buffer, mon->scratch_size);
-        if (count > mon->scratch_size) {
-            debugf("RMAP packet received was too large for buffer: %zd > %zu; discarding.", count, mon->scratch_size);
-        } else if (!rmap_recv_handle(mon, mon->scratch_buffer, count)) {
-            debug0("RMAP packet received was corrupted or unexpected.");
-        }
+    if (!rmap_recv_handle(mon, packet_data, packet_length)) {
+        debug0("RMAP packet received was corrupted or unexpected.");
     }
 }

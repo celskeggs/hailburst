@@ -57,9 +57,13 @@ static void spacecraft_init(void) {
     assert(!initialized);
 
     debug0("Initializing fakewire infrastructure...");
-    int err = fakewire_exc_init(&sc.fwport, "rmap_io", "/dev/vport0p1", FW_FLAG_VIRTIO);
+    fw_link_options_t options = {
+        .label = "bus",
+        .path  = "/dev/vport0p1",
+        .flags = FW_FLAG_VIRTIO,
+    };
+    int err = rmap_init_monitor(&sc.monitor, options, 0x2000);
     assert(err == 0);
-    rmap_init_monitor(&sc.monitor, &sc.fwport, 0x2000);
 
     debug0("Initializing telecomm infrastructure...");
     ringbuf_init(&sc.uplink_ring, 0x4000, 1);

@@ -12,8 +12,18 @@ typedef enum {
     FW_EXC_OPERATING,   // received a valid non-conflicting handshake
 } fw_exchange_state;
 
+typedef void (*fakewire_exc_read_cb)(void *param, uint8_t *packet_data, size_t packet_length);
+
+typedef struct {
+    fw_link_options_t link_options;
+    // receive settings
+    size_t               recv_max_size;
+    fakewire_exc_read_cb recv_callback;
+    void                *recv_param;
+} fw_exchange_options_t;
+
 typedef struct fw_exchange_st {
-    const char *label;
+    fw_exchange_options_t options;
 
     fw_exchange_state state;
     fw_link_t         io_port;
@@ -24,6 +34,7 @@ typedef struct fw_exchange_st {
     bool tx_busy;
 
     thread_t flowtx_thread;
+    thread_t reader_thread;
 
     uint32_t send_handshake_id; // generated handshake ID if in HANDSHAKING mode
     uint32_t recv_handshake_id; // received handshake ID
@@ -34,6 +45,8 @@ typedef struct fw_exchange_st {
     uint32_t pkts_sent;
     uint32_t pkts_rcvd;
 
+    uint8_t *receive_buffer;
+
     uint8_t *inbound_buffer;
     size_t   inbound_buffer_offset;
     size_t   inbound_buffer_max;
@@ -42,12 +55,8 @@ typedef struct fw_exchange_st {
 } fw_exchange_t;
 
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
-int fakewire_exc_init(fw_exchange_t *fwe, const char *label, const char *path, int flags);
+int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts);
 
-// actual length of packet is returned (>= 0) once read is complete.
-// if the buffer is too small for the packet, only up to packet_max bytes are written, but the return value includes the
-// truncated portion in the length.
-size_t fakewire_exc_read(fw_exchange_t *fwe, uint8_t *packet_out, size_t packet_max);
 void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len);
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */
