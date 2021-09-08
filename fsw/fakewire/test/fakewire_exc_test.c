@@ -43,6 +43,7 @@ static struct packet_chain *reverse_chain(struct packet_chain *chain) {
 struct reader_config {
     const char *name;
     fw_exchange_t *exc;
+    mutex_t out_mutex;
     struct packet_chain *chain_out;
 };
 
@@ -50,14 +51,13 @@ static void *exchange_reader(void *opaque) {
     struct reader_config *rc = (struct reader_config *) opaque;
     uint8_t receive_buffer[4096];
 
-    struct packet_chain *chain_out = NULL;
+    assert(rc->chain_out == NULL);
 
     while (true) {
         debugf("[%s] - Started read of packet", rc->name);
         ssize_t actual_len = fakewire_exc_read(rc->exc, receive_buffer, sizeof(receive_buffer));
         if (actual_len < 0) {
             debugf("[%s] Packet could not be read (actual_len=%ld); reader finished.", rc->name, actual_len);
-            rc->chain_out = reverse_chain(chain_out);
             return NULL;
         }
         debugf("[%s] Completed read of packet with length %ld", rc->name, actual_len - 1);
@@ -75,11 +75,12 @@ static void *exchange_reader(void *opaque) {
         memcpy(new_link->packet_data, receive_buffer + 1, actual_len - 1);
         new_link->packet_len = actual_len - 1;
         // add to linked list
-        new_link->next = chain_out;
-        chain_out = new_link;
+        mutex_lock(&rc->out_mutex);
+        new_link->next = rc->chain_out;
+        rc->chain_out = new_link;
+        mutex_unlock(&rc->out_mutex);
 
         if (last_packet_marker == 0) {
-            rc->chain_out = reverse_chain(chain_out);
             return NULL;
         }
     }
@@ -95,6 +96,8 @@ struct writer_config {
 static void *exchange_writer(void *opaque) {
     struct writer_config *wc = (struct writer_config *) opaque;
 
+    assert(wc->pass == false);
+
     struct packet_chain *chain = wc->chain_in;
     uint8_t send_buffer[4096];
 
@@ -106,7 +109,6 @@ static void *exchange_writer(void *opaque) {
         debugf("[%s] - Started write of packet with length %lu", wc->name, chain->packet_len);
         if (fakewire_exc_write(wc->exc, send_buffer, chain->packet_len + 1) < 0) {
             debug0("failed during fakewire_exc_write");
-            wc->pass = false;
             return NULL;
         }
         debugf("[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
@@ -130,12 +132,11 @@ struct exchange_config {
 static void *exchange_controller(void *opaque) {
     struct exchange_config *ec = (struct exchange_config *) opaque;
 
-    fw_exchange_t exc;
-    fakewire_exc_init(&exc, ec->name);
+    fw_exchange_t *exc = malloc(sizeof(fw_exchange_t));
+    assert(exc != NULL);
+    fakewire_exc_init(exc, ec->name);
     debugf("[%s] attaching...", ec->name);
-    if (fakewire_exc_attach(&exc, ec->path_buf, ec->flags) < 0) {
-        fakewire_exc_destroy(&exc);
-
+    if (fakewire_exc_attach(exc, ec->path_buf, ec->flags) < 0) {
         debugf("[%s] could not attach", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
@@ -143,20 +144,24 @@ static void *exchange_controller(void *opaque) {
     }
     debug0("Attached!");
 
-    struct reader_config rc = {
-        .name = ec->name,
-        .exc  = &exc,
-    };
-    struct writer_config wc = {
-        .name     = ec->name,
-        .exc      = &exc,
-        .chain_in = ec->chain_in,
-    };
+    struct reader_config *rc = malloc(sizeof(struct reader_config));
+    assert(rc != NULL);
+    rc->name = ec->name;
+    rc->exc = exc;
+    mutex_init(&rc->out_mutex);
+    rc->chain_out = NULL;
+
+    struct writer_config *wc = malloc(sizeof(struct writer_config));
+    assert(wc != NULL);
+    wc->name = ec->name;
+    wc->exc = exc;
+    wc->chain_in = ec->chain_in;
+    wc->pass = false;
 
     pthread_t reader_thread;
     pthread_t writer_thread;
-    thread_create(&reader_thread, "exc_reader", 1, exchange_reader, &rc);
-    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, &wc);
+    thread_create(&reader_thread, "exc_reader", 1, exchange_reader, rc);
+    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, wc);
 
     struct timespec ts;
     thread_time_now(&ts);
@@ -168,37 +173,19 @@ static void *exchange_controller(void *opaque) {
     if (!thread_join_timed(reader_thread, &ts)) {
         debugf("[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
         pass = false;
-        // detach to force stop
-        fakewire_exc_detach(&exc);
-        debugf("[%s] exchange controller: performed force stop", ec->name);
-        thread_join(reader_thread);
-        debugf("[%s] exchange controller: joined with reader", ec->name);
-        thread_join(writer_thread);
-        debugf("[%s] exchange controller: joined with writer", ec->name);
-    } else if (!thread_join_timed(writer_thread, &ts)) {
+    }
+    if (!thread_join_timed(writer_thread, &ts)) {
         debugf("[%s] exchange controller: could not join writer thread by 5 second deadline", ec->name);
         pass = false;
-        // detach to force stop
-        fakewire_exc_detach(&exc);
-        debugf("[%s] exchange controller: performed force stop", ec->name);
-        thread_join(writer_thread);
-        debugf("[%s] exchange controller: joined with writer", ec->name);
-    } else {
-        // passed! detach to clean up.
-        debugf("[%s] exchange controller: detaching to clean up", ec->name);
-        fakewire_exc_detach(&exc);
-
-        if (!wc.pass) {
-            debugf("[%s] exchange controller: failed due to writer failure", ec->name);
-            pass = false;
-        }
+    } else if (!wc->pass) {
+        debugf("[%s] exchange controller: failed due to writer failure", ec->name);
+        pass = false;
     }
 
-    // clean up
-    fakewire_exc_destroy(&exc);
-
     ec->pass = pass;
-    ec->chain_out = rc.chain_out;
+    mutex_lock(&rc->out_mutex);
+    ec->chain_out = reverse_chain(rc->chain_out);
+    mutex_unlock(&rc->out_mutex);
 
     return NULL;
 }
@@ -273,15 +260,6 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
     return ok;
 }
 
-static void free_packet_chain(struct packet_chain *chain) {
-    while (chain != NULL) {
-        struct packet_chain *next = chain->next;
-        free(chain->packet_data);
-        free(chain);
-        chain = next;
-    }
-}
-
 int test_main(void) {
     test_common_make_fifos("fwfifo");
 
@@ -336,10 +314,6 @@ int test_main(void) {
     } else {
         debug0("Valid packet chain transmitted from right to left.");
     }
-    free_packet_chain(ec_left.chain_in);
-    free_packet_chain(ec_left.chain_out);
-    free_packet_chain(ec_right.chain_in);
-    free_packet_chain(ec_right.chain_out);
 
     return code;
 }

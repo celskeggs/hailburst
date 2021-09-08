@@ -3,7 +3,7 @@ import os
 import shutil
 import subprocess
 
-N = 2000
+N = 10000
 MAXPROC = 200
 
 processes = []
@@ -34,7 +34,7 @@ for i in range(N):
 	while len(processes) >= MAXPROC:
 		scan()
 	with open(os.path.join(pdir, "out.log"), "w") as out:
-		proc = subprocess.Popen(["./fakewire_exc_test", pdir], stdout=out, stderr=subprocess.STDOUT)
+		proc = subprocess.Popen(["./build/fakewire_exc_test", pdir], stdout=out, stderr=subprocess.STDOUT)
 	processes.append((pdir, proc))
 
 while len(processes) > 0:
