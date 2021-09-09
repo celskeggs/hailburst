@@ -37,9 +37,12 @@ typedef struct fw_exchange_st {
     fw_link_t         io_port;
     fw_receiver_t     link_interface;
 
-    mutex_t mutex;
+    mutex_t mutex; // protects fields
     cond_t  cond;
-    bool tx_busy;
+
+    // do not block 'mutex' on acquiring 'tx_busy'
+    // do not block 'tx_busy' on waiting for the condition variable
+    mutex_t tx_busy;
 
     thread_t flowtx_thread;
     thread_t reader_thread;

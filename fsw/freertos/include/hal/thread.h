@@ -54,6 +54,12 @@ static inline void mutex_lock(mutex_t *mutex) {
     assert(status == pdTRUE); // should always be obtained, because we have support for vTaskSuspend
 }
 
+// returns true if taken, false if not available
+static inline bool mutex_lock_try(mutex_t *mutex) {
+    assert(mutex != NULL && *mutex != NULL);
+    return xSemaphoreTake(*mutex, 0) == pdTRUE;
+}
+
 static inline void mutex_unlock(mutex_t *mutex) {
     BaseType_t status;
     assert(mutex != NULL && *mutex != NULL);
@@ -133,6 +139,12 @@ static inline void semaphore_take(semaphore_t *sema) {
     assert(sema != NULL && *sema != NULL);
     status = xSemaphoreTake(*sema, portMAX_DELAY);
     assert(status == pdTRUE);
+}
+
+// returns true if taken, false if not available
+static inline bool semaphore_take_try(semaphore_t *sema) {
+    assert(sema != NULL && *sema != NULL);
+    return xSemaphoreTake(*sema, 0) == pdTRUE;
 }
 
 // returns true if taken, false if timed out

@@ -73,10 +73,11 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
     }
 }
 
-#define mutex_init(x)    THREAD_CHECK(pthread_mutex_init((x), NULL))
-#define mutex_destroy(x) THREAD_CHECK(pthread_mutex_destroy(x))
-#define mutex_lock(x)    THREAD_CHECK(pthread_mutex_lock(x))
-#define mutex_unlock(x)  THREAD_CHECK(pthread_mutex_unlock(x))
+#define mutex_init(x)     THREAD_CHECK(pthread_mutex_init((x), NULL))
+#define mutex_destroy(x)  THREAD_CHECK(pthread_mutex_destroy(x))
+#define mutex_lock(x)     THREAD_CHECK(pthread_mutex_lock(x))
+#define mutex_lock_try(x) THREAD_CHECK_OK(pthread_mutex_trylock(x), EBUSY)
+#define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
 
 #define cond_init(x)            THREAD_CHECK(pthread_cond_init((x), NULL))
 #define cond_destroy(x)         THREAD_CHECK(pthread_cond_destroy(x))
@@ -113,6 +114,17 @@ static inline void semaphore_take(semaphore_t *sema) {
     assert(sema->is_available == true);
     sema->is_available = false;
     mutex_unlock(&sema->mut);
+}
+
+// returns true if taken, false if not available
+static inline bool semaphore_take_try(semaphore_t *sema) {
+    assert(sema != NULL);
+    bool taken;
+    mutex_lock(&sema->mut);
+    taken = sema->is_available;
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+    return taken;
 }
 
 // returns true if taken, false if timed out
