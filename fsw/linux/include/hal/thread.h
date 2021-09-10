@@ -19,15 +19,25 @@ enum {
 
 typedef pthread_t       thread_t;
 typedef pthread_mutex_t mutex_t;
-typedef pthread_cond_t  cond_t;
 // although there are semaphores available under POSIX, they are counting semaphores, and not binary semaphores.
 typedef struct {
-    mutex_t mut;
-    cond_t  cond;
-    bool    is_available;
+    mutex_t        mut;
+    pthread_cond_t cond;
+    bool           is_available;
 } semaphore_t;
 
 typedef semaphore_t *wakeup_t;
+typedef struct {
+    mutex_t mutex;
+    pthread_cond_t cond;
+
+    uint8_t *memory;
+    size_t   item_size;
+    size_t   capacity;
+    // TODO: make sure I test integer overflow on these fields... SHOULD be fine, but needs to be tested
+    size_t   read_scroll;
+    size_t   write_scroll;
+} queue_t;
 
 static inline void thread_check(int fail, const char *note) {
     if (fail != 0) {
@@ -47,24 +57,6 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
     }
 }
 
-static inline void cond_timedwait_impl(cond_t *cond, mutex_t *mutex, uint64_t nanoseconds, const char *nc, const char *nm, const char *na) {
-    struct timeval now;
-    struct timespec timeout;
-    int retcode;
-
-    gettimeofday(&now, NULL);
-
-    nanoseconds += now.tv_usec * 1000;
-    timeout.tv_sec = now.tv_sec + nanoseconds / NS_PER_SEC;
-    timeout.tv_nsec = nanoseconds % NS_PER_SEC;
-
-    retcode = pthread_cond_timedwait(cond, mutex, &timeout);
-    if (retcode != 0 && retcode != ETIMEDOUT && retcode != EINTR) {
-        fprintf(stderr, "thread error: %d in cond_timedwait(%s, %s, %s)\n", retcode, nc, nm, na);
-        abort();
-    }
-}
-
 static inline void thread_cancel_impl(thread_t thread, const char *nt) {
     int err = pthread_cancel(thread);
     if (err != 0 && err != ESRCH) {
@@ -79,12 +71,6 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
 #define mutex_lock_try(x) THREAD_CHECK_OK(pthread_mutex_trylock(x), EBUSY)
 #define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
 
-#define cond_init(x)            THREAD_CHECK(pthread_cond_init((x), NULL))
-#define cond_destroy(x)         THREAD_CHECK(pthread_cond_destroy(x))
-#define cond_broadcast(x)       THREAD_CHECK(pthread_cond_broadcast(x))
-#define cond_wait(c, m)         THREAD_CHECK(pthread_cond_wait((c), (m)))
-#define cond_timedwait(c, m, a) (cond_timedwait_impl((c), (m), (a), #c, #m, #a))
-
 // name and priority go unused on POSIX; these are only used on FreeRTOS
 #define thread_create(x, name, priority, entrypoint, param) THREAD_CHECK(pthread_create((x), NULL, (entrypoint), (param)))
 #define thread_join(x)                                      THREAD_CHECK(pthread_join((x), NULL))
@@ -95,13 +81,13 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
 static inline void semaphore_init(semaphore_t *sema) {
     assert(sema != NULL);
     mutex_init(&sema->mut);
-    cond_init(&sema->cond);
+    THREAD_CHECK(pthread_cond_init(&sema->cond, NULL));
     sema->is_available = false;
 }
 
 static inline void semaphore_destroy(semaphore_t *sema) {
     assert(sema != NULL);
-    cond_destroy(&sema->cond);
+    THREAD_CHECK(pthread_cond_destroy(&sema->cond));
     mutex_destroy(&sema->mut);
 }
 
@@ -109,7 +95,7 @@ static inline void semaphore_take(semaphore_t *sema) {
     assert(sema != NULL);
     mutex_lock(&sema->mut);
     while (!sema->is_available) {
-        cond_wait(&sema->cond, &sema->mut);
+        THREAD_CHECK(pthread_cond_wait(&sema->cond, &sema->mut));
     }
     assert(sema->is_available == true);
     sema->is_available = false;
@@ -164,7 +150,7 @@ static inline bool semaphore_give(semaphore_t *sema) {
     mutex_lock(&sema->mut);
     if (!sema->is_available) {
         sema->is_available = true;
-        pthread_cond_signal(&sema->cond);
+        THREAD_CHECK(pthread_cond_signal(&sema->cond));
         given = true;
     }
     mutex_unlock(&sema->mut);
@@ -178,6 +164,7 @@ static inline void semaphore_reset_linuxonly(semaphore_t *sema) {
     mutex_unlock(&sema->mut);
 }
 
+extern void wakeup_system_init(void); // only needed for host-side tests
 extern wakeup_t wakeup_open(void);
 
 static inline void wakeup_take(wakeup_t wakeup) {
@@ -195,5 +182,14 @@ static inline bool wakeup_take_timed(wakeup_t wakeup, uint64_t nanoseconds) {
 static inline void wakeup_give(wakeup_t wakeup) {
     semaphore_give(wakeup);
 }
+
+extern void queue_init(queue_t *queue, size_t entry_size, size_t num_entries);
+extern void queue_destroy(queue_t *queue);
+extern void queue_send(queue_t *queue, const void *new_item);
+// returns true if sent, false if not
+extern bool queue_send_try(queue_t *queue, void *new_item);
+extern void queue_recv(queue_t *queue, void *new_item);
+// returns true if received, false if timed out
+extern bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns);
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

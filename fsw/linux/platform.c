@@ -1,6 +1,7 @@
 #include <hal/platform.h>
 #include <hal/thread.h>
 
+static bool initialized = false;
 static pthread_key_t wakeup_semaphore_key;
 
 static void wakeup_semaphore_destroy(void *ptr) {
@@ -12,6 +13,7 @@ static void wakeup_semaphore_destroy(void *ptr) {
 }
 
 wakeup_t wakeup_open(void) {
+    assert(initialized == true);
     semaphore_t *sema = (semaphore_t *) pthread_getspecific(wakeup_semaphore_key);
     if (sema == NULL) {
         sema = malloc(sizeof(semaphore_t));
@@ -23,9 +25,15 @@ wakeup_t wakeup_open(void) {
     return sema;
 }
 
+void wakeup_system_init(void) {
+    assert(!initialized);
+    THREAD_CHECK(pthread_key_create(&wakeup_semaphore_key, wakeup_semaphore_destroy));
+    initialized = true;
+}
+
 void platform_init(void) {
 	freopen("/dev/console", "w", stdout);
 	freopen("/dev/console", "w", stderr);
 
-    THREAD_CHECK(pthread_key_create(&wakeup_semaphore_key, wakeup_semaphore_destroy));
+    wakeup_system_init();
 }

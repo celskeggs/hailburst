@@ -43,8 +43,8 @@ if PLATFORM == PLAT_LINUX:
             env[inherit] = os.environ[inherit]
 
     INCLUDE += ["linux/include/"]
-    FAKEWIRE_CORE_SRC += ["fakewire/link_linux.c"]
-    MAIN_SRC += ["linux/clock.c", "linux/platform.c"]
+    FAKEWIRE_CORE_SRC += ["fakewire/link_linux.c", "linux/queue.c", "linux/platform.c"]
+    MAIN_SRC += ["linux/clock.c"]
 elif PLATFORM == PLAT_FREERTOS:
     COMMON_FLAGS = ['-ggdb', '-mcpu=cortex-a15', '-mfpu=vfpv4', '-mfloat-abi=softfp']
     env = Environment(

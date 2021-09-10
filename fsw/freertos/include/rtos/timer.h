@@ -32,4 +32,9 @@ static inline TickType_t timer_ns_to_ticks(uint64_t nanoseconds) {
     return ticks;
 }
 
+static inline TickType_t timer_ticks_until_ns(uint64_t nanoseconds_abs) {
+    uint64_t now = timer_now_ns();
+    return now > nanoseconds_abs ? timer_ns_to_ticks(nanoseconds_abs - now) : 0;
+}
+
 #endif /* FSW_FREERTOS_RTOS_TIMER_H */
