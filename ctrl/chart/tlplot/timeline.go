@@ -134,7 +134,6 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 	}
 
 	lastClipX := t.LastX
-	log.Printf("rendering %d markers...", len(t.Markers))
 	for _, marker := range t.Markers {
 		xPos := trX(marker.Time)
 		c.DrawGlyph(marker.Glyph, vg.Point{
@@ -149,7 +148,6 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 		}
 		lastClipX = marker.Time
 	}
-	log.Printf("done rendering %d markers.", len(t.Markers))
 }
 
 type xyconv TimelinePlot

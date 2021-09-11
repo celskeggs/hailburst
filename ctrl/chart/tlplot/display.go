@@ -165,6 +165,19 @@ func (p *PlotWidget) drawSliderRect(gtx layout.Context, startAxisX, endAxisX flo
 	paint.PaintOp{}.Add(gtx.Ops)
 }
 
+func (p *PlotWidget) ZoomOut() {
+	p.IsSettingNewSlider = false
+	size := p.SliderMax - p.SliderMin
+	p.SliderMin -= size / 2
+	p.SliderMax += size / 2
+	if p.SliderMin < p.BaseX.Min {
+		p.SliderMin = p.BaseX.Min
+	}
+	if p.SliderMax > p.BaseX.Max {
+		p.SliderMax = p.BaseX.Max
+	}
+}
+
 func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 	defer op.Save(gtx.Ops).Load()
 
@@ -177,6 +190,7 @@ func (p *PlotWidget) Layout(gtx layout.Context) layout.Dimensions {
 
 	// input for slider
 	for _, ev := range gtx.Queue.Events(layoutTag) {
+
 		if x, ok := ev.(pointer.Event); ok {
 			// frac := math.Max(0, math.Min(1, float64(x.Position.X)/float64(gtx.Constraints.Max.X)))
 			axisX, ok := p.ReverseTransform(x.Position.X)
@@ -324,6 +338,11 @@ func DisplayPlotExportable(p *plot.Plot, exportDir string) error {
 					case "E":
 						if e.State == key.Press {
 							plotWidget.Export()
+						}
+					case "-":
+						if e.State == key.Press {
+							plotWidget.ZoomOut()
+							win.Invalidate()
 						}
 					}
 

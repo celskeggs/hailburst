@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path"
+	"strconv"
 )
 
 // This rendering didn't actually turn out to be useful...
@@ -53,6 +54,16 @@ func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 	return out, nil
 }
 
+type PreciseTicks struct {}
+
+func (p PreciseTicks) Ticks(min, max float64) []plot.Tick {
+	ticks := plot.DefaultTicks{}.Ticks(min, max)
+	for i := range ticks {
+		ticks[i].Label = strconv.FormatFloat(ticks[i].Value, 'f', 6, 64)
+	}
+	return ticks
+}
+
 func GeneratePlot(dir string) (*plot.Plot, error) {
 	p := plot.New()
 	p.Title.Text = "Timeline: " + path.Base(dir)
@@ -74,6 +85,7 @@ func GeneratePlot(dir string) (*plot.Plot, error) {
 		names = append(names, scan.Label())
 	}
 	p.NominalY(names...)
+	p.X.Tick.Marker = PreciseTicks{}
 
 	return p, nil
 }
