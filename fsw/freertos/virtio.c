@@ -8,6 +8,7 @@
 #include <rtos/virtio.h>
 #include <rtos/virtqueue.h>
 #include <hal/thread.h>
+#include <fsw/clock.h>
 
 // #define DEBUG_INIT
 // #define DEBUG_VIRTQ
@@ -260,7 +261,8 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
 
 struct virtio_transact_sync_status {
     TaskHandle_t wake;
-    ssize_t total_length;
+    ssize_t      total_length;
+    uint64_t     timestamp;
 };
 
 static void virtio_transact_sync_done(struct virtio_console *con, void *opaque, size_t chain_bytes) {
@@ -270,13 +272,15 @@ static void virtio_transact_sync_done(struct virtio_console *con, void *opaque, 
     assert(status->total_length == -1);
     status->total_length = chain_bytes;
     assert(status->total_length >= 0);
+    status->timestamp = clock_timestamp();
     xTaskNotifyGive(status->wake);
 }
 
-ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count) {
+ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count, uint64_t *timestamp_ns_out) {
     struct virtio_transact_sync_status status = {
         .wake         = xTaskGetCurrentTaskHandle(),
         .total_length = -1,
+        .timestamp    = 0,
     };
     if (!virtio_transact(vq, ents, ent_count, virtio_transact_sync_done, &status)) {
         return -1;
@@ -286,6 +290,10 @@ ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     assert(status.total_length >= 0);
+    assert(status.timestamp > 0);
+    if (timestamp_ns_out) {
+        *timestamp_ns_out = status.timestamp;
+    }
     return status.total_length;
 }
 

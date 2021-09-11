@@ -51,7 +51,7 @@ static void *mainloop_run(void *opaque) {
         .is_receive  = false,
     };
     printf("Transacting...\n");
-    ssize_t actual = virtio_transact_sync(port->transmitq, &txv, 1);
+    ssize_t actual = virtio_transact_sync(port->transmitq, &txv, 1, NULL);
     printf("Transacted: %zd!\n", actual);
     assert(actual == 0);
 
@@ -62,7 +62,7 @@ static void *mainloop_run(void *opaque) {
         .is_receive  = true,
     };
     printf("Transacting read...\n");
-    actual = virtio_transact_sync(port->receiveq, &rxv, 1);
+    actual = virtio_transact_sync(port->receiveq, &rxv, 1, NULL);
     printf("Transacted: %zd: %s!\n", actual, rdata);
 
     return NULL;

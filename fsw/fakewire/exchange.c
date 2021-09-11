@@ -15,7 +15,7 @@ static void *fakewire_exc_read_cb_loop(void *fwe_opaque);
 static void *fakewire_exc_transmit_loop(void *fwe_opaque);
 
 static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count);
-static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param);
+static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t timestamp_ns);
 
 //#define DEBUG
 //#define APIDEBUG
@@ -35,6 +35,7 @@ struct input_queue_ent {
         struct {
             fw_ctrl_t symbol;
             uint32_t  param;
+            uint64_t  timestamp_ns;
         } ctrl_char;
         struct {
             uint8_t *input_ptr;
@@ -64,7 +65,8 @@ struct transmit_queue_ent {
 
 struct read_cb_queue_ent {
     /* buffer pointer not necessary, because it's always 'recv_buffer' in fw_exchange_t */
-    size_t read_size;
+    size_t   read_size;
+    uint64_t timestamp_ns; // timestamp when START_PACKET character was received
 };
 
 int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
@@ -118,7 +120,7 @@ static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t by
     wakeup_take(entry.data_chars.on_complete);
 }
 
-static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param) {
+static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t timestamp_ns) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL && fakewire_is_special(symbol));
     assert(param == 0 || fakewire_is_parametrized(symbol));
@@ -126,8 +128,9 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
     struct input_queue_ent entry = {
         .type = INPUT_RECV_CTRL_CHAR,
         .ctrl_char = {
-            .symbol = symbol,
-            .param  = param,
+            .symbol       = symbol,
+            .param        = param,
+            .timestamp_ns = timestamp_ns,
         },
     };
     queue_send(&fwe->input_queue, &entry);
@@ -150,7 +153,7 @@ static void *fakewire_exc_read_cb_loop(void *fwe_opaque) {
 #ifdef APIDEBUG
         debug_printf("API callback for read(%zd bytes/%zu bytes) starting...", read_cb_entry.read_size, fwe->options.recv_max_size);
 #endif
-        fwe->options.recv_callback(fwe->options.recv_param, fwe->recv_buffer, read_cb_entry.read_size);
+        fwe->options.recv_callback(fwe->options.recv_param, fwe->recv_buffer, read_cb_entry.read_size, read_cb_entry.timestamp_ns);
 #ifdef APIDEBUG
         debug_puts("API callback for read completed.");
 #endif
@@ -197,7 +200,6 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     assert(fwe != NULL);
     assert(fwe->recv_buffer != NULL);
 
-    fw_receiver_t *link_write = fakewire_link_interface(&fwe->io_port);
     struct transmit_queue_ent txmit_entry;
 
     while (true) {
@@ -210,13 +212,13 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
             debug_printf("Transmitting %zu data characters.", txmit_entry.data_param.data_len);
 #endif
             // data characters
-            link_write->recv_data(link_write->param, txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
+            fakewire_link_send_data(&fwe->io_port, txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
         } else {
 #ifdef DEBUG
             debug_printf("Transmitting control character %s(0x%08x).", fakewire_codec_symbol(txmit_entry.symbol), txmit_entry.ctrl_param);
 #endif
             // control character
-            link_write->recv_ctrl(link_write->param, txmit_entry.symbol, txmit_entry.ctrl_param);
+            fakewire_link_send_ctrl(&fwe->io_port, txmit_entry.symbol, txmit_entry.ctrl_param);
         }
 
         // send transmit complete notification
@@ -277,6 +279,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     bool resend_fcts = false;
     bool resend_pkts = false;
 
+    uint64_t recv_start_timestamp = 0;
     size_t recv_offset = 0;
 
     uint8_t *cur_packet_in     = NULL;
@@ -405,6 +408,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     } else {
                         assert(recv_state == FW_RECV_LISTENING);
                         recv_state = FW_RECV_RECEIVING;
+                        recv_start_timestamp = input_ent.ctrl_char.timestamp_ns;
                         pkts_rcvd += 1;
                         // reset receive buffer before proceeding
                         memset(fwe->recv_buffer, 0, fwe->options.recv_max_size);
@@ -419,7 +423,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                         // confirm completion
                         recv_state = FW_RECV_CALLBACK;
                         struct read_cb_queue_ent entry = {
-                            .read_size = recv_offset,
+                            .read_size    = recv_offset,
+                            .timestamp_ns = recv_start_timestamp,
                         };
                         bool sent = queue_send_try(&fwe->read_cb_queue, &entry);
                         assert(sent == true);

@@ -18,7 +18,7 @@ enum {
 #define SCRATCH_MARGIN_READ (12 + 1)  // for read replies
 #define PROTOCOL_RMAP (0x01)
 
-static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length);
+static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length, uint64_t sop_timestamp_ns);
 
 int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length) {
     assert(max_read_length <= RMAP_MAX_DATA_LEN);
@@ -80,6 +80,7 @@ void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_
     assert(context->scratch_buffer != NULL);
     context->is_pending = false;
     context->pending_next = NULL;
+    context->receive_timestamp = 0;
     semaphore_init(&context->on_complete);
 }
 
@@ -189,6 +190,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     context->read_max_length = 0;
     context->has_received = false;
     context->received_status = -1;
+    context->receive_timestamp = 0;
     context->pending_routing = routing;
     context->pending_next = context->monitor->pending_first;
     context->monitor->pending_first = context;
@@ -420,6 +422,11 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     return status_out;
 }
 
+uint64_t rmap_get_ack_timestamp_ns(rmap_context_t *context) {
+    assert(context->receive_timestamp != 0);
+    return context->receive_timestamp;
+}
+
 static rmap_context_t *rmap_look_up_txn(rmap_monitor_t *mon, uint16_t txn_id) {
     // assumes that mon->pending_mutex is held
     assert(mon != NULL);
@@ -435,7 +442,7 @@ static rmap_context_t *rmap_look_up_txn(rmap_monitor_t *mon, uint16_t txn_id) {
     return NULL;
 }
 
-static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
+static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count, uint64_t receive_timestamp) {
     if (count < 8 || in[1] != PROTOCOL_RMAP) {
         return false;
     }
@@ -468,6 +475,7 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
         }
         ctx->has_received = true;
         ctx->received_status = in[3];
+        ctx->receive_timestamp = receive_timestamp;
         mutex_unlock(&mon->pending_mutex);
         semaphore_give(&ctx->on_complete);
         return true;
@@ -505,6 +513,7 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
         }
         ctx->has_received = true;
         ctx->received_status = in[3];
+        ctx->receive_timestamp = receive_timestamp;
         ctx->read_actual_length = data_length;
         size_t copy_len = data_length;
         if (copy_len > ctx->read_max_length) {
@@ -517,11 +526,11 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count) {
     }
 }
 
-static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length) {
+static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length, uint64_t sop_timestamp_ns) {
     rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
     assert(mon != NULL && mon->scratch_buffer != NULL && packet_data != NULL);
 
-    if (!rmap_recv_handle(mon, packet_data, packet_length)) {
+    if (!rmap_recv_handle(mon, packet_data, packet_length, sop_timestamp_ns)) {
         debug0("RMAP packet received was corrupted or unexpected.");
     }
 }

@@ -13,7 +13,6 @@ typedef struct {
 
     const char *label;
 
-    fw_receiver_t interface;
     ringbuf_t     enc_ring;
     fw_encoder_t  encoder;
     fw_decoder_t  decoder;

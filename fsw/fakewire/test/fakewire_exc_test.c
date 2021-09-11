@@ -47,8 +47,9 @@ struct reader_config {
     semaphore_t finished;
 };
 
-static void exchange_recv(void *opaque, uint8_t *packet_data, size_t packet_length) {
+static void exchange_recv(void *opaque, uint8_t *packet_data, size_t packet_length, uint64_t timestamp_ns) {
     struct reader_config *rc = (struct reader_config *) opaque;
+    (void) timestamp_ns;
 
     debugf("[%s] Completed read of packet with length %ld", rc->name, packet_length - 1);
     assert(packet_length >= 1);

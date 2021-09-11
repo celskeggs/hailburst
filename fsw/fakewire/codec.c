@@ -53,7 +53,7 @@ static void fakewire_dec_raw_data(fw_decoder_t *fwd, uint8_t *bytes_in, size_t b
         byte_count -= count;
         bytes_in += count;
         if (fwd->recv_count == sizeof(fwd->recv_param)) {
-            fwd->output->recv_ctrl(fwd->output->param, fwd->recv_current, be32toh(fwd->recv_param));
+            fwd->output->recv_ctrl(fwd->output->param, fwd->recv_current, be32toh(fwd->recv_param), fwd->recv_timestamp_ns);
             fwd->recv_current = FWC_NONE;
         }
     }
@@ -63,7 +63,7 @@ static void fakewire_dec_raw_data(fw_decoder_t *fwd, uint8_t *bytes_in, size_t b
     }
 }
 
-static void fakewire_dec_raw_ctrl(fw_decoder_t *fwd, fw_ctrl_t symbol) {
+static void fakewire_dec_raw_ctrl(fw_decoder_t *fwd, fw_ctrl_t symbol, uint64_t recv_timestamp_ns) {
     assert(fwd != NULL && fwd->output != NULL);
     // if we receive another control character while still working on a parameter, report it as a codec error.
     if (fwd->recv_current != FWC_NONE) {
@@ -71,19 +71,20 @@ static void fakewire_dec_raw_ctrl(fw_decoder_t *fwd, fw_ctrl_t symbol) {
         debugf("[fakewire_codec] Encountered unexpected control character while decoding parameterized control character %s.",
                fakewire_codec_symbol(symbol));
         fwd->recv_current = FWC_NONE;
-        fwd->output->recv_ctrl(fwd->output->param, FWC_CODEC_ERROR, 0);
+        fwd->output->recv_ctrl(fwd->output->param, FWC_CODEC_ERROR, 0, fwd->recv_timestamp_ns);
     }
     // otherwise, if we receive a parameterized control character, start reading the parameter.
     if (fakewire_is_parametrized(symbol)) {
         fwd->recv_current = symbol;
         fwd->recv_count = 0;
+        fwd->recv_timestamp_ns = recv_timestamp_ns;
     } else {
         // and if we receive a non-parameterized control character, report it directly.
-        fwd->output->recv_ctrl(fwd->output->param, symbol, 0);
+        fwd->output->recv_ctrl(fwd->output->param, symbol, 0, recv_timestamp_ns);
     }
 }
 
-void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count) {
+void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count, uint64_t recv_timestamp_ns) {
     assert(byte_count > 0);
 
     uint8_t databuf[256];
@@ -125,7 +126,7 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
         }
         // transmit control characters
         if (ctrl_char != FWC_NONE) {
-            fakewire_dec_raw_ctrl(fwd, ctrl_char);
+            fakewire_dec_raw_ctrl(fwd, ctrl_char, recv_timestamp_ns);
         }
         // append new data to buffer
         if (!consumed) {

@@ -4,7 +4,8 @@
 #include <hal/thread.h>
 #include <fsw/fakewire/link.h>
 
-typedef void (*fakewire_exc_read_cb)(void *param, uint8_t *packet_data, size_t packet_length);
+// sop_timestamp_ns: start-of-packet timestamp (nanoseconds)
+typedef void (*fakewire_exc_read_cb)(void *param, uint8_t *packet_data, size_t packet_length, uint64_t sop_timestamp_ns);
 
 typedef struct {
     fw_link_options_t link_options;

@@ -69,6 +69,7 @@ typedef struct rmap_context_st {
     uint32_t    read_actual_length;
     bool        has_received;
     uint8_t     received_status;
+    uint64_t    receive_timestamp;
     uint16_t    pending_txn_id;
 
     rmap_addr_t    *pending_routing;
@@ -82,5 +83,6 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
                          uint8_t ext_addr, uint32_t main_addr, size_t data_length, void *data);
 rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
                         uint8_t ext_addr, uint32_t main_addr, size_t *data_length, void *data_out);
+uint64_t rmap_get_ack_timestamp_ns(rmap_context_t *context);
 
 #endif /* FSW_FAKEWIRE_RMAP_H */

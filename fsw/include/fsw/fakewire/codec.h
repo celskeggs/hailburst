@@ -40,7 +40,7 @@ static inline bool fakewire_is_parametrized(fw_ctrl_t ch) {
 typedef struct {
     void *param;
     void (*recv_data)(void *opaque, uint8_t *bytes_in, size_t bytes_count);
-    void (*recv_ctrl)(void *opaque, fw_ctrl_t symbol, uint32_t param);
+    void (*recv_ctrl)(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t recv_timestamp_ns);
 } fw_receiver_t;
 
 typedef struct {
@@ -50,11 +50,12 @@ typedef struct {
     fw_ctrl_t recv_current; // parameterized control character
     size_t    recv_count;   // 0-3: N bytes already processed
     uint32_t  recv_param;
+    uint64_t  recv_timestamp_ns;
 } fw_decoder_t;
 
 void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output);
 // no destroy function provided because it isn't needed; you can simply stop using the decoder.
-void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count);
+void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count, uint64_t recv_timestamp_ns);
 
 typedef struct {
     ringbuf_t *output;

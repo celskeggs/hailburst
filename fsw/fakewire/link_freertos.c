@@ -15,10 +15,9 @@ enum {
 #define debug_puts(str) (debugf("[ fakewire_link] [%s] %s", fwl->label, str))
 #define debug_printf(fmt, ...) (debugf("[ fakewire_link] [%s] " fmt, fwl->label, __VA_ARGS__))
 
-static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
-    assert(opaque != NULL && bytes_in != NULL);
+void fakewire_link_send_data(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count) {
+    assert(fwl != NULL && bytes_in != NULL);
     assert(bytes_count > 0);
-    fw_link_t *fwl = (fw_link_t*) opaque;
 
 #ifdef DEBUG
     debug_printf("Transmitting %zu regular bytes.", bytes_count);
@@ -27,10 +26,9 @@ static void fakewire_link_recv_data(void *opaque, uint8_t *bytes_in, size_t byte
     fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
 }
 
-static void fakewire_link_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param) {
-    assert(opaque != NULL);
+void fakewire_link_send_ctrl(fw_link_t *fwl, fw_ctrl_t symbol, uint32_t param) {
+    assert(fwl != NULL);
     assert(param == 0 || fakewire_is_parametrized(symbol));
-    fw_link_t *fwl = (fw_link_t*) opaque;
 
 #ifdef DEBUG
     debug_printf("Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
@@ -72,7 +70,7 @@ static void *fakewire_link_output_loop(void *opaque) {
         debug_printf("Writing %zu bytes to VIRTIO port...", count_bytes);
 #endif
         entry.length = count_bytes;
-        ssize_t status = virtio_transact_sync(fwl->port->transmitq, &entry, 1);
+        ssize_t status = virtio_transact_sync(fwl->port->transmitq, &entry, 1, NULL);
         if (status != 0) {
             debug_printf("Write failed: status=%zd", status);
             return NULL;
@@ -94,10 +92,11 @@ static void *fakewire_link_input_loop(void *opaque) {
         .length      = sizeof(read_buf),
         .is_receive  = true,
     };
+    uint64_t receive_timestamp = 0;
 
     while (true) {
         // read as many bytes as possible from the input port at once
-        ssize_t actual = virtio_transact_sync(fwl->port->receiveq, &entry, 1);
+        ssize_t actual = virtio_transact_sync(fwl->port->receiveq, &entry, 1, &receive_timestamp);
         if (actual <= 0) {
             debug_printf("Read failed: %zd when maximum was %zu", actual, sizeof(read_buf));
             return NULL;
@@ -107,9 +106,10 @@ static void *fakewire_link_input_loop(void *opaque) {
         debug_printf("Read %zd bytes from file descriptor.", actual);
 #endif
         assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
+        assert(receive_timestamp > 0);
 
         // write as many bytes at once as possible
-        fakewire_dec_decode(&fwl->decoder, read_buf, actual);
+        fakewire_dec_decode(&fwl->decoder, read_buf, actual, receive_timestamp);
     }
 }
 
@@ -147,12 +147,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     assert(fwl->port != NULL);
     debug0("VIRTIO port identified! Proceeding with fakewire initialization.");
 
-    // next, let's configure all the data structures and interfaces
-    fwl->interface = (fw_receiver_t) {
-        .param = fwl,
-        .recv_data = fakewire_link_recv_data,
-        .recv_ctrl = fakewire_link_recv_ctrl,
-    };
+    // next, let's configure all the data structures
     ringbuf_init(&fwl->enc_ring, FW_LINK_RING_SIZE, 1);
     fakewire_enc_init(&fwl->encoder, &fwl->enc_ring);
     fakewire_dec_init(&fwl->decoder, receiver);
@@ -165,10 +160,4 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl);
 
     return 0;
-}
-
-fw_receiver_t *fakewire_link_interface(fw_link_t *fwl) {
-    assert(fwl != NULL);
-
-    return &fwl->interface;
 }

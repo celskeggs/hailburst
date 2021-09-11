@@ -51,6 +51,6 @@ struct vector_entry {
 void virtio_init(virtio_port_cb callback, void *param);
 void virtio_serial_ready(struct virtio_console_port *port);
 // if negative, no room in ring buffer for descriptor; otherwise, returns number of bytes written by device.
-ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count);
+ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count, uint64_t *timestamp_ns_out);
 
 #endif /* FSW_FREERTOS_RTOS_VIRTIO_H */

@@ -89,7 +89,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     if (!magnetometer_set_register(mag, REG_LATCH, LATCH_ON)) {
         return false;
     }
-    reading_out->reading_time = clock_timestamp();
+    reading_out->reading_time = rmap_get_ack_timestamp_ns(&mag->rctx);
 
     usleep(15000);
 
