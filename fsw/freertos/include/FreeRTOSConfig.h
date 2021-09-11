@@ -111,8 +111,12 @@ extern void vConfigureTickInterrupt(void);
 
 /* A header file that defines trace macro can be included here. */
 
+// #define TASK_DEBUG
+
 extern void trace_task_switch(const char *task_name, unsigned int priority);
 
+#ifdef TASK_DEBUG
 #define traceTASK_SWITCHED_IN() trace_task_switch(pxCurrentTCB->pcTaskName, pxCurrentTCB->uxPriority)
+#endif
 
 #endif /* FSW_FREERTOS_FREERTOS_CONFIG_H */
