@@ -9,6 +9,7 @@
 #include <rtos/virtqueue.h>
 #include <hal/thread.h>
 #include <fsw/clock.h>
+#include <fsw/debug.h>
 
 // #define DEBUG_INIT
 // #define DEBUG_VIRTQ
@@ -64,9 +65,6 @@ enum {
     VIRTIO_F_SR_IOV             = 1ull << 37,
     VIRTIO_F_NOTIFICATION_DATA  = 1ull << 38,
 };
-
-#define LE32_TO_CPU(x) (le32toh(x))
-#define CPU_TO_LE32(x) (htole32(x))
 
 // all of these are little-endian
 struct virtio_mmio_registers {
@@ -206,7 +204,9 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
     assert(ent_count > 0);
     assert(cb != NULL);
 
-    // printf("beginning transaction on vq=%u...\n", vq->vq_index);
+#ifdef DEBUG_VIRTQ
+    debugf("VIRTIO[Q=%u]: Beginning transaction.", vq->vq_index);
+#endif
 
     mutex_lock(&vq->mutex);
     assert(vq->num > 0);
@@ -223,7 +223,7 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
         }
     }
     if (filled < ent_count) {
-        printf("VIRTIO: no more descriptors to use in ring buffer for vq=%u\n", vq->vq_index);
+        debugf("VIRTIO[Q=%u] No more descriptors to use in ring buffer.", vq->vq_index);
         mutex_unlock(&vq->mutex);
         return false;
     }
@@ -241,10 +241,17 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
         assert((size_t) vq->desc[desc].len == ents[i].length);
         vq->desc[desc].flags = (i < ent_count - 1 ? VIRTQ_DESC_F_NEXT : 0) | (ents[i].is_receive ? VIRTQ_DESC_F_WRITE : 0);
         vq->desc[desc].next = (i < ent_count - 1 ? descriptors[i+1] : 0xFFFF);
+
+#ifdef DEBUG_VIRTQ
+        debugf("VIRTIO[Q=%u]: Recruited descriptor %u; set in_use=true.", vq->vq_index, desc);
+#endif
     }
     vq->desc_meta[descriptors[0]].callback = cb;
     vq->desc_meta[descriptors[0]].callback_param = param;
     vq->avail->ring[vq->avail->idx % vq->num] = descriptors[0];
+#ifdef DEBUG_VIRTQ
+    debugf("VIRTIO[Q=%u]: Dispatching transaction via idx and queue_notify.", vq->vq_index);
+#endif
     asm volatile("dsb");
     vq->avail->idx++;
     asm volatile("dsb");
@@ -254,7 +261,7 @@ bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_cou
 
     mutex_unlock(&vq->mutex);
 #ifdef DEBUG_VIRTQ
-    printf("dispatched transaction on vq=%u.\n", vq->vq_index);
+    debugf("VIRTIO[Q=%u]: Dispatched transaction.", vq->vq_index);
 #endif
     return true;
 }
@@ -310,14 +317,11 @@ static void virtio_monitor(struct virtq *vq) {
 
     // this section doesn't need to be locked (except descriptor manipulation, inside) because it only accesses
     // vq->last_used_idx (only accessed by this function anyway) and vq->used (only accessed here and by the device)
-#ifdef DEBUG_VIRTQ
-    printf("processing monitor for virtqueue %u\n", vq->vq_index);
-#endif
     assert(vq->desc != NULL && vq->used != NULL);
     while (vq->last_used_idx != htole16(vq->used->idx)) {
         struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
 #ifdef DEBUG_VIRTQ
-        printf("received used entry %u for virtqueue %u: id=%u, len=%u\n", vq->last_used_idx, vq->vq_index, elem->id, elem->len);
+        debugf("VIRTIO[Q=%u]: Received transaction on root descriptor %u (len=%u, last_used_idx=%u, vq->used->idx=%u).", vq->vq_index, elem->id, elem->len, vq->last_used_idx, htole16(vq->used->idx));
 #endif
         size_t chain_bytes = elem->len;
         size_t desc = elem->id;
@@ -328,6 +332,9 @@ static void virtio_monitor(struct virtq *vq) {
         mutex_lock(&vq->mutex);
         for (;;) {
             assert(desc < vq->num);
+#ifdef DEBUG_VIRTQ
+            debugf("VIRTIO[Q=%u]: Unpacking descriptor %u; setting in_use to false.", vq->vq_index, desc);
+#endif
             assert(vq->desc_meta[desc].in_use == true);
             vq->desc_meta[desc].in_use = false;
             if (callback == NULL) {
@@ -357,7 +364,7 @@ static void virtio_monitor(struct virtq *vq) {
         assert(callback != NULL);
 
 #ifdef DEBUG_VIRTQ
-        printf("calling monitor callback.\n");
+        debugf("VIRTIO[Q=%u]: Notifying callback.", vq->vq_index);
 #endif
         callback(vq->con, callback_param, chain_bytes);
     }
@@ -369,16 +376,13 @@ static void virtio_monitor_loop(void *opaque_con) {
 
     for (;;) {
         // wait for event
-#ifdef DEBUG_VIRTQ
-        printf("waiting for monitor event...\n");
-#endif
         BaseType_t value;
         value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         assert(value != 0);
 
         // process event
 #ifdef DEBUG_VIRTQ
-        printf("processing monitor event...\n");
+        debug0("VIRTIO[Q=*]: Processing received monitor IRQ in task.");
 #endif
         for (size_t i = 0; i < con->num_queues; i++) {
             virtio_monitor(&con->virtqueues[i]);
@@ -403,7 +407,7 @@ static void receive_ctrl_cb(struct virtio_console *con, void *opaque, size_t cha
     assert(opaque != NULL);
     struct virtio_console_control *ctrl_recv = (struct virtio_console_control *) opaque;
 
-#ifdef DEBUG_VIRTQ
+#ifdef DEBUG_INIT
     printf("received CTRL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)\n", ctrl_recv->id, ctrl_recv->event, ctrl_recv->value, chain_bytes);
 #endif
 
@@ -456,7 +460,7 @@ static void transmit_port_ready_cb(struct virtio_console *con, void *opaque, siz
     free(opaque);
     (void) con;
 
-#ifdef DEBUG_VIRTQ
+#ifdef DEBUG_INIT
     printf("completed transmit of PORT_READY message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
 #endif
     assert(chain_bytes == 0);
@@ -489,7 +493,7 @@ static void transmit_ready_cb(struct virtio_console *con, void *opaque, size_t c
     free(opaque);
     (void) con;
 
-#ifdef DEBUG_VIRTQ
+#ifdef DEBUG_INIT
     printf("completed transmit of ready message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
 #endif
     assert(chain_bytes == 0);
@@ -510,70 +514,70 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
     printf("VIRTIO device: addr=%x, irq=%u\n", mem_addr, irq);
 #endif
 
-    if (LE32_TO_CPU(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
+    if (le32toh(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
         printf("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; not initializing.\n",
-               LE32_TO_CPU(mmio->magic_value), VIRTIO_MAGIC_VALUE);
+               le32toh(mmio->magic_value), VIRTIO_MAGIC_VALUE);
         return;
     }
 
-    if (LE32_TO_CPU(mmio->version) == VIRTIO_LEGACY_VERSION) {
+    if (le32toh(mmio->version) == VIRTIO_LEGACY_VERSION) {
         printf("VIRTIO device configured as legacy-only; cannot initialize.\n"
                "Set -global virtio-mmio.force-legacy=false to fix this.\n");
         return;
-    } else if (LE32_TO_CPU(mmio->version) != VIRTIO_VERSION) {
+    } else if (le32toh(mmio->version) != VIRTIO_VERSION) {
         printf("VIRTIO device version not recognized: found %u instead of %u\n",
-               LE32_TO_CPU(mmio->version), VIRTIO_VERSION);
+               le32toh(mmio->version), VIRTIO_VERSION);
         return;
     }
 
     // make sure this is a serial port
-    if (LE32_TO_CPU(mmio->device_id) != VIRTIO_CONSOLE_ID) {
+    if (le32toh(mmio->device_id) != VIRTIO_CONSOLE_ID) {
 #ifdef DEBUG_INIT
         printf("VIRTIO device ID=%u instead of CONSOLE (%u)\n",
-               LE32_TO_CPU(mmio->device_id), VIRTIO_CONSOLE_ID);
+               le32toh(mmio->device_id), VIRTIO_CONSOLE_ID);
 #endif
         return;
     }
 
     // reset the device
-    mmio->status = CPU_TO_LE32(0);
+    mmio->status = htole32(0);
 
     // acknowledge the device
-    mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_ACKNOWLEDGE);
-    mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_DRIVER);
+    mmio->status |= htole32(VIRTIO_DEVSTAT_ACKNOWLEDGE);
+    mmio->status |= htole32(VIRTIO_DEVSTAT_DRIVER);
 
     // read the feature bits
-    mmio->device_features_sel = CPU_TO_LE32(0);
-    uint64_t features = CPU_TO_LE32(mmio->device_features);
-    mmio->device_features_sel = CPU_TO_LE32(1);
-    features |= ((uint64_t) CPU_TO_LE32(mmio->device_features)) << 32;
+    mmio->device_features_sel = htole32(0);
+    uint64_t features = htole32(mmio->device_features);
+    mmio->device_features_sel = htole32(1);
+    features |= ((uint64_t) htole32(mmio->device_features)) << 32;
 
     // select feature bits
     if (!(features & VIRTIO_F_VERSION_1)) {
         printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x).\n"
                "Legacy devices are not supported.\n", features, VIRTIO_F_VERSION_1);
-        mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
+        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
         return;
     }
     if (!(features & VIRTIO_CONSOLE_F_MULTIPORT)) {
         printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x).\n"
                "This configuration is not yet supported.\n", features, VIRTIO_CONSOLE_F_MULTIPORT);
-        mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
+        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
         return;
     }
 
     // write selected bits back
     uint64_t selected_features = VIRTIO_F_VERSION_1 | VIRTIO_CONSOLE_F_MULTIPORT;
-    mmio->driver_features_sel = CPU_TO_LE32(0);
-    mmio->driver_features = CPU_TO_LE32((uint32_t) selected_features);
-    mmio->driver_features_sel = CPU_TO_LE32(1);
-    mmio->driver_features = CPU_TO_LE32((uint32_t) (selected_features >> 32));
+    mmio->driver_features_sel = htole32(0);
+    mmio->driver_features = htole32((uint32_t) selected_features);
+    mmio->driver_features_sel = htole32(1);
+    mmio->driver_features = htole32((uint32_t) (selected_features >> 32));
 
     // validate features
-    mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FEATURES_OK);
-    if (!(LE32_TO_CPU(mmio->status) & VIRTIO_DEVSTAT_FEATURES_OK)) {
+    mmio->status |= htole32(VIRTIO_DEVSTAT_FEATURES_OK);
+    if (!(le32toh(mmio->status) & VIRTIO_DEVSTAT_FEATURES_OK)) {
         printf("VIRTIO device did not set FEATURES_OK: read back status=%08x.\n", mmio->status);
-        mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
+        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
         return;
     }
 
@@ -596,7 +600,7 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
     status = xTaskCreate(virtio_monitor_loop, "virtio-monitor", 1000, con, PRIORITY_DRIVERS, &con->monitor_task);
     if (status != pdPASS) {
         printf("could not initialize virtio-monitor task; failed.\n");
-        mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_FAILED);
+        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
         return;
     }
     assert(con->monitor_task != NULL);
@@ -604,7 +608,7 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
     enable_irq(irq, virtio_irq_callback, con);
 
     // enable driver
-    mmio->status |= CPU_TO_LE32(VIRTIO_DEVSTAT_DRIVER_OK);
+    mmio->status |= htole32(VIRTIO_DEVSTAT_DRIVER_OK);
 
     // set up control queues
     struct virtq *ctrl_rx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE);
