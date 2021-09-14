@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -24,7 +25,7 @@ type Processes struct {
 	WaitAnyOnce sync.Once
 }
 
-func (p *Processes) Launch(path string, args []string, logfile string) {
+func (p *Processes) Launch(path string, args []string, logfile string) (pid int) {
 	cmd := exec.Command(path, args...)
 
 	out, err := os.Create(logfile)
@@ -59,6 +60,7 @@ func (p *Processes) Launch(path string, args []string, logfile string) {
 			log.Printf("Finished execution of %s", path)
 		}
 	}()
+	return cmd.Process.Pid
 }
 
 func (p *Processes) Signal(signal os.Signal) {
@@ -103,6 +105,25 @@ func (p *Processes) WaitAll() {
 func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func HasSocket(pid int) (bool, error) {
+	procdir := fmt.Sprintf("/proc/%d/fd/", pid)
+	ents, err := ioutil.ReadDir(procdir)
+	if err != nil {
+		return false, err
+	}
+	for _, ent := range ents {
+		// find FDs (integers)
+		if _, err := strconv.ParseUint(ent.Name(), 10, 64); err == nil {
+			fdPath := path.Join(procdir, ent.Name())
+			dest, err := os.Readlink(fdPath)
+			if err == nil && strings.HasPrefix(dest, "socket:") {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func main() {
@@ -184,12 +205,18 @@ func main() {
 		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
 	}
-	p.Launch(cmd[0], cmd[1:], "qemu.log")
+	qemuPid := p.Launch(cmd[0], cmd[1:], "qemu.log")
 	// wait until it looks like QEMU is set up, to avoid GDB connection timeouts
-	for i := 0; i < 10 && !Exists("guest.log"); i++ {
-		time.Sleep(time.Millisecond * 100)
+	for i := 0; i < 10; i++ {
+		hasSocket, err := HasSocket(qemuPid)
+		if err != nil {
+			log.Printf("Error while checking for socket: %v; skipping check.", err)
+			break
+		}
+		if hasSocket {
+			break
+		}
 	}
-	time.Sleep(time.Millisecond * 100)
 
 	gdbCmd := []string{
 		"-batch",
