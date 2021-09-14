@@ -6,9 +6,13 @@ Under the same parent directory, clone the following repositories:
  - https://github.com/celskeggs/hailburst
  - https://github.com/celskeggs/qemu
  - https://sourceware.org/git/binutils-gdb.git
+ - https://github.com/embeddedartistry/libc (as ealibc/; remember to use --recursive)
+ - https://github.com/FreeRTOS/FreeRTOS (remember to use --recursive)
 
 Then, download and extract https://buildroot.org/downloads/buildroot-2021.02.tar.bz2 somewhere on
 your system, such as to ~/Binary/buildroot-2021.02/. Make sure to use THIS EXACT VERSION!
+
+Download and extract https://www.zlib.net/zlib-1.2.11.tar.gz such that there is a zlib-1.2.11/ directory under the same parent directory as hailburst.
 
 In the hailburst repository, copy local.config.template to local.config, and fill in the buildroot
 path where you installed it.
