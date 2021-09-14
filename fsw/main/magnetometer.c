@@ -234,7 +234,7 @@ static void *magnetometer_telemloop(void *mag_opaque) {
             mutex_lock(&mag->mutex);
             mag->num_readings -= num_downlink;
             assert(mag->num_readings <= MAGNETOMETER_MAX_READINGS);
-            memmove(&mag->readings[0], &mag->readings[num_downlink], mag->num_readings);
+            memmove(&mag->readings[0], &mag->readings[num_downlink], sizeof(tlm_mag_reading_t) * mag->num_readings);
         }
         mutex_unlock(&mag->mutex);
 
