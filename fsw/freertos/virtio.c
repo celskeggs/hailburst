@@ -314,7 +314,7 @@ static void virtio_monitor(struct virtq *vq) {
     printf("processing monitor for virtqueue %u\n", vq->vq_index);
 #endif
     assert(vq->desc != NULL && vq->used != NULL);
-    while (vq->last_used_idx != CPU_TO_LE32(vq->used->idx)) {
+    while (vq->last_used_idx != htole16(vq->used->idx)) {
         struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
 #ifdef DEBUG_VIRTQ
         printf("received used entry %u for virtqueue %u: id=%u, len=%u\n", vq->last_used_idx, vq->vq_index, elem->id, elem->len);

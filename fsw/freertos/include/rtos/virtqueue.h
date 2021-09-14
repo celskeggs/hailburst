@@ -110,7 +110,7 @@ struct virtq {
         struct virtio_console *con;
 
         size_t num;
-        uint32_t last_used_idx;
+        uint16_t last_used_idx;
         struct virtq_desc_meta *desc_meta;
 
         struct virtq_desc *desc;
