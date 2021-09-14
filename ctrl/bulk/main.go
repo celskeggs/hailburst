@@ -22,6 +22,7 @@ func main() {
 	var maxTrials uint32 = math.MaxUint32
 	var numCPUs = runtime.NumCPU()
 	var mode = "mem"
+	var platform = "linux"
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--max" {
 			maxTrials64, err := strconv.ParseUint(os.Args[i+1], 10, 32)
@@ -45,6 +46,11 @@ func main() {
 			mode = os.Args[i+1]
 			if mode != "mem" && mode != "reg" {
 				log.Fatalf("unrecognized mode option: %q", mode)
+			}
+		} else if os.Args[i] == "--platform" {
+			platform = os.Args[i+1]
+			if platform != "freertos" && platform != "linux" {
+				log.Fatalf("unrecognized platform option: %q", mode)
 			}
 		}
 	}
@@ -87,7 +93,7 @@ func main() {
 			log.Printf("Launching batch job #%d...", total)
 			go func(assignment PortAssignment) {
 				stamp := fmt.Sprintf("W%v-", assignment.ThreadNum) + time.Now().Format("2006-01-02T15:04:05")
-				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), mode)
+				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), platform, mode)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				err := cmd.Run()

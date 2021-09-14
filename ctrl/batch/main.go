@@ -106,8 +106,8 @@ func Exists(path string) bool {
 }
 
 func main() {
-	if len(os.Args) != 4 {
-		log.Fatalf("usage: %s <dir> <port> <mode>", os.Args[0])
+	if len(os.Args) != 5 {
+		log.Fatalf("usage: %s <dir> <port> <plat> <mode>", os.Args[0])
 	}
 	origDir, err := os.Getwd()
 	if err != nil {
@@ -125,7 +125,16 @@ func main() {
 	if err := os.Chdir(directory); err != nil {
 		log.Fatal(err)
 	}
-	mode := os.Args[3]
+	plat, mode := os.Args[3], os.Args[4]
+
+	var imagePath string
+	if plat == "freertos" {
+		imagePath = path.Join(origDir, "fsw/build/app")
+	} else if plat == "linux" {
+		imagePath = path.Join(origDir, "tree/images/zImage")
+	} else {
+		log.Fatalf("unknown platform: %s", plat)
+	}
 
 	out, err := os.Create("batch.log")
 	if err != nil {
@@ -162,15 +171,17 @@ func main() {
 		"-S", "-gdb", fmt.Sprintf("tcp::%v", port),
 		"-M", "virt",
 		"-m", "20",
-		"-kernel", path.Join(origDir, "tree/images/zImage"),
+		"-kernel", imagePath,
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
+		"-d", "guest_errors",
 		"-vga", "none",
-		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-serial", "file:guest.log",
+		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
 		"-device", "virtio-serial-device",
-		"-device", "virtserialport,name=tsvc0,chardev=ts0",
+		"-device", "virtserialport,name=tsvp0,chardev=ts0",
+		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
 	}
 	p.Launch(cmd[0], cmd[1:], "qemu.log")
@@ -180,26 +191,36 @@ func main() {
 	}
 	time.Sleep(time.Millisecond * 100)
 
-	var campaignCmd string
-	if mode == "reg" {
-		campaignCmd = "campaign 1000 1s reg"
-	} else if mode == "mem" {
-		campaignCmd = "campaign 10000 100ms"
-	} else {
-		log.Fatalf("unknown mode: %q", mode)
-	}
-
-	p.Launch(path.Join(origDir, "../gdbroot/bin/gdb"), []string{
+	gdbCmd := []string{
 		"-batch",
+	}
+	if plat == "freertos" {
+		gdbCmd = append(gdbCmd, "-ex", "symbol-file " + imagePath)
+	}
+	gdbCmd = append(gdbCmd,
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
 		"-ex", "source " + path.Join(origDir, "ctrl/script/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
-		"-ex", campaignCmd,
+	)
+	if mode == "reg" {
+		gdbCmd = append(gdbCmd,
+			"-ex", "campaign 1000 1s reg",
+		)
+	} else if mode == "mem" {
+		gdbCmd = append(gdbCmd,
+			"-ex", "campaign 10000 100ms",
+		)
+	} else {
+		log.Fatalf("unknown mode: %q", mode)
+	}
+	gdbCmd = append(gdbCmd,
 		"-ex", "printf \"Campaign concluded\n\"",
 		"-ex", "monitor info vtime",
-	}, "gdb.log")
+	)
+
+	p.Launch(path.Join(origDir, "../gdbroot/bin/gdb"), gdbCmd, "gdb.log")
 	go func() {
 		log.Printf("Monitoring requirements log...")
 		br := bufio.NewReader(f)
