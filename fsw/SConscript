@@ -61,7 +61,7 @@ elif PLATFORM == PLAT_FREERTOS:
     )
     # TODO: is this actually necessary?
     env["ASPPCOM"] = env["ASPPCOM"].replace("$CC", "$AS")
-    LIBGCC_LIBRARY_PATH = subprocess.check_output([env['CC'], "-print-libgcc-file-name"]).strip()
+    LIBGCC_LIBRARY_PATH = subprocess.check_output([env['CC'], "-print-libgcc-file-name"]).decode().strip()
     # TODO: ensure that ASFLAGS is actually used
     ROOT_DIR = "../../.."
     # embedded artistry's libc
