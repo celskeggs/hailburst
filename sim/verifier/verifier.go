@@ -181,12 +181,17 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 			lastReadings := lastReadingsArray.(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray).Readings
 			// guaranteed to have at least one element by telemetry decoder
 			lastReadingTime, inOrder = model.FromNanoseconds(lastReadings[len(lastReadings)-1].ReadingTime)
+			if !inOrder {
+				log.Printf("Out-of-order error resulting from error in previous downlink buffer")
+			}
 		}
 
 		// now validate the order
 		for _, reading := range readingsArray.Readings {
 			readingTime, rtOk := model.FromNanoseconds(reading.ReadingTime)
 			if !rtOk || !readingTime.AtOrAfter(lastReadingTime.Add(time.Millisecond*95)) {
+				log.Printf("Out-of-order error resulting from comparison issue: %v < (%v + 95ms = %v)",
+					readingTime, lastReadingTime, lastReadingTime.Add(time.Millisecond*95))
 				inOrder = false
 				break
 			}
@@ -357,6 +362,11 @@ func (v *verifier) OnMeasureMagnetometer(x, y, z int16) {
 					readingTime, ok := model.FromNanoseconds(reading.ReadingTime)
 					if ok && now.TimeDistance(readingTime) < MaxMagMeasTimeVariance {
 						return true
+					} else {
+						log.Printf("Found reading that almost matched, but didn't:\n" +
+							"measurement = {%d, %d, %d, now=%v}\n" +
+							"reading     = {%d, %d, %d, now=%v}",
+							x, y, z, now, reading.MagX, reading.MagY, reading.MagZ, readingTime)
 					}
 				}
 			}
