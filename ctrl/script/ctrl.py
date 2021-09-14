@@ -204,7 +204,7 @@ def list_registers():
         # to all of the more specialized registers in question.
         cached_reg_list = [(r, gdb.selected_frame().read_register(r).type.sizeof)
                            for r in gdb.selected_frame().architecture().registers()
-                           if str(gdb.selected_frame().read_register(r).type) not in ("float", "union neon_q")]
+                           if str(gdb.selected_frame().read_register(r).type) not in ("float", "union neon_q", "neon_q")]
     return cached_reg_list[:]
 
 
@@ -212,7 +212,7 @@ def inject_register_bitflip(register_name):
     value = gdb.selected_frame().read_register(register_name)
     if str(value.type) in ("long", "long long", "void *", "void (*)()"):
         lookup = None
-    elif str(value.type) == "union neon_d":
+    elif str(value.type) == "union neon_d" or str(value.type) == "neon_d":
         lookup = "u64"
     else:
         raise RuntimeError("not handled: inject_register_bitflip into register %s of type %s" % (register_name, value.type))
