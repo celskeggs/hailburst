@@ -99,9 +99,11 @@ func LoadTrial(trialdir string) (Trial, error) {
 			curReq := parts[0]
 			if failures > 0 {
 				if failedReq != "" {
-					return Trial{}, fmt.Errorf("found more than one failed req: %q %q", failedReq, parts[0])
+					log.Printf("WARNING: found more than one failed req: %q %q in %v", failedReq, parts[0], trialdir)
+					failedReq += "+" + curReq
+				} else {
+					failedReq = curReq
 				}
-				failedReq = curReq
 			}
 		} else if strings.HasPrefix(line, "Experiment: monitor reported I/O ceased at ") && strings.HasSuffix(line, " seconds") && strings.Count(line, " ") == 7 {
 			ceased, err = strconv.ParseFloat(strings.Split(line, " ")[6], 64)
