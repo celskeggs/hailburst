@@ -11,7 +11,7 @@ APPS_SITE_METHOD = local
 APPS_DEPENDENCIES = zlib
 
 define APPS_BUILD_CMDS
-    env $(TARGET_CONFIGURE_OPTS) scons -C $(@D) build/app build/S80app
+    env $(TARGET_CONFIGURE_OPTS) scons -C $(@D) build/app
 endef
 
 define APPS_INSTALL_TARGET_CMDS
