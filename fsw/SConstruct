@@ -1,1 +1,12 @@
-SConscript(dirs='.', variant_dir='build/', duplicate=False)
+AddOption(
+    '--prefix',
+    dest='prefix',
+    type='string',
+    nargs=1,
+    action='store',
+    metavar='DIR',
+    help='installation prefix',
+)
+
+SConscript(dirs='.', variant_dir='build-linux/', duplicate=False, exports={"platform": "linux"})
+SConscript(dirs='.', variant_dir='build-freertos/', duplicate=False, exports={"platform": "freertos"})

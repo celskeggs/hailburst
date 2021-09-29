@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"time"
 )
@@ -17,14 +18,17 @@ func main() {
 		fmt.Printf("Usage: ./ctrl.sh [--rebuild]\n")
 		return
 	}
-	var imagePath string
+	var imageArg []string
 	isBare := util.HasArg("--freertos")
 	if isBare {
-		imagePath = "fsw/build/app"
+		buildPath := "build-freertos/bootrom-bin"
+		imageArg = []string{
+			"-bios", path.Join("fsw/", buildPath),
+		}
 		if util.HasArg("--clean") {
 			// build the image
 			fmt.Printf("Cleaning FSW directory...\n")
-			cmd := exec.Command("scons", "--platform=freertos", "--clean")
+			cmd := exec.Command("scons", "-c")
 			cmd.Dir = "fsw"
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -35,7 +39,7 @@ func main() {
 		if util.HasArg("--rebuild") {
 			// build the image
 			fmt.Printf("Rebuilding FSW directory...\n")
-			cmd := exec.Command("scons", "--platform=freertos")
+			cmd := exec.Command("scons", buildPath)
 			cmd.Dir = "fsw"
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -44,7 +48,9 @@ func main() {
 			}
 		}
 	} else {
-		imagePath = "tree/images/zImage"
+		imageArg = []string{
+			"-kernel", "tree/images/zImage",
+		}
 		if util.HasArg("--rebuild") {
 			// first part is just to confirm that the code IS compilable (using the host toolchain)
 			fmt.Printf("Running make app/make clean as a precheck\n")
@@ -129,7 +135,9 @@ func main() {
 		"-S", "-s",
 		"-M", "virt",
 		"-m", "20",
-		"-kernel", imagePath,
+	}
+	cmd = append(cmd, imageArg...)
+	cmd = append(cmd,
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
@@ -141,7 +149,7 @@ func main() {
 		"-device", "virtserialport,name=tsvp0,chardev=ts0",
 		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
-	}
+	)
 	waitMain := p.LaunchInTerminal(strings.Join(cmd, " "), "QEMU", ".")
 	for i := 0; i < 10 && !util.Exists(guestLog); i++ {
 		time.Sleep(time.Millisecond * 100)
