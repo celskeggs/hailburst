@@ -133,7 +133,7 @@ func main() {
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
-		"-M", "virt",
+		"-M", "virt,x-enable-load-dtb=false",
 		"-m", "20",
 	}
 	cmd = append(cmd, imageArg...)
