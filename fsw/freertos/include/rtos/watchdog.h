@@ -1,0 +1,6 @@
+#ifndef FSW_FREERTOS_RTOS_WATCHDOG_H
+#define FSW_FREERTOS_RTOS_WATCHDOG_H
+
+void watchdog_init(void);
+
+#endif /* FSW_FREERTOS_RTOS_WATCHDOG_H */

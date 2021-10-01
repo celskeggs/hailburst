@@ -190,7 +190,7 @@ func main() {
 	cmd := []string{
 		path.Join(origDir, "../qemu/build/qemu-system-arm"),
 		"-S", "-gdb", fmt.Sprintf("tcp::%v", port),
-		"-M", "virt,,x-enable-load-dtb=false",
+		"-M", "virt,x-enable-load-dtb=false,x-enable-watchdog=true",
 		"-m", "20",
 		"-kernel", imagePath,
 		"-monitor", "stdio",
