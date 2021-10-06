@@ -16,7 +16,7 @@ import (
 const ShowIORecords = false
 
 func ScanAll(dir string) (out []scans.ScannedLine, err error) {
-	records, err := scans.ScanRawReqs(path.Join(dir, "reqs-raw.log"))
+	records, err := scans.ScanReqSummary(path.Join(dir, "reqs-raw.log"))
 	if err != nil {
 		return nil, errors.Wrap(err, "while scanning requirements")
 	}
