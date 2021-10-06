@@ -144,7 +144,12 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int mode)
 
 void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
     (void) task;
-    (void) pcTaskName;
+    if (recurse) {
+        abort();
+    }
+    recurse = true;
+
+    printf("STACK OVERFLOW occurred in task '%s'\n", pcTaskName);
     abort();
 }
 
