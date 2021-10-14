@@ -6,6 +6,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/fakewire/link.h>
 

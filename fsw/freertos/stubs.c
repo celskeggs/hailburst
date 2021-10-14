@@ -26,6 +26,11 @@ void _putchar(char c) {
     *(volatile unsigned long*)SERIAL_BASE = c;
 }
 
+int putchar(int c) {
+    _putchar(c);
+    return 0;
+}
+
 __attribute__((noreturn)) void _Exit(int status) {
     printf("system exit status %d\n", status);
     abort();

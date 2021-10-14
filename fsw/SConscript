@@ -4,8 +4,8 @@ import subprocess
 def build_common(env):
     env["CPPPATH"] += ["include/"]
     return [
-        env.Library("main-app", ["main/spacecraft.c", "main/radio.c", "main/comm.c", "main/cmd.c", "main/tlm.c",
-                                 "main/magnetometer.c", "main/heartbeat.c", "fakewire/rmap.c"]),
+        env.Library("main-app", ["main/cmd.c", "main/comm.c", "main/debug.c", "main/heartbeat.c", "main/magnetometer.c",
+                                 "main/radio.c", "fakewire/rmap.c", "main/spacecraft.c", "main/tlm.c"]),
         env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/ringbuf.c"])
     ]
 

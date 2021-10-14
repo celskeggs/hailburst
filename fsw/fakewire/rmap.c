@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <hal/thread.h>
+#include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/fakewire/rmap.h>
 
@@ -261,7 +262,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
             // it as an error.
-            debug0("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
+            debugf("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
         }
     }
 
@@ -531,6 +532,6 @@ static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t pac
     assert(mon != NULL && mon->scratch_buffer != NULL && packet_data != NULL);
 
     if (!rmap_recv_handle(mon, packet_data, packet_length, sop_timestamp_ns)) {
-        debug0("RMAP packet received was corrupted or unexpected.");
+        debugf("RMAP packet received was corrupted or unexpected.");
     }
 }

@@ -75,7 +75,7 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
 
     // arbitrarily use up_ctx for this initial configuration
     if (!radio_identify(radio, &radio->up_ctx)) {
-        debug0("Radio: could not identify device settings.");
+        debugf("Radio: could not identify device settings.");
         exit(1);
     }
 
@@ -303,7 +303,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     if (reg[REG_RX_STATE] == RX_STATE_IDLE) {
-        debug0("Radio: initializing uplink out of IDLE mode");
+        debugf("Radio: initializing uplink out of IDLE mode");
 
         radio->bytes_extracted = 0;
         reg[REG_RX_PTR] = radio->rx_halves[0].base;
@@ -433,7 +433,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             reg[REG_RX_PTR_ALT] = 0;
             reg[REG_RX_LEN_ALT] = 0;
             reg[REG_RX_STATE] = RX_STATE_LISTENING;
-            debug0("Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
+            debugf("Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
 #ifdef DEBUGIDX
             debugf("Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                    reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
@@ -467,7 +467,7 @@ static void *radio_uplink_loop(void *radio_opaque) {
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
-            debug0("Radio: hit error in uplink loop; halting uplink thread.");
+            debugf("Radio: hit error in uplink loop; halting uplink thread.");
             return NULL;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
@@ -549,7 +549,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {
-            debug0("Radio: hit error in downlink loop; halting downlink thread.");
+            debugf("Radio: hit error in downlink loop; halting downlink thread.");
             return NULL;
         }
     }

@@ -141,11 +141,11 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     virtio_init(fakewire_link_setup, fwl);
 
     // port
-    debug0("Waiting for VIRTIO port to be configured...");
+    debugf("Waiting for VIRTIO port to be configured...");
     BaseType_t status = xSemaphoreTake(fwl->port_acquired, portMAX_DELAY);
     assert(status == pdTRUE);
     assert(fwl->port != NULL);
-    debug0("VIRTIO port identified! Proceeding with fakewire initialization.");
+    debugf("VIRTIO port identified! Proceeding with fakewire initialization.");
 
     // next, let's configure all the data structures
     ringbuf_init(&fwl->enc_ring, FW_LINK_RING_SIZE, 1);

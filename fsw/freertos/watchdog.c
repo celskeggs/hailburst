@@ -4,6 +4,7 @@
 #include <rtos/timer.h>
 #include <rtos/watchdog.h>
 #include <hal/thread.h>
+#include <fsw/debug.h>
 
 enum {
     WATCHDOG_BASE_ADDRESS = 0x090c0000,
@@ -68,7 +69,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
         // how long until then?
         int32_t delay_until_earliest = earliest - now;
 
-        printf("[watchdog] now=%" PRIu64 ", deadline=%+d, earliest=%+d\n",
+        debugf("[watchdog] now=%" PRIu64 ", deadline=%+d, earliest=%+d",
                now_full, delay_until_deadline, delay_until_earliest);
 
         // if we can't feed yet, wait until we can
@@ -81,7 +82,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
         // greet watchdog, prepare food, feed watchdog
         uint32_t recipe = mmio->r_greet;
         uint32_t food = wdt_strict_food_from_recipe(recipe);
-        printf("[watchdog] recipe: 0x%08x -> food: 0x%08x\n", recipe, food);
+        debugf("[watchdog] recipe: 0x%08x -> food: 0x%08x", recipe, food);
         mmio->r_feed = food;
 
         // ensure that deadline has been updated

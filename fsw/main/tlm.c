@@ -229,7 +229,7 @@ void tlm_clock_calibrated(int64_t adjustment) {
 }
 
 void tlm_heartbeat(void) {
-    debug0("Heartbeat");
+    debugf("Heartbeat");
 
     tlm_elem_t tlm = { .telemetry_id = HEARTBEAT_TID, .data_len = 0 };
     telemetry_record_async(&tlm);

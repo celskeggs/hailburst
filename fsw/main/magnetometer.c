@@ -140,7 +140,7 @@ retry:
 
         usleep(200);
     }
-    debug0("Magnetometer: ran out of loop retries while trying to take a reading.");
+    debugf("Magnetometer: ran out of loop retries while trying to take a reading.");
     return false;
 }
 
@@ -149,22 +149,22 @@ static void *magnetometer_mainloop(void *mag_opaque) {
     assert(mag != NULL);
 
     for (;;) {
-        debug0("Checking for magnetometer power command...");
+        debugf("Checking for magnetometer power command...");
         mutex_lock(&mag->mutex);
         // wait for magnetometer power command
         while (!mag->should_be_powered) {
             mutex_unlock(&mag->mutex);
-            debug0("Waiting for magnetometer power command...");
+            debugf("Waiting for magnetometer power command...");
             semaphore_take(&mag->flag_change);
             mutex_lock(&mag->mutex);
         }
         assert(mag->should_be_powered == true);
         mutex_unlock(&mag->mutex);
-        debug0("Turning on magnetometer power...");
+        debugf("Turning on magnetometer power...");
 
         // turn on power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_ON)) {
-            debug0("Magnetometer: quitting read loop due to RMAP error.");
+            debugf("Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
         uint64_t powered_at = clock_timestamp();
@@ -187,7 +187,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             // take and report reading
             tlm_mag_reading_t reading;
             if (!magnetometer_take_reading(mag, &reading)) {
-                debug0("Magnetometer: quitting read loop due to RMAP error.");
+                debugf("Magnetometer: quitting read loop due to RMAP error.");
                 return NULL;
             }
 
@@ -202,7 +202,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
 
         // turn off power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF)) {
-            debug0("Magnetometer: quitting read loop due to RMAP error.");
+            debugf("Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
         tlm_mag_pwr_state_changed(false);
