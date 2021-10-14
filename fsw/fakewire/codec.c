@@ -7,6 +7,10 @@
 
 //#define DEBUG
 
+enum {
+    FSW_CODEC_SCRATCH_BUF_SIZE = 1024,
+};
+
 void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output) {
     assert(fwd != NULL && output != NULL);
     fwd->output = output;
@@ -144,16 +148,30 @@ void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output) {
     assert(fwe != NULL && output != NULL);
     assert(ringbuf_elem_size(output) == 1);
     fwe->output = output;
+    fwe->scratch_buffer = malloc(FSW_CODEC_SCRATCH_BUF_SIZE);
+    assert(fwe->scratch_buffer != NULL);
 }
 
 void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
-    // allocate enough space for byte_count * 2 bytes
-    uint8_t temp[byte_count * 2];
-    size_t j = 0;
+    uint8_t *temp = fwe->scratch_buffer;
+    size_t j = 0, total = 0;
 
+#ifdef DEBUG
+    debugf("[fakewire_codec] Beginning encoding of %zu raw data bytes.", byte_count);
+#endif
     for (size_t i = 0; i < byte_count; i++) {
+        // if our scratch buffer fills up, drain it to the ring buffer
+        if (j > FSW_CODEC_SCRATCH_BUF_SIZE - 2) {
+#ifdef DEBUG
+            debugf("[fakewire_codec] Scratch buffer full; draining %zu line bytes to ring buffer.", j);
+#endif
+            ringbuf_write_all(fwe->output, temp, j);
+            total += j;
+            j = 0;
+        }
+
         uint8_t byte = bytes_in[i];
         if (fakewire_is_special(byte)) {
             temp[j++] = FWC_ESCAPE_SYM;
@@ -162,16 +180,18 @@ void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_
         }
         temp[j++] = byte;
     }
-    assert(j >= byte_count && j <= sizeof(temp));
-
-    // write data to ring buffer
+    if (j > 0) {
+        // drain remaining data to ring buffer
+        ringbuf_write_all(fwe->output, temp, j);
 #ifdef DEBUG
-    debugf("[fakewire_codec] Encoded %zu raw data bytes to %zu line bytes.", byte_count, j);
+        debugf("[fakewire_codec] Draining %zu line bytes to ring buffer.", j);
 #endif
-    ringbuf_write_all(fwe->output, temp, j);
+        total += j;
+    }
 #ifdef DEBUG
-    debugf("[fakewire_codec] Completed write of %zu bytes to ring buffer.", j);
+    debugf("[fakewire_codec] Finished encoding %zu raw data bytes to %zu line bytes.", byte_count, total);
 #endif
+    assert(total >= byte_count && total <= byte_count * 2);
 }
 
 void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param) {

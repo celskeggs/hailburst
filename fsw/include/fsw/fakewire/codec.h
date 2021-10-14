@@ -59,6 +59,7 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
 
 typedef struct {
     ringbuf_t *output;
+    uint8_t *scratch_buffer;
 } fw_encoder_t;
 
 void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output);
