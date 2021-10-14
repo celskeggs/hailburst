@@ -1,7 +1,9 @@
-#ifndef FSW_BOOTROM_ELF_H
-#define FSW_BOOTROM_ELF_H
+#ifndef FSW_ELF_ELF_H
+#define FSW_ELF_ELF_H
 
+#include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef uint32_t Elf32_Addr;
 typedef uint16_t Elf32_Half;
@@ -72,4 +74,10 @@ enum {
     PT_ARM_UNWIND = 0x70000001,
 };
 
-#endif /* FSW_BOOTROM_ELF_H */
+typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz);
+typedef int (*elf_debug_cb_t)(const char* format, ...);
+
+bool elf_validate_header(uint8_t *kernel, elf_debug_cb_t debug);
+uint32_t elf_scan_load_segments(uint8_t *kernel, elf_debug_cb_t debug, uint32_t lowest_address, elf_scan_cb_t visitor);
+
+#endif /* FSW_ELF_ELF_H */

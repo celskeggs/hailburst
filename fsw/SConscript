@@ -72,6 +72,7 @@ def configure_freertos():
     FREERTOS_ARCH_INC = os.path.join(FREERTOS_ROOT, "portable/GCC/ARM_CA9")
 
     common_libs = build_common(rtos_env)
+    elf_lib = rtos_env.Library("elf", ["elf/elf.c"])
 
     rtos_env["CPPPATH"] += [
         "freertos/include/", "bootrom/include/",
@@ -114,7 +115,7 @@ def configure_freertos():
         action='$OBJCOPY -I binary -O elf32-littlearm -B arm --strip-all $SOURCE $TARGET',
     )
 
-    BOOTROM_SRC = ["bootrom/boot.c", "bootrom/start.s", ealibc, LIBGCC_LIBRARY_PATH, embedding]
+    BOOTROM_SRC = ["bootrom/boot.c", "bootrom/start.s", ealibc, LIBGCC_LIBRARY_PATH, embedding, elf_lib]
     rtos_bootrom_elf = rtos_env.Program("bootrom-elf", BOOTROM_SRC, LINKSCRIPT="bootrom/link.ld")
     rtos_env.Depends(rtos_bootrom_elf, "bootrom/link.ld")
 
