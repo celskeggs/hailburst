@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <rtos/timer.h>
 #include <fsw/debug.h>
 #include <fsw/fakewire/link.h>
 
@@ -94,6 +95,8 @@ static void *fakewire_link_input_loop(void *opaque) {
     };
     uint64_t receive_timestamp = 0;
 
+    uint64_t drain_start = timer_now_ns();
+
     while (true) {
         // read as many bytes as possible from the input port at once
         ssize_t actual = virtio_transact_sync(fwl->port->receiveq, &entry, 1, &receive_timestamp);
@@ -107,6 +110,11 @@ static void *fakewire_link_input_loop(void *opaque) {
 #endif
         assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
         assert(receive_timestamp > 0);
+
+        // drain all bytes immediately received after reset, to avoid synchronization spew
+        if (receive_timestamp >= drain_start && receive_timestamp < drain_start + TICK_PERIOD_NS) {
+            continue;
+        }
 
         // write as many bytes at once as possible
         fakewire_dec_decode(&fwl->decoder, read_buf, actual, receive_timestamp);
