@@ -140,7 +140,7 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int mode)
     printf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x\n", state->r4, state->r5, state->r6, state->r7);
     printf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x\n", state->r8, state->r9, state->r10, state->r11);
     printf("Registers: R12=0x%08x\n", state->r12);
-    printf("HALTING IN REACTION TO DATA ABORT AT TIME=%" PRIu64 "\n", now);
+    printf("HALTING IN REACTION TO %s AT TIME=%" PRIu64 "\n", abort_type, now);
     abort();
 }
 
