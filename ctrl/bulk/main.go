@@ -23,6 +23,7 @@ func main() {
 	var numCPUs = runtime.NumCPU()
 	var mode = "mem"
 	var platform = "linux"
+	var stop = "req"
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--max" {
 			maxTrials64, err := strconv.ParseUint(os.Args[i+1], 10, 32)
@@ -33,6 +34,7 @@ func main() {
 			if maxTrials == 0 {
 				log.Fatal("cannot run only zero trials")
 			}
+			i++
 		} else if os.Args[i] == "--cpus" {
 			numCPUs64, err := strconv.ParseInt(os.Args[i+1], 10, 0)
 			if err != nil {
@@ -42,16 +44,23 @@ func main() {
 			if numCPUs <= 0 {
 				log.Fatal("cannot run only positive numbers of CPUs in parallel")
 			}
+			i++
 		} else if os.Args[i] == "--mode" {
 			mode = os.Args[i+1]
 			if mode != "mem" && mode != "reg" {
 				log.Fatalf("unrecognized mode option: %q", mode)
 			}
+			i++
 		} else if os.Args[i] == "--platform" {
 			platform = os.Args[i+1]
 			if platform != "freertos" && platform != "linux" {
 				log.Fatalf("unrecognized platform option: %q", mode)
 			}
+			i++
+		} else if os.Args[i] == "--keep-going" {
+			stop = "none"
+		} else {
+			log.Fatalf("unknown argument: %q", os.Args[i])
 		}
 	}
 
@@ -93,7 +102,7 @@ func main() {
 			log.Printf("Launching batch job #%d...", total)
 			go func(assignment PortAssignment) {
 				stamp := fmt.Sprintf("W%v-", assignment.ThreadNum) + time.Now().Format("2006-01-02T15:04:05")
-				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), platform, mode)
+				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), platform, mode, stop)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				err := cmd.Run()

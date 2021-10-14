@@ -5,6 +5,7 @@ import (
 	"github.com/celskeggs/hailburst/sim/model"
 	"gonum.org/v1/plot/vg"
 	"image/color"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -317,7 +318,41 @@ func CollectiveSummary(raw []*ReqIntervalScan) *ReqIntervalScan {
 	}
 }
 
-func ScanReqSummary(path string) ([]*ReqIntervalScan, error) {
+func MeanDuration(durations []time.Duration) time.Duration {
+	var total time.Duration
+	if len(durations) == 0 {
+		return time.Duration(math.NaN())
+	}
+	for _, duration := range durations {
+		total += duration
+	}
+	return total / time.Duration(len(durations))
+}
+
+func CalcStats(summary *ReqIntervalScan) {
+	var failureTimes []time.Duration
+	var successTimes []time.Duration
+
+	wasFailure := false
+	for i := 0; i < len(summary.Intervals) - 1; i++ {
+		interval := summary.Intervals[i]
+		if interval.Mode == IntervalReliable {
+			successTimes = append(successTimes, interval.Duration())
+			wasFailure = false
+		} else {
+			if wasFailure {
+				failureTimes[len(failureTimes)-1] += interval.Duration()
+			} else {
+				failureTimes = append(failureTimes, interval.Duration())
+			}
+			wasFailure = true
+		}
+	}
+
+	log.Printf("STATS: mttf=%v, mttr=%v", MeanDuration(successTimes), MeanDuration(failureTimes))
+}
+
+func ScanReqSummary(path string, details bool) ([]*ReqIntervalScan, error) {
 	raw, err := ScanRawReqs(path)
 	if err != nil {
 		return nil, err
@@ -326,6 +361,11 @@ func ScanReqSummary(path string) ([]*ReqIntervalScan, error) {
 	for _, r := range raw {
 		ri = append(ri, Summarize(r))
 	}
-	ri = append(ri, CollectiveSummary(ri))
+	summary := CollectiveSummary(ri)
+	CalcStats(summary)
+	if !details {
+		ri = nil
+	}
+	ri = append(ri, summary)
 	return ri, nil
 }

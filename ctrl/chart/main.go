@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/celskeggs/hailburst/ctrl/chart/scans"
 	"github.com/celskeggs/hailburst/ctrl/chart/tlplot"
 	"github.com/pkg/errors"
@@ -9,21 +10,74 @@ import (
 	"math"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
+	"strings"
+	"unicode"
 )
 
-// This rendering didn't actually turn out to be useful...
-const ShowIORecords = false
+type Options struct {
+	ShowRawReqs       bool
+	ShowSummary       bool
+	ShowIoRec         bool
+	ShowSchedule      bool
+	ShowInjections    bool
+	ShowIoLog         bool
+	ShowSystemDetails bool
+}
 
-func ScanAll(dir string) (out []scans.ScannedLine, err error) {
-	records, err := scans.ScanReqSummary(path.Join(dir, "reqs-raw.log"))
-	if err != nil {
-		return nil, errors.Wrap(err, "while scanning requirements")
+func DefaultOptions() Options {
+	return Options{
+		ShowRawReqs:       true,
+		ShowSummary:       false,
+		ShowSystemDetails: true,
+		ShowIoRec:         false,
+		ShowSchedule:      false,
+		ShowInjections:    true,
+		ShowIoLog:         true,
 	}
-	for _, record := range records {
-		out = append(out, record)
+}
+
+func (o *Options) SetOption(name string, value bool) bool {
+	for _, c := range name {
+		if unicode.IsUpper(c) {
+			return false
+		}
 	}
-	if ShowIORecords {
+	parts := strings.Split(name, "-")
+	for i, part := range parts {
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	optionName := "Show" + strings.Join(parts, "")
+	v := reflect.ValueOf(o).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if optionName == v.Type().Field(i).Name {
+			v.Field(i).SetBool(value)
+			return true
+		}
+	}
+	return false
+}
+
+func ScanAll(dir string, options Options) (out []scans.ScannedLine, err error) {
+	if options.ShowSummary {
+		records, err := scans.ScanReqSummary(path.Join(dir, "reqs-raw.log"), options.ShowSystemDetails)
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning requirements")
+		}
+		for _, record := range records {
+			out = append(out, record)
+		}
+	} else if options.ShowRawReqs {
+		records, err := scans.ScanRawReqs(path.Join(dir, "reqs-raw.log"))
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning requirements")
+		}
+		for _, record := range records {
+			out = append(out, record)
+		}
+	}
+	if options.ShowIoRec {
 		ioRecs, err := scans.ScanIORecord(path.Join(dir, "io-dump.csv"))
 		if err != nil {
 			return nil, errors.Wrap(err, "while scanning io dump records")
@@ -32,29 +86,37 @@ func ScanAll(dir string) (out []scans.ScannedLine, err error) {
 			out = append(out, ioRec)
 		}
 	}
-	schedule, err := scans.ScanScheduler(path.Join(dir, "guest.log"))
-	if err != nil {
-		return nil, errors.Wrap(err, "while scanning guest.log for schedule")
+	if options.ShowSchedule {
+		schedule, err := scans.ScanScheduler(path.Join(dir, "guest.log"))
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning guest.log for schedule")
+		}
+		for _, priority := range schedule {
+			out = append(out, priority)
+		}
 	}
-	for _, priority := range schedule {
-		out = append(out, priority)
+	if options.ShowInjections {
+		injections, err := scans.ScanInjections(path.Join(dir, "injections.csv"))
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning injections")
+		}
+		out = append(out,
+			injections,
+		)
 	}
-	injections, err := scans.ScanInjections(path.Join(dir, "injections.csv"))
-	if err != nil {
-		return nil, errors.Wrap(err, "while scanning injections")
+	if options.ShowIoLog {
+		ioLog, err := scans.ScanIOLog(path.Join(dir, "timesync.sock.log"))
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning timesync log")
+		}
+		out = append(out,
+			ioLog,
+		)
 	}
-	ioLog, err := scans.ScanIOLog(path.Join(dir, "timesync.sock.log"))
-	if err != nil {
-		return nil, errors.Wrap(err, "while scanning timesync log")
-	}
-	out = append(out,
-		injections,
-		ioLog,
-	)
 	return out, nil
 }
 
-type PreciseTicks struct {}
+type PreciseTicks struct{}
 
 func (p PreciseTicks) Ticks(min, max float64) []plot.Tick {
 	ticks := plot.DefaultTicks{}.Ticks(min, max)
@@ -64,23 +126,31 @@ func (p PreciseTicks) Ticks(min, max float64) []plot.Tick {
 	return ticks
 }
 
-func GeneratePlot(dir string) (*plot.Plot, error) {
+func GeneratePlot(dirs []string, options Options) (*plot.Plot, error) {
 	p := plot.New()
-	p.Title.Text = "Timeline: " + path.Base(dir)
+	if len(dirs) == 1 {
+		p.Title.Text = "Timeline: " + path.Base(dirs[0])
+	} else {
+		p.Title.Text = fmt.Sprintf("Timelines from %d Trials", len(dirs))
+	}
 	p.X.Label.Text = "Virtual Time"
 	p.Y.Label.Text = "Requirement"
 
-	scanResults, err := ScanAll(dir)
-	if err != nil {
-		return nil, err
+	var lines []scans.ScannedLine
+	for _, dir := range dirs {
+		scanResults, err := ScanAll(dir, options)
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, scanResults...)
 	}
 
 	lastTime := 0.0
-	for _, scan := range scanResults {
+	for _, scan := range lines {
 		lastTime = math.Max(lastTime, scan.LastTime())
 	}
 	var names []string
-	for i, scan := range scanResults {
+	for i, scan := range lines {
 		p.Add(scan.BuildPlot(lastTime, float64(i)))
 		names = append(names, scan.Label())
 	}
@@ -91,17 +161,43 @@ func GeneratePlot(dir string) (*plot.Plot, error) {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		log.Fatalf("Usage: %s <trial-dir>", path.Base(os.Args[0]))
+	options := DefaultOptions()
+	var trialDirs []string
+	var usage bool
+	for i := 1; i < len(os.Args); i++ {
+		if strings.HasPrefix(os.Args[i], "--show-") {
+			if !options.SetOption(os.Args[i][7:], true) {
+				log.Fatalf("Invalid option: %q", os.Args[i][7:])
+			}
+		} else if strings.HasPrefix(os.Args[i], "--hide-") {
+			if !options.SetOption(os.Args[i][7:], false) {
+				log.Fatalf("Invalid option: %q", os.Args[i][7:])
+			}
+		} else if strings.HasPrefix(os.Args[i], "-") {
+			usage = true
+			break
+		} else if os.Args[i] != "" {
+			trialDirs = append(trialDirs, os.Args[i])
+		}
 	}
-	trialDir := os.Args[1]
+	if len(trialDirs) == 0 {
+		usage = true
+	}
+	if usage {
+		log.Fatalf("Usage: %s (--show X | --hide X)* <trial-dir> <trial-dir> ...", path.Base(os.Args[0]))
+	}
 
-	p, err := GeneratePlot(trialDir)
+	p, err := GeneratePlot(trialDirs, options)
 	if err != nil {
 		log.Fatal("error while generating plot: ", err)
 	}
 
-	if err := tlplot.DisplayPlotExportable(p, trialDir); err != nil {
+	exportDir := "."
+	if len(trialDirs) == 1 {
+		exportDir = trialDirs[0]
+	}
+
+	if err := tlplot.DisplayPlotExportable(p, exportDir); err != nil {
 		log.Fatal("error while displaying plot: ", err)
 	}
 }

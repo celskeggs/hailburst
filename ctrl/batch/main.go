@@ -127,8 +127,8 @@ func HasSocket(pid int) (bool, error) {
 }
 
 func main() {
-	if len(os.Args) != 5 {
-		log.Fatalf("usage: %s <dir> <port> <plat> <mode>", os.Args[0])
+	if len(os.Args) != 6 {
+		log.Fatalf("usage: %s <dir> <port> <plat> <mode> <stop>", os.Args[0])
 	}
 	origDir, err := os.Getwd()
 	if err != nil {
@@ -146,13 +146,21 @@ func main() {
 	if err := os.Chdir(directory); err != nil {
 		log.Fatal(err)
 	}
-	plat, mode := os.Args[3], os.Args[4]
+	plat, mode, stop := os.Args[3], os.Args[4], os.Args[5]
 
-	var imagePath string
+	var imageArg []string
+	var symbolFile string
+	ramMB := 20
 	if plat == "freertos" {
-		imagePath = path.Join(origDir, "fsw/build/app")
+		imageArg = []string{
+			"-bios", path.Join(origDir, "fsw/build-freertos/bootrom-bin"),
+		}
+		symbolFile = path.Join(origDir, "fsw/build-freertos/kernel")
+		ramMB = 4
 	} else if plat == "linux" {
-		imagePath = path.Join(origDir, "tree/images/zImage")
+		imageArg = []string{
+			"-kernel", path.Join(origDir, "tree/images/zImage"),
+		}
 	} else {
 		log.Fatalf("unknown platform: %s", plat)
 	}
@@ -191,20 +199,22 @@ func main() {
 		path.Join(origDir, "../qemu/build/qemu-system-arm"),
 		"-S", "-gdb", fmt.Sprintf("tcp::%v", port),
 		"-M", "virt,x-enable-load-dtb=false,x-enable-watchdog=true",
-		"-m", "20",
-		"-kernel", imagePath,
+		"-m", fmt.Sprintf("%d", ramMB),
+	}
+	cmd = append(cmd, imageArg...)
+	cmd = append(cmd,
 		"-monitor", "stdio",
 		"-parallel", "none",
 		"-icount", "shift=1,sleep=off",
 		"-d", "guest_errors",
 		"-vga", "none",
 		"-serial", "file:guest.log",
-		"-chardev", "timesync,id=ts0,path=" + timesyncSocket,
+		"-chardev", "timesync,id=ts0,path="+timesyncSocket,
 		"-device", "virtio-serial-device",
 		"-device", "virtserialport,name=tsvp0,chardev=ts0",
 		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
-	}
+	)
 	qemuPid := p.Launch(cmd[0], cmd[1:], "qemu.log")
 	// wait until it looks like QEMU is set up, to avoid GDB connection timeouts
 	for i := 0; i < 10; i++ {
@@ -221,14 +231,14 @@ func main() {
 	gdbCmd := []string{
 		"-batch",
 	}
-	if plat == "freertos" {
-		gdbCmd = append(gdbCmd, "-ex", "symbol-file " + imagePath)
+	if symbolFile != "" {
+		gdbCmd = append(gdbCmd, "-ex", "symbol-file "+symbolFile)
 	}
 	gdbCmd = append(gdbCmd,
 		"-ex", fmt.Sprintf("target remote :%v", port),
 		"-ex", "maintenance packet Qqemu.PhyMemMode:1",
 		"-ex", "set pagination off",
-		"-ex", "source " + path.Join(origDir, "ctrl/script/ctrl.py"),
+		"-ex", "source "+path.Join(origDir, "ctrl/script/ctrl.py"),
 		"-ex", "log_inject ./injections.csv",
 	)
 	if mode == "reg" {
@@ -248,41 +258,46 @@ func main() {
 	)
 
 	p.Launch(path.Join(origDir, "../gdbroot/bin/gdb"), gdbCmd, "gdb.log")
-	go func() {
-		log.Printf("Monitoring requirements log...")
-		br := bufio.NewReader(f)
-		ioCeased := false
-		reqFailed := false
-		for {
-			line, err := br.ReadString('\n')
-			if err == io.EOF {
-				// keep rereading until more data is added to the file
-				time.Sleep(time.Second)
-				continue
-			}
-			if err != nil {
-				if err.Error() == "use of closed file" {
-					// execution has ended by subprocess failure
+	if stop == "req" {
+		go func() {
+			log.Printf("Monitoring requirements log...")
+			br := bufio.NewReader(f)
+			ioCeased := false
+			reqFailed := false
+			for {
+				line, err := br.ReadString('\n')
+				if err == io.EOF {
+					// keep rereading until more data is added to the file
+					time.Sleep(time.Second)
+					continue
+				}
+				if err != nil {
+					if err.Error() == "use of closed file" {
+						// execution has ended by subprocess failure
+						break
+					}
+					log.Fatal(err)
+				}
+				fmt.Print(line)
+				if strings.HasPrefix(line, "Experiment: monitor reported I/O ceased") {
+					ioCeased = true
+				}
+				if line == "Failure detected in experiment.\n" {
+					reqFailed = true
+				}
+				if ioCeased && reqFailed {
+					// execution needs to be cut off, but let the simulation run a little longer before killing it...
+					time.Sleep(time.Second * 10)
+					fmt.Printf("Interrupting all...\n")
+					p.Signal(os.Interrupt)
 					break
 				}
-				log.Fatal(err)
 			}
-			fmt.Print(line)
-			if strings.HasPrefix(line, "Experiment: monitor reported I/O ceased") {
-				ioCeased = true
-			}
-			if line == "Failure detected in experiment.\n" {
-				reqFailed = true
-			}
-			if ioCeased && reqFailed {
-				// execution needs to be cut off, but let the simulation run a little longer before killing it...
-				time.Sleep(time.Second * 10)
-				fmt.Printf("Interrupting all...\n")
-				p.Signal(os.Interrupt)
-				break
-			}
-		}
-	}()
+		}()
+	} else if stop != "none" {
+		panic("invalid stop")
+	}
+
 	fmt.Printf("Waiting for any to terminate...\n")
 	p.WaitAny()
 	fmt.Printf("Interrupting any remaining processes...\n")

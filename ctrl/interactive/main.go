@@ -19,6 +19,7 @@ func main() {
 		return
 	}
 	var imageArg []string
+	ramMB := 20
 	isBare := util.HasArg("--freertos")
 	if isBare {
 		buildPath := "build-freertos/bootrom-bin"
@@ -47,6 +48,7 @@ func main() {
 				log.Fatal(err)
 			}
 		}
+		ramMB = 4
 	} else {
 		imageArg = []string{
 			"-kernel", "tree/images/zImage",
@@ -134,7 +136,7 @@ func main() {
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
 		"-M", "virt,x-enable-load-dtb=false,x-enable-watchdog=true",
-		"-m", "20",
+		"-m", fmt.Sprintf("%d", ramMB),
 	}
 	cmd = append(cmd, imageArg...)
 	cmd = append(cmd,
