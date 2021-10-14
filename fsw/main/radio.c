@@ -126,6 +126,7 @@ retry:
         } else if (retries > 0) {
             debugf("Radio: retrying memory read at 0x%x of length 0x%zx after recoverable error: 0x%03x",
                    rel_address, read_len, status);
+            retries -= 1;
             goto retry;
         } else {
             debugf("Radio: after %d retries, erroring out during memory read at 0x%x of length 0x%zx: 0x%03x",

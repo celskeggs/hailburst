@@ -96,7 +96,7 @@ func main() {
 		"../gdbroot/bin/gdb",
 	}
 	if isBare {
-		gdbCmd = append(gdbCmd, "-ex", "symbol-file fsw/build/app")
+		gdbCmd = append(gdbCmd, "-ex", "symbol-file fsw/build-freertos/kernel")
 	}
 	gdbCmd = append(gdbCmd,
 		"-ex", "target remote :1234",
