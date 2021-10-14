@@ -10,7 +10,6 @@
 #include <rtos/arm.h>
 #include <rtos/gic.h>
 #include <rtos/timer.h>
-#include <rtos/watchdog.h>
 #include <hal/platform.h>
 
 int errno = 0;
@@ -83,8 +82,6 @@ void entrypoint(void) {
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
 
-    // enable watchdog caretaker
-    watchdog_init();
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
     if (status != pdPASS) {

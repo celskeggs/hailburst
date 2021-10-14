@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <hal/watchdog.h>
 #include <fsw/debug.h>
 #include <fsw/radio.h>
 
@@ -483,6 +484,8 @@ static void *radio_uplink_loop(void *radio_opaque) {
         if (grabbed < 500) {
             usleep(10000);
         }
+
+        watchdog_ok(WATCHDOG_ASPECT_RADIO_UPLINK);
     }
 }
 
@@ -552,5 +555,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
             debugf("Radio: hit error in downlink loop; halting downlink thread.");
             return NULL;
         }
+
+        watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);
     }
 }

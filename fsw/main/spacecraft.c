@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include <hal/platform.h>
+#include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/cmd.h>
 #include <fsw/debug.h>
@@ -83,6 +84,9 @@ static void spacecraft_init(void) {
 
     debugf("Initializing heartbeats...");
     heartbeat_init(&sc.heart);
+
+    debugf("Initializing watchdog...");
+    watchdog_init();
 
     initialized = true;
 }

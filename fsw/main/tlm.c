@@ -3,6 +3,7 @@
 #include <inttypes.h>
 
 #include <hal/thread.h>
+#include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/tlm.h>
@@ -156,6 +157,8 @@ static void *telemetry_mainloop(void *encoder_opaque) {
                 packet.data_len = local_element.data_len;
                 packet.data_bytes = local_element.data_bytes; // array->pointer
             }
+
+            watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
         }
 
         // write to output

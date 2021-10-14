@@ -2,12 +2,14 @@
 #include <stdint.h>
 
 #include <rtos/timer.h>
-#include <rtos/watchdog.h>
+#include <hal/watchdog.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
 enum {
     WATCHDOG_BASE_ADDRESS = 0x090c0000,
+
+    WATCHDOG_ASPECT_MAX_AGE = TIMER_NS_PER_SEC,
 };
 
 struct watchdog_mmio_region {
@@ -21,6 +23,8 @@ struct watchdog_mmio_region {
 
 static thread_t watchdog_thread;
 static bool watchdog_initialized = false;
+static uint64_t watchdog_init_window_end;
+static volatile uint64_t watchdog_aspect_timestamps[WATCHDOG_ASPECT_NUM] = { 0 };
 
 /************** BEGIN WATCHDOG FOOD PREPARATION CODE FROM QEMU IMPLEMENTATION **************/
 static uint32_t integer_power_truncated(uint32_t base, uint16_t power)
@@ -49,6 +53,50 @@ static uint32_t wdt_strict_food_from_recipe(uint32_t recipe)
     return result;
 }
 /*************** END WATCHDOG FOOD PREPARATION CODE FROM QEMU IMPLEMENTATION ***************/
+
+void watchdog_ok(watchdog_aspect_t aspect) {
+    size_t offset = (size_t) aspect;
+    assert(offset < WATCHDOG_ASPECT_NUM);
+    watchdog_aspect_timestamps[offset] = timer_now_ns();
+}
+
+static const char *watchdog_aspect_name(watchdog_aspect_t w) {
+    _Static_assert(WATCHDOG_ASPECT_NUM == 4, "watchdog_aspect_name should be updated alongside watchdog_aspect_t");
+    assert(w < WATCHDOG_ASPECT_NUM);
+
+    switch (w) {
+    case WATCHDOG_ASPECT_RADIO_UPLINK:
+        return "RADIO_UPLINK";
+    case WATCHDOG_ASPECT_RADIO_DOWNLINK:
+        return "RADIO_DOWNLINK";
+    case WATCHDOG_ASPECT_TELEMETRY:
+        return "TELEMETRY";
+    case WATCHDOG_ASPECT_HEARTBEAT:
+        return "HEARTBEAT";
+    default:
+        assert(false);
+    }
+}
+
+static bool watchdog_aspects_ok(void) {
+    uint64_t now = timer_now_ns();
+    bool ok = true;
+
+    // allow one time unit after init for watchdog aspects to be populated, because the init value of 0 isn't valid
+    // for subsequent reboots
+    if (watchdog_init_window_end > now) {
+        assert(watchdog_init_window_end < now + WATCHDOG_ASPECT_MAX_AGE);
+        return true;
+    }
+
+    for (watchdog_aspect_t w = 0; w < WATCHDOG_ASPECT_NUM; w++) {
+        if (watchdog_aspect_timestamps[w] + WATCHDOG_ASPECT_MAX_AGE < now || watchdog_aspect_timestamps[w] > now) {
+            debugf("[watchdog] aspect %s not confirmed ok", watchdog_aspect_name(w));
+            ok = false;
+        }
+    }
+    return ok;
+}
 
 static void *watchdog_caretaker_loop(void *opaque) {
     (void) opaque;
@@ -79,6 +127,13 @@ static void *watchdog_caretaker_loop(void *opaque) {
             continue;
         }
 
+        if (!watchdog_aspects_ok()) {
+            // something is wrong! DO NOT FEED WATCHDOG!
+            debugf("[watchdog] something is wrong");
+            watchdog_force_reset();
+            return NULL;
+        }
+
         // greet watchdog, prepare food, feed watchdog
         uint32_t recipe = mmio->r_greet;
         uint32_t food = wdt_strict_food_from_recipe(recipe);
@@ -94,5 +149,18 @@ void watchdog_init(void) {
     assert(!watchdog_initialized);
     watchdog_initialized = true;
 
+    watchdog_init_window_end = timer_now_ns() + WATCHDOG_ASPECT_MAX_AGE;
+
     thread_create(&watchdog_thread, "watchdog", PRIORITY_DRIVERS, watchdog_caretaker_loop, NULL);
+}
+
+void watchdog_force_reset(void) {
+    struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
+
+    // writes to the greet register are forbidden
+    debugf("[watchdog] forcing reset");
+    mmio->r_greet = 0;
+    // if we continue here, something is really wrong... that should have killed the watchdog!
+    debugf("[watchdog] reset did not occur! aborting.");
+    abort();
 }
