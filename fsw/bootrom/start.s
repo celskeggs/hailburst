@@ -27,7 +27,9 @@ _reset:
     add sp, r0, #0x1000         @ Relocate stack to the returned address
     bl boot_phase_2             @ Run second entrypoint, which actually loads the kernel
 
-    blx r0                      @ Jump to the kernel
+    mov lr, r0                  @ Move aside jump target into a scratch register
+    ldr r0, =embedded_kernel    @ Pass address of embedded kernel to itself
+    blx lr                      @ Jump into the loaded kernel
 
     @ If the kernel returns, go into the abort handler.
 

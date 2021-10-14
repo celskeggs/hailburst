@@ -9,6 +9,7 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <rtos/scrubber.h>
 #include <rtos/timer.h>
 #include <hal/platform.h>
 
@@ -73,7 +74,7 @@ static void main_entrypoint(void *opaque) {
     exit(main(1, argv, envp));
 }
 
-void entrypoint(void) {
+void entrypoint(void *kernel_elf_rom) {
     configure_gic();
 
     // enable coprocessors for VFP
@@ -82,6 +83,8 @@ void entrypoint(void) {
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
 
+    // enable scrubber
+    scrubber_init(kernel_elf_rom);
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
     if (status != pdPASS) {

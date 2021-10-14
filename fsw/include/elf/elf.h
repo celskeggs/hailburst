@@ -74,8 +74,14 @@ enum {
     PT_ARM_UNWIND = 0x70000001,
 };
 
-typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz);
-typedef int (*elf_debug_cb_t)(const char* format, ...);
+enum {
+    PF_X = 0x1, /* execute */
+    PF_W = 0x2, /* write */
+    PF_R = 0x4, /* read */
+};
+
+typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags);
+typedef void (*elf_debug_cb_t)(const char* format, ...);
 
 bool elf_validate_header(uint8_t *kernel, elf_debug_cb_t debug);
 uint32_t elf_scan_load_segments(uint8_t *kernel, elf_debug_cb_t debug, uint32_t lowest_address, elf_scan_cb_t visitor);

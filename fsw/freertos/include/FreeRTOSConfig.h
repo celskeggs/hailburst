@@ -35,6 +35,7 @@ enum {
     PRIORITY_SERVERS = 3,
     PRIORITY_WORKERS = 2,
     PRIORITY_INIT    = 1,
+    PRIORITY_IDLE    = 0,
 };
 
 /* Memory allocation related definitions. */

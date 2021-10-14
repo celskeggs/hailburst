@@ -17,7 +17,7 @@ interrupt_vector_table:
 .comm abort_stack, 0x1000       @ Reserve 4k stack in the BSS
 
 .align 4
-_start:
+_start:                         @ r0 is populated by the bootrom with the ROM address of the kernel ELF file
     .globl _start
 
     cps #0x12                   @ Transition to IRQ mode
@@ -32,10 +32,10 @@ _start:
     cps #0x13                   @ Transition to supervisor mode
     ldr sp, =stack+0x1000       @ Set up the supervisor stack
 
-    ldr r0, =interrupt_vector_table
-    mcr p15, 0, r0, c12, c0, 0  @ Set up the interrupt vector table in the VBAR register
+    ldr r1, =interrupt_vector_table
+    mcr p15, 0, r1, c12, c0, 0  @ Set up the interrupt vector table in the VBAR register
 
-    bl entrypoint               @ Jump to the entrypoint function
+    bl entrypoint               @ Jump to the entrypoint function, passing r0 (kernel ELF address)
 
 .align 4
 undef_insn_handler:

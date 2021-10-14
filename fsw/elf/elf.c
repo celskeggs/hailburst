@@ -59,7 +59,7 @@ uint32_t elf_scan_load_segments(uint8_t *kernel, elf_debug_cb_t debug, uint32_t 
             return 0;
         }
 
-        visitor(segment->p_vaddr, kernel + segment->p_offset, segment->p_filesz, segment->p_memsz);
+        visitor(segment->p_vaddr, kernel + segment->p_offset, segment->p_filesz, segment->p_memsz, segment->p_flags);
 
         next_load_address = segment->p_vaddr + segment->p_memsz;
     }

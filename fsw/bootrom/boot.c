@@ -8,28 +8,32 @@
 
 extern uint8_t embedded_kernel[];
 
-#define MEMORY_LOW (0x40000000)
+enum {
+    MEMORY_LOW = 0x40000000,
+};
 
-static int debug_cb(const char* format, ...) {
+static void debug_cb(const char* format, ...) {
     va_list va;
     va_start(va, format);
     printf("[BOOT ROM] ");
-    int ret = vprintf(format, va);
+    vprintf(format, va);
     printf("\n");
     va_end(va);
-    return ret;
 }
 
-static void no_load(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz) {
+static void no_load(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags) {
     (void) vaddr;
     (void) load_source;
     (void) filesz;
     (void) memsz;
+    (void) flags;
 
     // do nothing
 }
 
-static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz) {
+static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags) {
+    (void) flags; // no distinction between permission types in main memory (flags are only needed by the scrubber)
+
     void *load_target = (void *) vaddr;
     memcpy(load_target, load_source, filesz);
     memset(load_target + filesz, 0, memsz - filesz);
