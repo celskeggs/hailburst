@@ -69,14 +69,13 @@ def configure_freertos():
 
     FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS-Kernel")
     FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
-    FREERTOS_ARCH_INC = os.path.join(FREERTOS_ROOT, "portable/GCC/ARM_CA9")
 
     common_libs = build_common(rtos_env)
     elf_lib = rtos_env.Library("elf", ["elf/elf.c"])
 
     rtos_env["CPPPATH"] += [
         "freertos/include/", "bootrom/include/",
-        FREERTOS_INC, FREERTOS_ARCH_INC,
+        FREERTOS_INC,
         EALIBC_INC, EALIBC_ROOT + "/printf", EALIBC_ROOT + "/arch/arm/include", ZLIB_ROOT
     ]
 
@@ -90,7 +89,7 @@ def configure_freertos():
 
     RTOS_SRC = ["freertos/clock.c", "freertos/fakewire_link.c", "freertos/gic.c", "freertos/scrubber.c",
                 "freertos/start.s", "freertos/stubs.c", "freertos/timer.c", "freertos/thread.c", "freertos/virtio.c",
-                "freertos/watchdog.c"]
+                "freertos/watchdog.c", "freertos/port.c", "freertos/portASM.S"]
     EXTERNAL_SRC = [
         LIBGCC_LIBRARY_PATH,
         os.path.join(ZLIB_ROOT, "crc32.c"),
@@ -98,8 +97,7 @@ def configure_freertos():
         elf_lib,
     ]
     EXTERNAL_SRC += [os.path.join(FREERTOS_ROOT, x) for x in
-                     ["tasks.c", "queue.c", "list.c",
-                      "portable/GCC/ARM_CA9/port.c", "portable/GCC/ARM_CA9/portASM.S", "portable/MemMang/heap_4.c"]]
+                     ["tasks.c", "queue.c", "list.c", "portable/MemMang/heap_4.c"]]
 
     rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC, LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "freertos/link.ld")
