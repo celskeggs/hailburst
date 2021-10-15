@@ -67,7 +67,7 @@ def configure_freertos():
 
     ZLIB_ROOT = os.path.join(ROOT_DIR, "zlib-1.2.11")
 
-    FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS/FreeRTOS/Source")
+    FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS-Kernel")
     FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
     FREERTOS_ARCH_INC = os.path.join(FREERTOS_ROOT, "portable/GCC/ARM_CA9")
 
