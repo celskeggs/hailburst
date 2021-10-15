@@ -20,7 +20,7 @@ func main() {
 	}
 	var imageArg []string
 	ramMB := 20
-	isBare := util.HasArg("--freertos")
+	isBare := !util.HasArg("--linux")
 	if isBare {
 		buildPath := "build-freertos/bootrom-bin"
 		imageArg = []string{
