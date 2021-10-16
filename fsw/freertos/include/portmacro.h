@@ -31,10 +31,6 @@
 #ifndef PORTMACRO_H
 #define PORTMACRO_H
 
-#ifdef __cplusplus
-	extern "C" {
-#endif
-
 /*-----------------------------------------------------------
  * Port specific definitions.
  *
@@ -164,10 +160,6 @@ by default. */
 #define portNOP() __asm volatile( "NOP" )
 #define portINLINE __inline
 
-#ifdef __cplusplus
-	} /* extern C */
-#endif
-
 
 /* The number of bits to shift for an interrupt priority is dependent on the
 number of bits implemented by the interrupt controller. */
@@ -208,4 +200,3 @@ number of bits implemented by the interrupt controller. */
 #define portMEMORY_BARRIER() __asm volatile( "" ::: "memory" )
 
 #endif /* PORTMACRO_H */
-

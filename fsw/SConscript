@@ -87,9 +87,9 @@ def configure_freertos():
               "stdlib/rand.c"]]
     )
 
-    RTOS_SRC = ["freertos/clock.c", "freertos/fakewire_link.c", "freertos/gic.c", "freertos/scrubber.c",
-                "freertos/start.s", "freertos/stubs.c", "freertos/timer.c", "freertos/thread.c", "freertos/virtio.c",
-                "freertos/watchdog.c", "freertos/port.c", "freertos/portASM.S"]
+    RTOS_SRC = ["freertos/clock.c", "freertos/entrypoint.s", "freertos/fakewire_link.c", "freertos/gic.c",
+                "freertos/scrubber.c", "freertos/stubs.c", "freertos/timer.c", "freertos/thread.c", "freertos/virtio.c",
+                "freertos/watchdog.c", "freertos/port.c"]
     EXTERNAL_SRC = [
         LIBGCC_LIBRARY_PATH,
         os.path.join(ZLIB_ROOT, "crc32.c"),
