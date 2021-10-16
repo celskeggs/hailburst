@@ -91,11 +91,11 @@ struct virtio_mmio_registers {
                    uint32_t RESERVED_5[2];
           volatile uint32_t status;              // Device status (RW)
                    uint32_t RESERVED_6[3];
-          volatile uint64_t queue_desc;          // Virtual queue’s Descriptor Area 64 bit long physical address (W)
+          volatile uint64_t queue_desc;          // Virtual queue's Descriptor Area 64 bit long physical address (W)
                    uint32_t RESERVED_7[2];
-          volatile uint64_t queue_driver;        // Virtual queue’s Driver Area 64 bit long physical address (W)
+          volatile uint64_t queue_driver;        // Virtual queue's Driver Area 64 bit long physical address (W)
                    uint32_t RESERVED_8[2];
-          volatile uint64_t queue_device;        // Virtual queue’s Device Area 64 bit long physical address (W)
+          volatile uint64_t queue_device;        // Virtual queue's Device Area 64 bit long physical address (W)
                    uint32_t RESERVED_9[21];
     const volatile uint32_t config_generation;   // Configuration atomicity value (R)
 };

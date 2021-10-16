@@ -20,7 +20,7 @@
  * 3. Neither the name of IBM nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ‘‘AS IS’’ AND
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS ''AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL IBM OR CONTRIBUTORS BE LIABLE
@@ -43,12 +43,12 @@
 /* This means the buffer contains a list of buffer descriptors. */
 #define VIRTQ_DESC_F_INDIRECT   4
 
-/* The device uses this in used->flags to advise the driver: don’t kick me
- * when you add a buffer.  It’s unreliable, so it’s simply an
+/* The device uses this in used->flags to advise the driver: don't kick me
+ * when you add a buffer.  It's unreliable, so it's simply an
  * optimization. */
 #define VIRTQ_USED_F_NO_NOTIFY  1
-/* The driver uses this in avail->flags to advise the device: don’t
- * interrupt me when you consume a buffer.  It’s unreliable, so it’s
+/* The driver uses this in avail->flags to advise the device: don't
+ * interrupt me when you consume a buffer.  It's unreliable, so it's
  * simply an optimization.  */
 #define VIRTQ_AVAIL_F_NO_INTERRUPT      1
 
