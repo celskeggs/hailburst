@@ -215,7 +215,12 @@ trap_recursive_flag:
     ADD     r14, r14, #1
     STR     r14, [r12]
 
-    @ If it is, we'll jump to the emergency handler, and will need to know what type of trap this was
+    @ Check also if we're in a critical section, where we cannot be safely suspended
+    LDR     r14, ulCriticalNestingConst
+    LDR     r14, [r14]
+    CMPEQ   r14, #0
+
+    @ If the trap is recursive, OR we're in a critical section, we'll jump to the emergency handler
     MOV     r14, #\trapid
     BNE     emergency_abort_handler
 
