@@ -30,6 +30,7 @@ typedef struct fw_exchange_st {
     queue_t transmit_queue;
     queue_t read_cb_queue;
     semaphore_t write_ready_sem;
+    volatile uint64_t last_transmit_timestamp_ns;
 
     uint8_t *recv_buffer; // allocated size: options.recv_max_size
 } fw_exchange_t;

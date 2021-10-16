@@ -149,6 +149,14 @@ static inline void queue_recv(queue_t *queue, void *new_item) {
     assert(status == pdTRUE);
 }
 
+// returns true if received, false if not
+static inline bool queue_recv_try(queue_t *queue, void *new_item) {
+    assert(queue != NULL && *queue != NULL);
+    BaseType_t status;
+    status = xQueueReceive(*queue, new_item, 0);
+    return status == pdTRUE;
+}
+
 // returns true if received, false if timed out
 static inline bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns) {
     assert(queue != NULL && *queue != NULL);

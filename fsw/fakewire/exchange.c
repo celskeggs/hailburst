@@ -29,7 +29,7 @@ struct input_queue_ent {
         INPUT_RECV_DATA_CHARS,
         INPUT_READ_CB_COMPLETE,
         INPUT_WRITE_PACKET,
-        INPUT_TXMIT_COMPLETE,
+        INPUT_WAKEUP,  // used by the transmit thread to make sure outgoing queues are rechecked.
     } type;
     union {
         struct {
@@ -61,6 +61,7 @@ struct transmit_queue_ent {
             size_t   data_len;
         } data_param;
     };
+    uint64_t timestamp_ns;
 };
 
 struct read_cb_queue_ent {
@@ -71,10 +72,12 @@ struct read_cb_queue_ent {
 
 int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     memset(fwe, 0, sizeof(fw_exchange_t));
+
     queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
     queue_init(&fwe->transmit_queue, sizeof(struct transmit_queue_ent), 1); // TODO: could we have more than one in flight at once?
     queue_init(&fwe->read_cb_queue, sizeof(struct read_cb_queue_ent), 1);
     semaphore_init(&fwe->write_ready_sem);
+    fwe->last_transmit_timestamp_ns = 0;
 
     fwe->options = opts;
     fwe->link_interface = (fw_receiver_t) {
@@ -203,8 +206,21 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     struct transmit_queue_ent txmit_entry;
 
     while (true) {
-        // wait for something to transmit
-        queue_recv(&fwe->transmit_queue, &txmit_entry);
+        // do we have anything to transmit?
+        if (!queue_recv_try(&fwe->transmit_queue, &txmit_entry)) {
+            // nothing yet. make sure the main loop knows we're waiting.
+            struct input_queue_ent entry = {
+                .type = INPUT_WAKEUP,
+            };
+            (void) queue_send_try(&fwe->input_queue, &entry);
+            // NOTE: we don't care if the send succeeds! this is because we have two cases:
+            //   1. It succeeds, which means that there's a new message to wake up the main thread.
+            //   2. It doesn't succeed, which means that there are OTHER messages that will wake up the main thread.
+            // There's no actual meaning to an INPUT_WAKEUP event... it just helps kick the main thread out of sleep.
+
+            // and now let's wait with a BLOCKING wait
+            queue_recv(&fwe->transmit_queue, &txmit_entry);
+        }
 
         // dispatch callback
         if (txmit_entry.symbol == FWC_NONE) {
@@ -221,11 +237,10 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
             fakewire_enc_encode_ctrl(fakewire_link_encoder(&fwe->io_port), txmit_entry.symbol, txmit_entry.ctrl_param);
         }
 
-        // send transmit complete notification
-        struct input_queue_ent entry = {
-            .type = INPUT_TXMIT_COMPLETE,
-        };
-        queue_send(&fwe->input_queue, &entry);
+        // update timestamp so that the timestamps can be checked
+        // (this lets the main thread know that we're done with each subsequent buffer)
+        // TODO: do I need a memory barrier first?
+        fwe->last_transmit_timestamp_ns = txmit_entry.timestamp_ns;
     }
 }
 
@@ -250,6 +265,7 @@ enum transmit_state {
     FW_TXMIT_HEADER,   // waiting to transmit START_PACKET symbol
     FW_TXMIT_BODY,     // waiting to transmit data characters in packet
     FW_TXMIT_FOOTER,   // waiting to transmit END_PACKET symbol
+    FW_TXMIT_PEND,     // waiting to receive confirmation that data buffer is consumed
 };
 
 // random interval in the range [3ms, 10ms)
@@ -278,6 +294,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     uint32_t pkts_rcvd = 0;
     bool resend_fcts = false;
     bool resend_pkts = false;
+    bool send_primary_handshake = false;
 
     uint64_t recv_start_timestamp = 0;
     size_t recv_offset = 0;
@@ -286,7 +303,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     size_t   cur_packet_len    = 0;
     wakeup_t cur_packet_wakeup = NULL;
 
-    bool can_transmit = true;
+    uint64_t cur_packet_wakeup_threshold = 0;
 
     struct input_queue_ent input_ent;
 
@@ -294,14 +311,17 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     semaphore_give(&fwe->write_ready_sem);
 
     while (true) {
-#ifdef DEBUG
-        debug_printf("Entering main exchange loop (can_transmit=%s).", can_transmit ? "true" : "false");
-#endif
         // event loop centered around the input queue... this should be the ONLY blocking call in this thread!
         bool timed_out = false;
-        if (can_transmit) {
+        if (exc_state == FW_EXC_OPERATING ? (!resend_fcts || !resend_pkts) : !send_primary_handshake) {
+#ifdef DEBUG
+            debug_puts("Entering main exchange loop (with timeout).");
+#endif
+            // explanation of this conditional: once we've timed out already and set the appropriate flags,
+            // there is no reason to keep timing out just to set the very same flags again.
             timed_out = !queue_recv_timed_abs(&fwe->input_queue, &input_ent, next_timeout);
         } else {
+            debug_puts("Entering main exchange loop (blocking).");
             queue_recv(&fwe->input_queue, &input_ent);
         }
 #ifdef DEBUG
@@ -322,8 +342,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             case INPUT_WRITE_PACKET:
                 wakeup_explanation = "INPUT_WRITE_PACKET";
                 break;
-            case INPUT_TXMIT_COMPLETE:
-                wakeup_explanation = "INPUT_TXMIT_COMPLETE";
+            case INPUT_WAKEUP:
+                wakeup_explanation = "INPUT_WAKEUP";
                 break;
             }
         }
@@ -332,34 +352,20 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
         // check invariants
         assert(exc_state >= FW_EXC_CONNECTING && exc_state <= FW_EXC_OPERATING);
-        assert(pkts_sent == fcts_rcvd || pkts_sent + 1 == fcts_rcvd);
+        assertf(pkts_sent == fcts_rcvd || pkts_sent + 1 == fcts_rcvd,
+                "pkts_sent = %u, fcts_rcvd = %u", pkts_sent, fcts_rcvd);
 
         bool do_reset = false;
 
         if (timed_out) {
             assert(clock_timestamp_monotonic() >= next_timeout);
-            assert(can_transmit == true);
 
             if (exc_state == FW_EXC_OPERATING) {
                 resend_fcts = true;
                 resend_pkts = true;
             } else {
                 assert(exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING);
-                // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
-                send_handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
-                debug_printf("Timeout expired; attempting primary handshake with ID=0x%08x; transitioning to handshaking mode.",
-                             send_handshake_id);
-                exc_state = FW_EXC_HANDSHAKING;
-
-                struct transmit_queue_ent tx_ent = {
-                    .symbol     = FWC_HANDSHAKE_1,
-                    .ctrl_param = send_handshake_id,
-                };
-                bool sent = queue_send_try(&fwe->transmit_queue, &tx_ent);
-                assert(sent == true);
-                can_transmit = false;
-
-                debug_printf("Sent primary handshake with ID=0x%08x.", send_handshake_id);
+                send_primary_handshake = true;
             }
 
             next_timeout = clock_timestamp_monotonic() + handshake_period();
@@ -390,6 +396,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     debug_printf("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
                                  param);
                     exc_state = FW_EXC_OPERATING;
+                    send_primary_handshake = false;
+                    send_secondary_handshake = false;
                 } else {
                     debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_2(0x%08x); resetting.",
                                  fakewire_codec_symbol(symbol), param,
@@ -518,8 +526,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             cur_packet_wakeup = input_ent.write_packet.on_complete;
             txmit_state = FW_TXMIT_HEADER;
             assert(cur_packet_in != NULL && cur_packet_wakeup != NULL);
-        } else if (input_ent.type == INPUT_TXMIT_COMPLETE) {
-            can_transmit = true;
+        } else if (input_ent.type == INPUT_WAKEUP) {
+            // no need to do anything... the whole point is just to wake us up immediately.
         } else {
             assert(false);
         }
@@ -536,6 +544,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             }
             send_handshake_id = 0;
             recv_handshake_id = 0;
+            send_primary_handshake = false;
             send_secondary_handshake = false;
             fcts_sent = fcts_rcvd = pkts_sent = pkts_rcvd = 0;
             resend_pkts = resend_fcts = false;
@@ -553,104 +562,159 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             next_timeout = clock_timestamp_monotonic() + handshake_period();
         }
 
-        if (can_transmit && resend_fcts) {
+        // optimization: if we can't send a first message to the transmit queue, then we should probably not
+        // bother trying with other messages right now.
+        bool transmit_possible = true;
+
+        if (transmit_possible && resend_fcts) {
             assert(exc_state == FW_EXC_OPERATING);
-#ifdef DEBUG
-            debug_printf("Transmitting reminder FCT(%u) tokens.", fcts_sent);
-#endif
+
             struct transmit_queue_ent tx_ent = {
-                .symbol     = FWC_FLOW_CONTROL,
-                .ctrl_param = fcts_sent,
+                .symbol       = FWC_FLOW_CONTROL,
+                .ctrl_param   = fcts_sent,
+                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            bool sent = queue_send_try(&fwe->transmit_queue, &tx_ent);
-            assert(sent == true);
-            can_transmit = false;
-            resend_fcts = false;
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+#ifdef DEBUG
+                debug_printf("Transmitted reminder FCT(%u) tokens.", fcts_sent);
+#endif
+                resend_fcts = false;
+            } else {
+                // try again later.
+                transmit_possible = false;
+            }
         }
 
-        if (can_transmit && resend_pkts) {
+        if (transmit_possible && resend_pkts) {
             assert(exc_state == FW_EXC_OPERATING);
-#ifdef DEBUG
-            debug_printf("Transmitting reminder KAT(%u) tokens.", pkts_sent);
-#endif
             struct transmit_queue_ent tx_ent = {
-                .symbol     = FWC_KEEP_ALIVE,
-                .ctrl_param = pkts_sent,
+                .symbol       = FWC_KEEP_ALIVE,
+                .ctrl_param   = pkts_sent,
+                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            bool sent = queue_send_try(&fwe->transmit_queue, &tx_ent);
-            assert(sent == true);
-            can_transmit = false;
-            resend_pkts = false;
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+#ifdef DEBUG
+                debug_printf("Transmitted reminder KAT(%u) tokens.", pkts_sent);
+#endif
+                resend_pkts = false;
+            } else {
+                // try again later.
+                transmit_possible = false;
+            }
         }
 
-        if (can_transmit && send_secondary_handshake) {
+        if (transmit_possible && send_primary_handshake) {
+            assert(exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING);
+
+            // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
+            uint32_t new_handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
+
+            struct transmit_queue_ent tx_ent = {
+                .symbol       = FWC_HANDSHAKE_1,
+                .ctrl_param   = new_handshake_id,
+                .timestamp_ns = clock_timestamp_monotonic(),
+            };
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+                debug_printf("Sent primary handshake with ID=0x%08x; transitioning to handshaking mode.",
+                             send_handshake_id);
+                send_handshake_id = new_handshake_id;
+                exc_state = FW_EXC_HANDSHAKING;
+                send_primary_handshake = false;
+                send_secondary_handshake = false;
+            } else {
+                // try again later.
+                transmit_possible = false;
+            }
+        }
+
+        if (transmit_possible && send_secondary_handshake) {
             assert(exc_state == FW_EXC_CONNECTING);
             struct transmit_queue_ent tx_ent = {
-                .symbol     = FWC_HANDSHAKE_2,
-                .ctrl_param = recv_handshake_id,
+                .symbol       = FWC_HANDSHAKE_2,
+                .ctrl_param   = recv_handshake_id,
+                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            bool sent = queue_send_try(&fwe->transmit_queue, &tx_ent);
-            assert(sent == true);
-            can_transmit = false;
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+                debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                             recv_handshake_id);
+                exc_state = FW_EXC_OPERATING;
+                send_primary_handshake = false;
+                send_secondary_handshake = false;
 
-            debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
-                         recv_handshake_id);
-            exc_state = FW_EXC_OPERATING;
-            send_secondary_handshake = false;
-
-            next_timeout = clock_timestamp_monotonic() + handshake_period();
+                next_timeout = clock_timestamp_monotonic() + handshake_period();
+            } else {
+                // try again later.
+                transmit_possible = false;
+            }
         }
 
-        if (can_transmit && exc_state == FW_EXC_OPERATING && txmit_state != FW_TXMIT_IDLE) {
+        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd) {
             assert(cur_packet_in != NULL);
 
-            bool do_transmit = true;
-            struct transmit_queue_ent tx_ent;
-            switch (txmit_state) {
-            case FW_TXMIT_HEADER:
-                if (fcts_rcvd == pkts_sent) {
-                    // cannot transmit header yet
-                    do_transmit = false;
-                    break;
-                }
-                tx_ent.symbol = FWC_START_PACKET;
-                tx_ent.ctrl_param = 0;
+            struct transmit_queue_ent tx_ent = {
+                .symbol       = FWC_START_PACKET,
+                .ctrl_param   = 0,
+                .timestamp_ns = clock_timestamp_monotonic(),
+            };
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
                 txmit_state = FW_TXMIT_BODY;
                 pkts_sent++;
-                break;
-            case FW_TXMIT_BODY:
-                tx_ent.symbol = FWC_NONE;
-                tx_ent.data_param.data_ptr = cur_packet_in;
-                tx_ent.data_param.data_len = cur_packet_len;
+            } else {
+                // try again later.
+                transmit_possible = false;
+            }
+        }
+
+        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
+            assert(cur_packet_in != NULL);
+
+            cur_packet_wakeup_threshold = clock_timestamp_monotonic();
+            struct transmit_queue_ent tx_ent = {
+                .symbol       = FWC_NONE,
+                .data_param   = {
+                    .data_ptr = cur_packet_in,
+                    .data_len = cur_packet_len,
+                },
+                .timestamp_ns = cur_packet_wakeup_threshold,
+            };
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
                 txmit_state = FW_TXMIT_FOOTER;
-                break;
-            case FW_TXMIT_FOOTER:
-                // transmit end-of-packet character
-                tx_ent.symbol = FWC_END_PACKET;
-                tx_ent.ctrl_param = 0;
-
-                // wake up writer
-                wakeup_give(cur_packet_wakeup);
-
-                // reset our state
-                txmit_state = FW_TXMIT_IDLE;
-                cur_packet_in = NULL;
-                cur_packet_len = 0;
-                cur_packet_wakeup = NULL;
-
-                // tell the next writer we're ready to hear from it
-                bool given = semaphore_give(&fwe->write_ready_sem);
-                assert(given == true);
-                break;
-            default:
-                assert(false);
+            } else {
+                // try again later.
+                transmit_possible = false;
             }
+        }
 
-            if (do_transmit) {
-                bool sent = queue_send_try(&fwe->transmit_queue, &tx_ent);
-                assert(sent == true);
-                can_transmit = false;
+        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER) {
+            assert(cur_packet_in != NULL);
+
+            struct transmit_queue_ent tx_ent = {
+                .symbol       = FWC_END_PACKET,
+                .ctrl_param   = 0,
+                .timestamp_ns = clock_timestamp_monotonic(),
+            };
+            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+                txmit_state = FW_TXMIT_PEND;
+            } else {
+                // try again later.
+                transmit_possible = false;
             }
+        }
+
+        if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_PEND && fwe->last_transmit_timestamp_ns > cur_packet_wakeup_threshold) {
+            // wake up writer
+            wakeup_give(cur_packet_wakeup);
+
+            // reset our state
+            txmit_state = FW_TXMIT_IDLE;
+            cur_packet_in = NULL;
+            cur_packet_len = 0;
+            cur_packet_wakeup = NULL;
+            cur_packet_wakeup_threshold = 0;
+
+            // tell the next writer we're ready to hear from it
+            bool given = semaphore_give(&fwe->write_ready_sem);
+            assert(given == true);
         }
     }
 }

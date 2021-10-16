@@ -145,7 +145,7 @@ static void *exchange_controller(void *opaque) {
         ec->chain_out = NULL;
         return NULL;
     }
-    debug0("Attached!");
+    debugf("Attached!");
 
     struct writer_config *wc = malloc(sizeof(struct writer_config));
     assert(wc != NULL);
@@ -188,7 +188,7 @@ static struct packet_chain *random_packet_chain(void) {
     int packet_count = rand() % 20 + 10;
 
     struct packet_chain *out = NULL;
-    debug0("Generating packets...");
+    debugf("Generating packets...");
     for (int i = 0; i < packet_count; i++) {
         struct packet_chain *next = check_malloc(sizeof(struct packet_chain));
         size_t new_len = (rand() % 2 == 0) ? (rand() % 4000) : (rand() % 10);
@@ -284,31 +284,31 @@ int test_main(void) {
     thread_create(&left, "ec_left", 1, exchange_controller, &ec_left);
     thread_create(&right, "ec_right", 1, exchange_controller, &ec_right);
 
-    debug0("Waiting for test to complete...");
+    debugf("Waiting for test to complete...");
     thread_join(left);
     thread_join(right);
-    debug0("Controller threads finished!");
+    debugf("Controller threads finished!");
 
     int code = 0;
     if (!ec_left.pass) {
-        debug0("Left controller failed");
+        debugf("Left controller failed");
         code = -1;
     }
     if (!ec_right.pass) {
-        debug0("Right controller failed");
+        debugf("Right controller failed");
         code = -1;
     }
     if (!compare_packet_chains("[left->right]", ec_left.chain_in, ec_right.chain_out)) {
-        debug0("Invalid packet chain transmitted from left to right");
+        debugf("Invalid packet chain transmitted from left to right");
         code = -1;
     } else {
-        debug0("Valid packet chain transmitted from left to right.");
+        debugf("Valid packet chain transmitted from left to right.");
     }
     if (!compare_packet_chains("[right->left]", ec_right.chain_in, ec_left.chain_out)) {
-        debug0("Invalid packet chain transmitted from right to left");
+        debugf("Invalid packet chain transmitted from right to left");
         code = -1;
     } else {
-        debug0("Valid packet chain transmitted from right to left.");
+        debugf("Valid packet chain transmitted from right to left.");
     }
 
     return code;

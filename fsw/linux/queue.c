@@ -113,6 +113,24 @@ void queue_recv(queue_t *queue, void *new_item) {
     mutex_unlock(&queue->mutex);
 }
 
+bool queue_recv_try(queue_t *queue, void *new_item) {
+    assert(queue != NULL && new_item != NULL);
+    bool received = false;
+    mutex_lock(&queue->mutex);
+    // wait until we have an item to receive
+    if (queue_readable_items_locked(queue) > 0) {
+        // perform receive
+        memcpy(new_item, queue_scroll_to_elemptr(queue, queue->read_scroll), queue->item_size);
+        queue->read_scroll = queue_scroll_plus_one(queue, queue->read_scroll);
+        // notify waiters
+        THREAD_CHECK(pthread_cond_broadcast(&queue->cond));
+        // notify caller
+        received = true;
+    }
+    mutex_unlock(&queue->mutex);
+    return received;
+}
+
 // returns true if received, false if timed out
 bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns) {
     assert(queue != NULL && new_item != NULL);

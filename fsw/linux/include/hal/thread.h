@@ -189,6 +189,8 @@ extern void queue_send(queue_t *queue, const void *new_item);
 // returns true if sent, false if not
 extern bool queue_send_try(queue_t *queue, void *new_item);
 extern void queue_recv(queue_t *queue, void *new_item);
+// returns true if received, false if not
+extern bool queue_recv_try(queue_t *queue, void *new_item);
 // returns true if received, false if timed out
 extern bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns);
 
