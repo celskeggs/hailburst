@@ -16,28 +16,6 @@ enum {
 #define debug_puts(str) (debugf("[ fakewire_link] [%s] %s", fwl->label, str))
 #define debug_printf(fmt, ...) (debugf("[ fakewire_link] [%s] " fmt, fwl->label, __VA_ARGS__))
 
-void fakewire_link_send_data(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count) {
-    assert(fwl != NULL && bytes_in != NULL);
-    assert(bytes_count > 0);
-
-#ifdef DEBUG
-    debug_printf("Transmitting %zu regular bytes.", bytes_count);
-#endif
-
-    fakewire_enc_encode_data(&fwl->encoder, bytes_in, bytes_count);
-}
-
-void fakewire_link_send_ctrl(fw_link_t *fwl, fw_ctrl_t symbol, uint32_t param) {
-    assert(fwl != NULL);
-    assert(param == 0 || fakewire_is_parametrized(symbol));
-
-#ifdef DEBUG
-    debug_printf("Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
-#endif
-
-    fakewire_enc_encode_ctrl(&fwl->encoder, symbol, param);
-}
-
 static void *fakewire_link_output_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;

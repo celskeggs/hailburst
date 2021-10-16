@@ -199,6 +199,10 @@ void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t para
     assert(fakewire_is_special(symbol) && symbol != FWC_ESCAPE_SYM);
     assert(param == 0 || fakewire_is_parametrized(symbol));
 
+#ifdef DEBUG
+    debugf("[fakewire_codec] Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
+#endif
+
     uint8_t byte = symbol;
     ringbuf_write_all(fwe->output, &byte, 1);
     if (fakewire_is_parametrized(symbol)) {

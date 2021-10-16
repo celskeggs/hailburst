@@ -212,13 +212,13 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
             debug_printf("Transmitting %zu data characters.", txmit_entry.data_param.data_len);
 #endif
             // data characters
-            fakewire_link_send_data(&fwe->io_port, txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
+            fakewire_enc_encode_data(fakewire_link_encoder(&fwe->io_port), txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
         } else {
 #ifdef DEBUG
             debug_printf("Transmitting control character %s(0x%08x).", fakewire_codec_symbol(txmit_entry.symbol), txmit_entry.ctrl_param);
 #endif
             // control character
-            fakewire_link_send_ctrl(&fwe->io_port, txmit_entry.symbol, txmit_entry.ctrl_param);
+            fakewire_enc_encode_ctrl(fakewire_link_encoder(&fwe->io_port), txmit_entry.symbol, txmit_entry.ctrl_param);
         }
 
         // send transmit complete notification
