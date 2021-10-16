@@ -51,7 +51,7 @@ typedef enum {
     NUM_REGISTERS  = 12,
 } radio_register_t;
 
-static bool radio_identify(radio_t *radio, rmap_context_t *ctx);
+static bool radio_initialize(radio_t *radio, rmap_context_t *ctx);
 static void *radio_uplink_loop(void *radio_opaque);
 static void *radio_downlink_loop(void *radio_opaque);
 
@@ -75,7 +75,7 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringb
     radio->bytes_extracted = 0;
 
     // arbitrarily use up_ctx for this initial configuration
-    if (!radio_identify(radio, &radio->up_ctx)) {
+    if (!radio_initialize(radio, &radio->up_ctx)) {
         debugf("Radio: could not identify device settings.");
         exit(1);
     }
@@ -250,7 +250,11 @@ retry:
     return true;
 }
 
-static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
+static bool radio_write_register(radio_t *radio, rmap_context_t *ctx, radio_register_t reg, uint32_t input) {
+    return radio_write_registers(radio, ctx, reg, reg, &input);
+}
+
+static bool radio_initialize(radio_t *radio, rmap_context_t *ctx) {
     uint32_t magic_num;
     if (!radio_read_register(radio, ctx, REG_MAGIC, &magic_num)) {
         return false;
@@ -280,6 +284,23 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
     radio->rx_halves[0].size = mem_size / 4;
     radio->rx_halves[1].size = mem_size / 4;
     radio->tx_region.size = mem_size / 2;
+
+    // disable transmission and reception
+    if (!radio_write_register(radio, ctx, REG_TX_STATE, TX_STATE_IDLE) ||
+            !radio_write_register(radio, ctx, REG_RX_STATE, RX_STATE_IDLE)) {
+        return false;
+    }
+
+    // clear remaining registers so that we have a known safe state to start from
+    uint32_t zeroes[4] = { 0, 0, 0, 0 };
+    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+    static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
+    static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
+    static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
+    if (!radio_write_registers(radio, ctx, REG_TX_PTR, REG_TX_LEN, zeroes)
+            || !radio_write_registers(radio, ctx, REG_RX_PTR, REG_RX_LEN_ALT, zeroes)) {
+        return false;
+    }
 
     return true;
 }
