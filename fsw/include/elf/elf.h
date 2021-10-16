@@ -1,6 +1,7 @@
 #ifndef FSW_ELF_ELF_H
 #define FSW_ELF_ELF_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,7 +48,7 @@ typedef struct {
     Elf32_Half     e_shnum;
     Elf32_Half     e_shstrndx;
 } Elf32_Ehdr;
-_Static_assert(sizeof(Elf32_Ehdr) == 52, "invalid sizeof(Elf32_Ehdr)");
+static_assert(sizeof(Elf32_Ehdr) == 52, "invalid sizeof(Elf32_Ehdr)");
 
 typedef struct {
     Elf32_Word    p_type;
@@ -59,7 +60,7 @@ typedef struct {
     Elf32_Word    p_flags;
     Elf32_Word    p_align;
 } Elf32_Phdr;
-_Static_assert(sizeof(Elf32_Phdr) == 32, "invalid sizeof(Elf32_Phdr)");
+static_assert(sizeof(Elf32_Phdr) == 32, "invalid sizeof(Elf32_Phdr)");
 
 // enum values for program header types
 enum {

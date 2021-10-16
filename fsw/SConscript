@@ -50,7 +50,7 @@ def configure_freertos():
         CCFLAGS=COMMON_RTOS_FLAGS + ["-Wall", "-Wextra", "-Werror",
                                      "-Wno-unknown-pragmas",  # because ealibc uses #pragma mark, and that causes trouble
                                      "-nostdlib", "-nostdinc", "-nostartfiles", "-ffreestanding",
-                                     "-std=gnu99",
+                                     "-std=gnu11",
                                      "-D_BITSIZE=32", "-D__FREERTOS__"],
         ASFLAGS=COMMON_RTOS_FLAGS + ["--fatal-warnings"],
         CPPPATH=[],

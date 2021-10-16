@@ -295,10 +295,10 @@ static bool radio_identify(radio_t *radio, rmap_context_t *ctx) {
 // interacts with radio to read from and flip virtual ping-pong buffer;
 // returns number of bytes placed into the uplink_buf_local buffer, or negative numbers on error.
 static ssize_t radio_uplink_service(radio_t *radio) {
-    _Static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
-    _Static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
-    _Static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
-    _Static_assert(REG_RX_PTR + 4 == REG_RX_STATE, "register layout assumptions");
+    static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
+    static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
+    static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
+    static_assert(REG_RX_PTR + 4 == REG_RX_STATE, "register layout assumptions");
     uint32_t reg[NUM_REGISTERS];
     if (!radio_read_registers(radio, &radio->up_ctx, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
         return -1;
@@ -504,8 +504,8 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     }
 
     // start the write
-    _Static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
-    _Static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
+    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+    static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
     assert(append_len <= radio->tx_region.size);
     uint32_t reg[] = {
         /* REG_TX_PTR */   radio->tx_region.base,

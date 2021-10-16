@@ -116,7 +116,7 @@ struct reg_state {
     uint32_t r12;
     uint32_t lr;
 };
-_Static_assert(sizeof(struct reg_state) == 14 * 4, "invalid sizeof(struct reg_state)");
+static_assert(sizeof(struct reg_state) == 14 * 4, "invalid sizeof(struct reg_state)");
 
 static const char *trap_mode_names[3] = {
     "UNDEFINED INSTRUCTION",

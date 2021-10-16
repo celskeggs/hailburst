@@ -61,7 +61,7 @@ void watchdog_ok(watchdog_aspect_t aspect) {
 }
 
 static const char *watchdog_aspect_name(watchdog_aspect_t w) {
-    _Static_assert(WATCHDOG_ASPECT_NUM == 4, "watchdog_aspect_name should be updated alongside watchdog_aspect_t");
+    static_assert(WATCHDOG_ASPECT_NUM == 4, "watchdog_aspect_name should be updated alongside watchdog_aspect_t");
     assert(w < WATCHDOG_ASPECT_NUM);
 
     switch (w) {

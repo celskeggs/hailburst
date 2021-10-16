@@ -99,7 +99,7 @@ struct virtio_mmio_registers {
                    uint32_t RESERVED_9[21];
     const volatile uint32_t config_generation;   // Configuration atomicity value (R)
 };
-_Static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struct virtio_mmio_registers)");
+static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struct virtio_mmio_registers)");
 
 struct virtio_console_config {
     uint16_t cols;
@@ -107,14 +107,14 @@ struct virtio_console_config {
     uint32_t max_nr_ports;
     uint32_t emerg_wr;
 };
-_Static_assert(sizeof(struct virtio_console_config) == 12, "wrong sizeof(struct virtio_console_config)");
+static_assert(sizeof(struct virtio_console_config) == 12, "wrong sizeof(struct virtio_console_config)");
 
 struct virtio_console_control {
     uint32_t id;    /* Port number */
     uint16_t event; /* The kind of control event */
     uint16_t value; /* Extra information for the event */
 };
-_Static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
+static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
 
 enum {
     // max handled length of received console names

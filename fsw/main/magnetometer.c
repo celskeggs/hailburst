@@ -95,9 +95,9 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
 
     rmap_status_t status;
     for (int loop_retries = 0; loop_retries < 50; loop_retries++) {
-        _Static_assert(REG_LATCH + 1 == REG_X, "assumptions about register layout");
-        _Static_assert(REG_LATCH + 2 == REG_Y, "assumptions about register layout");
-        _Static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
+        static_assert(REG_LATCH + 1 == REG_X, "assumptions about register layout");
+        static_assert(REG_LATCH + 2 == REG_Y, "assumptions about register layout");
+        static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
 
         uint16_t registers[4];
         size_t data_length;

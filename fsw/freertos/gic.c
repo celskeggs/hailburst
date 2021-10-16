@@ -37,7 +37,7 @@ struct gic_dist_reg {
     volatile uint8_t  gicd_spendsgir[16];    // SGI Set-Pending Registers
              uint32_t RESERVED5[52];
 };
-_Static_assert(sizeof(struct gic_dist_reg) == 0x1000, "invalid sizeof(gic_dist_reg)");
+static_assert(sizeof(struct gic_dist_reg) == 0x1000, "invalid sizeof(gic_dist_reg)");
 
 struct gic_cpu_reg {
     volatile uint32_t gicc_ctlr;             // CPU Interface Control Register
@@ -60,7 +60,7 @@ struct gic_cpu_reg {
     volatile uint32_t gicc_dir;              // Deactivate Interrupt Register
              uint32_t RESERVED3[1023];
 };
-_Static_assert(sizeof(struct gic_cpu_reg) == 0x2000, "invalid sizeof(gic_cpu_reg)");
+static_assert(sizeof(struct gic_cpu_reg) == 0x2000, "invalid sizeof(gic_cpu_reg)");
 
 static struct gic_dist_reg *dist = (struct gic_dist_reg *) GIC_DIST_ADDR;
 static struct gic_cpu_reg  *cpu  = (struct gic_cpu_reg *)  GIC_CPU_ADDR;
