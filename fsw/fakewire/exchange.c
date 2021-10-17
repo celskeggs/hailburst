@@ -70,6 +70,13 @@ struct read_cb_queue_ent {
     uint64_t timestamp_ns; // timestamp when START_PACKET character was received
 };
 
+static void fakewire_exc_link_write(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+    assert(fwe != NULL && bytes_in != NULL);
+
+    fakewire_link_write(&fwe->io_port, bytes_in, bytes_count);
+}
+
 int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     memset(fwe, 0, sizeof(fw_exchange_t));
 
@@ -89,6 +96,8 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     assert(opts.recv_max_size >= 1);
     fwe->recv_buffer = malloc(opts.recv_max_size);
     assert(fwe->recv_buffer != NULL);
+
+    fakewire_enc_init(&fwe->encoder, fakewire_exc_link_write, fwe);
 
     if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, opts.link_options) < 0) {
         free(fwe->recv_buffer);
@@ -204,6 +213,7 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     assert(fwe->recv_buffer != NULL);
 
     struct transmit_queue_ent txmit_entry;
+    bool needs_flush = false;
 
     while (true) {
         // do we have anything to transmit?
@@ -218,6 +228,13 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
             //   2. It doesn't succeed, which means that there are OTHER messages that will wake up the main thread.
             // There's no actual meaning to an INPUT_WAKEUP event... it just helps kick the main thread out of sleep.
 
+            // we only need to flush if we're going to block... otherwise, we're fine just squishing adjacent transmits
+            // into a single bulk write to the serial port.
+            if (needs_flush) {
+                fakewire_enc_flush(&fwe->encoder);
+                needs_flush = false;
+            }
+
             // and now let's wait with a BLOCKING wait
             queue_recv(&fwe->transmit_queue, &txmit_entry);
         }
@@ -228,13 +245,17 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
             debug_printf("Transmitting %zu data characters.", txmit_entry.data_param.data_len);
 #endif
             // data characters
-            fakewire_enc_encode_data(fakewire_link_encoder(&fwe->io_port), txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
+            fakewire_enc_encode_data(&fwe->encoder, txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
         } else {
 #ifdef DEBUG
             debug_printf("Transmitting control character %s(0x%08x).", fakewire_codec_symbol(txmit_entry.symbol), txmit_entry.ctrl_param);
 #endif
             // control character
-            fakewire_enc_encode_ctrl(fakewire_link_encoder(&fwe->io_port), txmit_entry.symbol, txmit_entry.ctrl_param);
+            fakewire_enc_encode_ctrl(&fwe->encoder, txmit_entry.symbol, txmit_entry.ctrl_param);
+
+            if (txmit_entry.symbol != FWC_START_PACKET) {
+                needs_flush = true;
+            }
         }
 
         // update timestamp so that the timestamps can be checked

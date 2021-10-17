@@ -57,15 +57,21 @@ void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output);
 // no destroy function provided because it isn't needed; you can simply stop using the decoder.
 void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count, uint64_t recv_timestamp_ns);
 
+typedef void (*fw_output_cb_t)(void *param, uint8_t *bytes_in, size_t byte_count);
+
 typedef struct {
-    ringbuf_t *output;
-    uint8_t *scratch_buffer;
+    void          *output_param;
+    fw_output_cb_t output_cb;
+
+    uint8_t       *enc_buffer;
+    size_t         enc_idx;
 } fw_encoder_t;
 
-void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output);
+void fakewire_enc_init(fw_encoder_t *fwe, fw_output_cb_t output_cb, void *output_param);
 // no destroy function provided because it isn't needed; you can simply stop using the encoder.
 
 void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
 void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
+void fakewire_enc_flush(fw_encoder_t *fwe);
 
 #endif /* FSW_FAKEWIRE_CODEC_H */

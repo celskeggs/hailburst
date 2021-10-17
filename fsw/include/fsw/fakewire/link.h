@@ -20,8 +20,6 @@ typedef struct {
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
 int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts);
 
-static inline fw_encoder_t *fakewire_link_encoder(fw_link_t *fwl) {
-    return &fwl->encoder;
-}
+void fakewire_link_write(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count);
 
 #endif /* FSW_FAKEWIRE_LINK_H */

@@ -16,47 +16,25 @@ enum {
 #define debug_puts(str) (debugf("[ fakewire_link] [%s] %s", fwl->label, str))
 #define debug_printf(fmt, ...) (debugf("[ fakewire_link] [%s] " fmt, fwl->label, __VA_ARGS__))
 
-static void *fakewire_link_output_loop(void *opaque) {
-    assert(opaque != NULL);
-    fw_link_t *fwl = (fw_link_t*) opaque;
+void fakewire_link_write(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count) {
+    assert(fwl != NULL && bytes_in != NULL && bytes_count > 0);
 
-    char write_buf[FW_LINK_RING_SIZE];
-
+    // write one large chunk to the output port
+#ifdef DEBUG
+    debug_printf("Writing %zu bytes to VIRTIO port...", bytes_count);
+#endif
     struct vector_entry entry = {
-        .data_buffer = write_buf,
-        .length      = 0 /* will be filled in later */,
+        .data_buffer = bytes_in,
+        .length      = bytes_count,
         .is_receive  = false,
     };
-
-    while (true) {
-        // read as many bytes as possible from ring buffer in one chunk
-        size_t count_bytes = ringbuf_read(&fwl->enc_ring, write_buf, sizeof(write_buf), RB_BLOCKING);
-        assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
+    ssize_t status = virtio_transact_sync(fwl->port->transmitq, &entry, 1, NULL);
+    if (status == 0) {
 #ifdef DEBUG
-        debug_printf("Preliminary ringbuf_read produced %zu bytes.", count_bytes);
+        debug_printf("Finished writing data to VIRTIO port.", bytes_count);
 #endif
-        if (count_bytes < sizeof(write_buf)) {
-            usleep(500); // wait half a millisecond to bunch related writes
-            count_bytes += ringbuf_read(&fwl->enc_ring, write_buf + count_bytes, sizeof(write_buf) - count_bytes, RB_NONBLOCKING);
-#ifdef DEBUG
-            debug_printf("Combined reads produced %zu bytes.", count_bytes);
-#endif
-        }
-        assert(count_bytes > 0 && count_bytes <= sizeof(write_buf));
-
-        // write one large chunk to the output port
-#ifdef DEBUG
-        debug_printf("Writing %zu bytes to VIRTIO port...", count_bytes);
-#endif
-        entry.length = count_bytes;
-        ssize_t status = virtio_transact_sync(fwl->port->transmitq, &entry, 1, NULL);
-        if (status != 0) {
-            debug_printf("Write failed: status=%zd", status);
-            return NULL;
-        }
-#ifdef DEBUG
-        debug_printf("Finished writing data to VIRTIO port.", actual);
-#endif
+    } else {
+        debug_printf("Write failed: status=%zd", status);
     }
 }
 
@@ -134,15 +112,12 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     debugf("VIRTIO port identified! Proceeding with fakewire initialization.");
 
     // next, let's configure all the data structures
-    ringbuf_init(&fwl->enc_ring, FW_LINK_RING_SIZE, 1);
-    fakewire_enc_init(&fwl->encoder, &fwl->enc_ring);
     fakewire_dec_init(&fwl->decoder, receiver);
 
     // tell the serial port device that we're ready to receive
     virtio_serial_ready(fwl->port);
 
     // now let's start the I/O threads
-    thread_create(&fwl->output_thread, "fw_out_loop", PRIORITY_SERVERS, fakewire_link_output_loop, fwl);
     thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl);
 
     return 0;

@@ -8,7 +8,7 @@
 //#define DEBUG
 
 enum {
-    FSW_CODEC_SCRATCH_BUF_SIZE = 1024,
+    FSW_ENCODING_BUF_SIZE = 1024,
 };
 
 void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output) {
@@ -144,30 +144,31 @@ void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count
     }
 }
 
-void fakewire_enc_init(fw_encoder_t *fwe, ringbuf_t *output) {
-    assert(fwe != NULL && output != NULL);
-    assert(ringbuf_elem_size(output) == 1);
-    fwe->output = output;
-    fwe->scratch_buffer = malloc(FSW_CODEC_SCRATCH_BUF_SIZE);
-    assert(fwe->scratch_buffer != NULL);
+void fakewire_enc_init(fw_encoder_t *fwe, fw_output_cb_t output_cb, void *output_param) {
+    assert(fwe != NULL && output_cb != NULL);
+    fwe->output_cb = output_cb;
+    fwe->output_param = output_param;
+    fwe->enc_buffer = malloc(FSW_ENCODING_BUF_SIZE);
+    assert(fwe->enc_buffer != NULL);
+    fwe->enc_idx = 0;
 }
 
 void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
-    uint8_t *temp = fwe->scratch_buffer;
-    size_t j = 0, total = 0;
+    uint8_t *temp = fwe->enc_buffer;
+    size_t j = fwe->enc_idx, total = 0;
 
 #ifdef DEBUG
     debugf("[fakewire_codec] Beginning encoding of %zu raw data bytes.", byte_count);
 #endif
     for (size_t i = 0; i < byte_count; i++) {
-        // if our scratch buffer fills up, drain it to the ring buffer
-        if (j > FSW_CODEC_SCRATCH_BUF_SIZE - 2) {
+        // if our buffer fills up, drain it to the output
+        if (j > FSW_ENCODING_BUF_SIZE - 2) {
 #ifdef DEBUG
-            debugf("[fakewire_codec] Scratch buffer full; draining %zu line bytes to ring buffer.", j);
+            debugf("[fakewire_codec] Buffer full; writing %zu line bytes.", j);
 #endif
-            ringbuf_write_all(fwe->output, temp, j);
+            fwe->output_cb(fwe->output_param, temp, j);
             total += j;
             j = 0;
         }
@@ -180,14 +181,8 @@ void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_
         }
         temp[j++] = byte;
     }
-    if (j > 0) {
-        // drain remaining data to ring buffer
-        ringbuf_write_all(fwe->output, temp, j);
-#ifdef DEBUG
-        debugf("[fakewire_codec] Draining %zu line bytes to ring buffer.", j);
-#endif
-        total += j;
-    }
+    total = total + j - fwe->enc_idx;
+    fwe->enc_idx = j;
 #ifdef DEBUG
     debugf("[fakewire_codec] Finished encoding %zu raw data bytes to %zu line bytes.", byte_count, total);
 #endif
@@ -203,10 +198,28 @@ void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t para
     debugf("[fakewire_codec] Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
-    uint8_t byte = symbol;
-    ringbuf_write_all(fwe->output, &byte, 1);
+    // if our buffer fills up, drain it to the output
+    if (fwe->enc_idx > FSW_ENCODING_BUF_SIZE - 1) {
+#ifdef DEBUG
+        debugf("[fakewire_codec] Buffer full; writing %zu line bytes.", fwe->enc_idx);
+#endif
+        fwe->output_cb(fwe->output_param, fwe->enc_buffer, fwe->enc_idx);
+        fwe->enc_idx = 0;
+    }
+    fwe->enc_buffer[fwe->enc_idx++] = (uint8_t) symbol;
     if (fakewire_is_parametrized(symbol)) {
         uint32_t netparam = htobe32(param);
         fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam));
+    }
+}
+
+void fakewire_enc_flush(fw_encoder_t *fwe) {
+    if (fwe->enc_idx > 0) {
+        // drain remaining data to output
+        fwe->output_cb(fwe->output_param, fwe->enc_buffer, fwe->enc_idx);
+#ifdef DEBUG
+        debugf("[fakewire_codec] Writing %zu line bytes for flush.", fwe->enc_idx);
+#endif
+        fwe->enc_idx = 0;
     }
 }
