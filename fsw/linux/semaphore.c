@@ -1,0 +1,94 @@
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <fsw/debug.h>
+#include <hal/thread.h>
+
+// semaphores are created empty, such that an initial take will block
+void semaphore_init(semaphore_t *sema) {
+    assert(sema != NULL);
+    mutex_init(&sema->mut);
+    THREAD_CHECK(pthread_cond_init(&sema->cond, NULL));
+    sema->is_available = false;
+}
+
+void semaphore_destroy(semaphore_t *sema) {
+    assert(sema != NULL);
+    THREAD_CHECK(pthread_cond_destroy(&sema->cond));
+    mutex_destroy(&sema->mut);
+}
+
+void semaphore_take(semaphore_t *sema) {
+    assert(sema != NULL);
+    mutex_lock(&sema->mut);
+    while (!sema->is_available) {
+        THREAD_CHECK(pthread_cond_wait(&sema->cond, &sema->mut));
+    }
+    assert(sema->is_available == true);
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+}
+
+// returns true if taken, false if not available
+bool semaphore_take_try(semaphore_t *sema) {
+    assert(sema != NULL);
+    bool taken;
+    mutex_lock(&sema->mut);
+    taken = sema->is_available;
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+    return taken;
+}
+
+// returns true if taken, false if timed out
+bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds) {
+    struct timeval now;
+    struct timespec timeout;
+    int retcode;
+
+    assert(sema != NULL);
+
+    gettimeofday(&now, NULL);
+
+    nanoseconds += now.tv_usec * 1000;
+    timeout.tv_sec = now.tv_sec + nanoseconds / NS_PER_SEC;
+    timeout.tv_nsec = nanoseconds % NS_PER_SEC;
+
+    mutex_lock(&sema->mut);
+    while (!sema->is_available) {
+        retcode = pthread_cond_timedwait(&sema->cond, &sema->mut, &timeout);
+        if (retcode == ETIMEDOUT) {
+            mutex_unlock(&sema->mut);
+            return false;
+        } else if (retcode != 0 && retcode != EINTR) {
+            fprintf(stderr, "thread error: %d in semaphore_take_timed\n", retcode);
+            abort();
+        }
+    }
+    assert(sema->is_available == true);
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+    return true;
+}
+
+bool semaphore_give(semaphore_t *sema) {
+    assert(sema != NULL);
+    bool given = false;
+    mutex_lock(&sema->mut);
+    if (!sema->is_available) {
+        sema->is_available = true;
+        THREAD_CHECK(pthread_cond_signal(&sema->cond));
+        given = true;
+    }
+    mutex_unlock(&sema->mut);
+    return given;
+}
+
+// not for generic code; only for internal Linux wakeup code implementation
+void semaphore_reset_linuxonly(semaphore_t *sema) {
+    mutex_lock(&sema->mut);
+    sema->is_available = false;
+    mutex_unlock(&sema->mut);
+}
