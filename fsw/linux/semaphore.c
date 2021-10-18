@@ -3,14 +3,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <hal/thread.h>
 
 // semaphores are created empty, such that an initial take will block
 void semaphore_init(semaphore_t *sema) {
     assert(sema != NULL);
+
     mutex_init(&sema->mut);
+    pthread_condattr_t attr;
+    THREAD_CHECK(pthread_condattr_init(&attr));
+    THREAD_CHECK(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));
     THREAD_CHECK(pthread_cond_init(&sema->cond, NULL));
+    THREAD_CHECK(pthread_condattr_destroy(&attr));
+
     sema->is_available = false;
 }
 
@@ -44,21 +51,22 @@ bool semaphore_take_try(semaphore_t *sema) {
 
 // returns true if taken, false if timed out
 bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds) {
-    struct timeval now;
-    struct timespec timeout;
-    int retcode;
+    return semaphore_take_timed_abs(sema, clock_timestamp_monotonic() + nanoseconds);
+}
 
+// returns true if taken, false if timed out
+bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns) {
     assert(sema != NULL);
+    struct timespec deadline_ts;
 
-    gettimeofday(&now, NULL);
-
-    nanoseconds += now.tv_usec * 1000;
-    timeout.tv_sec = now.tv_sec + nanoseconds / NS_PER_SEC;
-    timeout.tv_nsec = nanoseconds % NS_PER_SEC;
+    // this is possible because clock_timestamp_monotonic() uses CLOCK_MONOTONIC_RAW,
+    // and we set our condition variable to CLOCK_MONOTONIC_RAW as well above.
+    deadline_ts.tv_sec  = deadline_ns / NS_PER_SEC;
+    deadline_ts.tv_nsec = deadline_ns % NS_PER_SEC;
 
     mutex_lock(&sema->mut);
     while (!sema->is_available) {
-        retcode = pthread_cond_timedwait(&sema->cond, &sema->mut, &timeout);
+        int retcode = pthread_cond_timedwait(&sema->cond, &sema->mut, &deadline_ts);
         if (retcode == ETIMEDOUT) {
             mutex_unlock(&sema->mut);
             return false;

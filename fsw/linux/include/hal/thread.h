@@ -93,6 +93,8 @@ void semaphore_take(semaphore_t *sema);
 bool semaphore_take_try(semaphore_t *sema);
 // returns true if taken, false if timed out
 bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
+// returns true if taken, false if timed out
+bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
 bool semaphore_give(semaphore_t *sema);
 
 // not for generic code; only for internal Linux wakeup code implementation

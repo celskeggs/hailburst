@@ -99,6 +99,12 @@ static inline bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds)
     return xSemaphoreTake(*sema, timer_ns_to_ticks(nanoseconds)) == pdTRUE;
 }
 
+// returns true if taken, false if timed out
+static inline bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns) {
+    assert(sema != NULL && *sema != NULL);
+    return xSemaphoreTake(*sema, timer_ticks_until_ns(deadline_ns)) == pdTRUE;
+}
+
 static inline bool semaphore_give(semaphore_t *sema) {
     assert(sema != NULL && *sema != NULL);
     return xSemaphoreGive(*sema) == pdTRUE;
