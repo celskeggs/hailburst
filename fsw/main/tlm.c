@@ -43,11 +43,11 @@ enum {
 };
 
 static bool telemetry_initialized = false;
-static ringbuf_t telemetry_ring;
+static queue_t telemetry_queue;
 // atomic
 static uint32_t telemetry_dropped = 0;
 // to hold scratch buffers
-static ringbuf_t scratch_buffers;
+static queue_t scratch_buffers;
 
 static thread_t telemetry_mainloop_thread;
 
@@ -57,14 +57,14 @@ void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry_initialized);
 
     // set up ring buffer
-    ringbuf_init(&telemetry_ring, MAX_BUFFERED, sizeof(tlm_elem_t));
+    queue_init(&telemetry_queue, sizeof(tlm_elem_t), MAX_BUFFERED);
 
     // set up scratch buffer lending
-    ringbuf_init(&scratch_buffers, 1, sizeof(uint8_t*));
+    queue_init(&scratch_buffers, sizeof(uint8_t*), 1);
     uint8_t *scratch_buf = malloc(SCRATCH_BUFFER_SIZE);
     assert(scratch_buf != NULL);
-    size_t wc = ringbuf_write(&scratch_buffers, &scratch_buf, 1, RB_NONBLOCKING);
-    assert(wc == 1);
+    bool written = queue_send_try(&scratch_buffers, &scratch_buf);
+    assert(written);
 
     telemetry_initialized = true;
 
@@ -72,16 +72,15 @@ void telemetry_init(comm_enc_t *encoder) {
 }
 
 static void telemetry_record_async(tlm_elem_t *insert) {
-    size_t written = 0;
+    bool written = false;
     assert(insert->data_len <= MAX_TLM_BODY && insert->data_len != LEN_MARKER_SYNC);
     if (telemetry_initialized) {
         // first, snapshot current time
         insert->timestamp_ns = clock_timestamp();
         // then write element to ring buffer
-        written = ringbuf_write(&telemetry_ring, insert, 1, RB_NONBLOCKING);
-        assert(written <= 1);
+        written = queue_send_try(&telemetry_queue, insert);
     }
-    if (written != 1) {
+    if (!written) {
         __sync_fetch_and_add(&telemetry_dropped, (uint32_t) 1);
     }
 }
@@ -102,8 +101,7 @@ static void telemetry_record_sync(uint32_t telemetry_id, uint8_t *data_ptr, size
         },
     };
     // write sync element to ring buffer
-    size_t written = ringbuf_write(&telemetry_ring, &element, 1, RB_BLOCKING);
-    assert(written == 1);
+    queue_send(&telemetry_queue, &element);
     // wait for flag to be raised, so that we can proceed and potentially reuse *data_ptr
     wakeup_take(complete_wakeup);
     assert(complete_flag == true);
@@ -137,8 +135,7 @@ static void *telemetry_mainloop(void *encoder_opaque) {
             packet.data_bytes = (uint8_t*) &drop_count;
         } else {
             // pull telemetry from ring buffer
-            size_t count = ringbuf_read(&telemetry_ring, &local_element, 1, RB_BLOCKING);
-            assert(count == 1);
+            queue_recv(&telemetry_queue, &local_element);
 
             if (local_element.data_len == LEN_MARKER_SYNC) {
                 // pull synchronous element
@@ -249,8 +246,8 @@ void tlm_mag_pwr_state_changed(bool power_state) {
 void tlm_sync_mag_readings_iterator(bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param) {
     // wait until a buffer is available
     uint8_t *scratch_buf = NULL;
-    size_t rioc = ringbuf_read(&scratch_buffers, &scratch_buf, 1, RB_BLOCKING);
-    assert(rioc == 1 && scratch_buf != NULL);
+    queue_recv(&scratch_buffers, &scratch_buf);
+    assert(scratch_buf != NULL);
 
     // now fill up the scratch buffer
     uint16_t *out = (uint16_t*) scratch_buf;
@@ -283,6 +280,6 @@ void tlm_sync_mag_readings_iterator(bool (*iterator)(void *param, tlm_mag_readin
     telemetry_record_sync(MAG_READINGS_ARRAY_TID, scratch_buf, num_readings * 14);
 
     // now that we can reuse this scratch buffer, release it for the next client!
-    rioc = ringbuf_write(&scratch_buffers, &scratch_buf, 1, RB_NONBLOCKING);
-    assert(rioc == 1);
+    bool written = queue_send_try(&scratch_buffers, &scratch_buf);
+    assert(written);
 }
