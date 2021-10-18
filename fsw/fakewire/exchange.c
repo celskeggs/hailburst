@@ -266,6 +266,7 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
 
         // encode specified data
         if (txmit_entry->symbol == FWC_NONE) {
+            assert(txmit_entry->data_param.data_ptr != NULL);
 #ifdef DEBUG
             debug_printf("Transmitting %zu data characters.", txmit_entry->data_param.data_len);
 #endif

@@ -66,8 +66,11 @@ static void *chart_any_start(chart_t *chart, chart_note_state_t expected_state, 
         || (state == CHART_NOTE_REQUEST && next == chart->next_request)
         || (state == CHART_NOTE_REPLY   && next == chart->next_reply));
 
-    void *note = (state == expected_state ? chart_get_note(chart, chart->next_blank) : NULL);
+    void *note = (state == expected_state ? chart_get_note(chart, next) : NULL);
 
+#ifdef DEBUG
+    debugf("indices (START): blank=%d, request=%d, reply=%d\n", chart->next_blank, chart->next_request, chart->next_reply);
+#endif
     critical_exit(&chart->critical_section);
     return note;
 }
@@ -79,8 +82,11 @@ static void chart_any_send(chart_t *chart, void *note, chart_note_state_t expect
     assert(note == chart_get_note(chart, *next));
 
     chart->note_info[*next] = next_state;
-    *next += 1;
+    *next = (*next + 1) % chart->note_count;
 
+#ifdef DEBUG
+    debugf("indices  (SEND): blank=%d, request=%d, reply=%d\n", chart->next_blank, chart->next_request, chart->next_reply);
+#endif
     critical_exit(&chart->critical_section);
 }
 
@@ -103,7 +109,7 @@ void *chart_reply_start(chart_t *chart) {
 
 // write back a reply.
 void chart_reply_send(chart_t *chart, void *note) {
-    chart_any_send(chart, note, CHART_NOTE_REQUEST, CHART_NOTE_REPLY, &chart->next_blank);
+    chart_any_send(chart, note, CHART_NOTE_REQUEST, CHART_NOTE_REPLY, &chart->next_request);
 
     chart->notify_client(chart->notify_param);
 }
@@ -117,7 +123,7 @@ void *chart_ack_start(chart_t *chart) {
 
 // write back an acknowledgement.
 void chart_ack_send(chart_t *chart, void *note) {
-    chart_any_send(chart, note, CHART_NOTE_REPLY, CHART_NOTE_BLANK, &chart->next_blank);
+    chart_any_send(chart, note, CHART_NOTE_REPLY, CHART_NOTE_BLANK, &chart->next_reply);
 
     chart->notify_server(chart->notify_param);
 }
