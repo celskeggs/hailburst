@@ -9,6 +9,11 @@
 #include <fsw/spacecraft.h>
 #include <fsw/tlm.h>
 
+enum {
+    UPLINK_STREAM_CAPACITY = 0x4000,
+    DOWNLINK_STREAM_CAPACITY = 0x4000,
+};
+
 static rmap_addr_t radio_routing = {
     .destination = {
         .path_bytes = NULL,
@@ -67,17 +72,17 @@ static void spacecraft_init(void) {
     assert(err == 0);
 
     debugf("Initializing telecomm infrastructure...");
-    ringbuf_init(&sc.uplink_ring, 0x4000, 1);
-    ringbuf_init(&sc.downlink_ring, 0x4000, 1);
-    comm_dec_init(&sc.comm_decoder, &sc.uplink_ring);
-    comm_enc_init(&sc.comm_encoder, &sc.downlink_ring);
+    stream_init(&sc.uplink_stream, UPLINK_STREAM_CAPACITY);
+    stream_init(&sc.downlink_stream, DOWNLINK_STREAM_CAPACITY);
+    comm_dec_init(&sc.comm_decoder, &sc.uplink_stream);
+    comm_enc_init(&sc.comm_encoder, &sc.downlink_stream);
     telemetry_init(&sc.comm_encoder);
 
     debugf("Initializing clock...");
     clock_init(&sc.monitor, &clock_routing);
 
     debugf("Initializing radio...");
-    radio_init(&sc.radio, &sc.monitor, &radio_routing, &sc.uplink_ring, &sc.downlink_ring);
+    radio_init(&sc.radio, &sc.monitor, &radio_routing, &sc.uplink_stream, &sc.downlink_stream, DOWNLINK_STREAM_CAPACITY);
 
     debugf("Initializing magnetometer...");
     magnetometer_init(&sc.mag, &sc.monitor, &magnetometer_routing);

@@ -2,7 +2,6 @@
 #define FSW_RADIO_H
 
 #include <fsw/fakewire/rmap.h>
-#include <fsw/ringbuf.h>
 
 typedef struct {
     uint32_t base;
@@ -17,8 +16,8 @@ typedef struct {
     memregion_t    rx_halves[2];
     memregion_t    tx_region;
     uint32_t       bytes_extracted;
-    ringbuf_t     *up_ring;
-    ringbuf_t     *down_ring;
+    stream_t      *up_stream;
+    stream_t      *down_stream;
     thread_t       up_thread;
     thread_t       down_thread;
     uint8_t       *uplink_buf_local;
@@ -26,6 +25,6 @@ typedef struct {
 } radio_t;
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
-void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringbuf_t *uplink, ringbuf_t *downlink);
+void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, stream_t *uplink, stream_t *downlink, size_t downlink_capacity);
 
 #endif /* FSW_RADIO_H */

@@ -55,19 +55,14 @@ static bool radio_initialize(radio_t *radio, rmap_context_t *ctx);
 static void *radio_uplink_loop(void *radio_opaque);
 static void *radio_downlink_loop(void *radio_opaque);
 
-void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, ringbuf_t *uplink, ringbuf_t *downlink) {
+void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, stream_t *uplink, stream_t *downlink, size_t downlink_capacity) {
     assert(radio != NULL && mon != NULL && address != NULL && uplink != NULL && downlink != NULL);
-    assert(ringbuf_elem_size(uplink) == 1);
-    assert(ringbuf_elem_size(downlink) == 1);
-    size_t max_write_len = ringbuf_capacity(downlink);
-    if (max_write_len > RMAP_MAX_DATA_LEN) {
-        max_write_len = RMAP_MAX_DATA_LEN;
-    }
-    rmap_init_context(&radio->down_ctx, mon, max_write_len);
+    assert(downlink_capacity <= RMAP_MAX_DATA_LEN);
+    rmap_init_context(&radio->down_ctx, mon, downlink_capacity);
     rmap_init_context(&radio->up_ctx, mon, NUM_REGISTERS * sizeof(uint32_t));
     memcpy(&radio->address, address, sizeof(rmap_addr_t));
-    radio->up_ring = uplink;
-    radio->down_ring = downlink;
+    radio->up_stream = uplink;
+    radio->down_stream = downlink;
     radio->uplink_buf_local = malloc(UPLINK_BUF_LOCAL_SIZE);
     assert(radio->uplink_buf_local != NULL);
     radio->downlink_buf_local = malloc(DOWNLINK_BUF_LOCAL_SIZE);
@@ -494,12 +489,12 @@ static void *radio_uplink_loop(void *radio_opaque) {
             return NULL;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
-            // write all the data we just pulled to the ring buffer before continuing
-            ringbuf_write_all(radio->up_ring, radio->uplink_buf_local, grabbed);
+            // write all the data we just pulled to the stream before continuing
+            stream_write(radio->up_stream, radio->uplink_buf_local, grabbed);
 
-            // NOTE: if there's not enough space in the ring buffer, and we block, and the radio ends up overflowing
-            // the buffer... then that's a problem with us not reading the ring buffer fast enough, not a problem with
-            // us blocking on writing to the ring buffer.
+            // NOTE: if there's not enough space in the stream, and we block, and the radio ends up overflowing its
+            // buffer... then that's a problem with us not reading the stream fast enough, not a problem with us
+            // blocking on writing to the stream.
         }
 
         // only sleep if we haven't been reading all that much data. if we have, then we'd better keep at it!
@@ -570,7 +565,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
     }
     assert(max_len > 0);
     for (;;) {
-        size_t grabbed = ringbuf_read(radio->down_ring, radio->downlink_buf_local, max_len, RB_BLOCKING);
+        size_t grabbed = stream_read(radio->down_stream, radio->downlink_buf_local, max_len);
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {

@@ -7,7 +7,6 @@
 #include <fsw/heartbeat.h>
 #include <fsw/magnetometer.h>
 #include <fsw/radio.h>
-#include <fsw/ringbuf.h>
 
 typedef struct {
     // fakewire infrastructure
@@ -21,8 +20,8 @@ typedef struct {
     heartbeat_t    heart;
 
     // telecomm infrastructure
-    ringbuf_t      uplink_ring;
-    ringbuf_t      downlink_ring;
+    stream_t       uplink_stream;
+    stream_t       downlink_stream;
     comm_dec_t     comm_decoder;
     comm_enc_t     comm_encoder;
 } spacecraft_t;

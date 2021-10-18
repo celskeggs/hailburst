@@ -6,7 +6,7 @@ def build_common(env):
     return [
         env.Library("main-app", ["fakewire/rmap.c", "main/cmd.c", "main/comm.c", "main/debug.c", "main/heartbeat.c",
                                  "main/magnetometer.c", "main/radio.c", "main/spacecraft.c", "main/tlm.c"]),
-        env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c", "main/ringbuf.c"])
+        env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
     ]
 
 # ============================= Linux =============================
@@ -25,7 +25,7 @@ def configure_linux():
 
     linux_env["CPPPATH"] += ["linux/include/"]
 
-    LINUX_SRC = ["linux/fakewire_link.c", "linux/platform.c", "linux/queue.c", "linux/semaphore.c"]
+    LINUX_SRC = ["linux/fakewire_link.c", "linux/platform.c", "linux/queue.c", "linux/semaphore.c", "linux/stream.c"]
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c"] + common_libs)
     linux_env.Default(linux_app)
 
@@ -97,7 +97,7 @@ def configure_freertos():
         elf_lib,
     ]
     EXTERNAL_SRC += [os.path.join(FREERTOS_ROOT, x) for x in
-                     ["tasks.c", "queue.c", "list.c", "portable/MemMang/heap_4.c"]]
+                     ["tasks.c", "queue.c", "list.c", "stream_buffer.c", "portable/MemMang/heap_4.c"]]
 
     rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC, LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "freertos/link.ld")

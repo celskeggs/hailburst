@@ -4,7 +4,6 @@
 #include <rtos/virtio.h>
 #include <hal/thread.h>
 #include <fsw/fakewire/codec.h>
-#include <fsw/ringbuf.h>
 
 typedef struct {
     mutex_t                     port_mutex;

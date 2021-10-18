@@ -26,6 +26,9 @@ typedef struct {
     bool           is_available;
 } semaphore_t;
 
+// queue and stream implementations based on the "good option" from here:
+// https://www.snellman.net/blog/archive/2016-12-13-ring-buffers/
+
 typedef semaphore_t *wakeup_t;
 typedef struct {
     mutex_t mutex;
@@ -38,6 +41,24 @@ typedef struct {
     size_t   read_scroll;
     size_t   write_scroll;
 } queue_t;
+
+typedef struct {
+    mutex_t mutex;
+
+    // semaphores to notify when data is ready to be read or written
+    semaphore_t unblock_write;
+    semaphore_t unblock_read;
+    // advisory flags to catch simultaneous blocking writes or simultaneous blocking reads...
+    // (also used for optimization purposes)
+    bool blocked_write;
+    bool blocked_read;
+
+    uint8_t *memory;
+    size_t   capacity;
+    // TODO: make sure I test integer overflow or read_idx and write_idx... SHOULD be fine, but needs to be tested
+    size_t   read_idx;
+    size_t   write_idx;
+} stream_t;
 
 typedef mutex_t critical_t; // no such thing as a FreeRTOS critical section here, so fall back to mutexes
 
@@ -130,5 +151,12 @@ extern void queue_recv(queue_t *queue, void *new_item);
 extern bool queue_recv_try(queue_t *queue, void *new_item);
 // returns true if received, false if timed out
 extern bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns);
+
+extern void stream_init(stream_t *stream, size_t capacity);
+extern void stream_destroy(stream_t *stream);
+// may only be used by a single thread at a time
+extern void stream_write(stream_t *stream, uint8_t *data, size_t length);
+// may only be used by a single thread at a time
+extern size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len);
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

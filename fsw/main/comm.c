@@ -21,9 +21,8 @@ enum {
     BYTE_ESC_EOP    = 0x33,
 };
 
-void comm_dec_init(comm_dec_t *dec, ringbuf_t *uplink) {
+void comm_dec_init(comm_dec_t *dec, stream_t *uplink) {
     assert(dec != NULL && uplink != NULL);
-    assert(ringbuf_elem_size(uplink) == 1);
     dec->uplink = uplink;
     dec->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
     dec->resume_start = dec->resume_end = 0;
@@ -36,7 +35,7 @@ static uint8_t comm_dec_next_byte(comm_dec_t *dec, size_t protect_len) {
     // if we don't have enough bytes for the next symbol, we need to get more.
     if (dec->resume_start == dec->resume_end) {
         uint8_t *region = dec->scratch_buffer + protect_len;
-        size_t count = ringbuf_read(dec->uplink, region, COMM_SCRATCH_SIZE - protect_len, RB_BLOCKING);
+        size_t count = stream_read(dec->uplink, region, COMM_SCRATCH_SIZE - protect_len);
         assert(count > 0 && count + protect_len <= COMM_SCRATCH_SIZE);
         dec->resume_start = protect_len;
         dec->resume_end = protect_len + count;
@@ -121,9 +120,8 @@ void comm_dec_decode(comm_dec_t *dec, comm_packet_t *out) {
     }
 }
 
-void comm_enc_init(comm_enc_t *enc, ringbuf_t *downlink) {
+void comm_enc_init(comm_enc_t *enc, stream_t *downlink) {
     assert(enc != NULL && downlink != NULL);
-    assert(ringbuf_elem_size(downlink) == 1);
     enc->downlink = downlink;
     enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
 }
@@ -139,7 +137,7 @@ static void comm_enc_escape_limited(comm_enc_t *enc, uint8_t *data, size_t len) 
             enc->scratch_buffer[out_i++] = BYTE_ESC_ESCAPE;
         }
     }
-    ringbuf_write_all(enc->downlink, enc->scratch_buffer, out_i);
+    stream_write(enc->downlink, enc->scratch_buffer, out_i);
 }
 
 static void comm_enc_escape(comm_enc_t *enc, uint8_t *data, size_t len) {
@@ -157,7 +155,7 @@ void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in) {
     assert(enc != NULL && in != NULL);
 
     // start of packet
-    ringbuf_write_all(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_SOP}, 2);
+    stream_write(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_SOP}, 2);
 
     // encode header fields
     uint32_t fields[] = {
@@ -179,5 +177,5 @@ void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in) {
     comm_enc_escape(enc, (uint8_t*) &crc, sizeof(crc));
 
     // end of packet
-    ringbuf_write_all(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_EOP}, 2);
+    stream_write(enc->downlink, (uint8_t[]) {BYTE_ESCAPE, BYTE_ESC_EOP}, 2);
 }

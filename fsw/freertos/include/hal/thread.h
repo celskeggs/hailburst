@@ -10,6 +10,7 @@
 
 #include <FreeRTOS.h>
 #include <semphr.h>
+#include <stream_buffer.h>
 
 #include <rtos/timer.h>
 
@@ -23,6 +24,7 @@ typedef SemaphoreHandle_t mutex_t;
 typedef SemaphoreHandle_t semaphore_t;
 typedef TaskHandle_t wakeup_t;
 typedef QueueHandle_t queue_t;
+typedef StreamBufferHandle_t stream_t;
 
 typedef int critical_t; // we use a FreeRTOS critical section
 
@@ -194,6 +196,34 @@ static inline bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t
     BaseType_t status;
     status = xQueueReceive(*queue, new_item, timer_ticks_until_ns(deadline_ns));
     return status == pdTRUE;
+}
+
+static inline void stream_init(stream_t *stream, size_t capacity) {
+    assert(stream != NULL);
+    assert(capacity > 0);
+    *stream = xStreamBufferCreate(capacity, 1);
+    assert(*stream != NULL);
+}
+
+static inline void stream_destroy(stream_t *stream) {
+    assert(stream != NULL && *stream != NULL);
+    vStreamBufferDelete(*stream);
+    *stream = NULL;
+}
+
+// may only be used by a single thread at a time
+static inline void stream_write(stream_t *stream, uint8_t *data, size_t length) {
+    assert(stream != NULL && *stream != NULL);
+    size_t written = xStreamBufferSend(*stream, data, length, portMAX_DELAY);
+    assert(written == length);
+}
+
+// may only be used by a single thread at a time
+static inline size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len) {
+    assert(stream != NULL && *stream != NULL);
+    size_t read = xStreamBufferReceive(*stream, data, max_len, portMAX_DELAY);
+    assert(read > 0);
+    return read;
 }
 
 #endif /* FSW_FREERTOS_HAL_THREAD_H */
