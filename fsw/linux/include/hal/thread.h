@@ -192,6 +192,7 @@ static inline void wakeup_give(wakeup_t wakeup) {
 
 extern void queue_init(queue_t *queue, size_t entry_size, size_t num_entries);
 extern void queue_destroy(queue_t *queue);
+extern bool queue_is_empty(queue_t *queue);
 extern void queue_send(queue_t *queue, const void *new_item);
 // returns true if sent, false if not
 extern bool queue_send_try(queue_t *queue, void *new_item);

@@ -64,6 +64,14 @@ static inline size_t queue_writable_spaces_locked(queue_t *queue) {
     return queue->capacity - queue_readable_items_locked(queue);
 }
 
+bool queue_is_empty(queue_t *queue) {
+    assert(queue != NULL);
+    mutex_lock(&queue->mutex);
+    bool is_empty = queue_readable_items_locked(queue) == 0;
+    mutex_unlock(&queue->mutex);
+    return is_empty;;
+}
+
 void queue_send(queue_t *queue, const void *new_item) {
     assert(queue != NULL && new_item != NULL);
     mutex_lock(&queue->mutex);

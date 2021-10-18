@@ -2,6 +2,7 @@
 #define FSW_FAKEWIRE_EXCHANGE_H
 
 #include <hal/thread.h>
+#include <fsw/chart.h>
 #include <fsw/fakewire/link.h>
 
 // sop_timestamp_ns: start-of-packet timestamp (nanoseconds)
@@ -28,10 +29,10 @@ typedef struct fw_exchange_st {
 
     // input to exchange thread
     queue_t input_queue;
-    queue_t transmit_queue;
+    chart_t transmit_chart;  // client: exchange_thread, server: transmit_thread
+    semaphore_t transmit_wake; // used for client->server wakeups
     queue_t read_cb_queue;
     semaphore_t write_ready_sem;
-    volatile uint64_t last_transmit_timestamp_ns;
 
     uint8_t *recv_buffer; // allocated size: options.recv_max_size
 } fw_exchange_t;

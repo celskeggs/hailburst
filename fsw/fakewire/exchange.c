@@ -29,7 +29,7 @@ struct input_queue_ent {
         INPUT_RECV_DATA_CHARS,
         INPUT_READ_CB_COMPLETE,
         INPUT_WRITE_PACKET,
-        INPUT_WAKEUP,  // used by the transmit thread to make sure outgoing queues are rechecked.
+        INPUT_WAKEUP,  // used by the transmit thread to make sure the transmit chart is rechecked
     } type;
     union {
         struct {
@@ -48,11 +48,12 @@ struct input_queue_ent {
             size_t   packet_len;
             wakeup_t on_complete;
         } write_packet;
-        /* no parameters on txmit_complete */
+        /* no parameters on wakeup */
     };
 };
 
-struct transmit_queue_ent {
+struct transmit_chart_ent {
+    // <request region>
     fw_ctrl_t symbol; // if FWC_NONE, indicates a data character entry
     union {
         uint32_t ctrl_param;
@@ -61,7 +62,8 @@ struct transmit_queue_ent {
             size_t   data_len;
         } data_param;
     };
-    uint64_t timestamp_ns;
+    // <reply region>
+    // (empty)
 };
 
 struct read_cb_queue_ent {
@@ -77,14 +79,40 @@ static void fakewire_exc_link_write(void *opaque, uint8_t *bytes_in, size_t byte
     fakewire_link_write(&fwe->io_port, bytes_in, bytes_count);
 }
 
+static void fakewire_exc_transmit_chart_notify_server(void *opaque) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+    assert(fwe != NULL);
+
+    // we ignore the return value... if this fails, that's not a problem! that just means there was already a wake
+    // pending for the transmit thread, which is perfectly fine.
+    (void) semaphore_give(&fwe->transmit_wake);
+}
+
+static void fakewire_exc_transmit_chart_notify_client(void *opaque) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+    assert(fwe != NULL);
+
+    // we only need to send if the queue is empty... this is because ANY message qualifies as a wakeup in addition to
+    // its primary meaning! so any wakeup we add would be redundant.
+    if (queue_is_empty(&fwe->input_queue)) {
+        struct input_queue_ent entry = {
+            .type = INPUT_WAKEUP,
+        };
+        // if this send doesn't succeed, no worries! that means the queue somehow got filled since we checked whether
+        // it was empty, and in that case, there's a wakeup now!
+        (void) queue_send_try(&fwe->input_queue, &entry);
+    }
+}
+
 int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     memset(fwe, 0, sizeof(fw_exchange_t));
 
     queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
-    queue_init(&fwe->transmit_queue, sizeof(struct transmit_queue_ent), 1); // TODO: could we have more than one in flight at once?
+    chart_init(&fwe->transmit_chart, sizeof(struct transmit_chart_ent), 16,
+               fakewire_exc_transmit_chart_notify_server, fakewire_exc_transmit_chart_notify_client, fwe);
+    semaphore_init(&fwe->transmit_wake);
     queue_init(&fwe->read_cb_queue, sizeof(struct read_cb_queue_ent), 1);
     semaphore_init(&fwe->write_ready_sem);
-    fwe->last_transmit_timestamp_ns = 0;
 
     fwe->options = opts;
     fwe->link_interface = (fw_receiver_t) {
@@ -103,7 +131,8 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
         free(fwe->recv_buffer);
         semaphore_destroy(&fwe->write_ready_sem);
         queue_destroy(&fwe->read_cb_queue);
-        queue_destroy(&fwe->transmit_queue);
+        semaphore_destroy(&fwe->transmit_wake);
+        chart_destroy(&fwe->transmit_chart);
         queue_destroy(&fwe->input_queue);
         return -1;
     }
@@ -212,56 +241,54 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     assert(fwe != NULL);
     assert(fwe->recv_buffer != NULL);
 
-    struct transmit_queue_ent txmit_entry;
     bool needs_flush = false;
 
-    while (true) {
-        // do we have anything to transmit?
-        if (!queue_recv_try(&fwe->transmit_queue, &txmit_entry)) {
-            // nothing yet. make sure the main loop knows we're waiting.
-            struct input_queue_ent entry = {
-                .type = INPUT_WAKEUP,
-            };
-            (void) queue_send_try(&fwe->input_queue, &entry);
-            // NOTE: we don't care if the send succeeds! this is because we have two cases:
-            //   1. It succeeds, which means that there's a new message to wake up the main thread.
-            //   2. It doesn't succeed, which means that there are OTHER messages that will wake up the main thread.
-            // There's no actual meaning to an INPUT_WAKEUP event... it just helps kick the main thread out of sleep.
+    // when we initialize, if we have a pending send, we MUST skip it.
+    // this is because it might have already been processed, and we do not want to write duplicate data to the line!
+    void *note = chart_reply_start(&fwe->transmit_chart);
+    if (note != NULL) {
+        chart_reply_send(&fwe->transmit_chart, note);
+    }
 
+    while (true) {
+        struct transmit_chart_ent *txmit_entry = (struct transmit_chart_ent *) chart_reply_start(&fwe->transmit_chart);
+        if (txmit_entry == NULL) {
             // we only need to flush if we're going to block... otherwise, we're fine just squishing adjacent transmits
             // into a single bulk write to the serial port.
             if (needs_flush) {
                 fakewire_enc_flush(&fwe->encoder);
-                needs_flush = false;
             }
 
-            // and now let's wait with a BLOCKING wait
-            queue_recv(&fwe->transmit_queue, &txmit_entry);
+            // wait until something is ready, and then check again.
+            semaphore_take(&fwe->transmit_wake);
+            continue;
         }
 
-        // dispatch callback
-        if (txmit_entry.symbol == FWC_NONE) {
+        // encode specified data
+        if (txmit_entry->symbol == FWC_NONE) {
 #ifdef DEBUG
-            debug_printf("Transmitting %zu data characters.", txmit_entry.data_param.data_len);
+            debug_printf("Transmitting %zu data characters.", txmit_entry->data_param.data_len);
 #endif
             // data characters
-            fakewire_enc_encode_data(&fwe->encoder, txmit_entry.data_param.data_ptr, txmit_entry.data_param.data_len);
+            fakewire_enc_encode_data(&fwe->encoder, txmit_entry->data_param.data_ptr, txmit_entry->data_param.data_len);
+
+            // we don't set needs_flush here, because any important sequence of data characters will normally be
+            // followed by a FWC_END_PACKET, which will trigger the actual flush that matters.
         } else {
 #ifdef DEBUG
-            debug_printf("Transmitting control character %s(0x%08x).", fakewire_codec_symbol(txmit_entry.symbol), txmit_entry.ctrl_param);
+            debug_printf("Transmitting control character %s(0x%08x).", fakewire_codec_symbol(txmit_entry->symbol), txmit_entry->ctrl_param);
 #endif
             // control character
-            fakewire_enc_encode_ctrl(&fwe->encoder, txmit_entry.symbol, txmit_entry.ctrl_param);
+            fakewire_enc_encode_ctrl(&fwe->encoder, txmit_entry->symbol, txmit_entry->ctrl_param);
 
-            if (txmit_entry.symbol != FWC_START_PACKET) {
+            // we don't set needs_flush on FWC_START_PACKET, because it will normally be followed by a FWC_END_PACKET,
+            // which will trigger the actual flush that matters.
+            if (txmit_entry->symbol != FWC_START_PACKET) {
                 needs_flush = true;
             }
         }
 
-        // update timestamp so that the timestamps can be checked
-        // (this lets the main thread know that we're done with each subsequent buffer)
-        // TODO: do I need a memory barrier first?
-        fwe->last_transmit_timestamp_ns = txmit_entry.timestamp_ns;
+        chart_reply_send(&fwe->transmit_chart, txmit_entry);
     }
 }
 
@@ -324,7 +351,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     size_t   cur_packet_len    = 0;
     wakeup_t cur_packet_wakeup = NULL;
 
-    uint64_t cur_packet_wakeup_threshold = 0;
+    struct transmit_chart_ent *tx_ent = NULL;
 
     struct input_queue_ent input_ent;
 
@@ -583,159 +610,165 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             next_timeout = clock_timestamp_monotonic() + handshake_period();
         }
 
-        // optimization: if we can't send a first message to the transmit queue, then we should probably not
-        // bother trying with other messages right now.
-        bool transmit_possible = true;
+        // acknowledge any outstanding chart entries
+        struct transmit_chart_ent *ack_tx_ent;
+        while ((ack_tx_ent = chart_ack_start(&fwe->transmit_chart)) != NULL) {
+            if (ack_tx_ent->symbol == FWC_NONE) {
+                // if we wrote the data bytes for a packet, then we no longer need to hold on to the active buffer!
+                assert(txmit_state == FW_TXMIT_PEND);
+                assert(ack_tx_ent->data_param.data_ptr == cur_packet_in);
+                assert(ack_tx_ent->data_param.data_len == cur_packet_len);
 
-        if (transmit_possible && resend_fcts) {
-            assert(exc_state == FW_EXC_OPERATING);
+                // wake up writer
+                wakeup_give(cur_packet_wakeup);
 
-            struct transmit_queue_ent tx_ent = {
-                .symbol       = FWC_FLOW_CONTROL,
-                .ctrl_param   = fcts_sent,
-                .timestamp_ns = clock_timestamp_monotonic(),
-            };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-#ifdef DEBUG
-                debug_printf("Transmitted reminder FCT(%u) tokens.", fcts_sent);
-#endif
-                resend_fcts = false;
-            } else {
-                // try again later.
-                transmit_possible = false;
+                // reset our state
+                txmit_state = FW_TXMIT_IDLE;
+                cur_packet_in = NULL;
+                cur_packet_len = 0;
+                cur_packet_wakeup = NULL;
+
+                // tell the next writer we're ready to hear from it
+                bool given = semaphore_give(&fwe->write_ready_sem);
+                assert(given == true);
             }
+            chart_ack_send(&fwe->transmit_chart, ack_tx_ent);
         }
 
-        if (transmit_possible && resend_pkts) {
+        // check to see if we can transmit now, if we couldn't before
+        if (tx_ent == NULL) {
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
+        }
+
+        if (tx_ent != NULL && resend_fcts) {
             assert(exc_state == FW_EXC_OPERATING);
-            struct transmit_queue_ent tx_ent = {
+
+            *tx_ent = (struct transmit_chart_ent) {
+                .symbol     = FWC_FLOW_CONTROL,
+                .ctrl_param = fcts_sent,
+            };
+
+            resend_fcts = false;
+
+#ifdef DEBUG
+            debug_printf("Transmitting reminder FCT(%u) tokens.", fcts_sent);
+#endif
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
+        }
+
+        if (tx_ent != NULL && resend_pkts) {
+            assert(exc_state == FW_EXC_OPERATING);
+
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_KEEP_ALIVE,
                 .ctrl_param   = pkts_sent,
-                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
+
+            resend_pkts = false;
+
 #ifdef DEBUG
-                debug_printf("Transmitted reminder KAT(%u) tokens.", pkts_sent);
+            debug_printf("Transmitting reminder KAT(%u) tokens.", pkts_sent);
 #endif
-                resend_pkts = false;
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
+
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
 
-        if (transmit_possible && send_primary_handshake) {
+        if (tx_ent != NULL && send_primary_handshake) {
             assert(exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING);
 
             // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
-            uint32_t new_handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
+            send_handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
 
-            struct transmit_queue_ent tx_ent = {
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_HANDSHAKE_1,
-                .ctrl_param   = new_handshake_id,
-                .timestamp_ns = clock_timestamp_monotonic(),
+                .ctrl_param   = send_handshake_id,
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-                debug_printf("Sent primary handshake with ID=0x%08x; transitioning to handshaking mode.",
-                             send_handshake_id);
-                send_handshake_id = new_handshake_id;
-                exc_state = FW_EXC_HANDSHAKING;
-                send_primary_handshake = false;
-                send_secondary_handshake = false;
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
+
+            exc_state = FW_EXC_HANDSHAKING;
+            send_primary_handshake = false;
+            send_secondary_handshake = false;
+
+            debug_printf("Sending primary handshake with ID=0x%08x; transitioning to handshaking mode.",
+                         send_handshake_id);
+
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
 
-        if (transmit_possible && send_secondary_handshake) {
+        if (tx_ent != NULL && send_secondary_handshake) {
             assert(exc_state == FW_EXC_CONNECTING);
-            struct transmit_queue_ent tx_ent = {
+
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_HANDSHAKE_2,
                 .ctrl_param   = recv_handshake_id,
-                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-                debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
-                             recv_handshake_id);
-                exc_state = FW_EXC_OPERATING;
-                send_primary_handshake = false;
-                send_secondary_handshake = false;
 
-                next_timeout = clock_timestamp_monotonic() + handshake_period();
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
+            exc_state = FW_EXC_OPERATING;
+            send_primary_handshake = false;
+            send_secondary_handshake = false;
+
+            debug_printf("Sending secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                         recv_handshake_id);
+
+            next_timeout = clock_timestamp_monotonic() + handshake_period();
+
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
 
-        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd) {
+        if (tx_ent != NULL && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd) {
             assert(cur_packet_in != NULL);
 
-            struct transmit_queue_ent tx_ent = {
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_START_PACKET,
                 .ctrl_param   = 0,
-                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-                txmit_state = FW_TXMIT_BODY;
-                pkts_sent++;
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
+
+            txmit_state = FW_TXMIT_BODY;
+            pkts_sent++;
+
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
 
-        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
+        if (tx_ent != NULL && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
             assert(cur_packet_in != NULL);
 
-            cur_packet_wakeup_threshold = clock_timestamp_monotonic();
-            struct transmit_queue_ent tx_ent = {
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_NONE,
                 .data_param   = {
                     .data_ptr = cur_packet_in,
                     .data_len = cur_packet_len,
                 },
-                .timestamp_ns = cur_packet_wakeup_threshold,
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-                txmit_state = FW_TXMIT_FOOTER;
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
+
+            txmit_state = FW_TXMIT_FOOTER;
+
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
 
-        if (transmit_possible && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER) {
+        if (tx_ent != NULL && exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER) {
             assert(cur_packet_in != NULL);
 
-            struct transmit_queue_ent tx_ent = {
+            *tx_ent = (struct transmit_chart_ent) {
                 .symbol       = FWC_END_PACKET,
                 .ctrl_param   = 0,
-                .timestamp_ns = clock_timestamp_monotonic(),
             };
-            if (queue_send_try(&fwe->transmit_queue, &tx_ent)) {
-                txmit_state = FW_TXMIT_PEND;
-            } else {
-                // try again later.
-                transmit_possible = false;
-            }
-        }
 
-        if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_PEND && fwe->last_transmit_timestamp_ns > cur_packet_wakeup_threshold) {
-            // wake up writer
-            wakeup_give(cur_packet_wakeup);
+            txmit_state = FW_TXMIT_PEND;
 
-            // reset our state
-            txmit_state = FW_TXMIT_IDLE;
-            cur_packet_in = NULL;
-            cur_packet_len = 0;
-            cur_packet_wakeup = NULL;
-            cur_packet_wakeup_threshold = 0;
-
-            // tell the next writer we're ready to hear from it
-            bool given = semaphore_give(&fwe->write_ready_sem);
-            assert(given == true);
+            // send this note and locate the next one, if available
+            chart_request_send(&fwe->transmit_chart, tx_ent);
+            tx_ent = (struct transmit_chart_ent *) chart_request_start(&fwe->transmit_chart);
         }
     }
 }

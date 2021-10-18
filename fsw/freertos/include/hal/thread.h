@@ -147,6 +147,11 @@ static inline void queue_destroy(queue_t *queue) {
     *queue = NULL;
 }
 
+static inline bool queue_is_empty(queue_t *queue) {
+    assert(queue != NULL && *queue != NULL);
+    return uxQueueMessagesWaiting(*queue) == 0;
+}
+
 static inline void queue_send(queue_t *queue, const void *new_item) {
     assert(queue != NULL && *queue != NULL);
     BaseType_t status;

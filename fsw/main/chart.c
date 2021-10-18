@@ -6,12 +6,13 @@
 #include <fsw/chart.h>
 #include <hal/thread.h>
 
-void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void (*notify_server)(void), void (*notify_client)(void)) {
+void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void (*notify_server)(void *), void (*notify_client)(void *), void *param) {
     assert(chart != NULL && note_size > 0 && note_count > 0 && notify_server != NULL && notify_client != NULL);
     critical_init(&chart->critical_section);
 
     chart->notify_server = notify_server;
     chart->notify_client = notify_client;
+    chart->notify_param = param;
 
     chart->note_size = note_size;
     chart->note_count = note_count;
@@ -25,6 +26,17 @@ void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void
     }
 
     chart->next_blank = chart->next_reply = chart->next_request = 0;
+}
+
+void chart_destroy(chart_t *chart) {
+    assert(chart != NULL);
+    assert(chart->note_storage != NULL);
+    free(chart->note_storage);
+    assert(chart->note_info != NULL);
+    free(chart->note_info);
+    critical_destroy(&chart->critical_section);
+    // wipe entire structure
+    memset(chart, 0, sizeof(chart_t));
 }
 
 static inline void chart_validate_state(chart_note_state_t state) {
@@ -81,7 +93,7 @@ void *chart_request_start(chart_t *chart) {
 void chart_request_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_BLANK, CHART_NOTE_REQUEST, &chart->next_blank);
 
-    chart->notify_server();
+    chart->notify_server(chart->notify_param);
 }
 
 // if any unhandled requests are available, return a pointer to the memory of one of them, otherwise NULL.
@@ -93,7 +105,7 @@ void *chart_reply_start(chart_t *chart) {
 void chart_reply_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_REQUEST, CHART_NOTE_REPLY, &chart->next_blank);
 
-    chart->notify_client();
+    chart->notify_client(chart->notify_param);
 }
 
 // acknowledgements are sent by the CLIENT
@@ -107,5 +119,5 @@ void *chart_ack_start(chart_t *chart) {
 void chart_ack_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_REPLY, CHART_NOTE_BLANK, &chart->next_blank);
 
-    chart->notify_server();
+    chart->notify_server(chart->notify_param);
 }
