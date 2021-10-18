@@ -4,6 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <hal/atomic.h>
+#include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/magnetometer.h>
@@ -29,6 +31,10 @@ enum {
     MAG_RS_INVALID_ADDR  = 2,
     MAG_RS_INVALID_VALUE = 3,
     MAG_RS_CORRUPT_DATA  = 4,
+
+    MAGNETOMETER_MAX_READINGS = 100,
+
+    READING_DELAY_NS = 100 * 1000 * 1000,
 };
 
 static bool magnetometer_is_error_recoverable(rmap_status_t status) {
@@ -150,16 +156,11 @@ static void *magnetometer_mainloop(void *mag_opaque) {
 
     for (;;) {
         debugf("Checking for magnetometer power command...");
-        mutex_lock(&mag->mutex);
         // wait for magnetometer power command
-        while (!mag->should_be_powered) {
-            mutex_unlock(&mag->mutex);
+        while (!atomic_load_relaxed(mag->should_be_powered)) {
             debugf("Waiting for magnetometer power command...");
             semaphore_take(&mag->flag_change);
-            mutex_lock(&mag->mutex);
         }
-        assert(mag->should_be_powered == true);
-        mutex_unlock(&mag->mutex);
         debugf("Turning on magnetometer power...");
 
         // turn on power
@@ -171,18 +172,16 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         tlm_mag_pwr_state_changed(true);
 
         // take readings every 100ms until told to stop
-        uint64_t reading_time = powered_at;
-        mutex_lock(&mag->mutex);
-        while (mag->should_be_powered) {
+        uint64_t reading_time = powered_at + READING_DELAY_NS;
+        while (atomic_load_relaxed(mag->should_be_powered)) {
             // wait 100ms and check to confirm we weren't cancelled during that time
-            reading_time += 100 * 1000 * 1000;
-            mutex_unlock(&mag->mutex);
-            sleep_until(reading_time);
-            mutex_lock(&mag->mutex);
-            if (!mag->should_be_powered) {
+            if (semaphore_take_timed_abs(&mag->flag_change, reading_time)) {
+                // need to recheck state... wake might be spurious.
+                continue;
+            }
+            if (!atomic_load_relaxed(mag->should_be_powered)) {
                 break;
             }
-            mutex_unlock(&mag->mutex);
 
             // take and report reading
             tlm_mag_reading_t reading;
@@ -191,14 +190,12 @@ static void *magnetometer_mainloop(void *mag_opaque) {
                 return NULL;
             }
 
-            mutex_lock(&mag->mutex);
-            if (mag->num_readings < MAGNETOMETER_MAX_READINGS) {
-                mag->readings[mag->num_readings++] = reading;
-            } else {
-                debugf("Magnetometer: maxed out at %zu collected readings.", mag->num_readings);
+            if (!queue_send_try(&mag->readings, &reading)) {
+                debugf("Magnetometer: out of space in queue to write readings.");
             }
+
+            reading_time += READING_DELAY_NS;
         }
-        mutex_unlock(&mag->mutex);
 
         // turn off power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF)) {
@@ -207,6 +204,13 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         }
         tlm_mag_pwr_state_changed(false);
     }
+}
+
+static bool magnetometer_telem_iterator_next(void *mag_opaque, tlm_mag_reading_t *reading_out) {
+    magnetometer_t *mag = (magnetometer_t *) mag_opaque;
+    assert(mag != NULL && reading_out != NULL);
+
+    return queue_recv_try(&mag->readings, reading_out);
 }
 
 static void *magnetometer_telemloop(void *mag_opaque) {
@@ -218,25 +222,9 @@ static void *magnetometer_telemloop(void *mag_opaque) {
         uint64_t last_telem_time = clock_timestamp();
 
         // see if we have readings to downlink
-        mutex_lock(&mag->mutex);
-        if (mag->num_readings > 0) {
-            // snapshot readings to send
-            size_t num_downlink = mag->num_readings;
-            assert(num_downlink <= MAGNETOMETER_MAX_READINGS);
-            mutex_unlock(&mag->mutex);
-
-            // send readings
-            tlm_sync_mag_readings_array(mag->readings, num_downlink);
-
-            last_telem_time = clock_timestamp();
-
-            // rearrange any readings collected in the interim
-            mutex_lock(&mag->mutex);
-            mag->num_readings -= num_downlink;
-            assert(mag->num_readings <= MAGNETOMETER_MAX_READINGS);
-            memmove(&mag->readings[0], &mag->readings[num_downlink], sizeof(tlm_mag_reading_t) * mag->num_readings);
+        if (!queue_is_empty(&mag->readings)) {
+            tlm_sync_mag_readings_iterator(magnetometer_telem_iterator_next, mag);
         }
-        mutex_unlock(&mag->mutex);
 
         sleep_until(last_telem_time + (uint64_t) 5500000000);
     }
@@ -244,7 +232,7 @@ static void *magnetometer_telemloop(void *mag_opaque) {
 
 void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(mag != NULL && mon != NULL && address != NULL);
-    mutex_init(&mag->mutex);
+    queue_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
     semaphore_init(&mag->flag_change);
     mag->should_be_powered = false;
     rmap_init_context(&mag->rctx, mon, 4);
@@ -255,11 +243,8 @@ void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *ad
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     assert(mag != NULL);
-    mutex_lock(&mag->mutex);
     if (powered != mag->should_be_powered) {
-        mag->should_be_powered = powered;
-        debugf("Notifying loop that should_be_powered=%d", mag->should_be_powered);
+        atomic_store_relaxed(mag->should_be_powered, powered);
         semaphore_give(&mag->flag_change);
     }
-    mutex_unlock(&mag->mutex);
 }

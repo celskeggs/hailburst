@@ -7,22 +7,16 @@
 #include <fsw/fakewire/rmap.h>
 #include <fsw/tlm.h>
 
-#define MAGNETOMETER_MAX_READINGS (100)
-
 typedef struct {
     rmap_context_t rctx;
     rmap_addr_t address;
 
     // synchronization
-    mutex_t     mutex;
+    bool should_be_powered;
     semaphore_t flag_change;
 
-    // protected control flag
-    bool should_be_powered;
-
-    // protected telemetry buffer
-    size_t num_readings;
-    tlm_mag_reading_t readings[MAGNETOMETER_MAX_READINGS];
+    // telemetry buffer
+    queue_t readings;
 
     thread_t query_thread;
     thread_t telem_thread;

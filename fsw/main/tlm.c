@@ -246,10 +246,7 @@ void tlm_mag_pwr_state_changed(bool power_state) {
     telemetry_record_async(&tlm);
 }
 
-void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings) {
-    assert(num_readings > 0);
-    assert(num_readings * 14 <= SCRATCH_BUFFER_SIZE); // upper bound based on encoding capacity
-
+void tlm_sync_mag_readings_iterator(bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param) {
     // wait until a buffer is available
     uint8_t *scratch_buf = NULL;
     size_t rioc = ringbuf_read(&scratch_buffers, &scratch_buf, 1, RB_BLOCKING);
@@ -257,20 +254,29 @@ void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_reading
 
     // now fill up the scratch buffer
     uint16_t *out = (uint16_t*) scratch_buf;
-    debugf("Magnetometer Readings Array: %zu readings:", num_readings);
-    for (size_t i = 0; i < num_readings; i++) {
-        debugf("  Readings[%zu]={%"PRIu64", %d, %d, %d}",
-            i, readings[i].reading_time, readings[i].mag_x, readings[i].mag_y, readings[i].mag_z);
+    debugf("Magnetometer Readings Array:");
+    size_t num_readings = 0;
+    while ((uint8_t*) out - scratch_buf + 14 <= SCRATCH_BUFFER_SIZE) {
+        tlm_mag_reading_t rd;
 
-        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 48));
-        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 32));
-        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 16));
-        *out++ = htobe16((uint16_t) (readings[i].reading_time >> 0));
+        if (!iterator(param, &rd)) {
+            break;
+        }
 
-        *out++ = htobe16(readings[i].mag_x);
-        *out++ = htobe16(readings[i].mag_y);
-        *out++ = htobe16(readings[i].mag_z);
+        debugf("  Readings[%zu]={%"PRIu64", %d, %d, %d}", num_readings, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
+
+        *out++ = htobe16((uint16_t) (rd.reading_time >> 48));
+        *out++ = htobe16((uint16_t) (rd.reading_time >> 32));
+        *out++ = htobe16((uint16_t) (rd.reading_time >> 16));
+        *out++ = htobe16((uint16_t) (rd.reading_time >> 0));
+
+        *out++ = htobe16(rd.mag_x);
+        *out++ = htobe16(rd.mag_y);
+        *out++ = htobe16(rd.mag_z);
+
+        num_readings++;
     }
+    debugf("  Total number of readings: %zu\n", num_readings);
     assert((uint8_t*) out - scratch_buf == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream

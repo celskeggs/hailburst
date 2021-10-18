@@ -26,6 +26,6 @@ void tlm_heartbeat(void);
 void tlm_mag_pwr_state_changed(bool power_state);
 
 // synchronous telemetry writes
-void tlm_sync_mag_readings_array(tlm_mag_reading_t *readings, size_t num_readings);
+void tlm_sync_mag_readings_iterator(bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param);
 
 #endif /* FSW_TLM_H */
