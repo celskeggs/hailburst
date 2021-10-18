@@ -85,7 +85,7 @@ retry:
 
 static void sleep_until(uint64_t target_time) {
     int64_t remain;
-    while ((remain = target_time - clock_timestamp()) > 0) {
+    while ((remain = target_time - clock_timestamp_monotonic()) > 0) {
         usleep(remain / 1000);
     }
 }
@@ -168,7 +168,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             debugf("Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
-        uint64_t powered_at = clock_timestamp();
+        uint64_t powered_at = clock_timestamp_monotonic();
         tlm_mag_pwr_state_changed(true);
 
         // take readings every 100ms until told to stop
@@ -185,6 +185,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
 
             // take and report reading
             tlm_mag_reading_t reading;
+            debugf("Taking magnetometer reading...");
             if (!magnetometer_take_reading(mag, &reading)) {
                 debugf("Magnetometer: quitting read loop due to RMAP error.");
                 return NULL;
@@ -193,6 +194,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             if (!queue_send_try(&mag->readings, &reading)) {
                 debugf("Magnetometer: out of space in queue to write readings.");
             }
+            debugf("Took magnetometer reading!");
 
             reading_time += READING_DELAY_NS;
         }
@@ -219,7 +221,7 @@ static void *magnetometer_telemloop(void *mag_opaque) {
 
     // runs every 5.5 seconds to meet requirements
     for (;;) {
-        uint64_t last_telem_time = clock_timestamp();
+        uint64_t last_telem_time = clock_timestamp_monotonic();
 
         // see if we have readings to downlink
         if (!queue_is_empty(&mag->readings)) {

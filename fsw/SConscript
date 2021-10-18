@@ -12,8 +12,11 @@ def build_common(env):
 # ============================= Linux =============================
 
 def configure_linux():
-    linux_env = Environment(CCFLAGS=['-ggdb', '-Wall', '-Wextra', '-Werror', '-D_GNU_SOURCE'], LIBS=['pthread', 'z'],
-                            PREFIX=GetOption('prefix'), CPPPATH=[])
+    linux_env = Environment(CCFLAGS=['-ggdb', '-Wall', '-Wextra', '-Werror', '-D_GNU_SOURCE', '-std=gnu11',
+                                     '-Dstatic_assert=_Static_assert'],
+                            LIBS=['pthread', 'z'],
+                            PREFIX=GetOption('prefix'),
+                            CPPPATH=[])
 
     assert linux_env["CPPPATH"] == [], "cpppath: %r" % linux_env["CPPPATH"]
 

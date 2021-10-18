@@ -132,10 +132,15 @@ func main() {
 	}
 	p.LaunchInTerminal("\""+strings.Join(gdbCmd, "\" \"")+"\"", "GDB", ".")
 	time.Sleep(time.Millisecond * 100)
+	machine := "virt"
+	if isBare {
+		// FreeRTOS does not need the device tree blob, and supports the watchdog ... Linux is the opposite
+		machine += ",x-enable-load-dtb=false,x-enable-watchdog=true"
+	}
 	cmd := []string{
 		"../qemu/build/qemu-system-arm",
 		"-S", "-s",
-		"-M", "virt,x-enable-load-dtb=false,x-enable-watchdog=true",
+		"-M", machine,
 		"-m", fmt.Sprintf("%d", ramMB),
 	}
 	cmd = append(cmd, imageArg...)

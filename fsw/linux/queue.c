@@ -55,7 +55,9 @@ static inline size_t queue_scroll_plus_one(queue_t *queue, size_t scroll) {
 
 // _locked means the function assumes the lock is held
 static inline size_t queue_readable_items_locked(queue_t *queue) {
-    size_t size = (queue->write_scroll - queue->read_scroll) % (2 * queue->capacity);
+    assert(queue->write_scroll < 2 * queue->capacity);
+    assert(queue->read_scroll < 2 * queue->capacity);
+    size_t size = (queue->write_scroll - queue->read_scroll + 2 * queue->capacity) % (2 * queue->capacity);
     assert(size <= queue->capacity);
     return size;
 }
@@ -69,7 +71,7 @@ bool queue_is_empty(queue_t *queue) {
     mutex_lock(&queue->mutex);
     bool is_empty = queue_readable_items_locked(queue) == 0;
     mutex_unlock(&queue->mutex);
-    return is_empty;;
+    return is_empty;
 }
 
 void queue_send(queue_t *queue, const void *new_item) {

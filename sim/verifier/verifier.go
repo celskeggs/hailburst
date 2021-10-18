@@ -311,6 +311,8 @@ func (v *verifier) OnSetMagnetometerPower(powered bool) {
 					return true, false
 				} else {
 					// not depowered, so should have continued to collect readings
+					log.Printf("Expected to find one reading in the range %v-%v, but got %d readings",
+						pollAt.Add(-time.Millisecond*10), pollAt, len(readings))
 					return false, false
 				}
 			}
@@ -324,6 +326,7 @@ func (v *verifier) OnSetMagnetometerPower(powered bool) {
 					panic("should not transition powered->powered")
 				}
 				// should not have depowered if measurement was going to occur afterwards
+				log.Printf("Unexpectedly determined that magnetometer depowered.")
 				return false, false
 			}
 			lastReading = measuredAt
