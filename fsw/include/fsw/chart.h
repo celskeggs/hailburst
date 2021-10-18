@@ -24,23 +24,19 @@ typedef enum {
 typedef uint32_t chart_index_t;
 
 typedef struct {
-    chart_note_state_t state;
-    chart_index_t      next_idx;
-    chart_index_t      prev_idx;
-} chart_note_t;
-
-typedef struct {
     critical_t          critical_section;
 
     void (*notify_server)(void);
     void (*notify_client)(void);
 
-    size_t        note_size;
-    chart_index_t note_count;
-    uint8_t      *note_storage; // note_count elements of note_size each
-    chart_note_t *note_info;    // (note_count+CHART_NUM_STATES) elements, the last of which are the sentinels
+    size_t              note_size;
+    chart_index_t       note_count;
+    uint8_t            *note_storage; // note_count elements of note_size each
+    chart_note_state_t *note_info;    // note_count elements
 
-    chart_index_t nums[CHART_NUM_STATES];
+    chart_index_t next_blank;
+    chart_index_t next_request;
+    chart_index_t next_reply;
 } chart_t;
 
 // initializes a chart. notify_server and notify_client should be fast and non-blocking procedures that let the
