@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"github.com/celskeggs/hailburst/ctrl/trial"
 	"log"
 	"math"
 	"os"
@@ -21,9 +23,18 @@ type PortAssignment struct {
 func main() {
 	var maxTrials uint32 = math.MaxUint32
 	var numCPUs = runtime.NumCPU()
-	var mode = "mem"
-	var platform = "linux"
-	var stop = "req"
+	options := trial.Options{
+		HailburstDir: ".",
+		RedirectLogs: true,
+		Clean:        false,
+		Rebuild:      false,
+		Linux:        false,
+		Irradiate:    true,
+		RegisterMode: false,
+		Run:          false,
+		Monitor:      true,
+		Interactive:  false,
+	}
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--max" {
 			maxTrials64, err := strconv.ParseUint(os.Args[i+1], 10, 32)
@@ -46,23 +57,36 @@ func main() {
 			}
 			i++
 		} else if os.Args[i] == "--mode" {
-			mode = os.Args[i+1]
-			if mode != "mem" && mode != "reg" {
+			mode := os.Args[i+1]
+			if mode == "mem" {
+				options.RegisterMode = false
+			} else if mode == "reg" {
+				options.RegisterMode = true
+			} else {
 				log.Fatalf("unrecognized mode option: %q", mode)
 			}
 			i++
 		} else if os.Args[i] == "--platform" {
-			platform = os.Args[i+1]
-			if platform != "freertos" && platform != "linux" {
-				log.Fatalf("unrecognized platform option: %q", mode)
+			platform := os.Args[i+1]
+			if platform == "freertos" {
+				options.Linux = false
+			} else if platform == "linux" {
+				options.Linux = true
+			} else {
+				log.Fatalf("unrecognized platform option: %q", platform)
 			}
 			i++
 		} else if os.Args[i] == "--keep-going" {
-			stop = "none"
+			options.Monitor = false
 		} else {
 			log.Fatalf("unknown argument: %q", os.Args[i])
 		}
 	}
+
+	// build everything before we start
+	compilationOptions := options
+	compilationOptions.Rebuild = true
+	compilationOptions.Build()
 
 	workdir := "trials"
 
@@ -102,14 +126,20 @@ func main() {
 			log.Printf("Launching batch job #%d...", total)
 			go func(assignment PortAssignment) {
 				stamp := fmt.Sprintf("W%v-", assignment.ThreadNum) + time.Now().Format("2006-01-02T15:04:05")
-				cmd := exec.Command("./batch-proc", path.Join(workdir, stamp), fmt.Sprint(assignment.PortNum), platform, mode, stop)
+				localOptions := options
+				localOptions.TrialDir = path.Join(workdir, stamp)
+				localOptions.GdbPort = uint(assignment.PortNum)
+				optsJson, err := json.Marshal(localOptions)
+				if err != nil {
+					log.Fatalf("error encoding local options: %v", err)
+				}
+				cmd := exec.Command(compilationOptions.BatchBinaryPath(), string(optsJson))
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
-				err := cmd.Run()
-				if err != nil {
+				if err := cmd.Run(); err != nil {
 					log.Printf("error during trial: %v", err)
 				}
-				// so that all generated timestamps are unique within each worker
+				// sleep by at least a second so that all generated timestamps are unique within each worker
 				time.Sleep(time.Millisecond * 1200)
 				// return free thread token to the pool
 				threadFree <- assignment

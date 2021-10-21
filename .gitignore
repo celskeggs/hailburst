@@ -1,5 +1,8 @@
 /tree
 /.idea
 /trials
+/trial-last
 /local.config
 /timeline.png
+/sim/requirements-bin
+/ctrl/batch-bin
