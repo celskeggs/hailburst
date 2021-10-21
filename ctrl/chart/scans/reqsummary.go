@@ -142,7 +142,7 @@ func ShouldMerge(first, second ReqInterval) bool {
 	if second.Duration() > threshold {
 		threshold = second.Duration()
 	}
-	if threshold >= time.Second * 30 {
+	if threshold >= time.Second*30 {
 		threshold = time.Second * 30
 	}
 	return first.Mode == second.Mode && second.Start.Since(first.End) <= threshold
@@ -214,8 +214,8 @@ func Summarize(r *ReqScan) *ReqIntervalScan {
 
 type ScanEntry struct {
 	RequirementName string
-	Timestamp model.VirtualTime
-	NewMode IntervalMode
+	Timestamp       model.VirtualTime
+	NewMode         IntervalMode
 }
 
 func BuildScanEntries(rs *ReqIntervalScan) (out []ScanEntry) {
@@ -300,9 +300,9 @@ func CollectiveSummary(raw []*ReqIntervalScan) *ReqIntervalScan {
 				intervals[len(intervals)-1].End = nextTime
 			}
 			intervals = append(intervals, ReqInterval{
-				Mode:       status,
-				Start:      nextTime,
-				End:        nextTime,
+				Mode:  status,
+				Start: nextTime,
+				End:   nextTime,
 			})
 		} else {
 			intervals[len(intervals)-1].End = nextTime
@@ -334,7 +334,7 @@ func CalcStats(summary *ReqIntervalScan) {
 	var successTimes []time.Duration
 
 	wasFailure := false
-	for i := 0; i < len(summary.Intervals) - 1; i++ {
+	for i := 0; i < len(summary.Intervals)-1; i++ {
 		interval := summary.Intervals[i]
 		if interval.Mode == IntervalReliable {
 			successTimes = append(successTimes, interval.Duration())

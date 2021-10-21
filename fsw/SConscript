@@ -1,6 +1,7 @@
 import os
 import subprocess
 
+
 def build_common(env):
     env["CPPPATH"] += ["include/"]
     return [
@@ -8,6 +9,7 @@ def build_common(env):
                                  "main/magnetometer.c", "main/radio.c", "main/spacecraft.c", "main/tlm.c"]),
         env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
     ]
+
 
 # ============================= Linux =============================
 
@@ -32,11 +34,13 @@ def configure_linux():
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c"] + common_libs)
     linux_env.Default(linux_app)
 
-    linux_env.Program("fakewire_exc_test", LINUX_SRC + ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + common_libs)
+    linux_env.Program("fakewire_exc_test",
+                      LINUX_SRC + ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + common_libs)
 
     linux_env.Alias("install",
                     [linux_env.Install('$PREFIX/usr/bin', linux_app),
                      linux_env.Install('$PREFIX/etc/init.d', "linux/S80app")])
+
 
 # ============================= FreeRTOS =============================
 
@@ -51,7 +55,8 @@ def configure_freertos():
         STRIP="arm-none-eabi-strip",
         LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
         CCFLAGS=COMMON_RTOS_FLAGS + ["-Wall", "-Wextra", "-Werror",
-                                     "-Wno-unknown-pragmas",  # because ealibc uses #pragma mark, and that causes trouble
+                                     # because ealibc uses #pragma mark, and that causes trouble
+                                     "-Wno-unknown-pragmas",
                                      "-nostdlib", "-nostdinc", "-nostartfiles", "-ffreestanding",
                                      "-std=gnu11",
                                      "-D_BITSIZE=32", "-D__FREERTOS__"],
@@ -86,8 +91,7 @@ def configure_freertos():
         "ealibc",
         [os.path.join(EALIBC_ROOT, "printf/printf.c")] +
         [os.path.join(EALIBC_ROOT, "src", x) for x in
-             ["assert/assert.c", "string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c",
-              "stdlib/rand.c"]]
+         ["assert/assert.c", "string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c", "stdlib/rand.c"]]
     )
 
     RTOS_SRC = ["freertos/clock.c", "freertos/entrypoint.s", "freertos/fakewire_link.c", "freertos/gic.c",
@@ -128,6 +132,7 @@ def configure_freertos():
         action='$OBJCOPY -I elf32-littlearm -O binary $SOURCE $TARGET',
     )
     rtos_env.Default(rtos_bootrom_bin)
+
 
 # ============================= Main =============================
 

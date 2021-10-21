@@ -65,7 +65,7 @@ func main() {
 			}
 			for fi := 0; fi < len(fieldNames); fi++ {
 				fname := fieldNames[fi]
-				namePad := fname + strings.Repeat(" ", maxFieldWidth - len(fname))
+				namePad := fname + strings.Repeat(" ", maxFieldWidth-len(fname))
 				fmt.Printf("  --> %s = %v\n", namePad, rv.Field(fi).Interface())
 			}
 		}

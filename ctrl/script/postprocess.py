@@ -6,7 +6,8 @@ header = ["Type", "ID", "Timestamp (ns)", "Total Errors"]
 
 with open("experiment-out.csv", "r") as iterdata:
     iterlines = csv.reader(iterdata)
-    assert next(iterlines) == ["Record ID", "Timestamp", "Iteration", "Total Errors", "Marker Returned", "Last Marker Sent"]
+    assert next(iterlines) == ["Record ID", "Timestamp", "Iteration", "Total Errors", "Marker Returned",
+                               "Last Marker Sent"]
     for line in iterlines:
         lines.append(["Iteration"] + line[0:2] + line[3:4])
 

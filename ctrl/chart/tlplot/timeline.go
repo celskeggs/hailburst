@@ -63,7 +63,7 @@ func NewTimelinePlot(activities []Activity, markers []Marker, loc float64, heigh
 func splitRows(text string, nrows int) (out []string) {
 	out = make([]string, nrows)
 	for i := 0; i < nrows; i++ {
-		out[i] = text[len(text)*i/nrows:len(text)*(i+1)/nrows]
+		out[i] = text[len(text)*i/nrows : len(text)*(i+1)/nrows]
 	}
 	return out
 }
@@ -90,7 +90,7 @@ func searchTextSize(style draw.TextStyle, text string, maxWidth vg.Length) (resu
 
 func fillSingleRow(c draw.Canvas, style draw.TextStyle, text string, posX vg.Length, posY vg.Length) {
 	c.FillText(style, vg.Point{
-		X: posX + style.Width(text) / 2,
+		X: posX + style.Width(text)/2,
 		Y: posY,
 	}, text)
 }
@@ -101,9 +101,9 @@ func fillMultiRow(c draw.Canvas, style draw.TextStyle, rows []string, posX vg.Le
 		if len(rows) == 1 {
 			frac = 0.5
 		} else {
-			frac = float64(i) / float64(len(rows) - 1)
+			frac = float64(i) / float64(len(rows)-1)
 		}
-		fillSingleRow(c, style, row, posX, posYMin + (posYMax - posYMin) * vg.Length(frac))
+		fillSingleRow(c, style, row, posX, posYMin+(posYMax-posYMin)*vg.Length(frac))
 	}
 }
 
@@ -125,7 +125,7 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 		}
 		c.FillPolygon(activity.Color, c.ClipPolygonX(pts[0:4]))
 		c.StrokeLines(t.BoxStyle, c.ClipLinesX(pts)...)
-		if activity.Label != "" && t.TextStyle.Width(activity.Label) + xStart <= xEnd && c.ContainsX(xStart) {
+		if activity.Label != "" && t.TextStyle.Width(activity.Label)+xStart <= xEnd && c.ContainsX(xStart) {
 			c.FillText(t.TextStyle, vg.Point{
 				X: (xStart + xEnd) / 2,
 				Y: y,
@@ -143,8 +143,8 @@ func (t *TimelinePlot) Plot(c draw.Canvas, plt *plot.Plot) {
 		startPos := xPos + marker.Glyph.Radius
 		endPos := trX(lastClipX) - marker.Glyph.Radius
 		if marker.Label != "" && startPos < endPos {
-			style, rows := searchTextSize(t.TextStyle, marker.Label, endPos - startPos)
-			fillMultiRow(c, style, rows, startPos, y - t.Height/2, y + t.Height/2)
+			style, rows := searchTextSize(t.TextStyle, marker.Label, endPos-startPos)
+			fillMultiRow(c, style, rows, startPos, y-t.Height/2, y+t.Height/2)
 		}
 		lastClipX = marker.Time
 	}

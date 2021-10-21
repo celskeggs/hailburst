@@ -12,7 +12,8 @@ def qemu_hmp(cmdstr):
 
 def now():
     text = qemu_hmp("info vtime")
-    assert text.startswith("virtual time: ") and text.endswith(" ns") and text.count(" ") == 3, "invalid output: %r" % text
+    assert text.startswith("virtual time: ") and text.endswith(" ns") and text.count(" ") == 3,\
+        "invalid output: %r" % text
     return int(text.split(" ")[2])
 
 
@@ -32,11 +33,11 @@ class MemoryRange:
         assert prio_text == "(prio"
         assert kind in ("i/o", "ram", "romd"), "TODO: add support for memory kind %s" % kind
         return MemoryRange(
-            start = int(start_range, 16),
-            end = int(end_range, 16),
-            priority = int(prio_num, 10),
-            kind = kind,
-            name = name,
+            start=int(start_range, 16),
+            end=int(end_range, 16),
+            priority=int(prio_num, 10),
+            kind=kind,
+            name=name,
         )
 
 
@@ -191,20 +192,24 @@ def inject_bitflip(address, bytewidth):
 
     rnvalue = int.from_bytes(inferior.read_memory(address, bytewidth), "little")
 
-    assert nvalue == rnvalue and nvalue != ovalue, "mismatched values: o=0x%x n=0x%x rn=0x%x" % (ovalue, nvalue, rnvalue)
+    assert nvalue == rnvalue and nvalue != ovalue,\
+        "mismatched values: o=0x%x n=0x%x rn=0x%x" % (ovalue, nvalue, rnvalue)
     global_writer.write(address, ovalue, nvalue)
     print("Injected bitflip into address 0x%x: old value 0x%x -> new value 0x%x" % (address, ovalue, nvalue))
 
 
 cached_reg_list = None
+
+
 def list_registers():
     global cached_reg_list
     if cached_reg_list is None:
         # we can avoid needing to handle float and 'union neon_q', because on ARM, there are d# registers that alias
         # to all of the more specialized registers in question.
-        cached_reg_list = [(r, gdb.selected_frame().read_register(r).type.sizeof)
-                           for r in gdb.selected_frame().architecture().registers()
-                           if str(gdb.selected_frame().read_register(r).type) not in ("float", "union neon_q", "neon_q")]
+        frame = gdb.selected_frame()
+        cached_reg_list = [(r, frame.read_register(r).type.sizeof)
+                           for r in frame.architecture().registers()
+                           if str(frame.read_register(r).type) not in ("float", "union neon_q", "neon_q")]
     return cached_reg_list[:]
 
 
@@ -215,7 +220,8 @@ def inject_register_bitflip(register_name):
     elif str(value.type) == "union neon_d" or str(value.type) == "neon_d":
         lookup = "u64"
     else:
-        raise RuntimeError("not handled: inject_register_bitflip into register %s of type %s" % (register_name, value.type))
+        raise RuntimeError("not handled: inject_register_bitflip into register %s of type %s"
+                           % (register_name, value.type))
 
     intval = int(value[lookup] if lookup else value)
     bitcount = 8 * value.type.sizeof
@@ -229,10 +235,12 @@ def inject_register_bitflip(register_name):
         print("Injected bitflip into register %s: old value 0x%x -> new value 0x%x" % (register_name, intval, rrval))
         return True
     elif (intval & bitmask) == (rrval & bitmask):
-        print("Bitflip could not be injected into register %s. (0x%x -> 0x%x ignored.)" % (register_name, intval, newval))
+        print("Bitflip could not be injected into register %s. (0x%x -> 0x%x ignored.)"
+              % (register_name, intval, newval))
         return False
     else:
-        raise RuntimeError("double-mismatched register values on register %s: o=0x%x n=0x%x rr=0x%x" % (register_name, intval, newval, rrval))
+        raise RuntimeError("double-mismatched register values on register %s: o=0x%x n=0x%x rr=0x%x"
+                           % (register_name, intval, newval, rrval))
 
 
 class BuildCmd(gdb.Command):

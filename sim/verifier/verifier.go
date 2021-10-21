@@ -366,8 +366,8 @@ func (v *verifier) OnMeasureMagnetometer(x, y, z int16) {
 					if ok && now.TimeDistance(readingTime) < MaxMagMeasTimeVariance {
 						return true
 					} else {
-						log.Printf("Found reading that almost matched, but didn't:\n" +
-							"measurement = {%d, %d, %d, now=%v}\n" +
+						log.Printf("Found reading that almost matched, but didn't:\n"+
+							"measurement = {%d, %d, %d, now=%v}\n"+
 							"reading     = {%d, %d, %d, now=%v}",
 							x, y, z, now, reading.MagX, reading.MagY, reading.MagZ, readingTime)
 					}
