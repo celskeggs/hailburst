@@ -27,6 +27,7 @@ typedef struct {
     void             *(*start_routine)(void*);
     void               *arg;
     task_restart_hook_t restart_hook;
+    bool                hit_restart;
     StaticTask_t        preallocated_task_memory;
     StackType_t         preallocated_stack[STACK_SIZE];
 } *thread_t;

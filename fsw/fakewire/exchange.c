@@ -139,7 +139,7 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
 
     thread_create(&fwe->exchange_thread, "fw_exc_thread",      PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, NOT_RESTARTABLE);
     thread_create(&fwe->read_cb_thread,  "fw_read_cb_thread",  PRIORITY_SERVERS, fakewire_exc_read_cb_loop,  fwe, NOT_RESTARTABLE);
-    thread_create(&fwe->transmit_thread, "fw_transmit_thread", PRIORITY_SERVERS, fakewire_exc_transmit_loop, fwe, NOT_RESTARTABLE);
+    thread_create(&fwe->transmit_thread, "fw_transmit_thread", PRIORITY_SERVERS, fakewire_exc_transmit_loop, fwe, RESTARTABLE);
     return 0;
 }
 
@@ -241,6 +241,8 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     assert(fwe != NULL);
     assert(fwe->recv_buffer != NULL);
 
+    debug_puts("Initializing exchange transmit loop!");
+
     bool needs_flush = false;
 
     // when we initialize, if we have a pending send, we MUST skip it.
@@ -248,6 +250,7 @@ static void *fakewire_exc_transmit_loop(void *fwe_opaque) {
     void *note = chart_reply_start(&fwe->transmit_chart);
     if (note != NULL) {
         chart_reply_send(&fwe->transmit_chart, note);
+        debug_puts("Cleared existing message.");
     }
 
     while (true) {
@@ -370,7 +373,9 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             // there is no reason to keep timing out just to set the very same flags again.
             timed_out = !queue_recv_timed_abs(&fwe->input_queue, &input_ent, next_timeout);
         } else {
+#ifdef DEBUG
             debug_puts("Entering main exchange loop (blocking).");
+#endif
             queue_recv(&fwe->input_queue, &input_ent);
         }
 #ifdef DEBUG

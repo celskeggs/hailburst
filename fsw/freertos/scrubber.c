@@ -2,6 +2,7 @@
 
 #include <elf/elf.h>
 #include <rtos/scrubber.h>
+#include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
@@ -42,11 +43,15 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
     }
 }
 
+static uint64_t scrubber_iteration = 0;
+
 static void *scrubber_mainloop(void *opaque) {
     uint8_t *kernel_elf_rom = (uint8_t *) opaque;
 
     for (;;) {
         debugf("[scrubber] beginning cycle (baseline kernel ELF at 0x%08x)...", kernel_elf_rom);
+
+        atomic_store_relaxed(scrubber_iteration, scrubber_iteration | 1);
 
         if (!elf_validate_header(kernel_elf_rom, debugf)) {
             debugf("[scrubber] header validation failed; halting scrubber.");
@@ -58,10 +63,29 @@ static void *scrubber_mainloop(void *opaque) {
             return NULL;
         }
 
+        atomic_store_relaxed(scrubber_iteration, scrubber_iteration + 1);
+
         debugf("[scrubber] scrub cycle complete.");
 
         // scrub about once per second
         usleep(1000000);
+    }
+}
+
+void scrubber_cycle_wait(void) {
+    // if we're currently in an iteration, consider the 'start iteration' to be the next one; otherwise, if we're
+    // waiting for an iteration, consider the 'start iteration' to be the one that's about to start.
+    uint64_t start_iteration = (atomic_load_relaxed(scrubber_iteration) + 1) & ~1;
+    int max_attempts = 200; // wait at most two seconds, regardless.
+    // wait until the iteration ends.
+    while (atomic_load_relaxed(scrubber_iteration) < start_iteration + 2) {
+        usleep(10 * 1000); // wait about 10 milliseconds and then recheck
+        max_attempts -= 1;
+        if (max_attempts <= 0) {
+            // this whole thing is a heuristic, anyway. better to not sleep forever than to insist on a scrub cycle
+            // DEFINITELY having completed.
+            break;
+        }
     }
 }
 

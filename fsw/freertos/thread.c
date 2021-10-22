@@ -4,12 +4,18 @@
 #include <task.h>
 
 #include <rtos/crash.h>
+#include <rtos/scrubber.h>
 #include <hal/thread.h>
 
 static void thread_restart_hook(void *opaque, TaskHandle_t task);
 
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
+
+    if (state->hit_restart) {
+        printf("Pending restart on next scrubber cycle.\n");
+        scrubber_cycle_wait();
+    }
 
     // discard return value
     (void) state->start_routine(state->arg);
@@ -46,6 +52,7 @@ static void thread_restart_hook(void *opaque, TaskHandle_t task) {
     // the TaskHandle could refer to undefined memory.
     taskENTER_CRITICAL();
     vTaskDelete(task);
+    state->hit_restart = true;
     thread_start_internal(state, true);
     taskEXIT_CRITICAL();
 }
@@ -63,6 +70,7 @@ void thread_create(thread_t *out, const char *name, unsigned int priority,
     state->priority = priority;
     state->start_routine = start_routine;
     state->arg = arg;
+    state->hit_restart = false;
     state->done = xSemaphoreCreateBinary();
     assert(state->done != NULL);
     state->handle = NULL;
