@@ -137,9 +137,9 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
         return -1;
     }
 
-    thread_create(&fwe->exchange_thread, "fw_exc_thread",      PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe);
-    thread_create(&fwe->read_cb_thread,  "fw_read_cb_thread",  PRIORITY_SERVERS, fakewire_exc_read_cb_loop,  fwe);
-    thread_create(&fwe->transmit_thread, "fw_transmit_thread", PRIORITY_SERVERS, fakewire_exc_transmit_loop, fwe);
+    thread_create(&fwe->exchange_thread, "fw_exc_thread",      PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, NOT_RESTARTABLE);
+    thread_create(&fwe->read_cb_thread,  "fw_read_cb_thread",  PRIORITY_SERVERS, fakewire_exc_read_cb_loop,  fwe, NOT_RESTARTABLE);
+    thread_create(&fwe->transmit_thread, "fw_transmit_thread", PRIORITY_SERVERS, fakewire_exc_transmit_loop, fwe, NOT_RESTARTABLE);
     return 0;
 }
 

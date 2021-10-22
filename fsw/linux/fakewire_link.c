@@ -139,7 +139,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     fakewire_dec_init(&fwl->decoder, receiver);
 
     // and now let's set up the input thread
-    thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl);
+    thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl, NOT_RESTARTABLE);
 
     return 0;
 }

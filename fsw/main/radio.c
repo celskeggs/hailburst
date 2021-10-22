@@ -75,8 +75,8 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, strea
         exit(1);
     }
 
-    thread_create(&radio->up_thread, "radio_up_loop", PRIORITY_WORKERS, radio_uplink_loop, radio);
-    thread_create(&radio->down_thread, "radio_down_loop", PRIORITY_WORKERS, radio_downlink_loop, radio);
+    thread_create(&radio->up_thread, "radio_up_loop", PRIORITY_WORKERS, radio_uplink_loop, radio, NOT_RESTARTABLE);
+    thread_create(&radio->down_thread, "radio_down_loop", PRIORITY_WORKERS, radio_downlink_loop, radio, NOT_RESTARTABLE);
 }
 
 static bool radio_is_error_recoverable(rmap_status_t status) {

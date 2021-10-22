@@ -1,8 +1,12 @@
 #include <stdio.h>
 
 #include <FreeRTOS.h>
+#include <task.h>
 
+#include <rtos/crash.h>
 #include <hal/thread.h>
+
+static void thread_restart_hook(void *opaque, TaskHandle_t task);
 
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
@@ -20,8 +24,34 @@ static void thread_entrypoint(void *opaque) {
     }
 }
 
-void thread_create(thread_t *out, const char *name, unsigned int priority, void *(*start_routine)(void*), void *arg) {
-    BaseType_t status;
+static void thread_start_internal(thread_t state, restartable_t restartable) {
+    state->handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
+                                      state->preallocated_stack, &state->preallocated_task_memory);
+    assert(state->handle != NULL);
+    // just a check for implementation assumptions regarding task creation
+    assert((void*) state->handle == (void*) &state->preallocated_task_memory);
+
+    if (restartable == RESTARTABLE) {
+        state->restart_hook.hook_callback = thread_restart_hook;
+        state->restart_hook.hook_param = state;
+        task_set_restart_handler(state->handle, &state->restart_hook);
+    }
+}
+
+static void thread_restart_hook(void *opaque, TaskHandle_t task) {
+    thread_t state = (thread_t) opaque;
+    assert(state != NULL && task != NULL && state->handle == task);
+
+    // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
+    // the TaskHandle could refer to undefined memory.
+    taskENTER_CRITICAL();
+    vTaskDelete(task);
+    thread_start_internal(state, true);
+    taskEXIT_CRITICAL();
+}
+
+void thread_create(thread_t *out, const char *name, unsigned int priority,
+                   void *(*start_routine)(void*), void *arg, restartable_t restartable) {
     assert(out != NULL);
 
     assert(priority < configMAX_PRIORITIES);
@@ -29,6 +59,8 @@ void thread_create(thread_t *out, const char *name, unsigned int priority, void 
     thread_t state = malloc(sizeof(*state));
     assert(state != NULL);
 
+    state->name = name;
+    state->priority = priority;
     state->start_routine = start_routine;
     state->arg = arg;
     state->done = xSemaphoreCreateBinary();
@@ -39,11 +71,7 @@ void thread_create(thread_t *out, const char *name, unsigned int priority, void 
         name = "anonymous_thread";
     }
 
-    status = xTaskCreate(thread_entrypoint, name, 1000, state, priority, &state->handle);
-    if (status == errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY) {
-        printf("Out of memory while allocating anonymous task.\n");
-    }
-    assert(status == pdPASS);
+    thread_start_internal(state, restartable);
 
     *out = state;
 }

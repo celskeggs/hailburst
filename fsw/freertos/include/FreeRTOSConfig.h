@@ -9,7 +9,7 @@
 #define configUSE_TICKLESS_IDLE                 0
 // configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      1000
-#define configMAX_PRIORITIES                    5
+#define configMAX_PRIORITIES                    6
 #define configMINIMAL_STACK_SIZE                512
 #define configMAX_TASK_NAME_LEN                 16
 #define configUSE_16_BIT_TICKS                  0
@@ -29,8 +29,10 @@
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
 #define configUSE_TASK_FPU_SUPPORT              2
+#define configUSE_APPLICATION_TASK_TAG          1
 
 enum {
+    PRIORITY_REPAIR  = 5, // only used for critical repair tasks!
     PRIORITY_DRIVERS = 4,
     PRIORITY_SERVERS = 3,
     PRIORITY_WORKERS = 2,
@@ -39,7 +41,7 @@ enum {
 };
 
 /* Memory allocation related definitions. */
-#define configSUPPORT_STATIC_ALLOCATION             0
+#define configSUPPORT_STATIC_ALLOCATION             1
 #define configSUPPORT_DYNAMIC_ALLOCATION            1
 #define configTOTAL_HEAP_SIZE                       327680
 #define configAPPLICATION_ALLOCATED_HEAP            0
