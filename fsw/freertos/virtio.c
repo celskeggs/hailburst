@@ -15,6 +15,16 @@
 // #define DEBUG_VIRTQ
 
 enum {
+    VIRTIO_MMIO_ADDRESS_BASE   = 0x0A000000,
+    VIRTIO_MMIO_ADDRESS_STRIDE = 0x200,
+    VIRTIO_MMIO_IRQS_BASE      = IRQ_SPI_BASE + 16,
+    VIRTIO_MMIO_REGION_NUM     = 32,
+
+    VIRTIO_MMIO_FAKEWIRE_REGION = 31,
+
+    VIRTIO_MMIO_FAKEWIRE_ADDRESS = VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * VIRTIO_MMIO_FAKEWIRE_REGION,
+    VIRTIO_MMIO_FAKEWIRE_IRQ     = VIRTIO_MMIO_IRQS_BASE + VIRTIO_MMIO_FAKEWIRE_REGION,
+
     VIRTIO_MAGIC_VALUE    = 0x74726976,
     VIRTIO_LEGACY_VERSION = 1,
     VIRTIO_VERSION        = 2,
@@ -650,9 +660,5 @@ void virtio_init(virtio_port_cb callback, void *param) {
     assert(!virtio_initialized);
     virtio_initialized = true;
 
-    for (size_t n = 0; n < VIRTIO_MMIO_REGION_NUM; n++) {
-        virtio_init_console(callback, param,
-                            VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * n,
-                            VIRTIO_MMIO_IRQS_BASE + n);
-    }
+    virtio_init_console(callback, param, VIRTIO_MMIO_FAKEWIRE_ADDRESS, VIRTIO_MMIO_FAKEWIRE_IRQ);
 }

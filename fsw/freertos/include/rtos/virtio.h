@@ -9,13 +9,6 @@
 
 #include <rtos/gic.h>
 
-enum {
-    VIRTIO_MMIO_ADDRESS_BASE   = 0x0A000000,
-    VIRTIO_MMIO_ADDRESS_STRIDE = 0x200,
-    VIRTIO_MMIO_IRQS_BASE      = IRQ_SPI_BASE + 16,
-    VIRTIO_MMIO_REGION_NUM     = 32,
-};
-
 struct virtio_console_port;
 
 // called when a new port becomes available
