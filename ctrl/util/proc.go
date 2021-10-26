@@ -17,6 +17,7 @@ type Processes struct {
 	waitChannels   []<-chan void
 	waitAnyChannel chan void
 	waitAnyOnce    sync.Once
+	xtermIndex     int
 }
 
 func MakeProcesses() *Processes {
@@ -25,18 +26,25 @@ func MakeProcesses() *Processes {
 	}
 }
 
-func wrapInXterm(argv []string, title string) []string {
+var locations = []string{
+	"0+0", "948+0", "0+487", "948+487",
+}
+
+func wrapInXterm(argv []string, title string, i int) []string {
 	cmdline := "'" + strings.Join(argv, "' '") + "'"
 	return []string{
 		"xterm",
 		"-fa", "Monospace", "-fs", "10", // font configuration
 		"-T", title,
+		"-geometry", "117x25+" + locations[i % 4],
 		"-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", cmdline),
 	}
 }
 
 func (p *Processes) LaunchInTerminal(argv []string, title string, cwd string) (pid int) {
-	return p.LaunchHeadless(wrapInXterm(argv, title), "", cwd)
+	index := p.xtermIndex
+	p.xtermIndex += 1
+	return p.LaunchHeadless(wrapInXterm(argv, title, index), "", cwd)
 }
 
 func (p *Processes) LaunchHeadless(argv []string, logfile string, cwd string) (pid int) {
