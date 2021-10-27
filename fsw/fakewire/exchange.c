@@ -79,6 +79,13 @@ static void fakewire_exc_link_write(void *opaque, uint8_t *bytes_in, size_t byte
     fakewire_link_write(&fwe->io_port, bytes_in, bytes_count);
 }
 
+static void fakewire_exc_link_receive(void *opaque, uint8_t *data, size_t length, uint64_t receive_timestamp) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+    assert(fwe != NULL && data != NULL && length > 0);
+
+    fakewire_dec_decode(&fwe->decoder, data, length, receive_timestamp);
+}
+
 static void fakewire_exc_transmit_chart_notify_server(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
@@ -126,8 +133,9 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     assert(fwe->recv_buffer != NULL);
 
     fakewire_enc_init(&fwe->encoder, fakewire_exc_link_write, fwe);
+    fakewire_dec_init(&fwe->decoder, &fwe->link_interface);
 
-    if (fakewire_link_init(&fwe->io_port, &fwe->link_interface, opts.link_options) < 0) {
+    if (fakewire_link_init(&fwe->io_port, opts.link_options, fakewire_exc_link_receive, fwe) < 0) {
         free(fwe->recv_buffer);
         semaphore_destroy(&fwe->write_ready_sem);
         queue_destroy(&fwe->read_cb_queue);

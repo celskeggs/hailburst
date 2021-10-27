@@ -1,6 +1,8 @@
 #ifndef FSW_FAKEWIRE_LINK_H
 #define FSW_FAKEWIRE_LINK_H
 
+typedef void (*fw_link_cb_t)(void *param, uint8_t *data, size_t length, uint64_t receive_timestamp);
+
 #include <hal/fakewire_link.h>
 
 enum {
@@ -18,7 +20,7 @@ typedef struct {
 
 // initializes both the link AND the encoder specified!
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts);
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, fw_link_cb_t recv, void *param);
 
 void fakewire_link_write(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count);
 

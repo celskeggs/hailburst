@@ -21,6 +21,7 @@ typedef struct fw_exchange_st {
 
     fw_link_t         io_port;
     fw_encoder_t      encoder;
+    fw_decoder_t      decoder;
     fw_receiver_t     link_interface;
 
     thread_t exchange_thread;

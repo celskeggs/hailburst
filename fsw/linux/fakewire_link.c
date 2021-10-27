@@ -55,17 +55,20 @@ static void *fakewire_link_input_loop(void *opaque) {
 #endif
         assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
 
-        // write as many bytes at once as possible
-        fakewire_dec_decode(&fwl->decoder, read_buf, actual, clock_timestamp());
+        // decode as many bytes at once as possible
+        fwl->recv(fwl->param, read_buf, actual, clock_timestamp());
     }
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts) {
-    assert(fwl != NULL && receiver != NULL && opts.label != NULL && opts.path != NULL);
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, fw_link_cb_t recv, void *param) {
+    assert(fwl != NULL && recv != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // set up debug info real quick
     fwl->label = opts.label;
+    // store callback
+    fwl->recv = recv;
+    fwl->param = param;
 
     // first, let's open the file descriptors for our I/O backend of choice
 
@@ -134,9 +137,6 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
         }
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
-
-    // next, let's configure the data structures
-    fakewire_dec_init(&fwl->decoder, receiver);
 
     // and now let's set up the input thread
     thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl, NOT_RESTARTABLE);

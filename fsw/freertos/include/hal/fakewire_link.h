@@ -10,10 +10,12 @@ typedef struct {
     chart_t               data_tx;
     struct virtio_console console;
     const char           *label;
-    fw_decoder_t          decoder;
     semaphore_t           tx_wake;
     semaphore_t           rx_wake;
     thread_t              rx_thread;
+
+    fw_link_cb_t recv;
+    void        *param;
 } fw_link_t;
 
 #endif /* FSW_FREERTOS_HAL_FAKEWIRE_LINK_H */

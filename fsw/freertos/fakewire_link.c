@@ -82,7 +82,7 @@ static void *fakewire_link_rx_loop(void *opaque) {
         }
 
         // decode the whole buffer at once
-        fakewire_dec_decode(&fwl->decoder, entry->data, entry->actual_length, entry->receive_timestamp);
+        fwl->recv(fwl->param, entry->data, entry->actual_length, entry->receive_timestamp);
 
         // consume the reply
         chart_reply_send(&fwl->data_rx, entry);
@@ -109,8 +109,8 @@ static void fakewire_link_notify_tx_thread(void *opaque) {
     (void) semaphore_give(&fwl->tx_wake);
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_t opts) {
-    assert(fwl != NULL && receiver != NULL && opts.label != NULL && opts.path != NULL);
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, fw_link_cb_t recv, void *param) {
+    assert(fwl != NULL && recv != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // set up debug info real quick
@@ -123,7 +123,8 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     assert(opts.flags == FW_FLAG_VIRTIO);
 
     // configure the data structures
-    fakewire_dec_init(&fwl->decoder, receiver);
+    fwl->recv = recv;
+    fwl->param = param;
     semaphore_init(&fwl->rx_wake);
     semaphore_init(&fwl->tx_wake);
     chart_init(&fwl->data_rx, 1024, 16, fakewire_link_notify_rx_thread, fakewire_link_notify_device, fwl);

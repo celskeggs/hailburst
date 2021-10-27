@@ -11,10 +11,10 @@ typedef struct {
     int fd_out;
 
     const char *label;
+    thread_t    input_thread;
 
-    fw_decoder_t  decoder;
-
-    thread_t input_thread;
+    fw_link_cb_t recv;
+    void        *param;
 } fw_link_t;
 
 #endif /* FSW_LINUX_HAL_FAKEWIRE_LINK_H */
