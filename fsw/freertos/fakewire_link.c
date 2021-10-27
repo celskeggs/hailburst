@@ -83,6 +83,9 @@ static void *fakewire_link_rx_loop(void *opaque) {
 
         // decode the whole buffer at once
         fakewire_dec_decode(&fwl->decoder, entry->data, entry->actual_length, entry->receive_timestamp);
+
+        // consume the reply
+        chart_reply_send(&fwl->data_rx, entry);
     }
 }
 
