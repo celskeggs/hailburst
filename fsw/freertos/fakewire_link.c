@@ -122,6 +122,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
     // configure the data structures
     fakewire_dec_init(&fwl->decoder, receiver);
     semaphore_init(&fwl->rx_wake);
+    semaphore_init(&fwl->tx_wake);
     chart_init(&fwl->data_rx, 1024, 16, fakewire_link_notify_rx_thread, fakewire_link_notify_device, fwl);
     chart_init(&fwl->data_tx, 1024, 16, fakewire_link_notify_device, fakewire_link_notify_tx_thread, fwl);
 
@@ -130,6 +131,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_receiver_t *receiver, fw_link_options_
         debugf("Could not configure VIRTIO serial port.");
         chart_destroy(&fwl->data_tx);
         chart_destroy(&fwl->data_rx);
+        semaphore_destroy(&fwl->tx_wake);
         semaphore_destroy(&fwl->rx_wake);
         return -1;
     }

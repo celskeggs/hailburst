@@ -176,7 +176,11 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         assert(elem->id == ring_index);
         if (queue->direction == QUEUE_INPUT) {
             assert(elem->len > 0);
-            assert(elem->len <= chart_note_size(queue->chart) - offsetof(struct virtio_input_entry, data));
+            // if this trips, it might be because the device tried to write more data than there was actually room
+            assertf(elem->len <= chart_note_size(queue->chart) - offsetof(struct virtio_input_entry, data),
+                "elem->len=%u, note_size=%u, offset=%u, desc len=%u",
+                elem->len, chart_note_size(queue->chart), offsetof(struct virtio_input_entry, data),
+                queue->desc[ring_index].len);
 
             struct virtio_input_entry *request = chart_request_start(queue->chart);
             assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
@@ -265,7 +269,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
         return false;
     }
     // inconsistency if we hit this: we already checked this condition during discovery!
-    assert(device->mmio->queue_num_max == 0);
+    assert(device->mmio->queue_num_max != 0);
 
     queue->direction = direction;
     queue->queue_num = chart_note_count(chart);
@@ -317,7 +321,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
             .addr  = (uint64_t) (uintptr_t) data_ptr,
-            .len   = 0,
+            .len   = direction == QUEUE_INPUT ? chart_note_size(chart) - offsetof(struct virtio_input_entry, data) : 0,
             .flags = direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
             .next  = 0xFFFF /* invalid index */,
         };
