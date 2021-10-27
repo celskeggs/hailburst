@@ -96,43 +96,4 @@ struct virtq_used {
         /* Only if VIRTIO_F_EVENT_IDX: le16 avail_event; */
 };
 
-typedef void (*transact_cb)(struct virtio_console *con, void *param, size_t chain_bytes);
-
-struct virtq_desc_meta {
-        bool in_use;
-        transact_cb callback;
-        void *callback_param;
-};
-
-struct virtq {
-        mutex_t mutex;
-        size_t vq_index;
-        struct virtio_console *con;
-
-        size_t num;
-        uint16_t last_used_idx;
-        struct virtq_desc_meta *desc_meta;
-
-        struct virtq_desc *desc;
-        struct virtq_avail *avail;
-        struct virtq_used *used;
-};
-
-static inline int virtq_need_event(uint16_t event_idx, uint16_t new_idx, uint16_t old_idx)
-{
-         return (uint16_t)(new_idx - event_idx - 1) < (uint16_t)(new_idx - old_idx);
-}
-
-/* Get location of event indices (only with VIRTIO_F_EVENT_IDX) */
-static inline uint16_t *virtq_used_event(struct virtq *vq)
-{
-        /* For backwards compat, used event index is at *end* of avail ring. */
-        return &vq->avail->ring[vq->num];
-}
-
-static inline uint16_t *virtq_avail_event(struct virtq *vq)
-{
-        /* For backwards compat, avail event index is at *end* of used ring. */
-        return (uint16_t *)&vq->used->ring[vq->num];
-}
 #endif /* VIRTQUEUE_H */

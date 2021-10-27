@@ -96,7 +96,7 @@ def configure_freertos():
 
     RTOS_SRC = ["freertos/clock.c", "freertos/crash.c", "freertos/entrypoint.s", "freertos/fakewire_link.c",
                 "freertos/gic.c", "freertos/scrubber.c", "freertos/stubs.c", "freertos/timer.c", "freertos/thread.c",
-                "freertos/virtio.c", "freertos/watchdog.c", "freertos/port.c"]
+                "freertos/virtio.c", "freertos/virtio_console.c", "freertos/watchdog.c", "freertos/port.c"]
     EXTERNAL_SRC = [
         LIBGCC_LIBRARY_PATH,
         os.path.join(ZLIB_ROOT, "crc32.c"),

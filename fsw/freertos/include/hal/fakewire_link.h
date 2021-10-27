@@ -6,15 +6,14 @@
 #include <fsw/fakewire/codec.h>
 
 typedef struct {
-    mutex_t                     port_mutex;
-    SemaphoreHandle_t           port_acquired;
-    struct virtio_console_port *port;
-
-    const char *label;
-
-    fw_decoder_t  decoder;
-
-    thread_t input_thread;
+    chart_t               data_rx;
+    chart_t               data_tx;
+    struct virtio_console console;
+    const char           *label;
+    fw_decoder_t          decoder;
+    semaphore_t           tx_wake;
+    semaphore_t           rx_wake;
+    thread_t              rx_thread;
 } fw_link_t;
 
 #endif /* FSW_FREERTOS_HAL_FAKEWIRE_LINK_H */

@@ -49,11 +49,6 @@ static inline void chart_consistency_check(chart_t *chart) {
               && chart->next_reply < chart->note_count);
 }
 
-static inline void *chart_get_note(chart_t *chart, chart_index_t index) {
-    assert(index < chart->note_count);
-    return &chart->note_storage[chart->note_size * index];
-}
-
 static void *chart_any_start(chart_t *chart, chart_note_state_t expected_state, chart_index_t next) {
     chart_validate_state(expected_state);
 

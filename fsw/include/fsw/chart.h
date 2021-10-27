@@ -45,6 +45,30 @@ typedef struct {
 void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void (*notify_server)(void *), void (*notify_client)(void *), void *param);
 void chart_destroy(chart_t *chart);
 
+static inline chart_index_t chart_note_size(chart_t *chart) {
+    assert(chart != NULL);
+    return chart->note_size;
+}
+
+static inline chart_index_t chart_note_count(chart_t *chart) {
+    assert(chart != NULL);
+    return chart->note_count;
+}
+
+static inline void *chart_get_note(chart_t *chart, chart_index_t index) {
+    assert(chart != NULL && index < chart->note_count);
+    return &chart->note_storage[chart->note_size * index];
+}
+
+static inline chart_index_t chart_get_index(chart_t *chart, void *note) {
+    assert(chart != NULL && (void *) note >= (void *) chart->note_storage);
+    size_t offset = (uint8_t*) note - chart->note_storage;
+    assert(offset % chart->note_size == 0);
+    chart_index_t index = offset / chart->note_size;
+    assert(index < chart->note_count);
+    return index;
+}
+
 // requests are sent by the CLIENT
 
 // if any note is blank, return a pointer to its memory, otherwise NULL.

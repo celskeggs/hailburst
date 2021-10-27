@@ -7,6 +7,7 @@
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
 #include <rtos/virtqueue.h>
+#include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
@@ -15,40 +16,12 @@
 // #define DEBUG_VIRTQ
 
 enum {
-    VIRTIO_MMIO_ADDRESS_BASE   = 0x0A000000,
-    VIRTIO_MMIO_ADDRESS_STRIDE = 0x200,
-    VIRTIO_MMIO_IRQS_BASE      = IRQ_SPI_BASE + 16,
-    VIRTIO_MMIO_REGION_NUM     = 32,
-
-    VIRTIO_MMIO_FAKEWIRE_REGION = 31,
-
-    VIRTIO_MMIO_FAKEWIRE_ADDRESS = VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * VIRTIO_MMIO_FAKEWIRE_REGION,
-    VIRTIO_MMIO_FAKEWIRE_IRQ     = VIRTIO_MMIO_IRQS_BASE + VIRTIO_MMIO_FAKEWIRE_REGION,
-
     VIRTIO_MAGIC_VALUE    = 0x74726976,
     VIRTIO_LEGACY_VERSION = 1,
     VIRTIO_VERSION        = 2,
 
-    VIRTIO_CONSOLE_ID     = 3,
-
-    VIRTIO_CONSOLE_VQ_RECEIVE  = 0,
-    VIRTIO_CONSOLE_VQ_TRANSMIT = 1,
-
-    VIRTIO_CONSOLE_VQ_CTRL_BASE = 2,
-
     VIRTIO_IRQ_BIT_USED_BUFFER = 0x1,
     VIRTIO_IRQ_BIT_CONF_CHANGE = 0x2,
-};
-
-enum {
-    VIRTIO_CONSOLE_DEVICE_READY  = 0,
-    VIRTIO_CONSOLE_DEVICE_ADD    = 1,
-    VIRTIO_CONSOLE_DEVICE_REMOVE = 2,
-    VIRTIO_CONSOLE_PORT_READY    = 3,
-    VIRTIO_CONSOLE_CONSOLE_PORT  = 4,
-    VIRTIO_CONSOLE_RESIZE        = 5,
-    VIRTIO_CONSOLE_PORT_OPEN     = 6,
-    VIRTIO_CONSOLE_PORT_NAME     = 7,
 };
 
 enum {
@@ -58,22 +31,6 @@ enum {
     VIRTIO_DEVSTAT_FEATURES_OK        = 8,
     VIRTIO_DEVSTAT_DEVICE_NEEDS_RESET = 64,
     VIRTIO_DEVSTAT_FAILED             = 128,
-};
-
-enum {
-    VIRTIO_CONSOLE_F_SIZE        = 1ull << 0,
-    VIRTIO_CONSOLE_F_MULTIPORT   = 1ull << 1, // **
-    VIRTIO_CONSOLE_F_EMERG_WRITE = 1ull << 2, // **
-
-    VIRTIO_F_RING_INDIRECT_DESC = 1ull << 28, // **
-    VIRTIO_F_RING_EVENT_IDX     = 1ull << 29, // **
-    VIRTIO_F_VERSION_1          = 1ull << 32, // **
-    VIRTIO_F_ACCESS_PLATFORM    = 1ull << 33,
-    VIRTIO_F_RING_PACKED        = 1ull << 34,
-    VIRTIO_F_IN_ORDER           = 1ull << 35,
-    VIRTIO_F_ORDER_PLATFORM     = 1ull << 36,
-    VIRTIO_F_SR_IOV             = 1ull << 37,
-    VIRTIO_F_NOTIFICATION_DATA  = 1ull << 38,
 };
 
 // all of these are little-endian
@@ -111,26 +68,6 @@ struct virtio_mmio_registers {
 };
 static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struct virtio_mmio_registers)");
 
-struct virtio_console_config {
-    uint16_t cols;
-    uint16_t rows;
-    uint32_t max_nr_ports;
-    uint32_t emerg_wr;
-};
-static_assert(sizeof(struct virtio_console_config) == 12, "wrong sizeof(struct virtio_console_config)");
-
-struct virtio_console_control {
-    uint32_t id;    /* Port number */
-    uint16_t event; /* The kind of control event */
-    uint16_t value; /* Extra information for the event */
-};
-static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
-
-enum {
-    // max handled length of received console names
-    VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
-};
-
 static void *zalloc_aligned(size_t size, size_t align) {
     assert(size > 0 && align > 0);
     uint8_t *out = malloc(size + align - 1);
@@ -146,407 +83,323 @@ static void *zalloc_aligned(size_t size, size_t align) {
     return out;
 }
 
-static void virtqueue_init(struct virtq *vq, size_t num) {
-    assert(vq != NULL);
-    assert(num > 0);
-
-    vq->num = num;
-    vq->desc_meta = zalloc_aligned(sizeof(struct virtq_desc_meta) * num, 1);
-    assert(vq->desc_meta != NULL);
-    vq->desc = zalloc_aligned(sizeof(struct virtq_desc) * num, 16);
-    assert(vq->desc != NULL);
-    vq->avail = zalloc_aligned(sizeof(struct virtq_avail) + sizeof(uint16_t) * num, 2);
-    assert(vq->avail != NULL);
-    vq->used = zalloc_aligned(sizeof(struct virtq_used) + sizeof(struct virtq_used_elem) * num, 4);
-    assert(vq->used != NULL);
-}
-
-static struct virtq *virtio_get_vq(struct virtio_console *con, size_t vqn) {
-    struct virtq *vq;
-    if (vqn >= con->num_queues) {
-        return NULL;
-    }
-    vq = &con->virtqueues[vqn];
-    mutex_lock(&vq->mutex);
-    if (vq->num != 0) {
-        // already initialized
-        mutex_unlock(&vq->mutex);
-        return vq;
-    }
-
-    con->mmio->queue_sel = vqn;
-    if (con->mmio->queue_ready != 0) {
-        printf("VIRTIO device already had virtqueue %d initialized; failing.\n", vqn);
-        mutex_unlock(&vq->mutex);
-        return NULL;
-    }
-    if (con->mmio->queue_num_max == 0) {
-        printf("VIRTIO device queue %d was unexpectedly nonexistent; failing.\n", vqn);
-        mutex_unlock(&vq->mutex);
-        return NULL;
-    }
-    size_t num = con->mmio->queue_num_max;
-    if (num > 4) {
-        num = 4;
-    }
-    vq->con = con;
-    vq->vq_index = vqn;
-    virtqueue_init(vq, num);
-    con->mmio->queue_num = vq->num;
-    con->mmio->queue_desc = (uint64_t) (uintptr_t) vq->desc;
-    con->mmio->queue_driver = (uint64_t) (uintptr_t) vq->avail;
-    con->mmio->queue_device = (uint64_t) (uintptr_t) vq->used;
-    asm volatile("dsb");
-    con->mmio->queue_ready = 1;
-
-#ifdef DEBUG_INIT
-    printf("VIRTIO queue %d now configured\n", vqn);
-#endif
-
-    mutex_unlock(&vq->mutex);
-    return vq;
-}
-
 // TODO: go back through and add all the missing conversions from LE32 to CPU
-bool virtio_transact(struct virtq *vq, struct vector_entry *ents, size_t ent_count, transact_cb cb, void *param) {
-    assert(vq != NULL);
-    assert(ents != NULL);
-    assert(ent_count > 0);
-    assert(cb != NULL);
 
-#ifdef DEBUG_VIRTQ
-    debugf("VIRTIO[Q=%u]: Beginning transaction.", vq->vq_index);
-#endif
+// monitors two things:
+static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, struct virtio_device_queue *queue) {
+    assert(queue != NULL);
 
-    mutex_lock(&vq->mutex);
-    assert(vq->num > 0);
-
-    // first: find a free descriptor table entry
-    size_t descriptors[ent_count];
-    size_t filled = 0;
-    for (size_t i = 0; i < vq->num; i++) {
-        if (!vq->desc_meta[i].in_use) {
-            descriptors[filled++] = i;
-            if (filled >= ent_count) {
-                break;
-            }
-        }
-    }
-    if (filled < ent_count) {
-        debugf("VIRTIO[Q=%u] No more descriptors to use in ring buffer.", vq->vq_index);
-        mutex_unlock(&vq->mutex);
-        return false;
-    }
-    assert(filled == ent_count);
-    for (size_t i = 0; i < ent_count; i++) {
-        size_t desc = descriptors[i];
-        assert(desc < vq->num);
-        assert(!vq->desc_meta[desc].in_use);
-        vq->desc_meta[desc].in_use = true;
-        vq->desc_meta[desc].callback = NULL;
-        vq->desc_meta[desc].callback_param = NULL;
-
-        vq->desc[desc].addr = (uint64_t) (uintptr_t) ents[i].data_buffer;
-        vq->desc[desc].len = (uint32_t) ents[i].length;
-        assert((size_t) vq->desc[desc].len == ents[i].length);
-        vq->desc[desc].flags = (i < ent_count - 1 ? VIRTQ_DESC_F_NEXT : 0) | (ents[i].is_receive ? VIRTQ_DESC_F_WRITE : 0);
-        vq->desc[desc].next = (i < ent_count - 1 ? descriptors[i+1] : 0xFFFF);
-
-#ifdef DEBUG_VIRTQ
-        debugf("VIRTIO[Q=%u]: Recruited descriptor %u; set in_use=true.", vq->vq_index, desc);
-#endif
-    }
-    vq->desc_meta[descriptors[0]].callback = cb;
-    vq->desc_meta[descriptors[0]].callback_param = param;
-    vq->avail->ring[vq->avail->idx % vq->num] = descriptors[0];
-#ifdef DEBUG_VIRTQ
-    debugf("VIRTIO[Q=%u]: Dispatching transaction via idx and queue_notify.", vq->vq_index);
-#endif
-    asm volatile("dsb");
-    vq->avail->idx++;
-    asm volatile("dsb");
-    if (!vq->avail->flags) {
-        vq->con->mmio->queue_notify = vq->vq_index;
-    }
-
-    mutex_unlock(&vq->mutex);
-#ifdef DEBUG_VIRTQ
-    debugf("VIRTIO[Q=%u]: Dispatched transaction.", vq->vq_index);
-#endif
-    return true;
-}
-
-struct virtio_transact_sync_status {
-    TaskHandle_t wake;
-    ssize_t      total_length;
-    uint64_t     timestamp;
-};
-
-static void virtio_transact_sync_done(struct virtio_console *con, void *opaque, size_t chain_bytes) {
-    (void) con;
-
-    struct virtio_transact_sync_status *status = (struct virtio_transact_sync_status *) opaque;
-    assert(status->total_length == -1);
-    status->total_length = chain_bytes;
-    assert(status->total_length >= 0);
-    status->timestamp = clock_timestamp();
-    xTaskNotifyGive(status->wake);
-}
-
-ssize_t virtio_transact_sync(struct virtq *vq, struct vector_entry *ents, size_t ent_count, uint64_t *timestamp_ns_out) {
-    struct virtio_transact_sync_status status = {
-        .wake         = xTaskGetCurrentTaskHandle(),
-        .total_length = -1,
-        .timestamp    = 0,
-    };
-    if (!virtio_transact(vq, ents, ent_count, virtio_transact_sync_done, &status)) {
-        return -1;
-    }
-
-    // wait until transaction completes
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    assert(status.total_length >= 0);
-    assert(status.timestamp > 0);
-    if (timestamp_ns_out) {
-        *timestamp_ns_out = status.timestamp;
-    }
-    return status.total_length;
-}
-
-static void virtio_monitor(struct virtq *vq) {
-    assert(vq != NULL);
-
-    mutex_lock(&vq->mutex);
     // only monitor if initialized
-    if (vq->num == 0) {
-        mutex_unlock(&vq->mutex);
+    if (queue->chart == NULL) {
         return;
     }
-    mutex_unlock(&vq->mutex);
 
-    // this section doesn't need to be locked (except descriptor manipulation, inside) because it only accesses
-    // vq->last_used_idx (only accessed by this function anyway) and vq->used (only accessed here and by the device)
-    assert(vq->desc != NULL && vq->used != NULL);
-    while (vq->last_used_idx != htole16(vq->used->idx)) {
-        struct virtq_used_elem *elem = &vq->used->ring[vq->last_used_idx%vq->num];
-#ifdef DEBUG_VIRTQ
-        debugf("VIRTIO[Q=%u]: Received transaction on root descriptor %u (len=%u, last_used_idx=%u, vq->used->idx=%u).", vq->vq_index, elem->id, elem->len, vq->last_used_idx, htole16(vq->used->idx));
-#endif
-        size_t chain_bytes = elem->len;
-        size_t desc = elem->id;
+    assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
 
-        transact_cb callback = NULL;
-        void *callback_param = NULL;
+    // FIRST: process chart updates
 
-        mutex_lock(&vq->mutex);
+    if (queue->direction == QUEUE_INPUT) {
+        // we are the chart client.
+
+        // check to see if any data we received finished getting processed by the chart server.
         for (;;) {
-            assert(desc < vq->num);
-#ifdef DEBUG_VIRTQ
-            debugf("VIRTIO[Q=%u]: Unpacking descriptor %u; setting in_use to false.", vq->vq_index, desc);
-#endif
-            assert(vq->desc_meta[desc].in_use == true);
-            vq->desc_meta[desc].in_use = false;
-            if (callback == NULL) {
-                callback = vq->desc_meta[desc].callback;
-                callback_param = vq->desc_meta[desc].callback_param;
-                assert(callback != NULL);
-                // zero out state for safety
-                vq->desc_meta[desc].callback = NULL;
-                vq->desc_meta[desc].callback_param = NULL;
-            } else {
-                assert(vq->desc_meta[desc].callback == NULL);
-                assert(vq->desc_meta[desc].callback_param == NULL);
-            }
-            // zero out state for safety
-            vq->desc[desc].addr = 0xFFFFFFFF;
-            vq->desc[desc].len = 0;
-            // continue if additional elements in chain
-            if (vq->desc[desc].flags & VIRTQ_DESC_F_NEXT) {
-                desc = vq->desc[desc].next;
-            } else {
+            struct virtio_input_entry *reply = chart_ack_start(queue->chart);
+            if (reply == NULL) {
                 break;
             }
-        }
-        mutex_unlock(&vq->mutex);
-
-        vq->last_used_idx++;
-        assert(callback != NULL);
+            uint32_t index = chart_get_index(queue->chart, reply);
+            uint32_t next_ring_index = queue->avail->idx % queue->queue_num;
+            // these two should work in lockstep!
+            assert(index == next_ring_index);
+            // these should still match from the previous cycle, so we don't need to update anything.
+            assert(queue->avail->ring[index] == index);
 
 #ifdef DEBUG_VIRTQ
-        debugf("VIRTIO[Q=%u]: Notifying callback.", vq->vq_index);
+            debugf("VIRTIO[Q=%u]: Dispatching INPUT transaction for index=%u.", queue_index, index);
 #endif
-        callback(vq->con, callback_param, chain_bytes);
+
+            // TODO: confirm that a 'dsb' is emitted before this
+            atomic_store(queue->avail->idx, queue->avail->idx + 1);
+            // TODO: confirm that a 'dsb' is emitted before this
+            if (!atomic_load(queue->avail->flags)) {
+                atomic_store_relaxed(device->mmio->queue_notify, queue_index);
+            }
+
+            chart_ack_send(queue->chart, reply);
+        }
+    } else if (queue->direction == QUEUE_OUTPUT) {
+        // we are the chart server.
+
+        // check to see if we have a new request.
+        struct virtio_output_entry *request = chart_reply_start(queue->chart);
+        if (request != NULL) {
+            uint32_t index = chart_get_index(queue->chart, request);
+            uint32_t next_ring_index = queue->avail->idx % queue->queue_num;
+            // these two should work in lockstep!
+            assert(index == next_ring_index);
+            // these should still match from the previous cycle, so we don't need to update anything.
+            assert(queue->avail->ring[index] == index);
+            // validate that length fits within constraints
+            assert(request->actual_length <=
+                        chart_note_size(queue->chart) - offsetof(struct virtio_output_entry, data));
+            // update descriptor to have the right length
+            queue->desc[index].len = request->actual_length;
+
+#ifdef DEBUG_VIRTQ
+            debugf("VIRTIO[Q=%u]: Dispatching OUTPUT transaction for index=%u.", queue_index, index);
+#endif
+
+            // TODO: confirm that a 'dsb' is emitted before this
+            atomic_store(queue->avail->idx, queue->avail->idx + 1);
+            // TODO: confirm that a 'dsb' is emitted before this
+            if (!atomic_load(queue->avail->flags)) {
+                atomic_store_relaxed(device->mmio->queue_notify, queue_index);
+            }
+
+            // TODO: come up with a way to have more than one OUTPUT request in flight at once
+        }
+    } else {
+        assert(false);
+    }
+
+    // SECOND: process 'used' ring buffer from device
+
+    // TODO: do I need to validate the rest of the data structures somewhere (i.e. that the descriptors haven't changed?)
+
+    while (queue->last_used_idx != htole16(queue->used->idx)) {
+        uint32_t ring_index = queue->last_used_idx % queue->queue_num;
+        struct virtq_used_elem *elem = &queue->used->ring[ring_index];
+#ifdef DEBUG_VIRTQ
+        debugf("VIRTIO[Q=%u]: Received transaction for index=%u (len=%u, last_used_idx=%u, vq->used->idx=%u).",
+               queue_index, ring_index, elem->len, queue->last_used_idx, htole16(queue->used->idx));
+#endif
+        assert(elem->id == ring_index);
+        if (queue->direction == QUEUE_INPUT) {
+            assert(elem->len > 0);
+            assert(elem->len <= chart_note_size(queue->chart) - offsetof(struct virtio_input_entry, data));
+
+            struct virtio_input_entry *request = chart_request_start(queue->chart);
+            assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
+            // great; this is already the place we populated with our data!
+            request->receive_timestamp = clock_timestamp();
+            request->actual_length = elem->len;
+
+            chart_request_send(queue->chart, request);
+        } else if (queue->direction == QUEUE_OUTPUT) {
+            assert(elem->len == 0);
+
+            struct virtio_output_entry *request = chart_reply_start(queue->chart);
+            assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
+            // great; we're done with this buffer now, so we can release it back to the server.
+            chart_reply_send(queue->chart, request);
+        } else {
+            assert(false);
+        }
+
+        queue->last_used_idx++;
     }
 }
 
-static void virtio_monitor_loop(void *opaque_con) {
-    assert(opaque_con != NULL);
-    struct virtio_console *con = (struct virtio_console *) opaque_con;
+static void *virtio_monitor_loop(void *opaque_device) {
+    assert(opaque_device != NULL);
+    struct virtio_device *device = (struct virtio_device *) opaque_device;
 
+#ifdef DEBUG_VIRTQ
+    debugf("VIRTIO[Q=*]: Entering monitor loop.");
+#endif
     for (;;) {
-        // wait for event
+        // update I/O
+        for (uint32_t i = 0; i < device->num_queues; i++) {
+            virtio_monitor(device, i, &device->queues[i]);
+        }
+
+        // wait for event, which might either be from the chart or from the IRQ callback
         BaseType_t value;
         value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         assert(value != 0);
 
         // process event
 #ifdef DEBUG_VIRTQ
-        debug0("VIRTIO[Q=*]: Processing received monitor IRQ in task.");
+        debugf("VIRTIO[Q=*]: Processing received monitor IRQ in task.");
 #endif
-        for (size_t i = 0; i < con->num_queues; i++) {
-            virtio_monitor(&con->virtqueues[i]);
-        }
     }
 }
 
-static void virtio_irq_callback(void *opaque_con) {
-    assert(opaque_con != NULL);
-    struct virtio_console *con = (struct virtio_console *) opaque_con;
+static void virtio_device_irq_callback(void *opaque_device) {
+    assert(opaque_device != NULL);
+    struct virtio_device *device = (struct virtio_device *) opaque_device;
+    assert(device->initialized == true && device->monitor_task != NULL && device->monitor_task->handle != NULL);
 
     BaseType_t was_woken = pdFALSE;
-    uint32_t status = con->mmio->interrupt_status;
+    uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
-        vTaskNotifyGiveFromISR(con->monitor_task, &was_woken);
+        // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
+        vTaskNotifyGiveFromISR(device->monitor_task->handle, &was_woken);
     }
-    con->mmio->interrupt_ack = status;
+    device->mmio->interrupt_ack = status;
     portYIELD_FROM_ISR(was_woken);
 }
 
-static void receive_ctrl_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
-    assert(opaque != NULL);
-    struct virtio_console_control *ctrl_recv = (struct virtio_console_control *) opaque;
+void virtio_device_chart_wakeup(struct virtio_device *device) {
+    assert(device != NULL && device->monitor_task != NULL && device->monitor_task->handle != NULL);
 
-#ifdef DEBUG_INIT
-    printf("received CTRL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)\n", ctrl_recv->id, ctrl_recv->event, ctrl_recv->value, chain_bytes);
-#endif
+    // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
+    BaseType_t result = xTaskNotifyGive(device->monitor_task->handle);
+    assert(result == pdPASS);
+}
 
-    if (ctrl_recv->event == VIRTIO_CONSOLE_DEVICE_ADD) {
-        assert(chain_bytes == sizeof(struct virtio_console_control));
+bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction,
+                               chart_t *chart) {
+    assert(device != NULL && chart != NULL);
+    assert(direction == QUEUE_INPUT || direction == QUEUE_OUTPUT);
+    assert(device->initialized == true && device->monitor_task == NULL);
+    assert(device->queues != NULL);
+    assert(queue_index < device->num_queues);
 
-        struct virtio_console_port *port = malloc(sizeof(struct virtio_console_port));
-        assert(port != NULL);
-        size_t base_queue = (ctrl_recv->id == 0 ? 0 : 2 + ctrl_recv->id * 2);
-        port->console   = con;
-        port->port_num  = ctrl_recv->id;
-        port->receiveq  = virtio_get_vq(con, base_queue + 0);
-        port->transmitq = virtio_get_vq(con, base_queue + 1);
+    struct virtio_device_queue *queue = &device->queues[queue_index];
+    assert(queue->chart == NULL);
 
-        con->callback(con->callback_param, port);
-    } else if (ctrl_recv->event == VIRTIO_CONSOLE_PORT_NAME) {
-        assert(chain_bytes > sizeof(struct virtio_console_control));
-        size_t n = chain_bytes - sizeof(struct virtio_console_control);
-        if (n > VIRTIO_CONSOLE_CTRL_RECV_MARGIN) {
-            n = VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
+    device->mmio->queue_sel = queue_index;
+    if (device->mmio->queue_ready != 0) {
+        printf("VIRTIO device apparently already had virtqueue %d initialized; failing.\n", queue_index);
+        return false;
+    }
+    // inconsistency if we hit this: we already checked this condition during discovery!
+    assert(device->mmio->queue_num_max == 0);
+
+    queue->direction = direction;
+    queue->queue_num = chart_note_count(chart);
+    assert(queue->queue_num > 0);
+
+    if (queue->queue_num > device->mmio->queue_num_max) {
+        printf("VIRTIO device supports up to %u entries in a queue buffer, but sticky-chart contained %u.\n",
+               device->mmio->queue_num_max, queue->queue_num);
+        return false;
+    }
+
+    device->mmio->queue_num = queue->queue_num;
+
+    queue->desc = zalloc_aligned(sizeof(struct virtq_desc) * queue->queue_num, 16);
+    assert(queue->desc != NULL);
+    queue->avail = zalloc_aligned(sizeof(struct virtq_avail) + sizeof(uint16_t) * queue->queue_num, 2);
+    assert(queue->avail != NULL);
+    queue->used = zalloc_aligned(sizeof(struct virtq_used) + sizeof(struct virtq_used_elem) * queue->queue_num, 4);
+    assert(queue->used != NULL);
+
+    device->mmio->queue_desc   = (uint64_t) (uintptr_t) queue->desc;
+    device->mmio->queue_driver = (uint64_t) (uintptr_t) queue->avail;
+    device->mmio->queue_device = (uint64_t) (uintptr_t) queue->used;
+
+    // TODO: ensure this actually emits a DSB *before* the store
+    atomic_store(device->mmio->queue_ready, 1);
+
+    if (direction == QUEUE_INPUT) {
+        // make sure chart is in expected blank state
+        assert(chart_request_start(chart) == chart_get_note(chart, 0));
+        assert(chart_reply_start(chart) == NULL);
+        assert(chart_ack_start(chart) == NULL);
+    }
+
+    // configure descriptors to refer to chart memory directly
+    for (uint32_t i = 0; i < queue->queue_num; i++) {
+        uint8_t *data_ptr;
+        if (direction == QUEUE_INPUT) {
+            struct virtio_input_entry *entry = chart_get_note(chart, i);
+            data_ptr = &entry->data[0];
+            assert(chart_note_size(chart) > sizeof(*entry));
+        } else if (direction == QUEUE_OUTPUT) {
+            struct virtio_output_entry *entry = chart_get_note(chart, i);
+            data_ptr = &entry->data[0];
+            assert(chart_note_size(chart) > sizeof(*entry));
+        } else {
+            assert(false);
         }
-
-        char name[VIRTIO_CONSOLE_CTRL_RECV_MARGIN + 1];
-        memcpy(name, ctrl_recv + 1, n);
-        name[n] = '\0';
-
-        printf("VIRTIO device name: '%s' (%u)\n", name, n);
-    } else if (ctrl_recv->event == VIRTIO_CONSOLE_PORT_OPEN) {
-        assert(chain_bytes == sizeof(struct virtio_console_control));
-        assert(ctrl_recv->value == 1);
-    } else {
-        printf("UNHANDLED event: ctrl event %u\n", ctrl_recv->event);
-    }
-
-    memset(ctrl_recv, 0, sizeof(struct virtio_console_control));
-
-    struct vector_entry ents_recv = {
-        .data_buffer = ctrl_recv,
-        .length = sizeof(struct virtio_console_control),
-        .is_receive = true,
-    };
-
-    struct virtq *ctrl_rx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE);
-    bool ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
-    assert(ok);
-}
-
-static void transmit_port_ready_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
-    assert(opaque != NULL);
-    free(opaque);
-    (void) con;
-
-#ifdef DEBUG_INIT
-    printf("completed transmit of PORT_READY message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
-#endif
-    assert(chain_bytes == 0);
-}
-
-void virtio_serial_ready(struct virtio_console_port *port) {
-    assert(port != NULL);
-
-    struct virtq *ctrl_tx_q = virtio_get_vq(port->console, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT);
-
-    for (int event = 0; event < 2; event++) {
-        struct virtio_console_control *ctrl = malloc(sizeof(struct virtio_console_control));
-        assert(ctrl != NULL);
-        ctrl->id = port->port_num;
-        ctrl->event = (event == 0) ? VIRTIO_CONSOLE_PORT_READY : VIRTIO_CONSOLE_PORT_OPEN;
-        ctrl->value = 1;
-
-        struct vector_entry ents = {
-            .data_buffer = ctrl,
-            .length = sizeof(struct virtio_console_control),
-            .is_receive = false,
+        queue->desc[i] = (struct virtq_desc) {
+            /* address (guest-physical) */
+            .addr  = (uint64_t) (uintptr_t) data_ptr,
+            .len   = 0,
+            .flags = direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
+            .next  = 0xFFFF /* invalid index */,
         };
-        bool ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_port_ready_cb, ctrl);
-        assert(ok);
+        // populate all of the avail ring entries to their corresponding descriptors.
+        // we won't need to change these again.
+        queue->avail->ring[i] = i;
     }
-}
+    if (direction == QUEUE_INPUT) {
+        assert(queue->avail->idx == 0);
+        // TODO: confirm that a 'dsb' is emitted before this
+        atomic_store(queue->avail->idx, queue->queue_num);
+        // TODO: confirm that a 'dsb' is emitted before this
+        if (!atomic_load(queue->avail->flags)) {
+            atomic_store_relaxed(device->mmio->queue_notify, queue_index);
+        }
+    }
 
-static void transmit_ready_cb(struct virtio_console *con, void *opaque, size_t chain_bytes) {
-    assert(opaque != NULL);
-    free(opaque);
-    (void) con;
+    // set chart ONLY if we succeed, because it's what marks the queue as being valid
+    queue->chart = chart;
 
 #ifdef DEBUG_INIT
-    printf("completed transmit of ready message on CONSOLE device: chain_bytes=%u\n", chain_bytes);
+    printf("VIRTIO queue %d now configured\n", queue_index);
 #endif
-    assert(chain_bytes == 0);
+
+    return true;
 }
 
-void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_addr, uint32_t irq) {
-    struct virtio_mmio_registers *mmio = (struct virtio_mmio_registers *) mem_addr;
-    struct virtio_console *con = malloc(sizeof(struct virtio_console));
-    assert(con != NULL);
+static void virtio_device_teardown_queue(struct virtio_device *device, uint32_t queue_index) {
+    assert(device != NULL);
+    assert(device->initialized == true && device->monitor_task == NULL);
+    assert(device->queues != NULL);
+    assert(queue_index < device->num_queues);
 
-    con->mmio = mmio;
-    con->config = (struct virtio_console_config *) (mmio + 1);
-    con->irq = irq;
-    con->callback = callback;
-    con->callback_param = param;
+    struct virtio_device_queue *queue = &device->queues[queue_index];
+    if (queue->chart != NULL) {
+        queue->chart = NULL;
+        assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
+        free(queue->desc);
+        free(queue->avail);
+        free(queue->used);
+    } else {
+        assert(queue->desc == NULL && queue->avail == NULL && queue->used == NULL);
+    }
+    memset(queue, 0, sizeof(*queue));
+}
+
+// true on success, false on failure
+bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32_t irq, uint32_t device_id,
+                        virtio_feature_select_cb feature_select) {
+    assert(device != NULL && device->initialized == false);
+    struct virtio_mmio_registers *mmio = (struct virtio_mmio_registers *) mem_addr;
+
+    device->mmio = mmio;
+    device->config_space = mmio + 1;
+    device->irq = irq;
 
 #ifdef DEBUG_INIT
     printf("VIRTIO device: addr=%x, irq=%u\n", mem_addr, irq);
 #endif
 
     if (le32toh(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
-        printf("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; not initializing.\n",
+        printf("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; failing.\n",
                le32toh(mmio->magic_value), VIRTIO_MAGIC_VALUE);
-        return;
+        return false;
     }
 
     if (le32toh(mmio->version) == VIRTIO_LEGACY_VERSION) {
-        printf("VIRTIO device configured as legacy-only; cannot initialize.\n"
+        printf("VIRTIO device configured as legacy-only; cannot initialize; failing.\n"
                "Set -global virtio-mmio.force-legacy=false to fix this.\n");
-        return;
+        return false;
     } else if (le32toh(mmio->version) != VIRTIO_VERSION) {
-        printf("VIRTIO device version not recognized: found %u instead of %u\n",
+        printf("VIRTIO device version not recognized: found %u instead of %u; failing.\n",
                le32toh(mmio->version), VIRTIO_VERSION);
-        return;
+        return false;
     }
 
     // make sure this is a serial port
-    if (le32toh(mmio->device_id) != VIRTIO_CONSOLE_ID) {
+    if (le32toh(mmio->device_id) != device_id) {
 #ifdef DEBUG_INIT
-        printf("VIRTIO device ID=%u instead of CONSOLE (%u)\n",
-               le32toh(mmio->device_id), VIRTIO_CONSOLE_ID);
+        printf("VIRTIO device ID=%u instead of ID=%u; failing.\n", le32toh(mmio->device_id), device_id);
 #endif
-        return;
+        return false;
     }
 
     // reset the device
@@ -563,102 +416,92 @@ void virtio_init_console(virtio_port_cb callback, void *param, uintptr_t mem_add
     features |= ((uint64_t) htole32(mmio->device_features)) << 32;
 
     // select feature bits
-    if (!(features & VIRTIO_F_VERSION_1)) {
-        printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x).\n"
-               "Legacy devices are not supported.\n", features, VIRTIO_F_VERSION_1);
+    if (!feature_select(&features)) {
         mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return;
-    }
-    if (!(features & VIRTIO_CONSOLE_F_MULTIPORT)) {
-        printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x).\n"
-               "This configuration is not yet supported.\n", features, VIRTIO_CONSOLE_F_MULTIPORT);
-        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return;
+        return false;
     }
 
     // write selected bits back
-    uint64_t selected_features = VIRTIO_F_VERSION_1 | VIRTIO_CONSOLE_F_MULTIPORT;
     mmio->driver_features_sel = htole32(0);
-    mmio->driver_features = htole32((uint32_t) selected_features);
+    mmio->driver_features = htole32((uint32_t) features);
     mmio->driver_features_sel = htole32(1);
-    mmio->driver_features = htole32((uint32_t) (selected_features >> 32));
+    mmio->driver_features = htole32((uint32_t) (features >> 32));
 
     // validate features
     mmio->status |= htole32(VIRTIO_DEVSTAT_FEATURES_OK);
     if (!(le32toh(mmio->status) & VIRTIO_DEVSTAT_FEATURES_OK)) {
-        printf("VIRTIO device did not set FEATURES_OK: read back status=%08x.\n", mmio->status);
+        printf("VIRTIO device did not set FEATURES_OK: read back status=%08x; failing.\n", mmio->status);
         mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return;
+        return false;
+    }
+
+    // discover number of queues
+    for (uint32_t queue_i = 0; ; queue_i++) {
+        device->mmio->queue_sel = queue_i;
+        if (device->mmio->queue_ready != 0) {
+            printf("VIRTIO device already had virtqueue %d initialized; failing.\n", queue_i);
+            mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
+            return false;
+        }
+        if (device->mmio->queue_num_max == 0) {
+            device->num_queues = queue_i;
+            break;
+        }
+    }
+
+    if (device->num_queues == 0) {
+        printf("VIRTIO device discovered to have 0 queues; failing.\n");
+        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
+        return false;
     }
 
 #ifdef DEBUG_INIT
-    printf("Maximum number of ports supported by VIRTIO device: %d\n", con->config->max_nr_ports);
+    printf("VIRTIO device discovered to have %u queues.\n", device->num_queues);
 #endif
 
-    uint32_t virtqueues = (con->config->max_nr_ports + 1) * 2;
-    con->num_queues = virtqueues;
-    con->virtqueues = malloc(sizeof(struct virtq) * virtqueues);
-    assert(con->virtqueues != NULL);
+    device->queues = malloc(sizeof(struct virtio_device_queue) * device->num_queues);
+    assert(device->queues != NULL);
 
-    for (uint32_t vq = 0; vq < virtqueues; vq++) {
-        con->virtqueues[vq].num = 0;
-        mutex_init(&con->virtqueues[vq].mutex);
+    // mark everything as uninitialized
+    for (uint32_t vq = 0; vq < device->num_queues; vq++) {
+        device->queues[vq].chart = NULL;
     }
-
-    assert(con->monitor_task == NULL);
-    BaseType_t status;
-    status = xTaskCreate(virtio_monitor_loop, "virtio-monitor", 1000, con, PRIORITY_DRIVERS, &con->monitor_task);
-    if (status != pdPASS) {
-        printf("could not initialize virtio-monitor task; failed.\n");
-        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return;
-    }
-    assert(con->monitor_task != NULL);
-
-    enable_irq(irq, virtio_irq_callback, con);
 
     // enable driver
     mmio->status |= htole32(VIRTIO_DEVSTAT_DRIVER_OK);
 
-    // set up control queues
-    struct virtq *ctrl_rx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE);
-    struct virtq *ctrl_tx_q = virtio_get_vq(con, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT);
+    assert(device->initialized == false);
+    device->initialized = true;
 
-    // initialize receive request for control queue first, so that replies don't get dropped
-    for (int i = 0; i < 4; i++) {
-        struct virtio_console_control *ctrl_recv = zalloc_aligned(sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 1);
-        assert(ctrl_recv != NULL);
-        struct vector_entry ents_recv = {
-            .data_buffer = ctrl_recv,
-            .length = sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN,
-            .is_receive = true,
-        };
-
-        bool ok = virtio_transact(ctrl_rx_q, &ents_recv, 1, receive_ctrl_cb, ctrl_recv);
-        assert(ok);
-    }
-
-    // now request initialization
-    struct virtio_console_control *ctrl = malloc(sizeof(struct virtio_console_control));
-    assert(ctrl != NULL);
-    ctrl->id = 0xFFFFFFFF;
-    ctrl->event = VIRTIO_CONSOLE_DEVICE_READY;
-    ctrl->value = 1;
-
-    struct vector_entry ents = {
-        .data_buffer = ctrl,
-        .length = sizeof(struct virtio_console_control),
-        .is_receive = false,
-    };
-    bool ok = virtio_transact(ctrl_tx_q, &ents, 1, transmit_ready_cb, ctrl);
-    assert(ok);
+    return true;
 }
 
-static bool virtio_initialized = false;
+void virtio_device_start(struct virtio_device *device) {
+    assert(device != NULL && device->initialized);
+    assert(device->monitor_task == NULL);
+    thread_create(&device->monitor_task, "virtio-monitor", PRIORITY_DRIVERS, virtio_monitor_loop, device,
+                  NOT_RESTARTABLE);
+    assert(device->monitor_task != NULL);
+    enable_irq(device->irq, virtio_device_irq_callback, device);
+}
 
-void virtio_init(virtio_port_cb callback, void *param) {
-    assert(!virtio_initialized);
-    virtio_initialized = true;
+void *virtio_device_config_space(struct virtio_device *device) {
+    assert(device != NULL && device->initialized && device->config_space != NULL);
+    return device->config_space;
+}
 
-    virtio_init_console(callback, param, VIRTIO_MMIO_FAKEWIRE_ADDRESS, VIRTIO_MMIO_FAKEWIRE_IRQ);
+void virtio_device_fail(struct virtio_device *device) {
+    // currently, this can only be called before virtio_device_start is called
+    assert(device != NULL && device->initialized);
+    assert(device->monitor_task == NULL);
+    device->mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
+    // wait until after we indicate that we've failed before we free any memory, just in case some of it was referenced
+    // by buffers provided to the device.
+    assert(device->queues != NULL);
+    for (uint32_t i = 0; i < device->num_queues; i++) {
+        virtio_device_teardown_queue(device, i);
+    }
+    free(device->queues);
+    // clear everything
+    memset(device, 0, sizeof(*device));
 }

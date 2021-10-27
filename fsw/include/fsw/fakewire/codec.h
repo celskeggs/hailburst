@@ -66,7 +66,7 @@ typedef struct {
 } fw_encoder_t;
 
 void fakewire_enc_init(fw_encoder_t *fwe, fw_output_cb_t output_cb, void *output_param);
-// no destroy function provided because it isn't needed; you can simply stop using the encoder.
+// TODO: add destroy function, because it is now necessary
 
 void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
 void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
