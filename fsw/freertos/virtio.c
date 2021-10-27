@@ -118,9 +118,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
             debugf("VIRTIO[Q=%u]: Dispatching INPUT transaction for index=%u.", queue_index, index);
 #endif
 
-            // TODO: confirm that a 'dsb' is emitted before this
             atomic_store(queue->avail->idx, queue->avail->idx + 1);
-            // TODO: confirm that a 'dsb' is emitted before this
             if (!atomic_load(queue->avail->flags)) {
                 atomic_store_relaxed(device->mmio->queue_notify, queue_index);
             }
@@ -149,9 +147,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
             debugf("VIRTIO[Q=%u]: Dispatching OUTPUT transaction for index=%u.", queue_index, index);
 #endif
 
-            // TODO: confirm that a 'dsb' is emitted before this
             atomic_store(queue->avail->idx, queue->avail->idx + 1);
-            // TODO: confirm that a 'dsb' is emitted before this
             if (!atomic_load(queue->avail->flags)) {
                 atomic_store_relaxed(device->mmio->queue_notify, queue_index);
             }
@@ -294,7 +290,6 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     device->mmio->queue_driver = (uint64_t) (uintptr_t) queue->avail;
     device->mmio->queue_device = (uint64_t) (uintptr_t) queue->used;
 
-    // TODO: ensure this actually emits a DSB *before* the store
     atomic_store(device->mmio->queue_ready, 1);
 
     if (direction == QUEUE_INPUT) {
@@ -331,9 +326,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     }
     if (direction == QUEUE_INPUT) {
         assert(queue->avail->idx == 0);
-        // TODO: confirm that a 'dsb' is emitted before this
         atomic_store(queue->avail->idx, queue->queue_num);
-        // TODO: confirm that a 'dsb' is emitted before this
         if (!atomic_load(queue->avail->flags)) {
             atomic_store_relaxed(device->mmio->queue_notify, queue_index);
         }
