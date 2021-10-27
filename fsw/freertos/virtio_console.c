@@ -82,13 +82,13 @@ static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct v
 static bool virtio_console_feature_select(uint64_t *features) {
     // check feature bits
     if (!(*features & VIRTIO_F_VERSION_1)) {
-        printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x).\n"
-               "Legacy devices are not supported.\n", *features, VIRTIO_F_VERSION_1);
+        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x). "
+               "Legacy devices are not supported.", *features, VIRTIO_F_VERSION_1);
         return false;
     }
     if (!(*features & VIRTIO_CONSOLE_F_MULTIPORT)) {
-        printf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x).\n"
-               "This configuration is not yet supported.\n", *features, VIRTIO_CONSOLE_F_MULTIPORT);
+        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x). "
+               "This configuration is not yet supported.", *features, VIRTIO_CONSOLE_F_MULTIPORT);
         return false;
     }
 
@@ -145,7 +145,7 @@ static void *virtio_console_control_loop(void *opaque) {
         struct virtio_output_entry *tx_ack_entry = chart_ack_start(&console->control_tx);
         if (tx_ack_entry != NULL) {
 #ifdef DEBUG_INIT
-            printf("Completed transmit of VIRTIO CONSOLE control message.\n");
+            debugf("Completed transmit of VIRTIO CONSOLE control message.");
 #endif
             chart_ack_send(&console->control_tx, tx_ack_entry);
         }
@@ -156,7 +156,7 @@ static void *virtio_console_control_loop(void *opaque) {
             struct virtio_console_control *recv = (struct virtio_console_control *) rx_entry->data;
 
 #ifdef DEBUG_INIT
-            printf("Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)\n",
+            debugf("Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
                    recv->id, recv->event, recv->value, rx_entry->actual_length);
 #endif
 
@@ -164,12 +164,12 @@ static void *virtio_console_control_loop(void *opaque) {
                 assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
 
                 if (recv->id != VIRTIO_FAKEWIRE_PORT_INDEX) {
-                    printf("WARNING: Did not expect to find serial port %u attached to anything.\n", recv->id);
+                    debugf("WARNING: Did not expect to find serial port %u attached to anything.", recv->id);
                 } else if (console->confirmed_port_present) {
-                    printf("WARNING: Did not expect to receive duplicate message about fakewire port %u.\n", recv->id);
+                    debugf("WARNING: Did not expect to receive duplicate message about fakewire port %u.", recv->id);
                 } else {
 #ifdef DEBUG_INIT
-                    printf("Discovered serial port %u as expected for fakewire connection.\n", recv->id);
+                    debugf("Discovered serial port %u as expected for fakewire connection.", recv->id);
 #endif
                     console->confirmed_port_present = true;
 
@@ -185,7 +185,7 @@ static void *virtio_console_control_loop(void *opaque) {
                 assert(recv->value == 1);
                 // nothing to do
             } else {
-                printf("UNHANDLED event: ctrl event %u\n", recv->event);
+                debugf("Unhandled console control event: %u.", recv->event);
             }
 
             chart_reply_send(&console->control_rx, rx_entry);
@@ -222,7 +222,7 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
             (struct virtio_console_config *) virtio_device_config_space(&console->device);
 
 #ifdef DEBUG_INIT
-    printf("Maximum number of ports supported by VIRTIO device: %d\n", config->max_nr_ports);
+    debugf("Maximum number of ports supported by VIRTIO device: %d", config->max_nr_ports);
 #endif
 
     // TODO: should I really be treating 'num_queues' as public?
