@@ -69,10 +69,8 @@ void *virtio_device_config_space(struct virtio_device *device);
 // true on success, false on failure
 bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction, chart_t *chart);
 void virtio_device_start(struct virtio_device *device);
-void virtio_device_chart_wakeup(struct virtio_device *device);
 void virtio_device_fail(struct virtio_device *device);
 
 bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx);
-void virtio_console_chart_wakeup(struct virtio_console *console);
 
 #endif /* FSW_FREERTOS_RTOS_VIRTIO_H */

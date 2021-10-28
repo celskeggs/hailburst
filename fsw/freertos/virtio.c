@@ -238,7 +238,8 @@ static void virtio_device_irq_callback(void *opaque_device) {
     portYIELD_FROM_ISR(was_woken);
 }
 
-void virtio_device_chart_wakeup(struct virtio_device *device) {
+static void virtio_device_chart_wakeup(void *opaque) {
+    struct virtio_device *device = (struct virtio_device *) opaque;
     assert(device != NULL && device->monitor_task != NULL && device->monitor_task->handle != NULL);
 
     // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
@@ -295,6 +296,12 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
         assert(chart_request_start(chart) == chart_get_note(chart, 0));
         assert(chart_reply_start(chart) == NULL);
         assert(chart_ack_start(chart) == NULL);
+
+        chart_attach_client(chart, virtio_device_chart_wakeup, device);
+    } else if (direction == QUEUE_OUTPUT) {
+        chart_attach_server(chart, virtio_device_chart_wakeup, device);
+    } else {
+        assert(false);
     }
 
     // configure descriptors to refer to chart memory directly

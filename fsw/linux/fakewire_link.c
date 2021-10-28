@@ -80,7 +80,8 @@ static void *fakewire_link_tx_loop(void *opaque) {
     }
 }
 
-void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
+static void fakewire_link_notify_rx_chart(void *opaque) {
+    fw_link_t *fwl = (fw_link_t *) opaque;
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
@@ -88,7 +89,8 @@ void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
     (void) semaphore_give(&fwl->receive_wake);
 }
 
-void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
+static void fakewire_link_notify_tx_chart(void *opaque) {
+    fw_link_t *fwl = (fw_link_t *) opaque;
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
@@ -176,6 +178,9 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
     semaphore_init(&fwl->transmit_wake);
     fwl->rx_chart = data_rx;
     fwl->tx_chart = data_tx;
+
+    chart_attach_client(data_rx, fakewire_link_notify_rx_chart, fwl);
+    chart_attach_server(data_tx, fakewire_link_notify_tx_chart, fwl);
 
     // and now let's set up the input thread
     thread_create(&fwl->receive_thread,  "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);

@@ -27,8 +27,9 @@ typedef struct {
     critical_t          critical_section;
 
     void (*notify_server)(void *);
+    void *notify_server_param;
     void (*notify_client)(void *);
-    void *notify_param;
+    void *notify_client_param;
 
     size_t              note_size;
     chart_index_t       note_count;
@@ -42,7 +43,9 @@ typedef struct {
 
 // initializes a chart. notify_server and notify_client should be fast and non-blocking procedures that let the
 // appropriate party to the chart know to check it again.
-void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void (*notify_server)(void *), void (*notify_client)(void *), void *param);
+void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count);
+void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param);
+void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *param);
 void chart_destroy(chart_t *chart);
 
 static inline chart_index_t chart_note_size(chart_t *chart) {

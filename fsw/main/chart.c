@@ -4,15 +4,24 @@
 #include <string.h>
 
 #include <fsw/chart.h>
+#include <fsw/debug.h>
 #include <hal/thread.h>
 
-void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void (*notify_server)(void *), void (*notify_client)(void *), void *param) {
-    assert(chart != NULL && note_size > 0 && note_count > 0 && notify_server != NULL && notify_client != NULL);
+static void panic_unpopulated(void *param) {
+    assert(param == NULL);
+
+    debugf("chart %p never had a proper notify function registered; crashing.");
+    abort();
+}
+
+void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count) {
+    assert(chart != NULL && note_size > 0 && note_count > 0);
     critical_init(&chart->critical_section);
 
-    chart->notify_server = notify_server;
-    chart->notify_client = notify_client;
-    chart->notify_param = param;
+    chart->notify_server = panic_unpopulated;
+    chart->notify_server_param = NULL;
+    chart->notify_client = panic_unpopulated;
+    chart->notify_client_param = NULL;
 
     chart->note_size = note_size;
     chart->note_count = note_count;
@@ -26,6 +35,20 @@ void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count, void
     }
 
     chart->next_blank = chart->next_reply = chart->next_request = 0;
+}
+
+void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param) {
+    assert(chart != NULL && notify_server != NULL);
+    assert(chart->notify_server == panic_unpopulated && chart->notify_server_param == NULL);
+    chart->notify_server = notify_server;
+    chart->notify_server_param = param;
+}
+
+void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *param) {
+    assert(chart != NULL && notify_client != NULL);
+    assert(chart->notify_client == panic_unpopulated && chart->notify_client_param == NULL);
+    chart->notify_client = notify_client;
+    chart->notify_client_param = param;
 }
 
 void chart_destroy(chart_t *chart) {
@@ -94,7 +117,8 @@ void *chart_request_start(chart_t *chart) {
 void chart_request_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_BLANK, CHART_NOTE_REQUEST, &chart->next_blank);
 
-    chart->notify_server(chart->notify_param);
+    assert(chart->notify_server != NULL);
+    chart->notify_server(chart->notify_server_param);
 }
 
 // if any unhandled requests are available, return a pointer to the memory of one of them, otherwise NULL.
@@ -106,7 +130,8 @@ void *chart_reply_start(chart_t *chart) {
 void chart_reply_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_REQUEST, CHART_NOTE_REPLY, &chart->next_request);
 
-    chart->notify_client(chart->notify_param);
+    assert(chart->notify_client != NULL);
+    chart->notify_client(chart->notify_client_param);
 }
 
 // acknowledgements are sent by the CLIENT

@@ -34,11 +34,9 @@ struct input_queue_ent {
 };
 
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
-    fakewire_exc_notify_chart((fw_exchange_t *) opaque);
-}
-
-void fakewire_exc_notify_chart(fw_exchange_t *fwe) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
+
     // we only need to send if the queue is empty... this is because ANY message qualifies as a wakeup in addition to
     // its primary meaning! so any wakeup we add would be redundant.
     if (queue_is_empty(&fwe->input_queue)) {
@@ -51,32 +49,20 @@ void fakewire_exc_notify_chart(fw_exchange_t *fwe) {
     }
 }
 
-static void fakewire_exc_chart_notify_link_rx(void *opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL);
-
-    fakewire_link_notify_rx_chart(&fwe->io_port);
-}
-
-static void fakewire_exc_chart_notify_link_tx(void *opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL);
-
-    fakewire_link_notify_tx_chart(&fwe->io_port);
-}
-
 int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart) {
     assert(fwe != NULL && read_chart != NULL);
     memset(fwe, 0, sizeof(fw_exchange_t));
 
     fwe->link_opts = link_opts;
+
     fwe->read_chart = read_chart;
+    chart_attach_client(fwe->read_chart, fakewire_exc_chart_notify_exchange, fwe);
 
     queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
-    chart_init(&fwe->transmit_chart, 1024, 16,
-               fakewire_exc_chart_notify_link_tx, fakewire_exc_chart_notify_exchange, fwe);
-    chart_init(&fwe->receive_chart, 1024, 16,
-               fakewire_exc_chart_notify_exchange, fakewire_exc_chart_notify_link_rx, fwe);
+    chart_init(&fwe->transmit_chart, 1024, 16);
+    chart_attach_client(&fwe->transmit_chart, fakewire_exc_chart_notify_exchange, fwe);
+    chart_init(&fwe->receive_chart, 1024, 16);
+    chart_attach_server(&fwe->receive_chart, fakewire_exc_chart_notify_exchange, fwe);
     semaphore_init(&fwe->write_ready_sem);
 
     fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);

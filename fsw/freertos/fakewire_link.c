@@ -7,16 +7,6 @@
 #include <fsw/debug.h>
 #include <fsw/fakewire/link.h>
 
-void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
-    assert(fwl != NULL);
-    virtio_console_chart_wakeup(&fwl->console);
-}
-
-void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
-    assert(fwl != NULL);
-    virtio_console_chart_wakeup(&fwl->console);
-}
-
 int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
     assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));

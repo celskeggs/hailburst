@@ -29,13 +29,6 @@ static void rmap_monitor_notify_read_task(void *opaque) {
     (void) semaphore_give(&mon->monitor_wake);
 }
 
-static void rmap_monitor_notify_exchange_chart(void *opaque) {
-    rmap_monitor_t *mon = (rmap_monitor_t *) opaque;
-    assert(mon != NULL);
-
-    fakewire_exc_notify_chart(&mon->exc);
-}
-
 int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length) {
     assert(max_read_length <= RMAP_MAX_DATA_LEN);
 
@@ -48,8 +41,8 @@ int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_
 
     mutex_init(&mon->pending_mutex);
     semaphore_init(&mon->monitor_wake);
-    chart_init(&mon->exc_read_chart, io_rx_pad_size(max_read_length), 4,
-               rmap_monitor_notify_read_task, rmap_monitor_notify_exchange_chart, mon);
+    chart_init(&mon->exc_read_chart, io_rx_pad_size(max_read_length), 4);
+    chart_attach_server(&mon->exc_read_chart, rmap_monitor_notify_read_task, mon);
 
     if (fakewire_exc_init(&mon->exc, link_options, &mon->exc_read_chart) < 0) {
         chart_destroy(&mon->exc_read_chart);

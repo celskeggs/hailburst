@@ -139,13 +139,6 @@ static void exchange_state_notify_reader(void *opaque) {
     (void) semaphore_give(&est->rc.wake);
 }
 
-static void exchange_state_notify_exchange(void *opaque) {
-    struct exchange_state *est = (struct exchange_state *) opaque;
-    assert(est != NULL);
-
-    fakewire_exc_notify_chart(&est->exc);
-}
-
 static void *exchange_controller(void *opaque) {
     struct exchange_config *ec = (struct exchange_config *) opaque;
 
@@ -157,8 +150,8 @@ static void *exchange_controller(void *opaque) {
     est->rc.chain_out = NULL;
     semaphore_init(&est->rc.wake);
 
-    chart_init(&est->rc.read_chart, io_rx_pad_size(4096), 4,
-               exchange_state_notify_reader, exchange_state_notify_exchange, est);
+    chart_init(&est->rc.read_chart, io_rx_pad_size(4096), 4);
+    chart_attach_server(&est->rc.read_chart, exchange_state_notify_reader, est);
 
     fw_link_options_t options = {
         .label = ec->name,

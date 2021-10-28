@@ -99,25 +99,12 @@ static bool virtio_console_feature_select(uint64_t *features) {
 
 static bool virtio_fakewire_attached = false;
 
-// for our end of the data charts only
-void virtio_console_chart_wakeup(struct virtio_console *console) {
-    assert(console->initialized);
-
-    virtio_device_chart_wakeup(&console->device);
-}
-
 static void virtio_console_wake_control(void *opaque) {
     struct virtio_console *console = (struct virtio_console *) opaque;
     assert(console != NULL && console->initialized);
     // we ignore the case where we fail to give the semaphore... that just means another wake request is already on the
     // queue, and therefore there's no need for us to enqueue another wakeup!
     (void) semaphore_give(&console->control_wake);
-}
-
-static void virtio_console_wake_device(void *opaque) {
-    struct virtio_console *console = (struct virtio_console *) opaque;
-    assert(console != NULL && console->initialized);
-    virtio_device_chart_wakeup(&console->device);
 }
 
 static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_t id, uint16_t event, uint16_t value) {
@@ -230,7 +217,8 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
 
     size_t rx_size = sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)
                    + VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
-    chart_init(&console->control_rx, rx_size, 4, virtio_console_wake_control, virtio_console_wake_device, console);
+    chart_init(&console->control_rx, rx_size, 4);
+    chart_attach_server(&console->control_rx, virtio_console_wake_control, console);
 
     if (!virtio_device_setup_queue(&console->device,
                 VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, &console->control_rx)) {
@@ -240,7 +228,8 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     }
 
     size_t tx_size = sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent);
-    chart_init(&console->control_tx, tx_size, 4, virtio_console_wake_device, virtio_console_wake_control, console);
+    chart_init(&console->control_tx, tx_size, 4);
+    chart_attach_client(&console->control_tx, virtio_console_wake_control, console);
 
     if (!virtio_device_setup_queue(&console->device,
                 VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, &console->control_tx)) {

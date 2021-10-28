@@ -26,7 +26,6 @@ typedef struct fw_exchange_st {
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
 int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart);
 
-void fakewire_exc_notify_chart(fw_exchange_t *fwe);
 void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len);
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */
