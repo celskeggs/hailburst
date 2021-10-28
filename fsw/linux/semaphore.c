@@ -15,7 +15,7 @@ void semaphore_init(semaphore_t *sema) {
     pthread_condattr_t attr;
     THREAD_CHECK(pthread_condattr_init(&attr));
     THREAD_CHECK(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));
-    THREAD_CHECK(pthread_cond_init(&sema->cond, NULL));
+    THREAD_CHECK(pthread_cond_init(&sema->cond, &attr));
     THREAD_CHECK(pthread_condattr_destroy(&attr));
 
     sema->is_available = false;
@@ -69,6 +69,7 @@ bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns) {
         int retcode = pthread_cond_timedwait(&sema->cond, &sema->mut, &deadline_ts);
         if (retcode == ETIMEDOUT) {
             mutex_unlock(&sema->mut);
+            assert(clock_timestamp_monotonic() >= deadline_ns);
             return false;
         } else if (retcode != 0 && retcode != EINTR) {
             fprintf(stderr, "thread error: %d in semaphore_take_timed\n", retcode);
