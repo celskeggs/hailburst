@@ -30,11 +30,10 @@ typedef struct fw_exchange_st {
     queue_t input_queue;
     chart_t transmit_chart;  // client: exchange_thread, server: link driver
     chart_t receive_chart;   // client: link driver, server: exchange_thread
+    chart_t read_chart;      // client: exchange_thread, server: read_cb_thread
 
-    queue_t     read_cb_queue;
+    semaphore_t read_wake;
     semaphore_t write_ready_sem;
-
-    uint8_t *recv_buffer; // allocated size: options.recv_max_size
 } fw_exchange_t;
 
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
