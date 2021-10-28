@@ -62,6 +62,7 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
             if (fwd->rx_entry == NULL) {
                 return (decoded->data_actual_len > 0);
             }
+            fwd->rx_offset = 0;
         }
         assert(fwd->rx_entry->actual_length <= chart_note_size(fwd->rx_chart) - offsetof(struct io_rx_ent, data));
         assert(fwd->rx_offset < fwd->rx_entry->actual_length);
