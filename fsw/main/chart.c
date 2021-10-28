@@ -120,5 +120,6 @@ void *chart_ack_start(chart_t *chart) {
 void chart_ack_send(chart_t *chart, void *note) {
     chart_any_send(chart, note, CHART_NOTE_REPLY, CHART_NOTE_BLANK, &chart->next_reply);
 
-    chart->notify_server(chart->notify_param);
+    // no notification is necessary; the client is the only next communicator that can do anything with it, but they
+    // were the one who called this function!
 }

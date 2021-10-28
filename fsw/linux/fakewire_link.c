@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <termios.h>
@@ -40,35 +41,52 @@ static void *fakewire_link_input_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
-    uint8_t read_buf[1024];
-
     while (true) {
+        struct io_rx_ent *entry = chart_ack_start(fwl->rx_chart);
+        if (entry != NULL) {
+            chart_ack_send(fwl->rx_chart, entry);
+            continue;
+        }
+        entry = chart_request_start(fwl->rx_chart);
+        if (entry == NULL) {
+            // wait for another entry to be available
+            semaphore_take(&fwl->input_wake);
+            continue;
+        }
         // read as many bytes as possible from the input port at once
-        ssize_t actual = read(fwl->fd_in, read_buf, sizeof(read_buf));
+        size_t max = chart_note_size(fwl->rx_chart) - offsetof(struct io_rx_ent, data);
+        ssize_t actual = read(fwl->fd_in, entry->data, max);
 
         if (actual <= 0) { // 0 means EOF, <0 means error
-            debug_printf("Read failed: %zd when maximum was %zu", actual, sizeof(read_buf));
+            debug_printf("Read failed: %zd when maximum was %zu", actual, max);
             return NULL;
         }
 #ifdef DEBUG
         debug_printf("Read %zd bytes from file descriptor.", actual);
 #endif
-        assert(actual > 0 && actual <= (ssize_t) sizeof(read_buf));
+        assert(actual > 0 && actual <= (ssize_t) max);
 
-        // decode as many bytes at once as possible
-        fwl->recv(fwl->param, read_buf, actual, clock_timestamp());
+        entry->receive_timestamp = clock_timestamp();
+        entry->actual_length = (uint32_t) actual;
+
+        chart_request_send(fwl->rx_chart, entry);
     }
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, fw_link_cb_t recv, void *param) {
-    assert(fwl != NULL && recv != NULL && opts.label != NULL && opts.path != NULL);
+void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
+    assert(fwl != NULL);
+
+    // we don't worry about wakeups getting dropped.
+    // that just means a previous wakeup is still pending, which is just as good!
+    (void) semaphore_give(&fwl->input_wake);
+}
+
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx) {
+    assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
     // set up debug info real quick
     fwl->label = opts.label;
-    // store callback
-    fwl->recv = recv;
-    fwl->param = param;
 
     // first, let's open the file descriptors for our I/O backend of choice
 
@@ -137,6 +155,10 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, fw_link_cb_t recv
         }
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
+
+    // prepare for input thread
+    semaphore_init(&fwl->input_wake);
+    fwl->rx_chart = data_rx;
 
     // and now let's set up the input thread
     thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl, NOT_RESTARTABLE);

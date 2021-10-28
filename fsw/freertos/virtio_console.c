@@ -121,7 +121,7 @@ static void virtio_console_wake_device(void *opaque) {
 }
 
 static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_t id, uint16_t event, uint16_t value) {
-    struct virtio_output_entry *entry = chart_request_start(&console->control_tx);
+    struct io_tx_ent *entry = chart_request_start(&console->control_tx);
     // should never run out of spaces; we only ever send three, and there are four slots!
     assert(entry != NULL);
     entry->actual_length = sizeof(struct virtio_console_control);
@@ -142,7 +142,7 @@ static void *virtio_console_control_loop(void *opaque) {
 
     for (;;) {
         // perform any required acknowledgements for the transmit queue
-        struct virtio_output_entry *tx_ack_entry = chart_ack_start(&console->control_tx);
+        struct io_tx_ent *tx_ack_entry = chart_ack_start(&console->control_tx);
         if (tx_ack_entry != NULL) {
 #ifdef DEBUG_INIT
             debugf("Completed transmit of VIRTIO CONSOLE control message.");
@@ -151,7 +151,7 @@ static void *virtio_console_control_loop(void *opaque) {
         }
 
         // receive any requests on the receive queue
-        struct virtio_input_entry *rx_entry = chart_reply_start(&console->control_rx);
+        struct io_rx_ent *rx_entry = chart_reply_start(&console->control_rx);
         if (rx_entry != NULL) {
             struct virtio_console_control *recv = (struct virtio_console_control *) rx_entry->data;
 
@@ -228,7 +228,7 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     // TODO: should I really be treating 'num_queues' as public?
     assert(console->device.num_queues == (config->max_nr_ports + 1) * 2);
 
-    size_t rx_size = sizeof(struct virtio_console_control) + sizeof(struct virtio_input_entry)
+    size_t rx_size = sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)
                    + VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
     chart_init(&console->control_rx, rx_size, 4, virtio_console_wake_control, virtio_console_wake_device, console);
 
@@ -239,7 +239,7 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
         return false;
     }
 
-    size_t tx_size = sizeof(struct virtio_console_control) + sizeof(struct virtio_output_entry);
+    size_t tx_size = sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent);
     chart_init(&console->control_tx, tx_size, 4, virtio_console_wake_device, virtio_console_wake_control, console);
 
     if (!virtio_device_setup_queue(&console->device,

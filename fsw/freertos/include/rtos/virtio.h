@@ -18,10 +18,10 @@ typedef enum {
 
 // If a queue is an INPUT queue (i.e. it reads from the device),
 //     then virtio is the chart CLIENT and the other end is the chart SERVER,
-//     and the elements of the chart are virtio_input_entry structures.
+//     and the elements of the chart are io_rx_ent structures.
 // If a queue is an OUTPUT queue (i.e. it writes to the device),
 //     then virtio is the chart SERVER and the other end is the chart CLIENT,
-//     and the elements of the chart are virtio_output_entry structures.
+//     and the elements of the chart are io_tx_ent structures.
 struct virtio_device_queue {
     chart_t           *chart;
     virtio_queue_dir_t direction;
@@ -32,17 +32,6 @@ struct virtio_device_queue {
     struct virtq_desc  *desc;
     struct virtq_avail *avail;
     struct virtq_used  *used;
-};
-
-struct virtio_input_entry {
-    uint64_t receive_timestamp;
-    uint32_t actual_length;
-    uint8_t  data[];
-};
-
-struct virtio_output_entry {
-    uint32_t actual_length;
-    uint8_t  data[];
 };
 
 struct virtio_device {

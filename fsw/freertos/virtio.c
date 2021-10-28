@@ -103,7 +103,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
 
         // check to see if any data we received finished getting processed by the chart server.
         for (;;) {
-            struct virtio_input_entry *reply = chart_ack_start(queue->chart);
+            struct io_rx_ent *reply = chart_ack_start(queue->chart);
             if (reply == NULL) {
                 break;
             }
@@ -129,7 +129,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         // we are the chart server.
 
         // check to see if we have a new request.
-        struct virtio_output_entry *request = chart_reply_start(queue->chart);
+        struct io_tx_ent *request = chart_reply_start(queue->chart);
         if (request != NULL) {
             uint32_t index = chart_get_index(queue->chart, request);
             uint32_t next_ring_index = queue->avail->idx % queue->queue_num;
@@ -138,8 +138,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
             // these should still match from the previous cycle, so we don't need to update anything.
             assert(queue->avail->ring[index] == index);
             // validate that length fits within constraints
-            assert(request->actual_length <=
-                        chart_note_size(queue->chart) - offsetof(struct virtio_output_entry, data));
+            assert(request->actual_length <= chart_note_size(queue->chart) - offsetof(struct io_tx_ent, data));
             // update descriptor to have the right length
             queue->desc[index].len = request->actual_length;
 
@@ -173,12 +172,12 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         if (queue->direction == QUEUE_INPUT) {
             assert(elem->len > 0);
             // if this trips, it might be because the device tried to write more data than there was actually room
-            assertf(elem->len <= chart_note_size(queue->chart) - offsetof(struct virtio_input_entry, data),
+            assertf(elem->len <= chart_note_size(queue->chart) - offsetof(struct io_rx_ent, data),
                 "elem->len=%u, note_size=%u, offset=%u, desc len=%u",
-                elem->len, chart_note_size(queue->chart), offsetof(struct virtio_input_entry, data),
+                elem->len, chart_note_size(queue->chart), offsetof(struct io_rx_ent, data),
                 queue->desc[ring_index].len);
 
-            struct virtio_input_entry *request = chart_request_start(queue->chart);
+            struct io_rx_ent *request = chart_request_start(queue->chart);
             assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
             // great; this is already the place we populated with our data!
             request->receive_timestamp = clock_timestamp();
@@ -188,7 +187,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         } else if (queue->direction == QUEUE_OUTPUT) {
             assert(elem->len == 0);
 
-            struct virtio_output_entry *request = chart_reply_start(queue->chart);
+            struct io_tx_ent *request = chart_reply_start(queue->chart);
             assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
             // great; we're done with this buffer now, so we can release it back to the server.
             chart_reply_send(queue->chart, request);
@@ -303,11 +302,11 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     for (uint32_t i = 0; i < queue->queue_num; i++) {
         uint8_t *data_ptr;
         if (direction == QUEUE_INPUT) {
-            struct virtio_input_entry *entry = chart_get_note(chart, i);
+            struct io_rx_ent *entry = chart_get_note(chart, i);
             data_ptr = &entry->data[0];
             assert(chart_note_size(chart) > sizeof(*entry));
         } else if (direction == QUEUE_OUTPUT) {
-            struct virtio_output_entry *entry = chart_get_note(chart, i);
+            struct io_tx_ent *entry = chart_get_note(chart, i);
             data_ptr = &entry->data[0];
             assert(chart_note_size(chart) > sizeof(*entry));
         } else {
@@ -316,7 +315,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
             .addr  = (uint64_t) (uintptr_t) data_ptr,
-            .len   = direction == QUEUE_INPUT ? chart_note_size(chart) - offsetof(struct virtio_input_entry, data) : 0,
+            .len   = direction == QUEUE_INPUT ? chart_note_size(chart) - offsetof(struct io_rx_ent, data) : 0,
             .flags = direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
             .next  = 0xFFFF /* invalid index */,
         };

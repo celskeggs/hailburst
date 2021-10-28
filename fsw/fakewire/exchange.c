@@ -14,9 +14,6 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 static void *fakewire_exc_read_cb_loop(void *fwe_opaque);
 static void *fakewire_exc_transmit_loop(void *fwe_opaque);
 
-static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count);
-static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t timestamp_ns);
-
 //#define DEBUG
 //#define APIDEBUG
 
@@ -25,23 +22,11 @@ static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t p
 
 struct input_queue_ent {
     enum {
-        INPUT_RECV_CTRL_CHAR,
-        INPUT_RECV_DATA_CHARS,
         INPUT_READ_CB_COMPLETE,
         INPUT_WRITE_PACKET,
         INPUT_WAKEUP,  // used by the transmit thread to make sure the transmit chart is rechecked
     } type;
     union {
-        struct {
-            fw_ctrl_t symbol;
-            uint32_t  param;
-            uint64_t  timestamp_ns;
-        } ctrl_char;
-        struct {
-            uint8_t *input_ptr;
-            size_t   input_len;
-            wakeup_t on_complete;
-        } data_chars;
         /* no parameters on read_cb_complete */
         struct {
             uint8_t *packet_in;
@@ -79,14 +64,7 @@ static void fakewire_exc_link_write(void *opaque, uint8_t *bytes_in, size_t byte
     fakewire_link_write(&fwe->io_port, bytes_in, bytes_count);
 }
 
-static void fakewire_exc_link_receive(void *opaque, uint8_t *data, size_t length, uint64_t receive_timestamp) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL && data != NULL && length > 0);
-
-    fakewire_dec_decode(&fwe->decoder, data, length, receive_timestamp);
-}
-
-static void fakewire_exc_transmit_chart_notify_server(void *opaque) {
+static void fakewire_exc_transmit_chart_notify_tx_task(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
@@ -95,7 +73,7 @@ static void fakewire_exc_transmit_chart_notify_server(void *opaque) {
     (void) semaphore_give(&fwe->transmit_wake);
 }
 
-static void fakewire_exc_transmit_chart_notify_client(void *opaque) {
+static void fakewire_exc_transmit_chart_notify_exchange(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
@@ -111,31 +89,35 @@ static void fakewire_exc_transmit_chart_notify_client(void *opaque) {
     }
 }
 
+static void fakewire_exc_transmit_chart_notify_link(void *opaque) {
+    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+    assert(fwe != NULL);
+
+    fakewire_link_notify_rx_chart(&fwe->io_port);
+}
+
 int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     memset(fwe, 0, sizeof(fw_exchange_t));
 
     queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
     chart_init(&fwe->transmit_chart, sizeof(struct transmit_chart_ent), 16,
-               fakewire_exc_transmit_chart_notify_server, fakewire_exc_transmit_chart_notify_client, fwe);
+               fakewire_exc_transmit_chart_notify_tx_task, fakewire_exc_transmit_chart_notify_exchange, fwe);
+    chart_init(&fwe->receive_chart, 1024, 16,
+               fakewire_exc_transmit_chart_notify_exchange, fakewire_exc_transmit_chart_notify_link, fwe);
     semaphore_init(&fwe->transmit_wake);
     queue_init(&fwe->read_cb_queue, sizeof(struct read_cb_queue_ent), 1);
     semaphore_init(&fwe->write_ready_sem);
 
     fwe->options = opts;
-    fwe->link_interface = (fw_receiver_t) {
-        .param = fwe,
-        .recv_data = fakewire_exc_on_recv_data,
-        .recv_ctrl = fakewire_exc_on_recv_ctrl,
-    };
 
     assert(opts.recv_max_size >= 1);
     fwe->recv_buffer = malloc(opts.recv_max_size);
     assert(fwe->recv_buffer != NULL);
 
     fakewire_enc_init(&fwe->encoder, fakewire_exc_link_write, fwe);
-    fakewire_dec_init(&fwe->decoder, &fwe->link_interface);
+    fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
 
-    if (fakewire_link_init(&fwe->io_port, opts.link_options, fakewire_exc_link_receive, fwe) < 0) {
+    if (fakewire_link_init(&fwe->io_port, opts.link_options, &fwe->receive_chart) < 0) {
         free(fwe->recv_buffer);
         semaphore_destroy(&fwe->write_ready_sem);
         queue_destroy(&fwe->read_cb_queue);
@@ -149,42 +131,6 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
     thread_create(&fwe->read_cb_thread,  "fw_read_cb_thread",  PRIORITY_SERVERS, fakewire_exc_read_cb_loop,  fwe, NOT_RESTARTABLE);
     thread_create(&fwe->transmit_thread, "fw_transmit_thread", PRIORITY_SERVERS, fakewire_exc_transmit_loop, fwe, RESTARTABLE);
     return 0;
-}
-
-static void fakewire_exc_on_recv_data(void *opaque, uint8_t *bytes_in, size_t bytes_count) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL && bytes_in != NULL);
-
-    struct input_queue_ent entry = {
-        .type = INPUT_RECV_DATA_CHARS,
-        .data_chars = {
-            .input_ptr   = bytes_in,
-            .input_len   = bytes_count,
-            .on_complete = wakeup_open(),
-        },
-    };
-    queue_send(&fwe->input_queue, &entry);
-
-    // must wait so that we know when the *bytes_in buffer can be reused.
-    wakeup_take(entry.data_chars.on_complete);
-}
-
-static void fakewire_exc_on_recv_ctrl(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t timestamp_ns) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL && fakewire_is_special(symbol));
-    assert(param == 0 || fakewire_is_parametrized(symbol));
-
-    struct input_queue_ent entry = {
-        .type = INPUT_RECV_CTRL_CHAR,
-        .ctrl_char = {
-            .symbol       = symbol,
-            .param        = param,
-            .timestamp_ns = timestamp_ns,
-        },
-    };
-    queue_send(&fwe->input_queue, &entry);
-
-    // no need to wait for this entry to be processed... there's no pointer to free, so we can continue immediately.
 }
 
 static void *fakewire_exc_read_cb_loop(void *fwe_opaque) {
@@ -365,6 +311,11 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
     struct transmit_chart_ent *tx_ent = NULL;
 
+    fw_decoded_ent_t rx_ent = {
+        .data_out     = NULL,
+        .data_max_len = 0,
+    };
+
     struct input_queue_ent input_ent;
 
     // make sure we accept input from the first writer
@@ -392,12 +343,6 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             wakeup_explanation = "timed out";
         } else {
             switch (input_ent.type) {
-            case INPUT_RECV_CTRL_CHAR:
-                wakeup_explanation = "INPUT_RECV_CTRL_CHAR";
-                break;
-            case INPUT_RECV_DATA_CHARS:
-                wakeup_explanation = "INPUT_RECV_DATA_CHARS";
-                break;
             case INPUT_READ_CB_COMPLETE:
                 wakeup_explanation = "INPUT_READ_CB_COMPLETE";
                 break;
@@ -417,8 +362,6 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
         assertf(pkts_sent == fcts_rcvd || pkts_sent + 1 == fcts_rcvd,
                 "pkts_sent = %u, fcts_rcvd = %u", pkts_sent, fcts_rcvd);
 
-        bool do_reset = false;
-
         if (timed_out) {
             assert(clock_timestamp_monotonic() >= next_timeout);
 
@@ -431,153 +374,6 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             }
 
             next_timeout = clock_timestamp_monotonic() + handshake_period();
-        } else if (input_ent.type == INPUT_RECV_CTRL_CHAR) {
-            fw_ctrl_t symbol = input_ent.ctrl_char.symbol;
-            uint32_t  param  = input_ent.ctrl_char.param;
-#ifdef DEBUG
-            debug_printf("Received control character: %s(0x%08x).", fakewire_codec_symbol(symbol), param);
-#endif
-            assert(param == 0 || fakewire_is_parametrized(symbol));
-
-            switch (exc_state) {
-            case FW_EXC_CONNECTING:
-                if (symbol == FWC_HANDSHAKE_1) {
-                    // received a primary handshake
-                    debug_printf("Received a primary handshake with ID=0x%08x.", param);
-                    recv_handshake_id = param;
-                    send_secondary_handshake = true;
-                } else {
-                    debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
-                                 fakewire_codec_symbol(symbol), param);
-                    do_reset = true;
-                }
-                break;
-            case FW_EXC_HANDSHAKING:
-                if (symbol == FWC_HANDSHAKE_2 && param == send_handshake_id) {
-                    // received a valid secondary handshake
-                    debug_printf("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
-                                 param);
-                    exc_state = FW_EXC_OPERATING;
-                    send_primary_handshake = false;
-                    send_secondary_handshake = false;
-                } else {
-                    debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_2(0x%08x); resetting.",
-                                 fakewire_codec_symbol(symbol), param,
-                                 send_handshake_id);
-                    do_reset = true;
-                }
-                break;
-            case FW_EXC_OPERATING:
-                // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
-                switch (symbol) {
-                case FWC_START_PACKET:
-                    if (fcts_sent != pkts_rcvd + 1) {
-                        debug_printf("Received unauthorized start-of-packet (fcts_sent=%u, pkts_rcvd=%u); resetting.",
-                                     fcts_sent, pkts_rcvd);
-                        do_reset = true;
-                    } else {
-                        assert(recv_state == FW_RECV_LISTENING);
-                        recv_state = FW_RECV_RECEIVING;
-                        recv_start_timestamp = input_ent.ctrl_char.timestamp_ns;
-                        pkts_rcvd += 1;
-                        // reset receive buffer before proceeding
-                        memset(fwe->recv_buffer, 0, fwe->options.recv_max_size);
-                        recv_offset = 0;
-                    }
-                    break;
-                case FWC_END_PACKET:
-                    if (recv_state == FW_RECV_OVERFLOWED) {
-                        // discard state and get ready for another packet
-                        recv_state = FW_RECV_PREPARING;
-                    } else if (recv_state == FW_RECV_RECEIVING) {
-                        // confirm completion
-                        recv_state = FW_RECV_CALLBACK;
-                        struct read_cb_queue_ent entry = {
-                            .read_size    = recv_offset,
-                            .timestamp_ns = recv_start_timestamp,
-                        };
-                        bool sent = queue_send_try(&fwe->read_cb_queue, &entry);
-                        assert(sent == true);
-                    } else {
-                        debug_printf("Hit unexpected END_PACKET in receive state %d; resetting.", recv_state);
-                        do_reset = true;
-                    }
-                    break;
-                case FWC_ERROR_PACKET:
-                    if (recv_state == FW_RECV_OVERFLOWED || recv_state == FW_RECV_RECEIVING) {
-                        // discard state and get ready for another packet
-                        recv_state = FW_RECV_PREPARING;
-                    } else {
-                        debug_printf("Hit unexpected ERROR_PACKET in receive state %d; resetting.", recv_state);
-                        do_reset = true;
-                    }
-                    break;
-                case FWC_FLOW_CONTROL:
-                    if (param == fcts_rcvd + 1) {
-                        // make sure this FCT matches our send state
-                        if (pkts_sent != fcts_rcvd) {
-                            debug_printf("Received incremented FCT(%u) when no packet had been sent (%u, %u); resetting.",
-                                         param, pkts_sent, fcts_rcvd);
-                            do_reset = true;
-                        } else {
-                            // received FCT; can send another packet
-                            fcts_rcvd = param;
-                        }
-                    } else if (param != fcts_rcvd) {
-                        // FCT number should always either stay the same or increment by one.
-                        debug_printf("Received unexpected FCT(%u) when last count was %u; resetting.",
-                                     param, fcts_rcvd);
-                        do_reset = true;
-                    }
-                    break;
-                case FWC_KEEP_ALIVE:
-                    if (pkts_rcvd != param) {
-                        debug_printf("KAT mismatch: received %u packets, but supposed to have received %u; resetting.",
-                                     pkts_rcvd, param);
-                        do_reset = true;
-                    }
-                    break;
-                default:
-                    debug_printf("Unexpected %s(0x%08x) during OPERATING mode; resetting.",
-                                 fakewire_codec_symbol(symbol), param);
-                    do_reset = true;
-                }
-                break;
-            default:
-                assert(false);
-            }
-        } else if (input_ent.type == INPUT_RECV_DATA_CHARS) {
-            uint8_t *input_ptr   = input_ent.data_chars.input_ptr;
-            size_t   input_len   = input_ent.data_chars.input_len;
-            wakeup_t on_complete = input_ent.data_chars.on_complete;
-            assert(input_ptr != NULL && input_len > 0 && on_complete != NULL);
-
-#ifdef DEBUG
-            debug_printf("Received %zu regular data bytes.", input_len);
-#endif
-
-            if (recv_state == FW_RECV_OVERFLOWED) {
-                assert(exc_state == FW_EXC_OPERATING);
-                // discard extraneous bytes and do nothing
-            } else if (exc_state != FW_EXC_OPERATING || recv_state != FW_RECV_RECEIVING) {
-                debug_printf("Received unexpected data character 0x%02x during state (exc=%d, recv=%d); resetting.",
-                             input_ptr[0], exc_state, recv_state);
-                do_reset = true;
-            } else if (recv_offset + input_len > fwe->options.recv_max_size) {
-                debug_printf("Packet exceeded buffer size %zu; discarding.", fwe->options.recv_max_size);
-                recv_state = FW_RECV_OVERFLOWED;
-            } else {
-                // actually collect the received data and put it into the buffer
-                assert(fwe->recv_buffer != NULL);
-                assert(recv_offset < fwe->options.recv_max_size);
-
-                memcpy(&fwe->recv_buffer[recv_offset], input_ptr, input_len);
-                recv_offset += input_len;
-
-                assert(recv_offset <= fwe->options.recv_max_size);
-            }
-
-            wakeup_give(on_complete);
         } else if (input_ent.type == INPUT_READ_CB_COMPLETE) {
             assert(recv_state == FW_RECV_CALLBACK);
             recv_state = FW_RECV_PREPARING;
@@ -594,22 +390,189 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             assert(false);
         }
 
-        if (do_reset) {
-            exc_state = FW_EXC_CONNECTING;
-            // unless we're busy, reset receive state
-            if (recv_state != FW_RECV_CALLBACK) {
-                recv_state = FW_RECV_PREPARING;
+        // input byte decode loop
+        for (;;) {
+            bool do_reset = false;
+
+            if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING && recv_offset < fwe->options.recv_max_size) {
+                assert(fwe->recv_buffer != NULL && fwe->options.recv_max_size > 0);
+                rx_ent.data_out     = fwe->recv_buffer + recv_offset;
+                rx_ent.data_max_len = fwe->options.recv_max_size - recv_offset;
+            } else {
+                // tell decoder to discard data and just tell us the number of bytes
+                rx_ent.data_out     = NULL;
+                rx_ent.data_max_len = 0;
             }
-            // if we're transmitting, make sure we start again from the beginning
-            if (txmit_state != FW_TXMIT_IDLE) {
-                txmit_state = FW_TXMIT_HEADER;
+            if (!fakewire_dec_decode(&fwe->decoder, &rx_ent)) {
+                // no more data to receive right now; wait until next wakeup
+                break;
             }
-            send_handshake_id = 0;
-            recv_handshake_id = 0;
-            send_primary_handshake = false;
-            send_secondary_handshake = false;
-            fcts_sent = fcts_rcvd = pkts_sent = pkts_rcvd = 0;
-            resend_pkts = resend_fcts = false;
+            // process received control character or data characters
+            if (rx_ent.ctrl_out != FWC_NONE) {
+                assert(rx_ent.data_actual_len == 0);
+
+                fw_ctrl_t symbol = rx_ent.ctrl_out;
+                uint32_t  param  = rx_ent.ctrl_param;
+#ifdef DEBUG
+                debug_printf("Received control character: %s(0x%08x).", fakewire_codec_symbol(symbol), param);
+#endif
+                assert(param == 0 || fakewire_is_parametrized(symbol));
+
+                switch (exc_state) {
+                case FW_EXC_CONNECTING:
+                    if (symbol == FWC_HANDSHAKE_1) {
+                        // received a primary handshake
+                        debug_printf("Received a primary handshake with ID=0x%08x.", param);
+                        recv_handshake_id = param;
+                        send_secondary_handshake = true;
+                    } else {
+                        debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
+                                     fakewire_codec_symbol(symbol), param);
+                        do_reset = true;
+                    }
+                    break;
+                case FW_EXC_HANDSHAKING:
+                    if (symbol == FWC_HANDSHAKE_2 && param == send_handshake_id) {
+                        // received a valid secondary handshake
+                        debug_printf("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                                     param);
+                        exc_state = FW_EXC_OPERATING;
+                        send_primary_handshake = false;
+                        send_secondary_handshake = false;
+                    } else {
+                        debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_2(0x%08x); resetting.",
+                                     fakewire_codec_symbol(symbol), param,
+                                     send_handshake_id);
+                        do_reset = true;
+                    }
+                    break;
+                case FW_EXC_OPERATING:
+                    // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
+                    switch (symbol) {
+                    case FWC_START_PACKET:
+                        if (fcts_sent != pkts_rcvd + 1) {
+                            debug_printf("Received unauthorized start-of-packet (fcts_sent=%u, pkts_rcvd=%u); resetting.",
+                                         fcts_sent, pkts_rcvd);
+                            do_reset = true;
+                        } else {
+                            assert(recv_state == FW_RECV_LISTENING);
+                            recv_state = FW_RECV_RECEIVING;
+                            recv_start_timestamp = rx_ent.receive_timestamp;
+                            pkts_rcvd += 1;
+                            // reset receive buffer before proceeding
+                            memset(fwe->recv_buffer, 0, fwe->options.recv_max_size);
+                            recv_offset = 0;
+                        }
+                        break;
+                    case FWC_END_PACKET:
+                        if (recv_state == FW_RECV_OVERFLOWED) {
+                            // discard state and get ready for another packet
+                            recv_state = FW_RECV_PREPARING;
+                        } else if (recv_state == FW_RECV_RECEIVING) {
+                            // confirm completion
+                            recv_state = FW_RECV_CALLBACK;
+                            struct read_cb_queue_ent entry = {
+                                .read_size    = recv_offset,
+                                .timestamp_ns = recv_start_timestamp,
+                            };
+                            bool sent = queue_send_try(&fwe->read_cb_queue, &entry);
+                            assert(sent == true);
+                        } else {
+                            debug_printf("Hit unexpected END_PACKET in receive state %d; resetting.", recv_state);
+                            do_reset = true;
+                        }
+                        break;
+                    case FWC_ERROR_PACKET:
+                        if (recv_state == FW_RECV_OVERFLOWED || recv_state == FW_RECV_RECEIVING) {
+                            // discard state and get ready for another packet
+                            recv_state = FW_RECV_PREPARING;
+                        } else {
+                            debug_printf("Hit unexpected ERROR_PACKET in receive state %d; resetting.", recv_state);
+                            do_reset = true;
+                        }
+                        break;
+                    case FWC_FLOW_CONTROL:
+                        if (param == fcts_rcvd + 1) {
+                            // make sure this FCT matches our send state
+                            if (pkts_sent != fcts_rcvd) {
+                                debug_printf("Received incremented FCT(%u) when no packet had been sent (%u, %u); resetting.",
+                                             param, pkts_sent, fcts_rcvd);
+                                do_reset = true;
+                            } else {
+                                // received FCT; can send another packet
+                                fcts_rcvd = param;
+                            }
+                        } else if (param != fcts_rcvd) {
+                            // FCT number should always either stay the same or increment by one.
+                            debug_printf("Received unexpected FCT(%u) when last count was %u; resetting.",
+                                         param, fcts_rcvd);
+                            do_reset = true;
+                        }
+                        break;
+                    case FWC_KEEP_ALIVE:
+                        if (pkts_rcvd != param) {
+                            debug_printf("KAT mismatch: received %u packets, but supposed to have received %u; resetting.",
+                                         pkts_rcvd, param);
+                            do_reset = true;
+                        }
+                        break;
+                    default:
+                        debug_printf("Unexpected %s(0x%08x) during OPERATING mode; resetting.",
+                                     fakewire_codec_symbol(symbol), param);
+                        do_reset = true;
+                    }
+                    break;
+                default:
+                    assert(false);
+                }
+            } else {
+                assert(rx_ent.data_actual_len > 0);
+
+                if (recv_state == FW_RECV_OVERFLOWED) {
+                    assert(exc_state == FW_EXC_OPERATING);
+                    assert(rx_ent.data_out == NULL);
+                    // discard extraneous bytes and do nothing
+#ifdef DEBUG
+                    debug_printf("Discarded an additional %zu regular data bytes.", input_len);
+#endif
+                } else if (exc_state != FW_EXC_OPERATING || recv_state != FW_RECV_RECEIVING) {
+                    assert(rx_ent.data_out == NULL);
+                    debug_printf("Received at least %zu unexpected data characters during state (exc=%d, recv=%d); "
+                                 "resetting.", rx_ent.data_actual_len, exc_state, recv_state);
+                    do_reset = true;
+                } else if (recv_offset >= fwe->options.recv_max_size) {
+                    assert(rx_ent.data_out == NULL);
+                    debug_printf("Packet exceeded buffer size %zu (at least %zu + %z bytes); discarding.",
+                                 fwe->options.recv_max_size, recv_offset, rx_ent.data_actual_len);
+                    recv_state = FW_RECV_OVERFLOWED;
+                } else {
+                    assert(rx_ent.data_out != NULL);
+                    assert(recv_offset + rx_ent.data_actual_len < fwe->options.recv_max_size);
+#ifdef DEBUG
+                    debug_printf("Received %zu regular data bytes.", rx_ent.data_actual_len);
+#endif
+                    recv_offset += rx_ent.data_actual_len;
+                    assert(recv_offset <= fwe->options.recv_max_size);
+                }
+            }
+
+            if (do_reset) {
+                exc_state = FW_EXC_CONNECTING;
+                // unless we're busy, reset receive state
+                if (recv_state != FW_RECV_CALLBACK) {
+                    recv_state = FW_RECV_PREPARING;
+                }
+                // if we're transmitting, make sure we start again from the beginning
+                if (txmit_state != FW_TXMIT_IDLE) {
+                    txmit_state = FW_TXMIT_HEADER;
+                }
+                send_handshake_id = 0;
+                recv_handshake_id = 0;
+                send_primary_handshake = false;
+                send_secondary_handshake = false;
+                fcts_sent = fcts_rcvd = pkts_sent = pkts_rcvd = 0;
+                resend_pkts = resend_fcts = false;
+            }
         }
 
         if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_PREPARING) {

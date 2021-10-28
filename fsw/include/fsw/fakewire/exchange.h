@@ -19,10 +19,9 @@ typedef struct {
 typedef struct fw_exchange_st {
     fw_exchange_options_t options;
 
-    fw_link_t         io_port;
-    fw_encoder_t      encoder;
-    fw_decoder_t      decoder;
-    fw_receiver_t     link_interface;
+    fw_link_t    io_port;
+    fw_encoder_t encoder;
+    fw_decoder_t decoder;
 
     thread_t exchange_thread;
     thread_t read_cb_thread;
@@ -31,8 +30,10 @@ typedef struct fw_exchange_st {
     // input to exchange thread
     queue_t input_queue;
     chart_t transmit_chart;  // client: exchange_thread, server: transmit_thread
+    chart_t receive_chart;   // client: link driver, server: exchange_thread
+
     semaphore_t transmit_wake; // used for client->server wakeups
-    queue_t read_cb_queue;
+    queue_t     read_cb_queue;
     semaphore_t write_ready_sem;
 
     uint8_t *recv_buffer; // allocated size: options.recv_max_size

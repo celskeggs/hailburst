@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <fsw/chart.h>
+#include <fsw/io.h>
+
 // THREAD SAFETY NOTE: none of this code is thread-safe.
 // You may free the memory used in any of these structures at any time, as long as the structure is not in use.
 
@@ -36,24 +39,34 @@ static inline bool fakewire_is_parametrized(fw_ctrl_t ch) {
 }
 
 typedef struct {
-    void *param;
-    void (*recv_data)(void *opaque, uint8_t *bytes_in, size_t bytes_count);
-    void (*recv_ctrl)(void *opaque, fw_ctrl_t symbol, uint32_t param, uint64_t recv_timestamp_ns);
-} fw_receiver_t;
+    fw_ctrl_t ctrl_out;
+    uint32_t  ctrl_param;
+    uint8_t  *data_out;     // pointer provided by caller; if NULL, data is discarded (but data_actual_len is still set)
+    size_t    data_max_len; // max len provided by caller
+    size_t    data_actual_len;
+    uint64_t  receive_timestamp;
+} fw_decoded_ent_t;
 
 typedef struct {
-    fw_receiver_t *output;
-    bool in_escape;
+    chart_t          *rx_chart;
+    struct io_rx_ent *rx_entry;
+    uint32_t          rx_offset;
 
+    // for internal decoder
+    bool recv_in_escape;
+    // for external decoder
     fw_ctrl_t recv_current; // parameterized control character
     size_t    recv_count;   // 0-3: N bytes already processed
     uint32_t  recv_param;
     uint64_t  recv_timestamp_ns;
 } fw_decoder_t;
 
-void fakewire_dec_init(fw_decoder_t *fwd, fw_receiver_t *output);
+// note: a decoder acts as the server side of data_rx
+void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart);
 // no destroy function provided because it isn't needed; you can simply stop using the decoder.
-void fakewire_dec_decode(fw_decoder_t *fwd, uint8_t *bytes_in, size_t byte_count, uint64_t recv_timestamp_ns);
+
+// returns true if another character is available; false if waiting on the chart is recommended
+bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
 
 typedef void (*fw_output_cb_t)(void *param, uint8_t *bytes_in, size_t byte_count);
 
