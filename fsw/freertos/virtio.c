@@ -138,7 +138,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
             // these should still match from the previous cycle, so we don't need to update anything.
             assert(queue->avail->ring[index] == index);
             // validate that length fits within constraints
-            assert(request->actual_length <= chart_note_size(queue->chart) - offsetof(struct io_tx_ent, data));
+            assert(request->actual_length <= io_tx_size(queue->chart));
             // update descriptor to have the right length
             queue->desc[index].len = request->actual_length;
 
@@ -172,10 +172,9 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         if (queue->direction == QUEUE_INPUT) {
             assert(elem->len > 0);
             // if this trips, it might be because the device tried to write more data than there was actually room
-            assertf(elem->len <= chart_note_size(queue->chart) - offsetof(struct io_rx_ent, data),
-                "elem->len=%u, note_size=%u, offset=%u, desc len=%u",
-                elem->len, chart_note_size(queue->chart), offsetof(struct io_rx_ent, data),
-                queue->desc[ring_index].len);
+            assertf(elem->len <= io_rx_size(queue->chart),
+                "elem->len=%u, rx_size=%u, offset=%u, desc len=%u",
+                elem->len, io_rx_size(queue->chart), queue->desc[ring_index].len);
 
             struct io_rx_ent *request = chart_request_start(queue->chart);
             assert(request != NULL && request == chart_get_note(queue->chart, ring_index));
@@ -315,7 +314,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
             .addr  = (uint64_t) (uintptr_t) data_ptr,
-            .len   = direction == QUEUE_INPUT ? chart_note_size(chart) - offsetof(struct io_rx_ent, data) : 0,
+            .len   = direction == QUEUE_INPUT ? io_rx_size(chart) : 0,
             .flags = direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
             .next  = 0xFFFF /* invalid index */,
         };

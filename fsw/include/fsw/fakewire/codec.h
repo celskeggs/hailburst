@@ -71,18 +71,21 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
 typedef void (*fw_output_cb_t)(void *param, uint8_t *bytes_in, size_t byte_count);
 
 typedef struct {
-    void          *output_param;
-    fw_output_cb_t output_cb;
+    chart_t          *tx_chart;
+    struct io_tx_ent *tx_entry;
 
-    uint8_t       *enc_buffer;
-    size_t         enc_idx;
+    // set if we've written something besides just data bytes and START_PACKET characters
+    // (the idea is that there's no point in flushing those unless we also have other characters worth flushing)
+    bool is_flush_worthwhile;
 } fw_encoder_t;
 
-void fakewire_enc_init(fw_encoder_t *fwe, fw_output_cb_t output_cb, void *output_param);
-// TODO: add destroy function, because it is now necessary
+void fakewire_enc_init(fw_encoder_t *fwe, chart_t *tx_chart);
+// no destroy function provided because it isn't needed; you can simply stop using the encoder.
 
-void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
-void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
+// returns how many bytes were successfully written (possibly 0, in which case waiting on the chart is recommended)
+size_t fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
+// returns true if control character was written, or false otherwise
+bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
 void fakewire_enc_flush(fw_encoder_t *fwe);
 
 #endif /* FSW_FAKEWIRE_CODEC_H */

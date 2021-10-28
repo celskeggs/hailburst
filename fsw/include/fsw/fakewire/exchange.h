@@ -25,14 +25,12 @@ typedef struct fw_exchange_st {
 
     thread_t exchange_thread;
     thread_t read_cb_thread;
-    thread_t transmit_thread;
 
     // input to exchange thread
     queue_t input_queue;
-    chart_t transmit_chart;  // client: exchange_thread, server: transmit_thread
+    chart_t transmit_chart;  // client: exchange_thread, server: link driver
     chart_t receive_chart;   // client: link driver, server: exchange_thread
 
-    semaphore_t transmit_wake; // used for client->server wakeups
     queue_t     read_cb_queue;
     semaphore_t write_ready_sem;
 

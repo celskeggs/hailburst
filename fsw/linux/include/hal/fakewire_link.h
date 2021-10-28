@@ -11,10 +11,13 @@ typedef struct {
     int fd_out;
 
     chart_t *rx_chart;
+    chart_t *tx_chart;
 
     const char *label;
-    semaphore_t input_wake;
-    thread_t    input_thread;
+    semaphore_t receive_wake;
+    thread_t    receive_thread;
+    semaphore_t transmit_wake;
+    thread_t    transmit_thread;
 } fw_link_t;
 
 #endif /* FSW_LINUX_HAL_FAKEWIRE_LINK_H */

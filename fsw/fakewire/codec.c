@@ -9,17 +9,6 @@
 
 //#define DEBUG
 
-enum {
-    FSW_ENCODING_BUF_SIZE = 1024,
-};
-
-void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart) {
-    assert(fwd != NULL && rx_chart != NULL);
-    // clear everything and populate rx_chart
-    memset(fwd, 0, sizeof(*fwd));
-    fwd->rx_chart = rx_chart;
-}
-
 const char *fakewire_codec_symbol(fw_ctrl_t c) {
     switch (c) {
     case FWC_HANDSHAKE_1:
@@ -43,6 +32,13 @@ const char *fakewire_codec_symbol(fw_ctrl_t c) {
     }
 }
 
+void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart) {
+    assert(fwd != NULL && rx_chart != NULL);
+    // clear everything and populate rx_chart
+    memset(fwd, 0, sizeof(*fwd));
+    fwd->rx_chart = rx_chart;
+}
+
 // partial version of decode that does not decode control character parameters (ctrl_param is not set)
 static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
     assert(fwd != NULL && decoded != NULL);
@@ -50,7 +46,7 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
 
     decoded->ctrl_out = FWC_NONE;
     decoded->data_actual_len = 0;
-    decoded->receive_timestamp = fwd->rx_entry->receive_timestamp;
+    decoded->receive_timestamp = 0;
 
     for (;;) {
         if (fwd->rx_entry != NULL && fwd->rx_offset == fwd->rx_entry->actual_length) {
@@ -64,9 +60,12 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
             }
             fwd->rx_offset = 0;
         }
-        assert(fwd->rx_entry->actual_length <= chart_note_size(fwd->rx_chart) - offsetof(struct io_rx_ent, data));
+        assert(fwd->rx_entry->actual_length <= io_rx_size(fwd->rx_chart));
         assert(fwd->rx_offset < fwd->rx_entry->actual_length);
         assert(decoded->data_out == NULL || decoded->data_actual_len < decoded->data_max_len);
+        if (decoded->receive_timestamp == 0) {
+            decoded->receive_timestamp = fwd->rx_entry->receive_timestamp;
+        }
 
         uint8_t cur_byte = fwd->rx_entry->data[fwd->rx_offset++];
 
@@ -191,82 +190,123 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
     }
 }
 
-void fakewire_enc_init(fw_encoder_t *fwe, fw_output_cb_t output_cb, void *output_param) {
-    assert(fwe != NULL && output_cb != NULL);
-    fwe->output_cb = output_cb;
-    fwe->output_param = output_param;
-    fwe->enc_buffer = malloc(FSW_ENCODING_BUF_SIZE);
-    assert(fwe->enc_buffer != NULL);
-    fwe->enc_idx = 0;
+void fakewire_enc_init(fw_encoder_t *fwe, chart_t *tx_chart) {
+    assert(fwe != NULL && tx_chart != NULL);
+    fwe->tx_chart = tx_chart;
+    fwe->tx_entry = NULL;
+    fwe->is_flush_worthwhile = false;
 }
 
-void fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
+static inline size_t fakewire_enc_space(fw_encoder_t *fwe) {
+    if (fwe->tx_entry == NULL) {
+        return 0;
+    }
+    assert(fwe->tx_entry->actual_length <= io_tx_size(fwe->tx_chart));
+    return io_tx_size(fwe->tx_chart) - fwe->tx_entry->actual_length;
+}
+
+static bool fakewire_enc_pump(fw_encoder_t *fwe) {
+    if (fwe->tx_entry == NULL) {
+        struct io_tx_ent *ack_ent;
+        // if something still needs to be acknowledged, acknowledge it.
+        // TODO: this suggests that charts are not exactly the right data structure here
+        while ((ack_ent = chart_ack_start(fwe->tx_chart)) != NULL) {
+            chart_ack_send(fwe->tx_chart, ack_ent);
+        }
+
+        fwe->tx_entry = chart_request_start(fwe->tx_chart);
+        fwe->tx_entry->actual_length = 0;
+        fwe->is_flush_worthwhile = false;
+    }
+    return fwe->tx_entry != NULL;
+}
+
+// does not respect is_flush_worthwhile
+static void fakewire_enc_flush_all(fw_encoder_t *fwe) {
+    if (fwe->tx_entry != NULL && fwe->tx_entry->actual_length > 0) {
+        // transmit buffer entry
+        chart_request_send(fwe->tx_chart, fwe->tx_entry);
+        fwe->tx_entry = NULL;
+#ifdef DEBUG
+        debugf("[fakewire_codec] Wrote %zu line bytes in flush.", fwe->enc_idx);
+#endif
+    }
+}
+
+static bool fakewire_enc_ensure_space(fw_encoder_t *fwe, size_t min_space) {
+    assert(min_space > 0);
+    if (fakewire_enc_space(fwe) < min_space) {
+        fakewire_enc_flush_all(fwe);
+        assert(fwe->tx_entry == NULL || fwe->tx_entry->actual_length == 0);
+        if (!fakewire_enc_pump(fwe)) {
+            return false;
+        }
+    }
+    assert(fwe->tx_entry != NULL);
+    assertf(fakewire_enc_space(fwe) >= min_space,
+            "not enough space: %zu < %zu", fakewire_enc_space(fwe), min_space);
+    return true;
+}
+
+size_t fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
-    uint8_t *temp = fwe->enc_buffer;
-    size_t j = fwe->enc_idx, total = 0;
 
 #ifdef DEBUG
     debugf("[fakewire_codec] Beginning encoding of %zu raw data bytes.", byte_count);
 #endif
-    for (size_t i = 0; i < byte_count; i++) {
-        // if our buffer fills up, drain it to the output
-        if (j > FSW_ENCODING_BUF_SIZE - 2) {
-#ifdef DEBUG
-            debugf("[fakewire_codec] Buffer full; writing %zu line bytes.", j);
-#endif
-            fwe->output_cb(fwe->output_param, temp, j);
-            total += j;
-            j = 0;
+    size_t in_offset;
+    for (in_offset = 0; in_offset < byte_count; in_offset++) {
+        uint8_t byte = bytes_in[in_offset];
+
+        if (!fakewire_enc_ensure_space(fwe, fakewire_is_special(byte) ? 2 : 1)) {
+            break;
         }
 
-        uint8_t byte = bytes_in[i];
         if (fakewire_is_special(byte)) {
-            temp[j++] = FWC_ESCAPE_SYM;
+            fwe->tx_entry->data[fwe->tx_entry->actual_length++] = FWC_ESCAPE_SYM;
             // encode byte so that it remains in the data range
             byte ^= 0x10;
         }
-        temp[j++] = byte;
+        fwe->tx_entry->data[fwe->tx_entry->actual_length++] = byte;
     }
-    total = total + j - fwe->enc_idx;
-    fwe->enc_idx = j;
 #ifdef DEBUG
-    debugf("[fakewire_codec] Finished encoding %zu raw data bytes to %zu line bytes.", byte_count, total);
+    debugf("[fakewire_codec] Finished encoding %zu/%zu raw data bytes.", in_offset, byte_count);
 #endif
-    assert(total >= byte_count && total <= byte_count * 2);
+    return in_offset;
 }
 
-void fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param) {
+bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param) {
     assert(fwe != NULL);
     assert(fakewire_is_special(symbol) && symbol != FWC_ESCAPE_SYM);
     assert(param == 0 || fakewire_is_parametrized(symbol));
+
+    // if our buffer fills up, drain it to the output
+    if (!fakewire_enc_ensure_space(fwe, fakewire_is_parametrized(symbol) ? 9 : 1)) {
+        return false;
+    }
 
 #ifdef DEBUG
     debugf("[fakewire_codec] Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
-    // if our buffer fills up, drain it to the output
-    if (fwe->enc_idx > FSW_ENCODING_BUF_SIZE - 1) {
-#ifdef DEBUG
-        debugf("[fakewire_codec] Buffer full; writing %zu line bytes.", fwe->enc_idx);
-#endif
-        fwe->output_cb(fwe->output_param, fwe->enc_buffer, fwe->enc_idx);
-        fwe->enc_idx = 0;
-    }
-    fwe->enc_buffer[fwe->enc_idx++] = (uint8_t) symbol;
+    fwe->tx_entry->data[fwe->tx_entry->actual_length++] = (uint8_t) symbol;
     if (fakewire_is_parametrized(symbol)) {
         uint32_t netparam = htobe32(param);
-        fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam));
+        size_t actual = fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam));
+        // should always succeed because of reserved space
+        assert(actual == sizeof(netparam));
     }
+
+    if (symbol != FWC_START_PACKET) {
+        fwe->is_flush_worthwhile = true;
+    }
+
+    return true;
 }
 
 void fakewire_enc_flush(fw_encoder_t *fwe) {
-    if (fwe->enc_idx > 0) {
-        // drain remaining data to output
-        fwe->output_cb(fwe->output_param, fwe->enc_buffer, fwe->enc_idx);
-#ifdef DEBUG
-        debugf("[fakewire_codec] Writing %zu line bytes for flush.", fwe->enc_idx);
-#endif
-        fwe->enc_idx = 0;
+    if (fwe->is_flush_worthwhile) {
+        fakewire_enc_flush_all(fwe);
     }
 }

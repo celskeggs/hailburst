@@ -18,9 +18,9 @@ typedef struct {
 
 // initializes both the link AND the encoder specified!
 // returns 0 if successfully initialized, -1 if an I/O error prevented initialization
-int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx);
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx);
 
 void fakewire_link_notify_rx_chart(fw_link_t *fwl);
-void fakewire_link_write(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count);
+void fakewire_link_notify_tx_chart(fw_link_t *fwl);
 
 #endif /* FSW_FAKEWIRE_LINK_H */

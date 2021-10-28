@@ -11,33 +11,12 @@
 #include <fsw/debug.h>
 #include <fsw/fakewire/link.h>
 
-enum {
-    FW_LINK_RING_SIZE = 1024,
-};
-
 //#define DEBUG
 
 #define debug_puts(str) (debugf("[ fakewire_link] [%s] %s", fwl->label, str))
 #define debug_printf(fmt, ...) (debugf("[ fakewire_link] [%s] " fmt, fwl->label, __VA_ARGS__))
 
-void fakewire_link_write(fw_link_t *fwl, uint8_t *bytes_in, size_t bytes_count) {
-    assert(fwl != NULL && bytes_in != NULL && bytes_count > 0);
-
-    // write one large chunk to the output port
-#ifdef DEBUG
-    debug_printf("Writing %zu bytes to file descriptor...", bytes_count);
-#endif
-    ssize_t actual = write(fwl->fd_out, bytes_in, bytes_count);
-    if (actual == (ssize_t) bytes_count) {
-#ifdef DEBUG
-        debug_printf("Finished writing %zd bytes to file descriptor.", actual);
-#endif
-    } else {
-        debug_printf("Write failed: %zd bytes instead of %zu bytes", actual, bytes_count);
-    }
-}
-
-static void *fakewire_link_input_loop(void *opaque) {
+static void *fakewire_link_rx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
@@ -50,11 +29,11 @@ static void *fakewire_link_input_loop(void *opaque) {
         entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
-            semaphore_take(&fwl->input_wake);
+            semaphore_take(&fwl->receive_wake);
             continue;
         }
         // read as many bytes as possible from the input port at once
-        size_t max = chart_note_size(fwl->rx_chart) - offsetof(struct io_rx_ent, data);
+        size_t max = io_rx_size(fwl->rx_chart);
         ssize_t actual = read(fwl->fd_in, entry->data, max);
 
         if (actual <= 0) { // 0 means EOF, <0 means error
@@ -73,15 +52,51 @@ static void *fakewire_link_input_loop(void *opaque) {
     }
 }
 
+static void *fakewire_link_tx_loop(void *opaque) {
+    assert(opaque != NULL);
+    fw_link_t *fwl = (fw_link_t*) opaque;
+
+    while (true) {
+        struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
+        if (entry == NULL) {
+            // wait for another entry to be available
+            semaphore_take(&fwl->transmit_wake);
+            continue;
+        }
+        // read as many bytes as possible from the input port at once
+        assert(entry->actual_length > 0 && entry->actual_length <= io_tx_size(fwl->tx_chart));
+
+        ssize_t actual = write(fwl->fd_out, entry->data, entry->actual_length);
+
+        if (actual == (ssize_t) entry->actual_length) {
+#ifdef DEBUG
+            debug_printf("Finished writing %zd bytes to file descriptor.", actual);
+#endif
+        } else {
+            debug_printf("Write failed: %zd bytes instead of %zu bytes", actual, entry->actual_length);
+        }
+
+        chart_reply_send(fwl->tx_chart, entry);
+    }
+}
+
 void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
     // that just means a previous wakeup is still pending, which is just as good!
-    (void) semaphore_give(&fwl->input_wake);
+    (void) semaphore_give(&fwl->receive_wake);
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx) {
+void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
+    assert(fwl != NULL);
+
+    // we don't worry about wakeups getting dropped.
+    // that just means a previous wakeup is still pending, which is just as good!
+    (void) semaphore_give(&fwl->transmit_wake);
+}
+
+int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
     assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
@@ -157,11 +172,14 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx)
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
 
     // prepare for input thread
-    semaphore_init(&fwl->input_wake);
+    semaphore_init(&fwl->receive_wake);
+    semaphore_init(&fwl->transmit_wake);
     fwl->rx_chart = data_rx;
+    fwl->tx_chart = data_tx;
 
     // and now let's set up the input thread
-    thread_create(&fwl->input_thread, "fw_in_loop", PRIORITY_SERVERS, fakewire_link_input_loop, fwl, NOT_RESTARTABLE);
+    thread_create(&fwl->receive_thread,  "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);
+    thread_create(&fwl->transmit_thread, "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, fwl, NOT_RESTARTABLE);
 
     return 0;
 }

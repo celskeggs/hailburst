@@ -34,8 +34,9 @@ def configure_linux():
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c"] + common_libs)
     linux_env.Default(linux_app)
 
-    linux_env.Program("fakewire_exc_test",
-                      LINUX_SRC + ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + common_libs)
+    linux_test = linux_env.Program("fakewire_exc_test", LINUX_SRC +
+                                   ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + common_libs)
+    linux_env.Default(linux_test)
 
     linux_env.Alias("install",
                     [linux_env.Install('$PREFIX/usr/bin', linux_app),

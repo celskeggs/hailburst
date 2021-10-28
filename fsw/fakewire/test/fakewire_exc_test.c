@@ -155,7 +155,7 @@ static void *exchange_controller(void *opaque) {
     wc->pass = false;
 
     pthread_t writer_thread;
-    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, wc);
+    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, wc, NOT_RESTARTABLE);
 
     struct timespec ts;
     thread_time_now(&ts);
@@ -281,8 +281,8 @@ int test_main(void) {
 
     pthread_t left, right;
 
-    thread_create(&left, "ec_left", 1, exchange_controller, &ec_left);
-    thread_create(&right, "ec_right", 1, exchange_controller, &ec_right);
+    thread_create(&left, "ec_left", 1, exchange_controller, &ec_left, NOT_RESTARTABLE);
+    thread_create(&right, "ec_right", 1, exchange_controller, &ec_right, NOT_RESTARTABLE);
 
     debugf("Waiting for test to complete...");
     thread_join(left);
