@@ -11,13 +11,12 @@
 #include <fsw/fakewire/exchange.h>
 
 static void *fakewire_exc_exchange_loop(void *fwe_opaque);
-static void *fakewire_exc_read_cb_loop(void *fwe_opaque);
 
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->options.link_options.label, str))
-#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->options.link_options.label, __VA_ARGS__))
+#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->link_opts.label, str))
+#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->link_opts.label, __VA_ARGS__))
 
 struct input_queue_ent {
     enum {
@@ -35,9 +34,11 @@ struct input_queue_ent {
 };
 
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL);
+    fakewire_exc_notify_chart((fw_exchange_t *) opaque);
+}
 
+void fakewire_exc_notify_chart(fw_exchange_t *fwe) {
+    assert(fwe != NULL);
     // we only need to send if the queue is empty... this is because ANY message qualifies as a wakeup in addition to
     // its primary meaning! so any wakeup we add would be redundant.
     if (queue_is_empty(&fwe->input_queue)) {
@@ -64,74 +65,34 @@ static void fakewire_exc_chart_notify_link_tx(void *opaque) {
     fakewire_link_notify_tx_chart(&fwe->io_port);
 }
 
-static void fakewire_exc_chart_notify_read_task(void *opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
-    assert(fwe != NULL);
-
-    // don't worry about failing to give the semaphore... that just means there's already a pending wake!
-    (void) semaphore_give(&fwe->read_wake);
-}
-
-int fakewire_exc_init(fw_exchange_t *fwe, fw_exchange_options_t opts) {
+int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart) {
+    assert(fwe != NULL && read_chart != NULL);
     memset(fwe, 0, sizeof(fw_exchange_t));
 
-    assert(opts.recv_max_size >= 1);
-    fwe->options = opts;
+    fwe->link_opts = link_opts;
+    fwe->read_chart = read_chart;
 
     queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
     chart_init(&fwe->transmit_chart, 1024, 16,
                fakewire_exc_chart_notify_link_tx, fakewire_exc_chart_notify_exchange, fwe);
     chart_init(&fwe->receive_chart, 1024, 16,
                fakewire_exc_chart_notify_exchange, fakewire_exc_chart_notify_link_rx, fwe);
-    chart_init(&fwe->read_chart, io_rx_pad_size(opts.recv_max_size), 4,
-               fakewire_exc_chart_notify_read_task, fakewire_exc_chart_notify_exchange, fwe);
     semaphore_init(&fwe->write_ready_sem);
-    semaphore_init(&fwe->read_wake);
 
     fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
 
-    if (fakewire_link_init(&fwe->io_port, opts.link_options, &fwe->receive_chart, &fwe->transmit_chart) < 0) {
-        semaphore_destroy(&fwe->read_wake);
+    if (fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart) < 0) {
         semaphore_destroy(&fwe->write_ready_sem);
-        chart_destroy(&fwe->read_chart);
         chart_destroy(&fwe->receive_chart);
         chart_destroy(&fwe->transmit_chart);
         queue_destroy(&fwe->input_queue);
         return -1;
     }
 
-    thread_create(&fwe->exchange_thread, "fw_exc_thread",      PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, NOT_RESTARTABLE);
-    thread_create(&fwe->read_cb_thread,  "fw_read_cb_thread",  PRIORITY_SERVERS, fakewire_exc_read_cb_loop,  fwe, NOT_RESTARTABLE);
+    thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, NOT_RESTARTABLE);
+
     return 0;
-}
-
-static void *fakewire_exc_read_cb_loop(void *fwe_opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
-    assert(fwe != NULL);
-
-    while (true) {
-        struct io_rx_ent *ent = chart_reply_start(&fwe->read_chart);
-        if (ent == NULL) {
-            semaphore_take(&fwe->read_wake);
-            continue;
-        }
-
-        assert(ent->actual_length <= io_rx_size(&fwe->read_chart));
-        assert(ent->receive_timestamp > 0);
-
-        // dispatch callback
-#ifdef APIDEBUG
-        debug_printf("API callback for read(%zd bytes/%zu bytes) starting...",
-                     ent->actual_length, io_rx_size(&fwe->read_chart));
-#endif
-        fwe->options.recv_callback(fwe->options.recv_param, ent->data, ent->actual_length, ent->receive_timestamp);
-#ifdef APIDEBUG
-        debug_puts("API callback for read completed.");
-#endif
-
-        chart_reply_send(&fwe->read_chart, ent);
-    }
 }
 
 void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
@@ -302,10 +263,10 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
         for (;;) {
             bool do_reset = false;
 
-            if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING && read_entry->actual_length < io_rx_size(&fwe->read_chart)) {
+            if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING && read_entry->actual_length < io_rx_size(fwe->read_chart)) {
                 assert(read_entry != NULL);
                 rx_ent.data_out     = read_entry->data + read_entry->actual_length;
-                rx_ent.data_max_len = io_rx_size(&fwe->read_chart) - read_entry->actual_length;
+                rx_ent.data_max_len = io_rx_size(fwe->read_chart) - read_entry->actual_length;
             } else {
                 // tell decoder to discard data and just tell us the number of bytes
                 rx_ent.data_out     = NULL;
@@ -369,7 +330,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                             read_entry->receive_timestamp = rx_ent.receive_timestamp;
                             pkts_rcvd += 1;
                             // reset receive buffer before proceeding
-                            memset(read_entry->data, 0, io_rx_size(&fwe->read_chart));
+                            memset(read_entry->data, 0, io_rx_size(fwe->read_chart));
                         }
                         break;
                     case FWC_END_PACKET:
@@ -380,7 +341,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                         } else if (recv_state == FW_RECV_RECEIVING) {
                             assert(read_entry != NULL);
                             // notify read task that data is ready to consume
-                            chart_request_send(&fwe->read_chart, read_entry);
+                            chart_request_send(fwe->read_chart, read_entry);
                             recv_state = FW_RECV_PREPARING;
                             read_entry = NULL;
                         } else {
@@ -447,19 +408,19 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     debug_printf("Received at least %zu unexpected data characters during state (exc=%d, recv=%d); "
                                  "resetting.", rx_ent.data_actual_len, exc_state, recv_state);
                     do_reset = true;
-                } else if (read_entry->actual_length >= io_rx_size(&fwe->read_chart)) {
+                } else if (read_entry->actual_length >= io_rx_size(fwe->read_chart)) {
                     assert(rx_ent.data_out == NULL);
                     debug_printf("Packet exceeded buffer size %zu (at least %zu + %z bytes); discarding.",
-                                 io_rx_size(&fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
+                                 io_rx_size(fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
                     recv_state = FW_RECV_OVERFLOWED;
                 } else {
                     assert(rx_ent.data_out != NULL);
-                    assert(read_entry->actual_length + rx_ent.data_actual_len <= io_rx_size(&fwe->read_chart));
+                    assert(read_entry->actual_length + rx_ent.data_actual_len <= io_rx_size(fwe->read_chart));
 #ifdef DEBUG
                     debug_printf("Received %zu regular data bytes.", rx_ent.data_actual_len);
 #endif
                     read_entry->actual_length += rx_ent.data_actual_len;
-                    assert(read_entry->actual_length <= io_rx_size(&fwe->read_chart));
+                    assert(read_entry->actual_length <= io_rx_size(fwe->read_chart));
                 }
             }
 
@@ -483,11 +444,11 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
         if (read_entry == NULL) {
             struct io_rx_ent *ent;
-            while ((ent = chart_ack_start(&fwe->read_chart)) != NULL) {
-                chart_ack_send(&fwe->read_chart, ent);
+            while ((ent = chart_ack_start(fwe->read_chart)) != NULL) {
+                chart_ack_send(fwe->read_chart, ent);
             }
 
-            read_entry = chart_request_start(&fwe->read_chart);
+            read_entry = chart_request_start(fwe->read_chart);
             if (read_entry != NULL) {
                 read_entry->actual_length = 0;
             }

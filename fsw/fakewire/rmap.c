@@ -19,7 +19,22 @@ enum {
 #define SCRATCH_MARGIN_READ (12 + 1)  // for read replies
 #define PROTOCOL_RMAP (0x01)
 
-static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length, uint64_t sop_timestamp_ns);
+static void *rmap_monitor_loop(void *mon_opaque);
+
+static void rmap_monitor_notify_read_task(void *opaque) {
+    rmap_monitor_t *mon = (rmap_monitor_t *) opaque;
+    assert(mon != NULL);
+
+    // don't worry about failing to give the semaphore... that just means there's already a pending wake!
+    (void) semaphore_give(&mon->monitor_wake);
+}
+
+static void rmap_monitor_notify_exchange_chart(void *opaque) {
+    rmap_monitor_t *mon = (rmap_monitor_t *) opaque;
+    assert(mon != NULL);
+
+    fakewire_exc_notify_chart(&mon->exc);
+}
 
 int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length) {
     assert(max_read_length <= RMAP_MAX_DATA_LEN);
@@ -32,15 +47,21 @@ int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_
     assert(mon->scratch_buffer != NULL);
 
     mutex_init(&mon->pending_mutex);
+    semaphore_init(&mon->monitor_wake);
+    chart_init(&mon->exc_read_chart, io_rx_pad_size(max_read_length), 4,
+               rmap_monitor_notify_read_task, rmap_monitor_notify_exchange_chart, mon);
 
-    fw_exchange_options_t options = {
-        .link_options  = link_options,
-        .recv_max_size = max_read_length,
-        .recv_callback = rmap_monitor_recv,
-        .recv_param    = mon,
-    };
+    if (fakewire_exc_init(&mon->exc, link_options, &mon->exc_read_chart) < 0) {
+        chart_destroy(&mon->exc_read_chart);
+        semaphore_destroy(&mon->monitor_wake);
+        mutex_destroy(&mon->pending_mutex);
+        free(mon->scratch_buffer);
+        return -1;
+    }
 
-    return fakewire_exc_init(&mon->exc, options);
+    thread_create(&mon->monitor_thread, "rmap_monitor", PRIORITY_SERVERS, rmap_monitor_loop, mon, NOT_RESTARTABLE);
+
+    return 0;
 }
 
 static bool rmap_has_txn_in_progress(rmap_monitor_t *mon, uint16_t txn_id) {
@@ -527,11 +548,24 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count, uin
     }
 }
 
-static void rmap_monitor_recv(void *mon_opaque, uint8_t *packet_data, size_t packet_length, uint64_t sop_timestamp_ns) {
+static void *rmap_monitor_loop(void *mon_opaque) {
     rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
-    assert(mon != NULL && mon->scratch_buffer != NULL && packet_data != NULL);
+    assert(mon != NULL && mon->scratch_buffer != NULL);
 
-    if (!rmap_recv_handle(mon, packet_data, packet_length, sop_timestamp_ns)) {
-        debugf("RMAP packet received was corrupted or unexpected.");
+    while (true) {
+        struct io_rx_ent *ent = chart_reply_start(&mon->exc_read_chart);
+        if (ent == NULL) {
+            semaphore_take(&mon->monitor_wake);
+            continue;
+        }
+
+        assert(ent->actual_length <= io_rx_size(&mon->exc_read_chart));
+        assert(ent->receive_timestamp > 0);
+
+        if (!rmap_recv_handle(mon, ent->data, ent->actual_length, ent->receive_timestamp)) {
+            debugf("RMAP packet received was corrupted or unexpected.");
+        }
+
+        chart_reply_send(&mon->exc_read_chart, ent);
     }
 }

@@ -44,36 +44,46 @@ struct reader_config {
     const char *name;
     mutex_t out_mutex;
     struct packet_chain *chain_out;
-    semaphore_t finished;
+
+    chart_t     read_chart;
+    semaphore_t wake;
 };
 
-static void exchange_recv(void *opaque, uint8_t *packet_data, size_t packet_length, uint64_t timestamp_ns) {
+static void *exchange_reader(void *opaque) {
     struct reader_config *rc = (struct reader_config *) opaque;
-    (void) timestamp_ns;
 
-    debugf("[%s] Completed read of packet with length %ld", rc->name, packet_length - 1);
-    assert(packet_length >= 1);
+    int last_packet_marker = 1;
+    do {
+        struct io_rx_ent *ent = chart_reply_start(&rc->read_chart);
+        if (ent == NULL) {
+            semaphore_take(&rc->wake);
+            continue;
+        }
 
-    int last_packet_marker = packet_data[0];
-    assert(last_packet_marker == 0 || last_packet_marker == 1);
+        assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(&rc->read_chart));
+        debugf("[%s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
 
-    struct packet_chain *new_link = check_malloc(sizeof(struct packet_chain));
-    if (packet_length > 0) {
-        new_link->packet_data = check_malloc(packet_length - 1);
-    } else {
-        new_link->packet_data = NULL;
-    }
-    memcpy(new_link->packet_data, packet_data + 1, packet_length - 1);
-    new_link->packet_len = packet_length - 1;
-    // add to linked list
-    mutex_lock(&rc->out_mutex);
-    new_link->next = rc->chain_out;
-    rc->chain_out = new_link;
-    mutex_unlock(&rc->out_mutex);
+        last_packet_marker = ent->data[0];
+        assert(last_packet_marker == 0 || last_packet_marker == 1);
 
-    if (last_packet_marker == 0) {
-        semaphore_give(&rc->finished);
-    }
+        struct packet_chain *new_link = check_malloc(sizeof(struct packet_chain));
+        if (ent->actual_length > 0) {
+            new_link->packet_data = check_malloc(ent->actual_length - 1);
+        } else {
+            new_link->packet_data = NULL;
+        }
+        memcpy(new_link->packet_data, ent->data + 1, ent->actual_length - 1);
+        new_link->packet_len = ent->actual_length - 1;
+        // add to linked list
+        mutex_lock(&rc->out_mutex);
+        new_link->next = rc->chain_out;
+        rc->chain_out = new_link;
+        mutex_unlock(&rc->out_mutex);
+
+        chart_reply_send(&rc->read_chart, ent);
+    } while (last_packet_marker != 0);
+
+    return NULL;
 }
 
 struct writer_config {
@@ -116,30 +126,48 @@ struct exchange_config {
     bool pass;
 };
 
+struct exchange_state {
+    struct reader_config rc;
+    struct writer_config wc;
+    fw_exchange_t exc;
+};
+
+static void exchange_state_notify_reader(void *opaque) {
+    struct exchange_state *est = (struct exchange_state *) opaque;
+    assert(est != NULL);
+
+    (void) semaphore_give(&est->rc.wake);
+}
+
+static void exchange_state_notify_exchange(void *opaque) {
+    struct exchange_state *est = (struct exchange_state *) opaque;
+    assert(est != NULL);
+
+    fakewire_exc_notify_chart(&est->exc);
+}
+
 static void *exchange_controller(void *opaque) {
     struct exchange_config *ec = (struct exchange_config *) opaque;
 
-    struct reader_config *rc = malloc(sizeof(struct reader_config));
-    assert(rc != NULL);
-    rc->name = ec->name;
-    mutex_init(&rc->out_mutex);
-    rc->chain_out = NULL;
-    semaphore_init(&rc->finished);
+    struct exchange_state *est = malloc(sizeof(struct exchange_state));
+    assert(est != NULL);
 
-    fw_exchange_options_t options = {
-        .link_options = {
-            .label = ec->name,
-            .path  = ec->path_buf,
-            .flags = ec->flags,
-        },
-        .recv_max_size = 4096,
-        .recv_callback = exchange_recv,
-        .recv_param    = rc,
+    est->rc.name = ec->name;
+    mutex_init(&est->rc.out_mutex);
+    est->rc.chain_out = NULL;
+    semaphore_init(&est->rc.wake);
+
+    chart_init(&est->rc.read_chart, io_rx_pad_size(4096), 4,
+               exchange_state_notify_reader, exchange_state_notify_exchange, est);
+
+    fw_link_options_t options = {
+        .label = ec->name,
+        .path  = ec->path_buf,
+        .flags = ec->flags,
     };
-    fw_exchange_t *exc = malloc(sizeof(fw_exchange_t));
-    assert(exc != NULL);
+
     debugf("[%s] initializing exchange...", ec->name);
-    if (fakewire_exc_init(exc, options) < 0) {
+    if (fakewire_exc_init(&est->exc, options, &est->rc.read_chart) < 0) {
         debugf("[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
@@ -147,15 +175,15 @@ static void *exchange_controller(void *opaque) {
     }
     debugf("Attached!");
 
-    struct writer_config *wc = malloc(sizeof(struct writer_config));
-    assert(wc != NULL);
-    wc->name = ec->name;
-    wc->exc = exc;
-    wc->chain_in = ec->chain_in;
-    wc->pass = false;
+    est->wc.name = ec->name;
+    est->wc.exc = &est->exc;
+    est->wc.chain_in = ec->chain_in;
+    est->wc.pass = false;
 
+    pthread_t reader_thread;
     pthread_t writer_thread;
-    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, wc, NOT_RESTARTABLE);
+    thread_create(&reader_thread, "exc_reader", 1, exchange_reader, &est->rc, NOT_RESTARTABLE);
+    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, &est->wc, NOT_RESTARTABLE);
 
     struct timespec ts;
     thread_time_now(&ts);
@@ -164,22 +192,22 @@ static void *exchange_controller(void *opaque) {
 
     bool pass = true;
 
-    if (!semaphore_take_timed(&rc->finished, 5ull * NS_PER_SEC)) {
-        debugf("[%s] exchange controller: did not receive completion notification from reader by 5 second deadline", ec->name);
+    if (!thread_join_timed(reader_thread, &ts)) {
+        debugf("[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
         pass = false;
     }
     if (!thread_join_timed(writer_thread, &ts)) {
         debugf("[%s] exchange controller: could not join writer thread by 5 second deadline", ec->name);
         pass = false;
-    } else if (!wc->pass) {
+    } else if (!est->wc.pass) {
         debugf("[%s] exchange controller: failed due to writer failure", ec->name);
         pass = false;
     }
 
     ec->pass = pass;
-    mutex_lock(&rc->out_mutex);
-    ec->chain_out = reverse_chain(rc->chain_out);
-    mutex_unlock(&rc->out_mutex);
+    mutex_lock(&est->rc.out_mutex);
+    ec->chain_out = reverse_chain(est->rc.chain_out);
+    mutex_unlock(&est->rc.out_mutex);
 
     return NULL;
 }

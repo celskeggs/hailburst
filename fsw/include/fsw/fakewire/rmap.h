@@ -43,16 +43,17 @@ typedef enum {
 typedef struct rmap_context_st rmap_context_t;
 
 typedef struct {
-    uint16_t next_txn_id;
     fw_exchange_t exc;
+    chart_t       exc_read_chart;
+    thread_t      monitor_thread;
+    semaphore_t   monitor_wake;
 
-    size_t scratch_size;
+    size_t   scratch_size;
     uint8_t *scratch_buffer;
 
-    mutex_t pending_mutex;
+    mutex_t         pending_mutex;
     rmap_context_t *pending_first;
-
-    thread_t monitor_thread;
+    uint16_t        next_txn_id;
 } rmap_monitor_t;
 
 typedef struct rmap_context_st {
