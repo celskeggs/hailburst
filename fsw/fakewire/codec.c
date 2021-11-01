@@ -248,7 +248,7 @@ static bool fakewire_enc_ensure_space(fw_encoder_t *fwe, size_t min_space) {
     return true;
 }
 
-size_t fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count) {
+size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size_t byte_count) {
     assert(fwe != NULL && bytes_in != NULL);
     assert(byte_count > 0);
 

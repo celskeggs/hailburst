@@ -18,35 +18,13 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 #define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->link_opts.label, str))
 #define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->link_opts.label, __VA_ARGS__))
 
-struct input_queue_ent {
-    enum {
-        INPUT_WRITE_PACKET,
-        INPUT_WAKEUP,  // used by the transmit thread to make sure the transmit chart is rechecked
-    } type;
-    union {
-        struct {
-            uint8_t *packet_in;
-            size_t   packet_len;
-            wakeup_t on_complete;
-        } write_packet;
-        /* no parameters on wakeup */
-    };
-};
-
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
-    // we only need to send if the queue is empty... this is because ANY message qualifies as a wakeup in addition to
-    // its primary meaning! so any wakeup we add would be redundant.
-    if (queue_is_empty(&fwe->input_queue)) {
-        struct input_queue_ent entry = {
-            .type = INPUT_WAKEUP,
-        };
-        // if this send doesn't succeed, no worries! that means the queue somehow got filled since we checked whether
-        // it was empty, and in that case, there's a wakeup now!
-        (void) queue_send_try(&fwe->input_queue, &entry);
-    }
+    // we don't care if our give actually succeeds... if it doesn't, that just means there's already a wakeup pending,
+    // and in that case it'll be woken up anyway!
+    (void) semaphore_give(&fwe->exchange_wake);
 }
 
 int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart) {
@@ -55,24 +33,25 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
 
     fwe->link_opts = link_opts;
 
+    semaphore_init(&fwe->exchange_wake);
+
     fwe->read_chart = read_chart;
     chart_attach_client(fwe->read_chart, fakewire_exc_chart_notify_exchange, fwe);
 
-    queue_init(&fwe->input_queue, sizeof(struct input_queue_ent), 16);
     chart_init(&fwe->transmit_chart, 1024, 16);
     chart_attach_client(&fwe->transmit_chart, fakewire_exc_chart_notify_exchange, fwe);
     chart_init(&fwe->receive_chart, 1024, 16);
     chart_attach_server(&fwe->receive_chart, fakewire_exc_chart_notify_exchange, fwe);
-    semaphore_init(&fwe->write_ready_sem);
+    wall_init(&fwe->write_wall, fakewire_exc_chart_notify_exchange, fwe);
 
     fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
 
     if (fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart) < 0) {
-        semaphore_destroy(&fwe->write_ready_sem);
+        wall_destroy(&fwe->write_wall);
         chart_destroy(&fwe->receive_chart);
         chart_destroy(&fwe->transmit_chart);
-        queue_destroy(&fwe->input_queue);
+        semaphore_destroy(&fwe->exchange_wake);
         return -1;
     }
 
@@ -81,33 +60,9 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
     return 0;
 }
 
-void fakewire_exc_write(fw_exchange_t *fwe, uint8_t *packet_in, size_t packet_len) {
+void fakewire_exc_attach_writer(fw_exchange_t *fwe, hole_t *hole, size_t hole_size, void (*notify_client)(void *), void *param) {
     assert(fwe != NULL);
-
-#ifdef APIDEBUG
-    debug_printf("API write(%zu bytes) start", packet_len);
-#endif
-
-    // wait until a write can be submitted
-    semaphore_take(&fwe->write_ready_sem);
-
-    // submit the write
-    struct input_queue_ent entry = {
-        .type = INPUT_WRITE_PACKET,
-        .write_packet = {
-            .packet_in   = packet_in,
-            .packet_len  = packet_len,
-            .on_complete = wakeup_open(),
-        },
-    };
-    queue_send(&fwe->input_queue, &entry);
-
-    // wait until write completes, so that we know when we can reuse the packet_in pointer
-    wakeup_take(entry.write_packet.on_complete);
-
-#ifdef APIDEBUG
-    debug_printf("API write(%zu bytes) success", packet_len);
-#endif
+    hole_init(hole, hole_size, &fwe->write_wall, notify_client, param);
 }
 
 // custom exchange protocol
@@ -162,90 +117,67 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
     struct io_rx_ent *read_entry = NULL;
 
-    uint8_t *cur_packet_in     = NULL;
-    size_t   cur_packet_len    = 0;
-    wakeup_t cur_packet_wakeup = NULL;
+    const uint8_t *cur_packet_ptr = NULL;
+    size_t         cur_packet_off = 0;
+    size_t         cur_packet_len = 0;
 
     fw_decoded_ent_t rx_ent = {
         .data_out     = NULL,
         .data_max_len = 0,
     };
 
-    struct input_queue_ent input_ent;
-
-    // make sure we accept input from the first writer
-    semaphore_give(&fwe->write_ready_sem);
-
     while (true) {
-        bool timed_out = false;
-        // start by checking whether there's a queue entry already available
-        if (!queue_recv_try(&fwe->input_queue, &input_ent)) {
+        if (!semaphore_take_try(&fwe->exchange_wake)) {
             // flush encoder before we sleep
             fakewire_enc_flush(&fwe->encoder);
 
-            // event loop centered around the input queue... this should be the ONLY blocking call in this thread!
-            if (exc_state == FW_EXC_OPERATING ? (!resend_fcts || !resend_pkts) : !send_primary_handshake) {
-                // explanation of this conditional: once we've timed out already and set the appropriate flags,
-                // there is no reason to keep timing out just to set the very same flags again.
+            if (exc_state == FW_EXC_OPERATING && (!resend_fcts || !resend_pkts)) {
+                // do a timed wait, so that we can send heartbeats when it's an appropriate time
 #ifdef DEBUG
-                debug_puts("Blocking in main exchange (with timeout).");
+                debug_puts("Blocking in main exchange (timeout A).");
 #endif
-                timed_out = !queue_recv_timed_abs(&fwe->input_queue, &input_ent, next_timeout);
+                if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
+                    assert(clock_timestamp_monotonic() >= next_timeout);
+#ifdef DEBUG
+                    debug_puts("Woke up main exchange loop (timeout A)");
+#endif
+                    resend_fcts = true;
+                    resend_pkts = true;
+
+                    next_timeout = clock_timestamp_monotonic() + handshake_period();
+                }
+            } else if ((exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING) && !send_primary_handshake) {
+                // do a timed wait, so that we can send a fresh handshake when it's an appropriate time
+#ifdef DEBUG
+                debug_puts("Blocking in main exchange (timeout B).");
+#endif
+                if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
+                    assert(clock_timestamp_monotonic() >= next_timeout);
+#ifdef DEBUG
+                    debug_puts("Woke up main exchange loop (timeout B)");
+#endif
+                    send_primary_handshake = true;
+
+                    next_timeout = clock_timestamp_monotonic() + handshake_period();
+                }
             } else {
 #ifdef DEBUG
                 debug_puts("Blocking in main exchange (blocking).");
 #endif
-                queue_recv(&fwe->input_queue, &input_ent);
+                semaphore_take(&fwe->exchange_wake);
             }
-        }
 #ifdef DEBUG
-        const char *wakeup_explanation = "???";
-        if (timed_out) {
-            wakeup_explanation = "timed out";
-        } else {
-            switch (input_ent.type) {
-            case INPUT_WRITE_PACKET:
-                wakeup_explanation = "INPUT_WRITE_PACKET";
-                break;
-            case INPUT_WAKEUP:
-                wakeup_explanation = "INPUT_WAKEUP";
-                break;
-            }
-        }
-        debug_printf("Woke up main exchange loop (%s)", wakeup_explanation);
+            debug_puts("Woke up main exchange loop");
 #endif
+        }
 
         // check invariants
         assert(exc_state >= FW_EXC_CONNECTING && exc_state <= FW_EXC_OPERATING);
         assertf(pkts_sent == fcts_rcvd || pkts_sent + 1 == fcts_rcvd,
                 "pkts_sent = %u, fcts_rcvd = %u", pkts_sent, fcts_rcvd);
 
-        if (timed_out) {
-            assert(clock_timestamp_monotonic() >= next_timeout);
-
-            if (exc_state == FW_EXC_OPERATING) {
-                resend_fcts = true;
-                resend_pkts = true;
-            } else {
-                assert(exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING);
-                send_primary_handshake = true;
-            }
-
-            next_timeout = clock_timestamp_monotonic() + handshake_period();
-        } else if (input_ent.type == INPUT_WRITE_PACKET) {
-            assert(txmit_state == FW_TXMIT_IDLE && cur_packet_in == NULL && cur_packet_wakeup == NULL);
-            cur_packet_in     = input_ent.write_packet.packet_in;
-            cur_packet_len    = input_ent.write_packet.packet_len;
-            cur_packet_wakeup = input_ent.write_packet.on_complete;
-            txmit_state = FW_TXMIT_HEADER;
-            assert(cur_packet_in != NULL && cur_packet_wakeup != NULL);
-        } else if (input_ent.type == INPUT_WAKEUP) {
-            // no need to do anything... the whole point is just to wake us up immediately.
-        } else {
-            assert(false);
-        }
-
-        // input byte decode loop
+        // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
+        // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
         for (;;) {
             bool do_reset = false;
 
@@ -428,6 +360,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             }
         }
 
+        // we only need to check for starting reads once per iteration, because we are gated on decoded line data
         if (read_entry == NULL) {
             struct io_rx_ent *ent;
             while ((ent = chart_ack_start(fwe->read_chart)) != NULL) {
@@ -500,43 +433,58 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             next_timeout = clock_timestamp_monotonic() + handshake_period();
         }
 
-        if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd
-                && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_START_PACKET, 0)) {
-            assert(cur_packet_in != NULL);
-
-            txmit_state = FW_TXMIT_BODY;
-            pkts_sent++;
-        }
-
-        if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
-            assert(cur_packet_in != NULL);
-
-            size_t actually_written = fakewire_enc_encode_data(&fwe->encoder, cur_packet_in, cur_packet_len);
-            if (actually_written == cur_packet_len) {
-                txmit_state = FW_TXMIT_FOOTER;
-            } else {
-                assert(actually_written < cur_packet_len);
-                cur_packet_in  += actually_written;
-                cur_packet_len -= actually_written;
+        do {
+            if (txmit_state == FW_TXMIT_IDLE) {
+                assert(cur_packet_ptr == NULL);
+                cur_packet_len = 0;
+                cur_packet_off = 0;
+                cur_packet_ptr = wall_query(&fwe->write_wall, &cur_packet_len);
+                if (cur_packet_ptr != NULL) {
+                    assert(cur_packet_len > 0);
+                    txmit_state = FW_TXMIT_HEADER;
+                } else {
+                    // out of write requests
+                    break;
+                }
             }
-        }
 
-        if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER
-                && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_END_PACKET, 0)) {
-            assert(cur_packet_in != NULL);
+            if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd
+                    && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_START_PACKET, 0)) {
+                assert(cur_packet_ptr != NULL && cur_packet_len > 0 && cur_packet_off == 0);
 
-            // wake up writer
-            wakeup_give(cur_packet_wakeup);
+                txmit_state = FW_TXMIT_BODY;
+                pkts_sent++;
+            }
 
-            // reset our state
-            txmit_state = FW_TXMIT_IDLE;
-            cur_packet_in     = NULL;
-            cur_packet_len    = 0;
-            cur_packet_wakeup = NULL;
+            if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
+                assert(cur_packet_ptr != NULL && cur_packet_off < cur_packet_len);
 
-            // tell the next writer we're ready to hear from it
-            bool given = semaphore_give(&fwe->write_ready_sem);
-            assert(given == true);
-        }
+                size_t actually_written = fakewire_enc_encode_data(&fwe->encoder, cur_packet_ptr + cur_packet_off, cur_packet_len - cur_packet_off);
+                if (actually_written + cur_packet_off == cur_packet_len) {
+                    txmit_state = FW_TXMIT_FOOTER;
+                } else {
+                    assert(actually_written < cur_packet_len - cur_packet_off);
+                    cur_packet_off += actually_written;
+                }
+            }
+
+            if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER
+                    && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_END_PACKET, 0)) {
+                assert(cur_packet_ptr != NULL);
+
+                // respond to writer
+                wall_reply(&fwe->write_wall, cur_packet_ptr);
+
+                // reset our state
+                txmit_state = FW_TXMIT_IDLE;
+                cur_packet_ptr = NULL;
+                cur_packet_off = 0;
+                cur_packet_len = 0;
+            }
+
+            // we want to keep trying to transmit until we either a) run out of pending write requests, or b) run out
+            // of encoding buffer space to write those requests. That way, we can be guaranteed that there will be a
+            // wakeup pending if there's anything more to do.
+        } while (txmit_state == FW_TXMIT_IDLE);
     }
 }

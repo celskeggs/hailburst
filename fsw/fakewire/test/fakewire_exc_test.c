@@ -88,7 +88,10 @@ static void *exchange_reader(void *opaque) {
 
 struct writer_config {
     const char *name;
-    fw_exchange_t *exc;
+
+    semaphore_t pigeon_wake;
+    hole_t      pigeon_hole;
+
     struct packet_chain *chain_in;
     bool pass;
 };
@@ -99,15 +102,20 @@ static void *exchange_writer(void *opaque) {
     assert(wc->pass == false);
 
     struct packet_chain *chain = wc->chain_in;
-    uint8_t send_buffer[4096];
 
     while (chain) {
-        assert(chain->packet_len <= sizeof(send_buffer) - 1);
-        send_buffer[0] = (chain->next != NULL); // whether or not the last packet
-        memcpy(send_buffer+1, chain->packet_data, chain->packet_len);
+        assert(chain->packet_len <= hole_max_msg_size(&wc->pigeon_hole) - 1);
+        uint8_t *buffer = hole_prepare(&wc->pigeon_hole);
+        assert(buffer != NULL);
 
-        debugf("[%s] - Started write of packet with length %lu", wc->name, chain->packet_len);
-        fakewire_exc_write(wc->exc, send_buffer, chain->packet_len + 1);
+        buffer[0] = (chain->next != NULL); // whether or not this is the last packet
+        memcpy(&buffer[1], chain->packet_data, chain->packet_len);
+
+        debugf("[%s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
+        hole_send(&wc->pigeon_hole, chain->packet_len + 1);
+        while (hole_peek(&wc->pigeon_hole) != NULL) {
+            semaphore_take(&wc->pigeon_wake);
+        }
         debugf("[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
         chain = chain->next;
@@ -137,6 +145,13 @@ static void exchange_state_notify_reader(void *opaque) {
     assert(est != NULL);
 
     (void) semaphore_give(&est->rc.wake);
+}
+
+static void exchange_state_notify_writer(void *opaque) {
+    struct exchange_state *est = (struct exchange_state *) opaque;
+    assert(est != NULL);
+
+    (void) semaphore_give(&est->wc.pigeon_wake);
 }
 
 static void *exchange_controller(void *opaque) {
@@ -169,7 +184,8 @@ static void *exchange_controller(void *opaque) {
     debugf("Attached!");
 
     est->wc.name = ec->name;
-    est->wc.exc = &est->exc;
+    semaphore_init(&est->wc.pigeon_wake);
+    fakewire_exc_attach_writer(&est->exc, &est->wc.pigeon_hole, 4096, exchange_state_notify_writer, est);
     est->wc.chain_in = ec->chain_in;
     est->wc.pass = false;
 

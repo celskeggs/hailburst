@@ -68,8 +68,6 @@ void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart);
 // returns true if another character is available; false if waiting on the chart is recommended
 bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
 
-typedef void (*fw_output_cb_t)(void *param, uint8_t *bytes_in, size_t byte_count);
-
 typedef struct {
     chart_t          *tx_chart;
     struct io_tx_ent *tx_entry;
@@ -83,7 +81,7 @@ void fakewire_enc_init(fw_encoder_t *fwe, chart_t *tx_chart);
 // no destroy function provided because it isn't needed; you can simply stop using the encoder.
 
 // returns how many bytes were successfully written (possibly 0, in which case waiting on the chart is recommended)
-size_t fakewire_enc_encode_data(fw_encoder_t *fwe, uint8_t *bytes_in, size_t byte_count);
+size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size_t byte_count);
 // returns true if control character was written, or false otherwise
 bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
 void fakewire_enc_flush(fw_encoder_t *fwe);

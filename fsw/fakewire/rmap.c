@@ -35,10 +35,6 @@ int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_
     mon->next_txn_id = 1;
     mon->pending_first = NULL;
 
-    mon->scratch_size = max_read_length + SCRATCH_MARGIN_READ;
-    mon->scratch_buffer = malloc(mon->scratch_size);
-    assert(mon->scratch_buffer != NULL);
-
     mutex_init(&mon->pending_mutex);
     semaphore_init(&mon->monitor_wake);
     chart_init(&mon->exc_read_chart, io_rx_pad_size(max_read_length), 4);
@@ -48,7 +44,6 @@ int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_
         chart_destroy(&mon->exc_read_chart);
         semaphore_destroy(&mon->monitor_wake);
         mutex_destroy(&mon->pending_mutex);
-        free(mon->scratch_buffer);
         return -1;
     }
 
@@ -87,12 +82,23 @@ static uint16_t rmap_next_txn(rmap_monitor_t *mon) {
     return txn_id;
 }
 
+static void rmap_context_notify_write_finished(void *opaque) {
+    rmap_context_t *context = (rmap_context_t *) opaque;
+    assert(context != NULL);
+
+    // note: this will only actually end up being helpful if the last transmit was for an unacknowledged write
+    semaphore_give(&context->on_complete);
+}
+
 void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_write_length) {
+    assert(context != NULL && mon != NULL);
+    // note: max_write_length CAN be zero, such as in the case of a device like the clock that only reads
     assert(max_write_length <= RMAP_MAX_DATA_LEN);
     context->monitor = mon;
-    context->scratch_size = max_write_length + SCRATCH_MARGIN_WRITE;
-    context->scratch_buffer = malloc(context->scratch_size);
-    assert(context->scratch_buffer != NULL);
+
+    fakewire_exc_attach_writer(&mon->exc, &context->writer, max_write_length + SCRATCH_MARGIN_WRITE,
+                               rmap_context_notify_write_finished, context);
+
     context->is_pending = false;
     context->pending_next = NULL;
     context->receive_timestamp = 0;
@@ -161,7 +167,8 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     // make sure we didn't get any null pointers
     assert(context != NULL && routing != NULL && data != NULL);
     // make sure we have enough space to buffer this much data in scratch memory
-    assert(0 < data_length && data_length <= RMAP_MAX_DATA_LEN && data_length + SCRATCH_MARGIN_WRITE <= context->scratch_size);
+    assert(0 < data_length && data_length <= RMAP_MAX_DATA_LEN
+            && data_length + SCRATCH_MARGIN_WRITE <= hole_max_msg_size(&context->writer));
     // make sure flags are valid
     assert(flags == (flags & (RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT)));
 
@@ -171,9 +178,14 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
            flags, ext_addr, main_addr, data_length);
 #endif
 
-    // use scratch buffer
-    uint8_t *out = context->scratch_buffer;
-    memset(out, 0, context->scratch_size);
+    // get output buffer for our writable pigeon hole
+    uint8_t *out_buffer = hole_prepare(&context->writer);
+    if (out_buffer == NULL) {
+        // should only happen when a previous rmap_write or rmap_read failed to write a packet.
+        return RS_TRANSMIT_BLOCKED;
+    }
+    uint8_t *out = out_buffer;
+    memset(out, 0, hole_max_msg_size(&context->writer));
     // and then start writing output bytes according to the write command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
@@ -227,16 +239,18 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     *out++ = header_crc;
 
     // build data body of packet
-    assert((out - context->scratch_buffer) + data_length + 1 <= context->scratch_size);
+    assert((out - out_buffer) + data_length + 1 <= hole_max_msg_size(&context->writer));
     memcpy(out, data, data_length);
     out += data_length;
 
     // and data CRC as trailer
     *out++ = rmap_crc8(data, data_length);
 
-    assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    fakewire_exc_write(&context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    hole_send(&context->writer, out - out_buffer);
+
+    // we only need to wait for a confirmation of our write if we're unacknowledged; otherwise, the acknowledgement
+    // itself is plenty of evidence that we sent our message successfully!
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
@@ -246,37 +260,57 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     rmap_status_t status_out;
 
     if (flags & RF_ACKNOWLEDGE) {
-        // if we transmitted successfully, and need an acknowledgement, then all we've got to do is wait for a reply!
+        // if we need an acknowledgement, then all we've got to do is wait for a reply!
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (context->has_received == false) {
-            uint64_t now = clock_timestamp_monotonic();
-            if (now >= timeout) {
-                break;
-            }
+        while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
             mutex_unlock(&context->monitor->pending_mutex);
-            semaphore_take_timed(&context->on_complete, timeout - now);
+            semaphore_take_timed_abs(&context->on_complete, timeout);
             mutex_lock(&context->monitor->pending_mutex);
     
             assert(context->is_pending == true);
         }
 
-        // got a reply!
         if (context->has_received == true) {
+            // got a reply!
             status_out = context->received_status;
         } else {
+            // timed out!
             assert(clock_timestamp_monotonic() > timeout);
-            status_out = RS_TRANSACTION_TIMEOUT;
+            if (hole_peek(&context->writer) != NULL) {
+                // timed out, AND it turns out we never even sent our message!
+                status_out = RS_TRANSMIT_TIMEOUT;
+            } else {
+                // timed out, BUT at least we transmitted our request.
+                status_out = RS_TRANSACTION_TIMEOUT;
+            }
         }
     } else {
-        // if we transmitted successfully, but didn't ask for a reply, we can just assume success!
+        // if we transmitted successfully, but didn't ask for a reply, we just need to wait for the write to complete!
 
-        status_out = RS_OK;
+        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
+        while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < timeout) {
+            mutex_unlock(&context->monitor->pending_mutex);
+            semaphore_take_timed_abs(&context->on_complete, timeout);
+            mutex_lock(&context->monitor->pending_mutex);
+
+            assert(context->is_pending == true);
+        }
+
+        if (hole_peek(&context->writer) == NULL) {
+            // message sent successfully!
+            status_out = RS_OK;
+        } else {
+            // timed out!
+            assert(clock_timestamp_monotonic() > timeout);
+            status_out = RS_TRANSMIT_TIMEOUT;
+        }
 
         if (context->has_received) {
-            // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so record
+            // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so report
             // it as an error.
             debugf("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
+            // BUT this doesn't really mean anything bad for our message, so we don't need to change status_out.
         }
     }
 
@@ -308,7 +342,8 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     assert(context != NULL && routing != NULL && data_length != NULL && data_out != NULL);
     // make sure the monitor has enough space to buffer this much data in scratch memory when receiving
     uint32_t max_data_length = *data_length;
-    assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN && max_data_length + SCRATCH_MARGIN_READ <= context->monitor->scratch_size);
+    assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN
+            && max_data_length + SCRATCH_MARGIN_READ <= io_rx_size(&context->monitor->exc_read_chart));
     // make sure flags are valid
     assert(flags == (flags & RF_INCREMENT));
 
@@ -318,10 +353,16 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
            flags, ext_addr, main_addr, *data_length);
 #endif
 
-    // use scratch buffer
-    uint8_t *out = context->scratch_buffer;
-    memset(out, 0, context->scratch_size);
-    // and then start writing output bytes according to the read command format
+    // get output buffer for our writable pigeon hole
+    uint8_t *out_buffer = hole_prepare(&context->writer);
+    if (out_buffer == NULL) {
+        // should only happen when a previous rmap_write or rmap_read failed to write a packet.
+        return RS_TRANSMIT_BLOCKED;
+    }
+    uint8_t *out = out_buffer;
+    memset(out, 0, hole_max_msg_size(&context->writer));
+
+    // now start writing output bytes according to the read command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
         assert(routing->destination.path_bytes != NULL);
@@ -372,9 +413,11 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     uint8_t header_crc = rmap_crc8(header_region, out - header_region);
     *out++ = header_crc;
 
-    assert(out <= context->scratch_buffer + context->scratch_size);
     // now transmit!
-    fakewire_exc_write(&context->monitor->exc, context->scratch_buffer, out - context->scratch_buffer);
+    hole_send(&context->writer, out - out_buffer);
+
+    // we don't explicitly need to wait for a confirmation that our read was written to the network; the timeout on
+    // receiving a reply is enough.
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
@@ -382,13 +425,9 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
 
     // next: wait for a reply!
     uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-    while (context->has_received == false) {
-        uint64_t now = clock_timestamp_monotonic();
-        if (now >= timeout) {
-            break;
-        }
+    while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
         mutex_unlock(&context->monitor->pending_mutex);
-        semaphore_take_timed(&context->on_complete, timeout - now);
+        semaphore_take_timed_abs(&context->on_complete, timeout);
         mutex_lock(&context->monitor->pending_mutex);
 
         assert(context->is_pending == true);
@@ -396,8 +435,8 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
 
     rmap_status_t status_out;
 
-    // got a reply!
     if (context->has_received == true) {
+        // got a reply!
         status_out = context->received_status;
         assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
         if (context->read_actual_length > max_data_length) {
@@ -409,8 +448,15 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
             *data_length = context->read_actual_length;
         }
     } else {
+        // timed out
         assert(clock_timestamp_monotonic() > timeout);
-        status_out = RS_TRANSACTION_TIMEOUT;
+        if (hole_peek(&context->writer) != NULL) {
+            // timed out, AND it turns out we never even finished sending our message!
+            status_out = RS_TRANSMIT_TIMEOUT;
+        } else {
+            // timed out, BUT at least we sent our read request.
+            status_out = RS_TRANSACTION_TIMEOUT;
+        }
         *data_length = 0;
     }
 
@@ -543,7 +589,7 @@ static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count, uin
 
 static void *rmap_monitor_loop(void *mon_opaque) {
     rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
-    assert(mon != NULL && mon->scratch_buffer != NULL);
+    assert(mon != NULL);
 
     while (true) {
         struct io_rx_ent *ent = chart_reply_start(&mon->exc_read_chart);

@@ -38,6 +38,8 @@ typedef enum {
     RS_REMOTE_ERR_MAX      = 0x0FF,
     RS_DATA_TRUNCATED      = 0x100,
     RS_TRANSACTION_TIMEOUT = 0x101,
+    RS_TRANSMIT_TIMEOUT    = 0x102,
+    RS_TRANSMIT_BLOCKED    = 0x103,
 } rmap_status_t;
 
 typedef struct rmap_context_st rmap_context_t;
@@ -48,9 +50,6 @@ typedef struct {
     thread_t      monitor_thread;
     semaphore_t   monitor_wake;
 
-    size_t   scratch_size;
-    uint8_t *scratch_buffer;
-
     mutex_t         pending_mutex;
     rmap_context_t *pending_first;
     uint16_t        next_txn_id;
@@ -59,8 +58,7 @@ typedef struct {
 typedef struct rmap_context_st {
     rmap_monitor_t *monitor;
 
-    size_t   scratch_size;
-    uint8_t *scratch_buffer;
+    hole_t writer;
 
     bool        is_pending;
     semaphore_t on_complete;

@@ -7,7 +7,7 @@ def build_common(env):
     return [
         env.Library("main-app", ["fakewire/rmap.c", "main/cmd.c", "main/comm.c", "main/debug.c", "main/heartbeat.c",
                                  "main/magnetometer.c", "main/radio.c", "main/spacecraft.c", "main/tlm.c"]),
-        env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
+        env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c", "main/wall.c"])
     ]
 
 
