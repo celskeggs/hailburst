@@ -47,6 +47,11 @@ static bool magnetometer_is_error_recoverable(rmap_status_t status) {
         return true;
     case MAG_RS_CORRUPT_DATA:
         return true;
+    // indicates link loss; worth retrying in case it gets re-established.
+    case RS_TRANSMIT_TIMEOUT:
+        return true;
+    case RS_TRANSMIT_BLOCKED:
+        return true;
     // indicates programming error or program code corruption; not worth retrying. we want these to be surfaced.
     case MAG_RS_NOT_ALIGNED:
         return false;
@@ -73,6 +78,7 @@ retry:
             return false;
         } else if (retries > 0) {
             debugf("Magnetometer: retrying register %u set after recoverable error: 0x%03x", reg, status);
+            retries -= 1;
             goto retry;
         } else {
             debugf("Magnetometer: after %d retries, erroring out during register %u set: 0x%03x",

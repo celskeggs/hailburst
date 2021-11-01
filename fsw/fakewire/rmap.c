@@ -11,8 +11,10 @@
 // #define DEBUGTXN
 
 enum {
-    // time out transactions after two milliseconds, which is nearly 4x the average time for a transaction.
-    RMAP_TIMEOUT_NS = 2 * 1000 * 1000,
+    // time out transmits after two milliseconsd
+    RMAP_TRANSMIT_TIMEOUT_NS = 2 * 1000 * 1000,
+    // time out receives after two milliseconds, which is nearly 4x the average time for a transaction.
+    RMAP_RECEIVE_TIMEOUT_NS = 2 * 1000 * 1000,
 };
 
 #define SCRATCH_MARGIN_WRITE (RMAP_MAX_PATH + 4 + RMAP_MAX_PATH + 12 + 1)
@@ -86,7 +88,6 @@ static void rmap_context_notify_write_finished(void *opaque) {
     rmap_context_t *context = (rmap_context_t *) opaque;
     assert(context != NULL);
 
-    // note: this will only actually end up being helpful if the last transmit was for an unacknowledged write
     semaphore_give(&context->on_complete);
 }
 
@@ -179,9 +180,19 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
 #endif
 
     // get output buffer for our writable pigeon hole
-    uint8_t *out_buffer = hole_prepare(&context->writer);
+    uint8_t *out_buffer;
+    uint64_t prev_transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
+    while ((out_buffer = hole_prepare(&context->writer)) == NULL
+                && clock_timestamp_monotonic() < prev_transmit_timeout) {
+        (void) semaphore_take_timed_abs(&context->on_complete, prev_transmit_timeout);
+    }
     if (out_buffer == NULL) {
         // should only happen when a previous rmap_write or rmap_read failed to write a packet.
+#ifdef DEBUGTXN
+        debugf("RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+               routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+               RS_TRANSMIT_BLOCKED);
+#endif
         return RS_TRANSMIT_BLOCKED;
     }
     uint8_t *out = out_buffer;
@@ -249,8 +260,14 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     // now transmit!
     hole_send(&context->writer, out - out_buffer);
 
-    // we only need to wait for a confirmation of our write if we're unacknowledged; otherwise, the acknowledgement
-    // itself is plenty of evidence that we sent our message successfully!
+    // wait for transmission to complete
+    uint64_t transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
+    while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < transmit_timeout) {
+        semaphore_take_timed_abs(&context->on_complete, transmit_timeout);
+
+        assert(context->is_pending == true);
+    }
+    // (check for timeout is after we acquire the lock)
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
@@ -259,15 +276,20 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     // exactly how we determine the final status depends on whether we expect a reply from the remote device.
     rmap_status_t status_out;
 
-    if (flags & RF_ACKNOWLEDGE) {
+    if (hole_peek(&context->writer) != NULL) {
+        // timed out when transmitting request, so don't bother waiting for a reply
+        assert(clock_timestamp_monotonic() > transmit_timeout);
+        status_out = RS_TRANSMIT_TIMEOUT;
+        // TODO: could we proactively invalidate the message now, so that it doesn't get transmitted later?
+    } else if (flags & RF_ACKNOWLEDGE) {
         // if we need an acknowledgement, then all we've got to do is wait for a reply!
 
-        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
+        uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
         while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
             mutex_unlock(&context->monitor->pending_mutex);
             semaphore_take_timed_abs(&context->on_complete, timeout);
             mutex_lock(&context->monitor->pending_mutex);
-    
+
             assert(context->is_pending == true);
         }
 
@@ -277,34 +299,12 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         } else {
             // timed out!
             assert(clock_timestamp_monotonic() > timeout);
-            if (hole_peek(&context->writer) != NULL) {
-                // timed out, AND it turns out we never even sent our message!
-                status_out = RS_TRANSMIT_TIMEOUT;
-            } else {
-                // timed out, BUT at least we transmitted our request.
-                status_out = RS_TRANSACTION_TIMEOUT;
-            }
+            status_out = RS_TRANSACTION_TIMEOUT;
         }
     } else {
-        // if we transmitted successfully, but didn't ask for a reply, we just need to wait for the write to complete!
+        // if we transmitted successfully, but didn't ask for a reply, we can just assume the request succeeded!
 
-        uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-        while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < timeout) {
-            mutex_unlock(&context->monitor->pending_mutex);
-            semaphore_take_timed_abs(&context->on_complete, timeout);
-            mutex_lock(&context->monitor->pending_mutex);
-
-            assert(context->is_pending == true);
-        }
-
-        if (hole_peek(&context->writer) == NULL) {
-            // message sent successfully!
-            status_out = RS_OK;
-        } else {
-            // timed out!
-            assert(clock_timestamp_monotonic() > timeout);
-            status_out = RS_TRANSMIT_TIMEOUT;
-        }
+        status_out = RS_OK;
 
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so report
@@ -354,9 +354,20 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
 #endif
 
     // get output buffer for our writable pigeon hole
-    uint8_t *out_buffer = hole_prepare(&context->writer);
+    uint8_t *out_buffer = NULL;
+    uint64_t prev_transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
+    while ((out_buffer = hole_prepare(&context->writer)) == NULL
+                && clock_timestamp_monotonic() < prev_transmit_timeout) {
+        (void) semaphore_take_timed_abs(&context->on_complete, prev_transmit_timeout);
+    }
     if (out_buffer == NULL) {
         // should only happen when a previous rmap_write or rmap_read failed to write a packet.
+        *data_length = 0;
+#ifdef DEBUGTXN
+        debugf("RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
+               routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+               *data_length, RS_TRANSMIT_BLOCKED);
+#endif
         return RS_TRANSMIT_BLOCKED;
     }
     uint8_t *out = out_buffer;
@@ -416,48 +427,56 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     // now transmit!
     hole_send(&context->writer, out - out_buffer);
 
-    // we don't explicitly need to wait for a confirmation that our read was written to the network; the timeout on
-    // receiving a reply is enough.
+    // wait for transmission to complete
+    uint64_t transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
+    while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < transmit_timeout) {
+        semaphore_take_timed_abs(&context->on_complete, transmit_timeout);
+
+        assert(context->is_pending == true);
+    }
+    // (check for timeout is after we acquire the lock)
 
     // re-acquire the lock and make sure our state is untouched
     mutex_lock(&context->monitor->pending_mutex);
     assert(context->is_pending == true);
 
-    // next: wait for a reply!
-    uint64_t timeout = clock_timestamp_monotonic() + RMAP_TIMEOUT_NS;
-    while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
-        mutex_unlock(&context->monitor->pending_mutex);
-        semaphore_take_timed_abs(&context->on_complete, timeout);
-        mutex_lock(&context->monitor->pending_mutex);
-
-        assert(context->is_pending == true);
-    }
-
     rmap_status_t status_out;
 
-    if (context->has_received == true) {
-        // got a reply!
-        status_out = context->received_status;
-        assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
-        if (context->read_actual_length > max_data_length) {
-            if (status_out == RS_OK) {
-                status_out = RS_DATA_TRUNCATED;
-            }
-            *data_length = max_data_length;
-        } else {
-            *data_length = context->read_actual_length;
-        }
-    } else {
-        // timed out
-        assert(clock_timestamp_monotonic() > timeout);
-        if (hole_peek(&context->writer) != NULL) {
-            // timed out, AND it turns out we never even finished sending our message!
-            status_out = RS_TRANSMIT_TIMEOUT;
-        } else {
-            // timed out, BUT at least we sent our read request.
-            status_out = RS_TRANSACTION_TIMEOUT;
-        }
+    if (hole_peek(&context->writer) != NULL) {
+        // did not manage to transmit request
+        assert(clock_timestamp_monotonic() > transmit_timeout);
+        status_out = RS_TRANSMIT_TIMEOUT;
         *data_length = 0;
+        // TODO: could we proactively invalidate the message now, so that it doesn't get transmitted later?
+    } else {
+        // next: wait for a reply!
+        uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
+        while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
+            mutex_unlock(&context->monitor->pending_mutex);
+            semaphore_take_timed_abs(&context->on_complete, timeout);
+            mutex_lock(&context->monitor->pending_mutex);
+
+            assert(context->is_pending == true);
+        }
+
+        if (context->has_received == true) {
+            // got a reply!
+            status_out = context->received_status;
+            assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
+            if (context->read_actual_length > max_data_length) {
+                if (status_out == RS_OK) {
+                    status_out = RS_DATA_TRUNCATED;
+                }
+                *data_length = max_data_length;
+            } else {
+                *data_length = context->read_actual_length;
+            }
+        } else {
+            // timed out
+            assert(clock_timestamp_monotonic() > timeout);
+            status_out = RS_TRANSACTION_TIMEOUT;
+            *data_length = 0;
+        }
     }
 
     // and now we can remove our pending entry from the linked list, so that the transaction ID can be reused by others

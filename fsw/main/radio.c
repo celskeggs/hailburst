@@ -89,6 +89,11 @@ static bool radio_is_error_recoverable(rmap_status_t status) {
         return true;
     case RADIO_RS_PACKET_CORRUPTED:
         return true;
+    // indicates link loss; worth retrying in case it gets re-established.
+    case RS_TRANSMIT_TIMEOUT:
+        return true;
+    case RS_TRANSMIT_BLOCKED:
+        return true;
     // indicates programming error or program code corruption; not worth retrying. we want these to be surfaced.
     case RADIO_RS_REGISTER_READ_ONLY:
         return false;
