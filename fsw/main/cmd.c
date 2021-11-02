@@ -14,18 +14,18 @@ enum {
 };
 
 typedef struct {
-    uint8_t *bytes_ptr;
-    ssize_t  bytes_remaining;
-    bool     parse_ok;
+    const uint8_t *bytes_ptr;
+    ssize_t        bytes_remaining;
+    bool           parse_ok;
 } cmd_parser_t;
 
 static uint8_t zero[8] = {0};
 
-static uint8_t *cmd_parser_consume(cmd_parser_t *parser, ssize_t n_bytes) {
+static const uint8_t *cmd_parser_consume(cmd_parser_t *parser, ssize_t n_bytes) {
     assert(n_bytes > 0 && n_bytes <= (ssize_t) sizeof(zero));
     parser->bytes_remaining -= n_bytes;
     if (parser->bytes_remaining >= 0) {
-        uint8_t *ptr_out = parser->bytes_ptr;
+        const uint8_t *ptr_out = parser->bytes_ptr;
         parser->bytes_ptr += n_bytes;
         return ptr_out;
     }
@@ -37,12 +37,12 @@ static bool cmd_parser_wrapup(cmd_parser_t *parser) {
 }
 
 static uint8_t cmd_parse_u8(cmd_parser_t *parser) {
-    uint8_t *ptr = cmd_parser_consume(parser, 1);
+    const uint8_t *ptr = cmd_parser_consume(parser, 1);
     return *ptr;
 }
 
 static uint32_t cmd_parse_u32(cmd_parser_t *parser) {
-    uint8_t *ptr = cmd_parser_consume(parser, 4);
+    const uint8_t *ptr = cmd_parser_consume(parser, 4);
     return (ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3];
 }
 
@@ -91,7 +91,7 @@ static cmd_t commands[] = {
     { .id = MAG_SET_PWR_STATE_CID, .cmd = cmd_mag_set_pwr_state },
 };
 
-cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, uint8_t *args, size_t args_len) {
+cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, const uint8_t *args, size_t args_len) {
     cmd_parser_t parser = {
         .bytes_ptr = args,
         .bytes_remaining = args_len,

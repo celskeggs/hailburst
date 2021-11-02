@@ -12,7 +12,7 @@ typedef enum {
     CMD_STATUS_UNRECOGNIZED = 2,  // command not valid
 } cmd_status_t;
 
-cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, uint8_t *args, size_t args_len);
+cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, const uint8_t *args, size_t args_len);
 
 void cmd_mainloop(spacecraft_t *sc);
 

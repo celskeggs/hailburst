@@ -126,7 +126,7 @@ void comm_enc_init(comm_enc_t *enc, stream_t *downlink) {
     enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
 }
 
-static void comm_enc_escape_limited(comm_enc_t *enc, uint8_t *data, size_t len) {
+static void comm_enc_escape_limited(comm_enc_t *enc, const uint8_t *data, size_t len) {
     assert(0 < len && len <= COMM_SCRATCH_SIZE / 2);
     size_t out_i = 0;
     for (size_t in_i = 0; in_i < len; in_i++) {
@@ -140,7 +140,7 @@ static void comm_enc_escape_limited(comm_enc_t *enc, uint8_t *data, size_t len) 
     stream_write(enc->downlink, enc->scratch_buffer, out_i);
 }
 
-static void comm_enc_escape(comm_enc_t *enc, uint8_t *data, size_t len) {
+static void comm_enc_escape(comm_enc_t *enc, const uint8_t *data, size_t len) {
     while (len > COMM_SCRATCH_SIZE / 2) {
         comm_enc_escape_limited(enc, data, COMM_SCRATCH_SIZE / 2);
         data += COMM_SCRATCH_SIZE / 2;

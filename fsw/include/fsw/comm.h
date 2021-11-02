@@ -8,10 +8,10 @@
 #include <hal/thread.h>
 
 typedef struct {
-    uint32_t cmd_tlm_id;
-    uint64_t timestamp_ns;
-    size_t   data_len;
-    uint8_t *data_bytes;
+    uint32_t       cmd_tlm_id;
+    uint64_t       timestamp_ns;
+    size_t         data_len;
+    const uint8_t *data_bytes;
 } comm_packet_t;
 
 typedef struct {

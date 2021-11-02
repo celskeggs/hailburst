@@ -4,7 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <hal/thread.h>
 #include <fsw/comm.h>
+#include <fsw/wall.h>
 
 typedef struct {
     uint64_t reading_time;
@@ -12,6 +14,11 @@ typedef struct {
     int16_t  mag_y;
     int16_t  mag_z;
 } tlm_mag_reading_t;
+
+typedef struct {
+    semaphore_t sync_wake;
+    hole_t      sync_hole;
+} tlm_sync_endpoint_t;
 
 // initialize telemetry system
 void telemetry_init(comm_enc_t *encoder);
@@ -26,6 +33,8 @@ void tlm_heartbeat(void);
 void tlm_mag_pwr_state_changed(bool power_state);
 
 // synchronous telemetry writes
-void tlm_sync_mag_readings_iterator(bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param);
+void tlm_sync_init(tlm_sync_endpoint_t *tep);
+void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
+                                    bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param);
 
 #endif /* FSW_TLM_H */

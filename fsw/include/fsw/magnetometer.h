@@ -18,6 +18,9 @@ typedef struct {
     // telemetry buffer
     queue_t readings;
 
+    // telemetry output endpoint
+    tlm_sync_endpoint_t telem_endpoint;
+
     thread_t query_thread;
     thread_t telem_thread;
 } magnetometer_t;
