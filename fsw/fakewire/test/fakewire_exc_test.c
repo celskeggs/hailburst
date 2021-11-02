@@ -297,8 +297,6 @@ int test_main(void) {
     char path_buf[256];
     test_common_get_fifo("fwfifo", path_buf, sizeof(path_buf));
 
-    wakeup_system_init();
-
     srand(31415);
 
     struct exchange_config ec_left = {

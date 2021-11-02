@@ -94,10 +94,3 @@ bool semaphore_give(semaphore_t *sema) {
     mutex_unlock(&sema->mut);
     return given;
 }
-
-// not for generic code; only for internal Linux wakeup code implementation
-void semaphore_reset_linuxonly(semaphore_t *sema) {
-    mutex_lock(&sema->mut);
-    sema->is_available = false;
-    mutex_unlock(&sema->mut);
-}
