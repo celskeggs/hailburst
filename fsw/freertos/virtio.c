@@ -482,7 +482,7 @@ void virtio_device_start(struct virtio_device *device) {
     assert(device != NULL && device->initialized);
     assert(device->monitor_task == NULL);
     thread_create(&device->monitor_task, "virtio-monitor", PRIORITY_DRIVERS, virtio_monitor_loop, device,
-                  NOT_RESTARTABLE);
+                  RESTARTABLE);
     assert(device->monitor_task != NULL);
     enable_irq(device->irq, virtio_device_irq_callback, device);
 }

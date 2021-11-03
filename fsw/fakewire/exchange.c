@@ -55,7 +55,7 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
         return -1;
     }
 
-    thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, NOT_RESTARTABLE);
+    thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, RESTARTABLE);
 
     return 0;
 }

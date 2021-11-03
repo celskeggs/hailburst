@@ -151,7 +151,7 @@ void watchdog_init(void) {
 
     watchdog_init_window_end = timer_now_ns() + WATCHDOG_ASPECT_MAX_AGE;
 
-    thread_create(&watchdog_thread, "watchdog", PRIORITY_DRIVERS, watchdog_caretaker_loop, NULL, NOT_RESTARTABLE);
+    thread_create(&watchdog_thread, "watchdog", PRIORITY_DRIVERS, watchdog_caretaker_loop, NULL, RESTARTABLE);
 }
 
 void watchdog_force_reset(void) {

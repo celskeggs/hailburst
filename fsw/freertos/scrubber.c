@@ -93,5 +93,5 @@ void scrubber_init(void *kernel_elf_rom) {
     assert(!scrubber_initialized);
     scrubber_initialized = true;
 
-    thread_create(&scrubber_thread, "scrubber", PRIORITY_IDLE, scrubber_mainloop, kernel_elf_rom, NOT_RESTARTABLE);
+    thread_create(&scrubber_thread, "scrubber", PRIORITY_IDLE, scrubber_mainloop, kernel_elf_rom, RESTARTABLE);
 }

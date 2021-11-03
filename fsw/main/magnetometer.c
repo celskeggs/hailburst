@@ -246,8 +246,8 @@ void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *ad
     mag->should_be_powered = false;
     rmap_init_context(&mag->rctx, mon, 4);
     memcpy(&mag->address, address, sizeof(rmap_addr_t));
-    thread_create(&mag->query_thread, "mag_query_loop", PRIORITY_WORKERS, magnetometer_mainloop, mag, NOT_RESTARTABLE);
-    thread_create(&mag->telem_thread, "mag_telem_loop", PRIORITY_WORKERS, magnetometer_telemloop, mag, NOT_RESTARTABLE);
+    thread_create(&mag->query_thread, "mag_query_loop", PRIORITY_WORKERS, magnetometer_mainloop, mag, RESTARTABLE);
+    thread_create(&mag->telem_thread, "mag_telem_loop", PRIORITY_WORKERS, magnetometer_telemloop, mag, RESTARTABLE);
 }
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {

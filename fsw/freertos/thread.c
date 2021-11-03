@@ -53,7 +53,7 @@ static void thread_restart_hook(void *opaque, TaskHandle_t task) {
     taskENTER_CRITICAL();
     vTaskDelete(task);
     state->hit_restart = true;
-    thread_start_internal(state, true);
+    thread_start_internal(state, RESTARTABLE);
     taskEXIT_CRITICAL();
 }
 
