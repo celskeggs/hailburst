@@ -38,11 +38,7 @@ __attribute__((noreturn)) void _Exit(int status) {
 }
 
 void usleep(unsigned long usec) {
-    TickType_t ticks = pdMS_TO_TICKS(usec / 1000);
-    if (usec > 0 && ticks == 0) {
-        ticks = 1;
-    }
-    vTaskDelay(ticks);
+    vTaskDelay(timer_ns_to_ticks(usec * 1000));
 }
 
 void *malloc(size_t size) {
