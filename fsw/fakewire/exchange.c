@@ -1,5 +1,3 @@
-#include <assert.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -15,8 +13,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_puts(str) (debugf("[  fakewire_exc] [%s] %s", fwe->link_opts.label, str))
-#define debug_printf(fmt, ...) (debugf("[  fakewire_exc] [%s] " fmt, fwe->link_opts.label, __VA_ARGS__))
+#define debug_printf(fmt, ...) debugf("[  fakewire_exc] [%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
 
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
@@ -134,12 +131,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             if (exc_state == FW_EXC_OPERATING && (!resend_fcts || !resend_pkts)) {
                 // do a timed wait, so that we can send heartbeats when it's an appropriate time
 #ifdef DEBUG
-                debug_puts("Blocking in main exchange (timeout A).");
+                debug_printf("Blocking in main exchange (timeout A).");
 #endif
                 if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
-                    debug_puts("Woke up main exchange loop (timeout A)");
+                    debug_printf("Woke up main exchange loop (timeout A)");
 #endif
                     resend_fcts = true;
                     resend_pkts = true;
@@ -149,12 +146,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             } else if ((exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING) && !send_primary_handshake) {
                 // do a timed wait, so that we can send a fresh handshake when it's an appropriate time
 #ifdef DEBUG
-                debug_puts("Blocking in main exchange (timeout B).");
+                debug_printf("Blocking in main exchange (timeout B).");
 #endif
                 if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
-                    debug_puts("Woke up main exchange loop (timeout B)");
+                    debug_printf("Woke up main exchange loop (timeout B)");
 #endif
                     send_primary_handshake = true;
 
@@ -162,12 +159,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 }
             } else {
 #ifdef DEBUG
-                debug_puts("Blocking in main exchange (blocking).");
+                debug_printf("Blocking in main exchange (blocking).");
 #endif
                 semaphore_take(&fwe->exchange_wake);
             }
 #ifdef DEBUG
-            debug_puts("Woke up main exchange loop");
+            debug_printf("Woke up main exchange loop");
 #endif
         }
 
@@ -376,7 +373,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
         if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_PREPARING && read_entry != NULL) {
             assert(read_entry->actual_length == 0);
 #ifdef DEBUG
-            debug_puts("Sending FCT.");
+            debug_printf("Sending FCT.");
 #endif
             fcts_sent += 1;
             recv_state = FW_RECV_LISTENING;

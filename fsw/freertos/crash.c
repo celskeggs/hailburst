@@ -1,5 +1,4 @@
 #include <inttypes.h>
-#include <stdio.h>
 
 #include <FreeRTOS.h>
 #include <task.h>
@@ -8,6 +7,7 @@
 #include <rtos/crash.h>
 #include <rtos/gic.h>
 #include <hal/thread.h>
+#include <fsw/debug.h>
 
 void abort(void) {
     asm volatile("CPSID i");
@@ -19,11 +19,11 @@ void abort(void) {
 
 static __attribute__((noreturn)) void suspend_current_task(void) {
     for (;;) {
-        printf("SUSPENDING TASK.\n");
+        debugf("SUSPENDING TASK.");
         // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
         // to return all the way back to the interrupted task.
         vTaskSuspend(NULL);
-        printf("Aborted task unexpectedly woke up!\n");
+        debugf("Aborted task unexpectedly woke up!");
     }
 }
 
@@ -35,9 +35,9 @@ static void restart_other_task(TaskHandle_t task) {
     assert(task != NULL && task != xTaskGetCurrentTaskHandle() && task != xTaskGetIdleTaskHandle());
     task_restart_hook_t *hook = (task_restart_hook_t *) xTaskGetApplicationTaskTag(task);
     assert(hook != NULL && hook->hook_callback != NULL);
-    printf("Performing restart action for task '%s'\n", pcTaskGetName(task));
+    debugf("Performing restart action for task '%s'", pcTaskGetName(task));
     hook->hook_callback(hook->hook_param, task);
-    printf("Finished performing restart action for task '%s'\n", pcTaskGetName(task));
+    debugf("Finished performing restart action for task '%s'", pcTaskGetName(task));
 }
 
 static void *restart_task_mainloop(void *opaque) {
@@ -63,7 +63,7 @@ static __attribute__((noreturn)) void restart_current_task(void) {
         assert(task_restart_queue_initialized == true);
         queue_send(&task_restart_queue, &cur);
     } else {
-        printf("Cannot restart this task (not marked as RESTARTABLE); suspending instead.\n");
+        debugf("Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
     }
     // wait forever for the restart task to run
     suspend_current_task();
@@ -103,15 +103,15 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     uint64_t now = timer_now_ns();
 
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
-    printf("%s\n", trap_name);
+    debugf("%s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     const char *name = pcTaskGetName(failed_task);
-    printf("%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x\n", trap_name, name, state->lr, spsr);
-    printf("Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x\n", state->r0, state->r1, state->r2, state->r3);
-    printf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x\n", state->r4, state->r5, state->r6, state->r7);
-    printf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x\n", state->r8, state->r9, state->r10, state->r11);
-    printf("Registers: R12=0x%08x\n", state->r12);
-    printf("HALTING RTOS IN REACTION TO %s AT TIME=%" PRIu64 "\n", trap_name, now);
+    debugf("%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x", trap_name, name, state->lr, spsr);
+    debugf("Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x", state->r0, state->r1, state->r2, state->r3);
+    debugf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x", state->r4, state->r5, state->r6, state->r7);
+    debugf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x", state->r8, state->r9, state->r10, state->r11);
+    debugf("Registers: R12=0x%08x", state->r12);
+    debugf("HALTING RTOS IN REACTION TO %s AT TIME=%" PRIu64, trap_name, now);
     // returns to an abort() call
 }
 
@@ -122,21 +122,21 @@ static volatile TaskHandle_t last_failed_task = NULL;
 
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
-    printf("TASK %s\n", trap_name);
+    debugf("TASK %s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     assert(failed_task != NULL);
     const char *name = pcTaskGetName(failed_task);
-    printf("%s occurred in task '%s'\n", trap_name, name);
+    debugf("%s occurred in task '%s'", trap_name, name);
 
     if (failed_task == xTaskGetIdleTaskHandle()) {
         // cannot suspend the IDLE task safely, because FreeRTOS requires that there always be an IDLE task
-        printf("EXCEPTION OCCURRED IN IDLE TASK; HALTING RTOS.\n");
+        debugf("EXCEPTION OCCURRED IN IDLE TASK; HALTING RTOS.");
         abort();
     }
 
     if (last_failed_task == failed_task) {
         // should be different, because we shouldn't hit any aborts past this point
-        printf("RECURSIVE ABORT; HALTING RTOS.\n");
+        debugf("RECURSIVE ABORT; HALTING RTOS.");
         abort();
     }
 
@@ -157,7 +157,7 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
 
     uint64_t now = timer_now_ns();
 
-    printf("STACK OVERFLOW occurred in task '%s'\n", pcTaskName);
-    printf("HALTING IN REACTION TO STACK OVERFLOW AT TIME=%" PRIu64 "\n", now);
+    debugf("STACK OVERFLOW occurred in task '%s'", pcTaskName);
+    debugf("HALTING IN REACTION TO STACK OVERFLOW AT TIME=%" PRIu64, now);
     abort();
 }

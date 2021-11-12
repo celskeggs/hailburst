@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <endian.h>
 #include <stdint.h>
 #include <zlib.h> // for crc32

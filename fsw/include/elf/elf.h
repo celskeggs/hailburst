@@ -1,10 +1,11 @@
 #ifndef FSW_ELF_ELF_H
 #define FSW_ELF_ELF_H
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#include <fsw/debug.h>
 
 typedef uint32_t Elf32_Addr;
 typedef uint16_t Elf32_Half;
@@ -82,9 +83,8 @@ enum {
 };
 
 typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags);
-typedef void (*elf_debug_cb_t)(const char* format, ...);
 
-bool elf_validate_header(uint8_t *kernel, elf_debug_cb_t debug);
-uint32_t elf_scan_load_segments(uint8_t *kernel, elf_debug_cb_t debug, uint32_t lowest_address, elf_scan_cb_t visitor);
+bool elf_validate_header(uint8_t *kernel);
+uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_scan_cb_t visitor);
 
 #endif /* FSW_ELF_ELF_H */

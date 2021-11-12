@@ -53,12 +53,12 @@ static void *scrubber_mainloop(void *opaque) {
 
         atomic_store_relaxed(scrubber_iteration, scrubber_iteration | 1);
 
-        if (!elf_validate_header(kernel_elf_rom, debugf)) {
+        if (!elf_validate_header(kernel_elf_rom)) {
             debugf("[scrubber] header validation failed; halting scrubber.");
             return NULL;
         }
 
-        if (elf_scan_load_segments(kernel_elf_rom, debugf, MEMORY_LOW, scrub_segment) == 0) {
+        if (elf_scan_load_segments(kernel_elf_rom, MEMORY_LOW, scrub_segment) == 0) {
             debugf("[scrubber] segment scan failed; halting scrubber.");
             return NULL;
         }

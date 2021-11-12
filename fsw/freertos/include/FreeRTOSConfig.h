@@ -1,8 +1,9 @@
 #ifndef FSW_FREERTOS_FREERTOS_CONFIG_H
 #define FSW_FREERTOS_FREERTOS_CONFIG_H
 
-#include <assert.h>
 #include <string.h> // for memset, needed by port.c
+
+#include <fsw/debug.h> // for assert
 
 #define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0

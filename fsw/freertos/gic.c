@@ -1,6 +1,3 @@
-#include <assert.h>
-#include <stdio.h>
-
 #include <FreeRTOS.h>
 
 #include <rtos/arm.h>

@@ -1,9 +1,7 @@
-#include <assert.h>
-#include <stdio.h>
-
 #include <hal/platform.h>
 #include <hal/watchdog.h>
 #include <fsw/clock.h>
+#include <fsw/clock_init.h>
 #include <fsw/cmd.h>
 #include <fsw/debug.h>
 #include <fsw/spacecraft.h>

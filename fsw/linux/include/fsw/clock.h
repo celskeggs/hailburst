@@ -5,10 +5,6 @@
 #include <stdint.h>
 #include <time.h>
 
-#include <fsw/fakewire/rmap.h>
-
-void clock_init(rmap_monitor_t *mon, rmap_addr_t *address);
-
 extern int64_t clock_offset_adj;
 
 static inline uint64_t clock_timestamp_monotonic(void) {

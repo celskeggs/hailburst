@@ -5,7 +5,7 @@ import subprocess
 def build_common(env):
     env["CPPPATH"] += ["include/"]
     return [
-        env.Library("main-app", ["fakewire/rmap.c", "main/cmd.c", "main/comm.c", "main/debug.c", "main/heartbeat.c",
+        env.Library("main-app", ["fakewire/rmap.c", "main/cmd.c", "main/comm.c", "main/heartbeat.c",
                                  "main/magnetometer.c", "main/radio.c", "main/spacecraft.c", "main/tlm.c"]),
         env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c", "main/wall.c"])
     ]
@@ -30,7 +30,8 @@ def configure_linux():
 
     linux_env["CPPPATH"] += ["linux/include/"]
 
-    LINUX_SRC = ["linux/fakewire_link.c", "linux/platform.c", "linux/queue.c", "linux/semaphore.c", "linux/stream.c"]
+    LINUX_SRC = ["linux/debug.c", "linux/fakewire_link.c", "linux/platform.c", "linux/queue.c", "linux/semaphore.c",
+                 "linux/stream.c"]
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c"] + common_libs)
     linux_env.Default(linux_app)
 
@@ -141,19 +142,18 @@ def configure_freertos():
     FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
 
     common_libs = build_common(rtos_env)
-    elf_lib = rtos_env.Library("elf", ["elf/elf.c"])
+    elf_lib = rtos_env.Library("elf", ["elf/elf.c", "freertos/debug.c"])
 
     rtos_env["CPPPATH"] += [
         "freertos/include/", "bootrom/include/",
         FREERTOS_INC,
-        EALIBC_INC, EALIBC_ROOT + "/printf", EALIBC_ROOT + "/arch/arm/include", ZLIB_ROOT
+        EALIBC_INC, EALIBC_ROOT + "/arch/arm/include", ZLIB_ROOT
     ]
 
     ealibc = rtos_env.Library(
         "ealibc",
-        [os.path.join(EALIBC_ROOT, "printf/printf.c")] +
         [os.path.join(EALIBC_ROOT, "src", x) for x in
-         ["assert/assert.c", "string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c", "stdlib/rand.c"]]
+         ["string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c", "stdlib/rand.c"]]
     )
 
     RTOS_SRC = ["freertos/clock.c", "freertos/crash.c", "freertos/entrypoint.s", "freertos/fakewire_link.c",

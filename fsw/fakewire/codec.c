@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <endian.h>
 #include <stddef.h>
 #include <stdlib.h>

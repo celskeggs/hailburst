@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include <fsw/clock.h>
+#include <fsw/clock_init.h>
 #include <fsw/debug.h>
 #include <fsw/tlm.h>
 

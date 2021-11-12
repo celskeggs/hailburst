@@ -1,8 +1,6 @@
-#include <assert.h>
 #include <endian.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
@@ -10,6 +8,7 @@
 #include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
+#include <fsw/io.h>
 
 // #define DEBUG_INIT
 // #define DEBUG_VIRTQ

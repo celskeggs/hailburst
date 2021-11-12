@@ -1,10 +1,7 @@
 #ifndef FSW_FREERTOS_HAL_THREAD_H
 #define FSW_FREERTOS_HAL_THREAD_H
 
-#include <assert.h>
-#include <errno.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -14,6 +11,7 @@
 
 #include <rtos/crash.h>
 #include <rtos/timer.h>
+#include <fsw/debug.h>
 
 enum {
     STACK_SIZE = 1000,

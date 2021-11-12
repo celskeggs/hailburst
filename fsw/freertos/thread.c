@@ -1,11 +1,10 @@
-#include <stdio.h>
-
 #include <FreeRTOS.h>
 #include <task.h>
 
 #include <rtos/crash.h>
 #include <rtos/scrubber.h>
 #include <hal/thread.h>
+#include <fsw/debug.h>
 
 static void thread_restart_hook(void *opaque, TaskHandle_t task);
 
@@ -13,7 +12,7 @@ static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
 
     if (state->hit_restart) {
-        printf("Pending restart on next scrubber cycle.\n");
+        debugf("Pending restart on next scrubber cycle.");
         scrubber_cycle_wait();
     }
 

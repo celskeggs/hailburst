@@ -3,10 +3,7 @@
 
 #include <stdint.h>
 
-#include <rtos/timer.h>
-#include <fsw/fakewire/rmap.h>
-
-void clock_init(rmap_monitor_t *mon, rmap_addr_t *address);
+#include <rtos/timer_min.h>
 
 static inline uint64_t clock_timestamp_monotonic(void) {
     return timer_now_ns();

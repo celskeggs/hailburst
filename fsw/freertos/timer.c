@@ -1,11 +1,11 @@
 #include <inttypes.h>
-#include <stdio.h>
 
 #include <FreeRTOS.h>
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
 #include <rtos/timer.h>
+#include <fsw/debug.h>
 
 extern void FreeRTOS_Tick_Handler(void);
 
@@ -19,7 +19,7 @@ static void timer_callback(void *opaque) {
     uint64_t new_time = arm_get_cntp_cval() + TICK_RATE_IN_CLOCK_UNITS;
     arm_set_cntp_cval(new_time);
 #ifdef TASK_DEBUG
-    printf("Tick hit at %" PRIu64 "; scheduled next tick for %" PRIu64 "\n", timer_now_ns(), new_time * CLOCK_PERIOD_NS);
+    debugf("Tick hit at %" PRIu64 "; scheduled next tick for %" PRIu64 "\n", timer_now_ns(), new_time * CLOCK_PERIOD_NS);
 #endif
     // call tick handler
     FreeRTOS_Tick_Handler();

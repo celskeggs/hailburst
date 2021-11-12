@@ -1,10 +1,9 @@
-#include <assert.h>
 #include <endian.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stdio.h>
 
 #include <fsw/cmd.h>
+#include <fsw/debug.h>
 #include <fsw/spacecraft.h>
 #include <fsw/tlm.h>
 
