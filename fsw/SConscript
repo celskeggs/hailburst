@@ -45,13 +45,50 @@ def configure_linux():
 
 # ============================= FreeRTOS =============================
 
-def configure_freertos():
-    COMMON_RTOS_FLAGS = ['-ggdb', '-mcpu=cortex-a15', '-mfpu=vfpv4', '-mfloat-abi=softfp']
+def configure_host_plugin(LLVM_BASE):
+    host_env = Environment(
+        CCFLAGS=[
+            "-Wall", "-Wextra", "-Werror",
+            "-Wno-unused-parameter",
+            "-fno-rtti",
+            "-std=gnu++14",
+        ],
+        CPPPATH=[
+            os.path.join(LLVM_BASE, "llvm/include"),
+            os.path.join(LLVM_BASE, "clang/include"),
+            os.path.join(LLVM_BASE, "build/include"),
+            os.path.join(LLVM_BASE, "build/tools/clang/include"),
+        ],
+    )
 
+    plugin = host_env.SharedLibrary("log-plugin", ["toolchain/log_plugin.cpp"])
+
+    return plugin
+
+
+def inject_dependency(builder, dependency):
+    original = builder.emitter
+
+    def custom_emitter(target, source, env):
+        target, source = original(target, source, env)
+        env.Depends(target, dependency)
+        return target, source
+    builder.builder.emitter = custom_emitter
+
+
+def configure_freertos():
     ROOT_DIR = os.path.abspath("../../..")
 
     LLVM_BASE = os.path.join(ROOT_DIR, "llvm-project-13")
     CLANG_PATH = os.path.join(LLVM_BASE, "build/bin/clang-13")
+
+    clang_plugin = configure_host_plugin(LLVM_BASE)
+
+    COMMON_FLAGS = [
+        "-ggdb",
+        "-target", "arm-none-eabi",
+        "-mcpu=cortex-a15", "-mfpu=vfpv4", "-mfloat-abi=softfp",
+    ]
 
     rtos_env = Environment(
         CC=CLANG_PATH,
@@ -60,16 +97,18 @@ def configure_freertos():
         OBJCOPY="arm-none-eabi-objcopy",
         STRIP="arm-none-eabi-strip",
         LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
-        CCFLAGS=COMMON_RTOS_FLAGS + ["-target", "arm-none-eabi",
-                                     "-Wall", "-Wextra", "-Werror",
-                                     # because ealibc uses #pragma mark, and that causes trouble
-                                     "-Wno-unknown-pragmas",
-                                     "-nostdlib", "-nostdinc", "-ffreestanding",
-                                     "-std=gnu11",
-                                     "-D_BITSIZE=32", "-D__FREERTOS__"],
-        ASFLAGS=COMMON_RTOS_FLAGS + ["-target", "arm-none-eabi", "-c", "-Wa,--fatal-warnings"],
+        CLANGPLUGIN=clang_plugin,
+        CCFLAGS=COMMON_FLAGS + ["-Wall", "-Wextra", "-Werror",
+                                # because ealibc uses #pragma mark, and that causes trouble
+                                "-Wno-unknown-pragmas",
+                                "-nostdlib", "-nostdinc", "-ffreestanding",
+                                "-fplugin=$CLANGPLUGIN",
+                                "-std=gnu11",
+                                "-D_BITSIZE=32", "-D__FREERTOS__"],
+        ASFLAGS=COMMON_FLAGS + ["-c", "-Wa,--fatal-warnings"],
         CPPPATH=[],
     )
+    inject_dependency(rtos_env['BUILDERS']['Object'], clang_plugin)
 
     # If we were using a fully working version of clang (i.e. not a clang-13 we baked ourselves), perhaps we could call
     # into the compiler to get a path to a working compiler_rt library (the clang equivalent libgcc).
