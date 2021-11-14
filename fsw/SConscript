@@ -48,28 +48,50 @@ def configure_linux():
 def configure_freertos():
     COMMON_RTOS_FLAGS = ['-ggdb', '-mcpu=cortex-a15', '-mfpu=vfpv4', '-mfloat-abi=softfp']
 
+    ROOT_DIR = os.path.abspath("../../..")
+
+    LLVM_BASE = os.path.join(ROOT_DIR, "llvm-project-13")
+    CLANG_PATH = os.path.join(LLVM_BASE, "build/bin/clang-13")
+
     rtos_env = Environment(
-        CC="arm-none-eabi-gcc",
-        AS="arm-none-eabi-as",
+        CC=CLANG_PATH,
+        AS=CLANG_PATH,
         LINK="arm-none-eabi-ld",
         OBJCOPY="arm-none-eabi-objcopy",
         STRIP="arm-none-eabi-strip",
         LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
-        CCFLAGS=COMMON_RTOS_FLAGS + ["-Wall", "-Wextra", "-Werror",
+        CCFLAGS=COMMON_RTOS_FLAGS + ["-target", "arm-none-eabi",
+                                     "-Wall", "-Wextra", "-Werror",
                                      # because ealibc uses #pragma mark, and that causes trouble
                                      "-Wno-unknown-pragmas",
-                                     "-nostdlib", "-nostdinc", "-nostartfiles", "-ffreestanding",
+                                     "-nostdlib", "-nostdinc", "-ffreestanding",
                                      "-std=gnu11",
                                      "-D_BITSIZE=32", "-D__FREERTOS__"],
-        ASFLAGS=COMMON_RTOS_FLAGS + ["--fatal-warnings"],
+        ASFLAGS=COMMON_RTOS_FLAGS + ["-target", "arm-none-eabi", "-c", "-Wa,--fatal-warnings"],
         CPPPATH=[],
     )
-    # TODO: is this actually necessary?
-    rtos_env["ASPPCOM"] = rtos_env["ASPPCOM"].replace("$CC", "$AS")
-    LIBGCC_LIBRARY_PATH = subprocess.check_output([rtos_env['CC'], "-print-libgcc-file-name"]).decode().strip()
 
-    # TODO: ensure that ASFLAGS is actually used
-    ROOT_DIR = "../../.."
+    # If we were using a fully working version of clang (i.e. not a clang-13 we baked ourselves), perhaps we could call
+    # into the compiler to get a path to a working compiler_rt library (the clang equivalent libgcc).
+    # we might do that like the following (which works for GCC)
+    if rtos_env['CC'].endswith("gcc"):
+        COMPILER_LIBRARY_PATH = subprocess.check_output([rtos_env['CC'], "-print-libgcc-file-name"]).decode().strip()
+    # Unfortunately, clang's compiler_rt cannot be easily cross-compiled due to assumptions baked into the cmake
+    # scripts, which means we need to build the library ourselves
+    else:
+        BUILTINS_PATH = os.path.join(LLVM_BASE, "compiler-rt/lib/builtins")
+        BUILTINS_ARCH_PATH = os.path.join(BUILTINS_PATH, "arm")
+        builtins = {filename.rsplit(".", 1)[0]: os.path.join(BUILTINS_PATH, filename)
+                    for filename in os.listdir(BUILTINS_PATH)
+                    if filename.endswith(".c")}
+        for x in ["emutls", "enable_execute_stack", "eprintf", "gcc_personality_v0"]:
+            del builtins[x]
+        builtins.update({filename.rsplit(".", 1)[0]: os.path.join(BUILTINS_ARCH_PATH, filename)
+                         for filename in os.listdir(BUILTINS_ARCH_PATH)
+                         if filename.endswith(".c") or filename.endswith(".S")})
+        COMPILER_LIBRARY_PATH = rtos_env.Library("compiler-rt-builtins", sorted(builtins.values()),
+                                                 CCFLAGS=rtos_env['CCFLAGS'] + ["-Wno-unused-parameter"])
+
     # embedded artistry's libc
     EALIBC_ROOT = os.path.join(ROOT_DIR, "ealibc")
     EALIBC_INC = os.path.join(EALIBC_ROOT, "include")
@@ -99,7 +121,7 @@ def configure_freertos():
                 "freertos/gic.c", "freertos/scrubber.c", "freertos/stubs.c", "freertos/timer.c", "freertos/thread.c",
                 "freertos/virtio.c", "freertos/virtio_console.c", "freertos/watchdog.c", "freertos/port.c"]
     EXTERNAL_SRC = [
-        LIBGCC_LIBRARY_PATH,
+        COMPILER_LIBRARY_PATH,
         os.path.join(ZLIB_ROOT, "crc32.c"),
         ealibc,
         elf_lib,
@@ -123,7 +145,7 @@ def configure_freertos():
         action='$OBJCOPY -I binary -O elf32-littlearm -B arm --strip-all $SOURCE $TARGET',
     )
 
-    BOOTROM_SRC = ["bootrom/boot.c", "bootrom/start.s", ealibc, LIBGCC_LIBRARY_PATH, embedding, elf_lib]
+    BOOTROM_SRC = ["bootrom/boot.c", "bootrom/start.s", ealibc, COMPILER_LIBRARY_PATH, embedding, elf_lib]
     rtos_bootrom_elf = rtos_env.Program("bootrom-elf", BOOTROM_SRC, LINKSCRIPT="bootrom/link.ld")
     rtos_env.Depends(rtos_bootrom_elf, "bootrom/link.ld")
 

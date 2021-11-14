@@ -14,6 +14,14 @@ your system, such as to ~/Binary/buildroot-2021.02/. Make sure to use THIS EXACT
 
 Download and extract https://www.zlib.net/zlib-1.2.11.tar.gz such that there is a zlib-1.2.11/ directory under the same parent directory as hailburst.
 
+Download and extract https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/llvm-project-13.0.0.src.tar.xz such that there is a llvm-project-13/ directory under the same parent directory as hailburst.
+
+Compile LLVM using:
+
+    $ cd build
+    $ cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On ../llvm
+    $ cmake --build .
+
 In the hailburst repository, copy local.config.template to local.config, and fill in the buildroot
 path where you installed it.
 
