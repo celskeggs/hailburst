@@ -12,7 +12,7 @@ static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
 
     if (state->hit_restart) {
-        debugf("Pending restart on next scrubber cycle.");
+        debugf(CRITICAL, "Pending restart on next scrubber cycle.");
         scrubber_cycle_wait();
     }
 

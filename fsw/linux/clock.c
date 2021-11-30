@@ -76,14 +76,14 @@ retry:
     status = rmap_read(&clock_device.context, clock_device.address, RF_INCREMENT, 0x00, reg, &read_len, output);
     if (status != RS_OK) {
         if (!clock_is_error_recoverable(status)) {
-            debugf("Clock: encountered unrecoverable error while reading register %u: 0x%03x", reg, status);
+            debugf(CRITICAL, "Clock: encountered unrecoverable error while reading register %u: 0x%03x", reg, status);
             return false;
         } else if (retries > 0) {
-            debugf("Clock: retrying register %u read after recoverable error: 0x%03x", reg, status);
+            debugf(CRITICAL, "Clock: retrying register %u read after recoverable error: 0x%03x", reg, status);
             retries -= 1;
             goto retry;
         } else {
-            debugf("Clock: after %d retries, erroring out during register %u read: 0x%03x",
+            debugf(CRITICAL, "Clock: after %d retries, erroring out during register %u read: 0x%03x",
                    TRANSACTION_RETRIES, reg, status);
             return false;
         }
@@ -104,8 +104,7 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     // validate that this is actually a clock
     uint32_t magic_num = 0;
     if (!clock_read_register(REG_MAGIC, &magic_num, sizeof(magic_num))) {
-        debugf("Could not read magic number from clock.");
-        abort();
+        abortf("Could not read magic number from clock.");
     }
     magic_num = be32toh(magic_num);
     assert(magic_num == CLOCK_MAGIC_NUM);
@@ -113,14 +112,13 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     uint64_t ref_time_sampled, local_time_postsampled;
     // sample once remotely and once locally
     if (!clock_read_register(REG_CLOCK, &ref_time_sampled, sizeof(ref_time_sampled))) {
-        debugf("Could not sample current time from clock.");
-        abort();
+        abortf("Could not sample current time from clock.");
     }
     local_time_postsampled = clock_timestamp_monotonic();
 
     ref_time_sampled = be64toh(ref_time_sampled);
 
-    debugf("Timing details: ref=%"PRIu64" local=%"PRIu64, ref_time_sampled, local_time_postsampled);
+    debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, ref_time_sampled, local_time_postsampled);
 
     // now compute the appropriate offset
     clock_offset_adj = ref_time_sampled - local_time_postsampled;

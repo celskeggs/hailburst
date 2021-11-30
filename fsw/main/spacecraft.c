@@ -60,7 +60,7 @@ static spacecraft_t sc;
 static void spacecraft_init(void) {
     assert(!initialized);
 
-    debugf("Initializing fakewire infrastructure...");
+    debugf(INFO, "Initializing fakewire infrastructure...");
     fw_link_options_t options = {
         .label = "bus",
         .path  = "/dev/vport0p1",
@@ -69,26 +69,26 @@ static void spacecraft_init(void) {
     int err = rmap_init_monitor(&sc.monitor, options, 0x2000);
     assert(err == 0);
 
-    debugf("Initializing telecomm infrastructure...");
+    debugf(INFO, "Initializing telecomm infrastructure...");
     stream_init(&sc.uplink_stream, UPLINK_STREAM_CAPACITY);
     stream_init(&sc.downlink_stream, DOWNLINK_STREAM_CAPACITY);
     comm_dec_init(&sc.comm_decoder, &sc.uplink_stream);
     comm_enc_init(&sc.comm_encoder, &sc.downlink_stream);
     telemetry_init(&sc.comm_encoder);
 
-    debugf("Initializing clock...");
+    debugf(INFO, "Initializing clock...");
     clock_init(&sc.monitor, &clock_routing);
 
-    debugf("Initializing radio...");
+    debugf(INFO, "Initializing radio...");
     radio_init(&sc.radio, &sc.monitor, &radio_routing, &sc.uplink_stream, &sc.downlink_stream, DOWNLINK_STREAM_CAPACITY);
 
-    debugf("Initializing magnetometer...");
+    debugf(INFO, "Initializing magnetometer...");
     magnetometer_init(&sc.mag, &sc.monitor, &magnetometer_routing);
 
-    debugf("Initializing heartbeats...");
+    debugf(INFO, "Initializing heartbeats...");
     heartbeat_init(&sc.heart);
 
-    debugf("Initializing watchdog...");
+    debugf(INFO, "Initializing watchdog...");
     watchdog_init();
 
     initialized = true;
@@ -100,11 +100,11 @@ int main(int argc, char *argv[]) {
 
     platform_init();
 
-    debugf("Initializing...");
+    debugf(CRITICAL, "Initializing...");
 
     spacecraft_init();
 
-    debugf("Entering command main loop");
+    debugf(INFO, "Entering command main loop");
 
     cmd_mainloop(&sc);
 

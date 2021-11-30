@@ -14,8 +14,7 @@
 #include <fsw/debug.h>
 
 __attribute__((noreturn)) void _Exit(int status) {
-    debugf("system exit status %d", status);
-    abort();
+    abortf("system exit status %d", status);
 }
 
 void usleep(unsigned long usec) {
@@ -28,10 +27,6 @@ void *malloc(size_t size) {
 
 void free(void *ptr) {
     vPortFree(ptr);
-}
-
-void perror(const char *s) {
-    debugf("perror: %s", s);
 }
 
 extern int main(int argc, char **argv, char **envp);
@@ -70,12 +65,10 @@ void entrypoint(void *kernel_elf_rom) {
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
     if (status != pdPASS) {
-        debugf("Error: could not create main task.");
-        abort();
+        abortf("Error: could not create main task.");
     }
     vTaskStartScheduler();
-    debugf("Scheduler halted.");
-    abort();
+    abortf("Scheduler halted.");
 }
 
 void platform_init(void) {
@@ -83,6 +76,5 @@ void platform_init(void) {
 }
 
 void trace_task_switch(const char *task_name, unsigned int priority) {
-    debugf("FreeRTOS scheduling %15s at priority %u",
-           task_name, priority);
+    debugf(TRACE, "FreeRTOS scheduling %15s at priority %u", task_name, priority);
 }

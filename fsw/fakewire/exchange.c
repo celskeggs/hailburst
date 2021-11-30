@@ -13,7 +13,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_printf(fmt, ...) debugf("[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
+#define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
 
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
@@ -131,12 +131,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             if (exc_state == FW_EXC_OPERATING && (!resend_fcts || !resend_pkts)) {
                 // do a timed wait, so that we can send heartbeats when it's an appropriate time
 #ifdef DEBUG
-                debug_printf("Blocking in main exchange (timeout A).");
+                debug_printf(TRACE, "Blocking in main exchange (timeout A).");
 #endif
                 if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
-                    debug_printf("Woke up main exchange loop (timeout A)");
+                    debug_printf(TRACE, "Woke up main exchange loop (timeout A)");
 #endif
                     resend_fcts = true;
                     resend_pkts = true;
@@ -146,12 +146,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             } else if ((exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING) && !send_primary_handshake) {
                 // do a timed wait, so that we can send a fresh handshake when it's an appropriate time
 #ifdef DEBUG
-                debug_printf("Blocking in main exchange (timeout B).");
+                debug_printf(TRACE, "Blocking in main exchange (timeout B).");
 #endif
                 if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
-                    debug_printf("Woke up main exchange loop (timeout B)");
+                    debug_printf(TRACE, "Woke up main exchange loop (timeout B)");
 #endif
                     send_primary_handshake = true;
 
@@ -159,12 +159,12 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 }
             } else {
 #ifdef DEBUG
-                debug_printf("Blocking in main exchange (blocking).");
+                debug_printf(TRACE, "Blocking in main exchange (blocking).");
 #endif
                 semaphore_take(&fwe->exchange_wake);
             }
 #ifdef DEBUG
-            debug_printf("Woke up main exchange loop");
+            debug_printf(TRACE, "Woke up main exchange loop");
 #endif
         }
 
@@ -198,7 +198,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 fw_ctrl_t symbol = rx_ent.ctrl_out;
                 uint32_t  param  = rx_ent.ctrl_param;
 #ifdef DEBUG
-                debug_printf("Received control character: %s(0x%08x).", fakewire_codec_symbol(symbol), param);
+                debug_printf(TRACE, "Received control character: %s(0x%08x).", fakewire_codec_symbol(symbol), param);
 #endif
                 assert(param == 0 || fakewire_is_parametrized(symbol));
 
@@ -206,11 +206,11 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 case FW_EXC_CONNECTING:
                     if (symbol == FWC_HANDSHAKE_1) {
                         // received a primary handshake
-                        debug_printf("Received a primary handshake with ID=0x%08x.", param);
+                        debug_printf(DEBUG, "Received a primary handshake with ID=0x%08x.", param);
                         recv_handshake_id = param;
                         send_secondary_handshake = true;
                     } else {
-                        debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
+                        debug_printf(CRITICAL, "Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
                                      fakewire_codec_symbol(symbol), param);
                         do_reset = true;
                     }
@@ -218,13 +218,14 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 case FW_EXC_HANDSHAKING:
                     if (symbol == FWC_HANDSHAKE_2 && param == send_handshake_id) {
                         // received a valid secondary handshake
-                        debug_printf("Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                        debug_printf(DEBUG,
+                                     "Received secondary handshake with ID=0x%08x; transitioning to operating mode.",
                                      param);
                         exc_state = FW_EXC_OPERATING;
                         send_primary_handshake = false;
                         send_secondary_handshake = false;
                     } else {
-                        debug_printf("Unexpected %s(0x%08x) instead of HANDSHAKE_2(0x%08x); resetting.",
+                        debug_printf(CRITICAL, "Unexpected %s(0x%08x) instead of HANDSHAKE_2(0x%08x); resetting.",
                                      fakewire_codec_symbol(symbol), param,
                                      send_handshake_id);
                         do_reset = true;
@@ -235,8 +236,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     switch (symbol) {
                     case FWC_START_PACKET:
                         if (fcts_sent != pkts_rcvd + 1) {
-                            debug_printf("Received unauthorized start-of-packet (fcts_sent=%u, pkts_rcvd=%u); resetting.",
-                                         fcts_sent, pkts_rcvd);
+                            debug_printf(CRITICAL, "Received unauthorized start-of-packet "
+                                         "(fcts_sent=%u, pkts_rcvd=%u); resetting.", fcts_sent, pkts_rcvd);
                             do_reset = true;
                         } else {
                             assert(recv_state == FW_RECV_LISTENING);
@@ -260,7 +261,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                             recv_state = FW_RECV_PREPARING;
                             read_entry = NULL;
                         } else {
-                            debug_printf("Hit unexpected END_PACKET in receive state %d; resetting.", recv_state);
+                            debug_printf(CRITICAL, "Hit unexpected END_PACKET in receive state %d; resetting.",
+                                         recv_state);
                             do_reset = true;
                         }
                         break;
@@ -270,7 +272,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                             recv_state = FW_RECV_PREPARING;
                             read_entry = NULL;
                         } else {
-                            debug_printf("Hit unexpected ERROR_PACKET in receive state %d; resetting.", recv_state);
+                            debug_printf(CRITICAL, "Hit unexpected ERROR_PACKET in receive state %d; resetting.",
+                                         recv_state);
                             do_reset = true;
                         }
                         break;
@@ -278,8 +281,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                         if (param == fcts_rcvd + 1) {
                             // make sure this FCT matches our send state
                             if (pkts_sent != fcts_rcvd) {
-                                debug_printf("Received incremented FCT(%u) when no packet had been sent (%u, %u); resetting.",
-                                             param, pkts_sent, fcts_rcvd);
+                                debug_printf(CRITICAL, "Received incremented FCT(%u) when no packet had been sent "
+                                             "(%u, %u); resetting.", param, pkts_sent, fcts_rcvd);
                                 do_reset = true;
                             } else {
                                 // received FCT; can send another packet
@@ -287,20 +290,20 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                             }
                         } else if (param != fcts_rcvd) {
                             // FCT number should always either stay the same or increment by one.
-                            debug_printf("Received unexpected FCT(%u) when last count was %u; resetting.",
+                            debug_printf(CRITICAL, "Received unexpected FCT(%u) when last count was %u; resetting.",
                                          param, fcts_rcvd);
                             do_reset = true;
                         }
                         break;
                     case FWC_KEEP_ALIVE:
                         if (pkts_rcvd != param) {
-                            debug_printf("KAT mismatch: received %u packets, but supposed to have received %u; resetting.",
-                                         pkts_rcvd, param);
+                            debug_printf(CRITICAL, "KAT mismatch: received %u packets, but supposed to have received "
+                                         "%u; resetting.", pkts_rcvd, param);
                             do_reset = true;
                         }
                         break;
                     default:
-                        debug_printf("Unexpected %s(0x%08x) during OPERATING mode; resetting.",
+                        debug_printf(CRITICAL, "Unexpected %s(0x%08x) during OPERATING mode; resetting.",
                                      fakewire_codec_symbol(symbol), param);
                         do_reset = true;
                     }
@@ -316,23 +319,23 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     assert(rx_ent.data_out == NULL);
                     // discard extraneous bytes and do nothing
 #ifdef DEBUG
-                    debug_printf("Discarded an additional %zu regular data bytes.", input_len);
+                    debug_printf(DEBUG, "Discarded an additional %zu regular data bytes.", input_len);
 #endif
                 } else if (exc_state != FW_EXC_OPERATING || recv_state != FW_RECV_RECEIVING) {
                     assert(rx_ent.data_out == NULL);
-                    debug_printf("Received at least %zu unexpected data characters during state (exc=%d, recv=%d); "
-                                 "resetting.", rx_ent.data_actual_len, exc_state, recv_state);
+                    debug_printf(CRITICAL, "Received at least %zu unexpected data characters during "
+                                 "state (exc=%d, recv=%d); resetting.", rx_ent.data_actual_len, exc_state, recv_state);
                     do_reset = true;
                 } else if (read_entry->actual_length >= io_rx_size(fwe->read_chart)) {
                     assert(rx_ent.data_out == NULL);
-                    debug_printf("Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
+                    debug_printf(CRITICAL, "Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
                                  io_rx_size(fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
                     recv_state = FW_RECV_OVERFLOWED;
                 } else {
                     assert(rx_ent.data_out != NULL);
                     assert(read_entry->actual_length + rx_ent.data_actual_len <= io_rx_size(fwe->read_chart));
 #ifdef DEBUG
-                    debug_printf("Received %zu regular data bytes.", rx_ent.data_actual_len);
+                    debug_printf(TRACE, "Received %zu regular data bytes.", rx_ent.data_actual_len);
 #endif
                     read_entry->actual_length += rx_ent.data_actual_len;
                     assert(read_entry->actual_length <= io_rx_size(fwe->read_chart));
@@ -373,7 +376,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
         if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_PREPARING && read_entry != NULL) {
             assert(read_entry->actual_length == 0);
 #ifdef DEBUG
-            debug_printf("Sending FCT.");
+            debug_printf(TRACE, "Sending FCT.");
 #endif
             fcts_sent += 1;
             recv_state = FW_RECV_LISTENING;
@@ -387,7 +390,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             assert(exc_state == FW_EXC_OPERATING);
             resend_fcts = false;
 #ifdef DEBUG
-            debug_printf("Transmitted reminder FCT(%u) tokens.", fcts_sent);
+            debug_printf(TRACE, "Transmitted reminder FCT(%u) tokens.", fcts_sent);
 #endif
         }
 
@@ -395,7 +398,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             assert(exc_state == FW_EXC_OPERATING);
             resend_pkts = false;
 #ifdef DEBUG
-            debug_printf("Transmitted reminder KAT(%u) tokens.", pkts_sent);
+            debug_printf(TRACE, "Transmitted reminder KAT(%u) tokens.", pkts_sent);
 #endif
         }
 
@@ -412,7 +415,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                 send_primary_handshake = false;
                 send_secondary_handshake = false;
 
-                debug_printf("Sent primary handshake with ID=0x%08x; transitioning to handshaking mode.",
+                debug_printf(DEBUG, "Sent primary handshake with ID=0x%08x; transitioning to handshaking mode.",
                              send_handshake_id);
             }
         }
@@ -424,7 +427,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
             send_primary_handshake = false;
             send_secondary_handshake = false;
 
-            debug_printf("Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
+            debug_printf(DEBUG, "Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
                          recv_handshake_id);
 
             next_timeout = clock_timestamp_monotonic() + handshake_period();

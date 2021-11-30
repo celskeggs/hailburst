@@ -173,7 +173,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     assert(flags == (flags & (RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT)));
 
 #ifdef DEBUGTXN
-    debugf("RMAP WRITE START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x LEN=%zu",
+    debugf(TRACE, "RMAP WRITE START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x LEN=%zu",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, data_length);
 #endif
@@ -188,7 +188,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     if (out_buffer == NULL) {
         // should only happen when a previous rmap_write or rmap_read failed to write a packet.
 #ifdef DEBUGTXN
-        debugf("RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+        debugf(TRACE, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
                RS_TRANSMIT_BLOCKED);
 #endif
@@ -308,7 +308,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         if (context->has_received) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so report
             // it as an error.
-            debugf("Impossible RMAP receive state; must have gotten a corrupted packet mixed up with a real one.");
+            debugf(CRITICAL, "Impossible RMAP receive; must have gotten a corrupted packet mixed up with a real one.");
             // BUT this doesn't really mean anything bad for our message, so we don't need to change status_out.
         }
     }
@@ -328,7 +328,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     mutex_unlock(&context->monitor->pending_mutex);
 
 #ifdef DEBUGTXN
-    debugf("RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+    debugf(TRACE, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key, status_out);
 #endif
     return status_out;
@@ -347,7 +347,7 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     assert(flags == (flags & RF_INCREMENT));
 
 #ifdef DEBUGTXN
-    debugf("RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x MAXLEN=%zu",
+    debugf(TRACE, "RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x MAXLEN=%zu",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, *data_length);
 #endif
@@ -363,7 +363,7 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
         // should only happen when a previous rmap_write or rmap_read failed to write a packet.
         *data_length = 0;
 #ifdef DEBUGTXN
-        debugf("RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
+        debugf(TRACE, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
                *data_length, RS_TRANSMIT_BLOCKED);
 #endif
@@ -494,7 +494,7 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     mutex_unlock(&context->monitor->pending_mutex);
 
 #ifdef DEBUGTXN
-    debugf("RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
+    debugf(TRACE, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            *data_length, status_out);
 #endif
@@ -620,7 +620,7 @@ static void *rmap_monitor_loop(void *mon_opaque) {
         assert(ent->receive_timestamp > 0);
 
         if (!rmap_recv_handle(mon, ent->data, ent->actual_length, ent->receive_timestamp)) {
-            debugf("RMAP packet received was corrupted or unexpected.");
+            debugf(CRITICAL, "RMAP packet received was corrupted or unexpected.");
         }
 
         chart_reply_send(&mon->exc_read_chart, ent);

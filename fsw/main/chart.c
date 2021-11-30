@@ -9,8 +9,7 @@
 static void panic_unpopulated(void *param) {
     assert(param == NULL);
 
-    debugf("chart never had a proper notify function registered; crashing.");
-    abort();
+    abortf("chart never had a proper notify function registered; crashing.");
 }
 
 void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count) {

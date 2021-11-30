@@ -116,14 +116,14 @@ func ScanAll(dir string, fswBin string, options Options) (out []scans.ScannedLin
 		)
 	}
 	if options.ShowLogs && fswBin != "" {
-		debuglog, err := scans.ScanDebugLog(path.Join(dir, "guest.log"),
+		debuglogs, err := scans.ScanDebugLog(path.Join(dir, "guest.log"),
 			[]string{path.Join(fswBin, "kernel"), path.Join(fswBin, "bootrom-elf")})
 		if err != nil {
 			return nil, errors.Wrap(err, "while scanning debug log")
 		}
-		out = append(out,
-			debuglog,
-		)
+		for _, debuglog := range debuglogs {
+			out = append(out, debuglog)
+		}
 	}
 	return out, nil
 }

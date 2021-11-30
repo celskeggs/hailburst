@@ -13,8 +13,7 @@
 
 //#define DEBUG
 
-#define debug_puts(str) (debugf("[ fakewire_link] [%s] %s", fwl->label, str))
-#define debug_printf(fmt, ...) (debugf("[ fakewire_link] [%s] " fmt, fwl->label, __VA_ARGS__))
+#define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->label, ## __VA_ARGS__))
 
 static void *fakewire_link_rx_loop(void *opaque) {
     assert(opaque != NULL);
@@ -37,11 +36,11 @@ static void *fakewire_link_rx_loop(void *opaque) {
         ssize_t actual = read(fwl->fd_in, entry->data, max);
 
         if (actual <= 0) { // 0 means EOF, <0 means error
-            debug_printf("Read failed: %zd when maximum was %zu", actual, max);
+            debug_printf(CRITICAL, "Read failed: %zd when maximum was %zu", actual, max);
             return NULL;
         }
 #ifdef DEBUG
-        debug_printf("Read %zd bytes from file descriptor.", actual);
+        debug_printf(TRACE, "Read %zd bytes from file descriptor.", actual);
 #endif
         assert(actual > 0 && actual <= (ssize_t) max);
 
@@ -70,10 +69,10 @@ static void *fakewire_link_tx_loop(void *opaque) {
 
         if (actual == (ssize_t) entry->actual_length) {
 #ifdef DEBUG
-            debug_printf("Finished writing %zd bytes to file descriptor.", actual);
+            debug_printf(TRACE, "Finished writing %zd bytes to file descriptor.", actual);
 #endif
         } else {
-            debug_printf("Write failed: %zd bytes instead of %zu bytes", actual, entry->actual_length);
+            debug_printf(CRITICAL, "Write failed: %zd bytes instead of %zu bytes", actual, entry->actual_length);
         }
 
         chart_reply_send(fwl->tx_chart, entry);

@@ -152,7 +152,7 @@ static void *telemetry_mainloop(void *opaque) {
             // this fetches the lastest drop count and replaces it with zero by atomic binary-and with 0.
             uint32_t drop_count = atomic_fetch_and_relaxed(telemetry.async_dropped, 0);
 
-            debugf("Telemetry dropped: MessagesLost=%u", drop_count);
+            debugf(CRITICAL, "Telemetry dropped: MessagesLost=%u", drop_count);
 
             // convert to big-endian
             drop_count = htobe32(drop_count);
@@ -224,7 +224,7 @@ static void *telemetry_mainloop(void *opaque) {
 }
 
 void tlm_cmd_received(uint64_t original_timestamp, uint32_t original_command_id) {
-    debugf("Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
+    debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
            original_timestamp, original_command_id);
 
     tlm_async_t tlm = { .telemetry_id = CMD_RECEIVED_TID, .data_len = 12 };
@@ -236,7 +236,7 @@ void tlm_cmd_received(uint64_t original_timestamp, uint32_t original_command_id)
 }
 
 void tlm_cmd_completed(uint64_t original_timestamp, uint32_t original_command_id, bool success) {
-    debugf("Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
+    debugf(DEBUG, "Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
            original_timestamp, original_command_id, success);
 
     tlm_async_t tlm = { .telemetry_id = CMD_COMPLETED_TID, .data_len = 13 };
@@ -249,7 +249,7 @@ void tlm_cmd_completed(uint64_t original_timestamp, uint32_t original_command_id
 }
 
 void tlm_cmd_not_recognized(uint64_t original_timestamp, uint32_t original_command_id, uint32_t length) {
-    debugf("Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
+    debugf(CRITICAL, "Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
            original_timestamp, original_command_id, length);
 
     tlm_async_t tlm = { .telemetry_id = CMD_NOT_RECOGNIZED_TID, .data_len = 16 };
@@ -262,7 +262,7 @@ void tlm_cmd_not_recognized(uint64_t original_timestamp, uint32_t original_comma
 }
 
 void tlm_pong(uint32_t ping_id) {
-    debugf("Pong: PingId=%08x", ping_id);
+    debugf(INFO, "Pong: PingId=%08x", ping_id);
 
     tlm_async_t tlm = { .telemetry_id = PONG_TID, .data_len = 4 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
@@ -271,7 +271,7 @@ void tlm_pong(uint32_t ping_id) {
 }
 
 void tlm_clock_calibrated(int64_t adjustment) {
-    debugf("ClockCalibrated: Adjustment=%"PRId64"", adjustment);
+    debugf(INFO, "ClockCalibrated: Adjustment=%"PRId64"", adjustment);
 
     tlm_async_t tlm = { .telemetry_id = CLOCK_CALIBRATED_TID, .data_len = 8 };
     uint32_t *out = (uint32_t*) tlm.data_bytes;
@@ -281,14 +281,14 @@ void tlm_clock_calibrated(int64_t adjustment) {
 }
 
 void tlm_heartbeat(void) {
-    debugf("Heartbeat");
+    debugf(DEBUG, "Heartbeat");
 
     tlm_async_t tlm = { .telemetry_id = HEARTBEAT_TID, .data_len = 0 };
     telemetry_record_async(&tlm);
 }
 
 void tlm_mag_pwr_state_changed(bool power_state) {
-    debugf("Magnetometer Power State Changed: PowerState=%d", power_state);
+    debugf(INFO, "Magnetometer Power State Changed: PowerState=%d", power_state);
 
     tlm_async_t tlm = { .telemetry_id = MAG_PWR_STATE_CHANGED_TID, .data_len = 1 };
     tlm.data_bytes[0] = (power_state ? 1 : 0);
@@ -304,7 +304,7 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
     // now fill up the buffer
     sync->telemetry_id = MAG_READINGS_ARRAY_TID;
     uint16_t *out = (uint16_t*) sync->data_bytes;
-    debugf("Magnetometer Readings Array:");
+    debugf(DEBUG, "Magnetometer Readings Array:");
     size_t num_readings = 0;
     while ((uint8_t*) out - sync->data_bytes + 14 <= (ssize_t) hole_max_msg_size(&tep->sync_hole)) {
         tlm_mag_reading_t rd;
@@ -313,7 +313,8 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
             break;
         }
 
-        debugf("  Readings[%zu]={%"PRIu64", %d, %d, %d}", num_readings, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
+        debugf(DEBUG, "  Readings[%zu]={%"PRIu64", %d, %d, %d}",
+               num_readings, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
 
         *out++ = htobe16((uint16_t) (rd.reading_time >> 48));
         *out++ = htobe16((uint16_t) (rd.reading_time >> 32));
@@ -326,7 +327,7 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
 
         num_readings++;
     }
-    debugf("  Total number of readings: %zu", num_readings);
+    debugf(DEBUG, "  Total number of readings: %zu", num_readings);
     assert((uint8_t*) out - sync->data_bytes == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream

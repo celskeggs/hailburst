@@ -16,8 +16,54 @@ const (
 	InvalidRecordUID = 0x00000002 // special MessageUID for records that could not be parsed properly
 )
 
+type LogLevel int
+const (
+	LogInvalid  LogLevel = 0
+	LogCritical LogLevel = 1
+	LogInfo     LogLevel = 2
+	LogDebug    LogLevel = 3
+	LogTrace    LogLevel = 4
+)
+
+func LogLevels() []LogLevel {
+	return []LogLevel{LogCritical, LogInfo, LogDebug, LogTrace}
+}
+
+func ParseLogLevel(raw uint32) (LogLevel, error) {
+	if raw >= 1 && raw <= 4 {
+		return LogLevel(raw), nil
+	} else {
+		return LogInvalid, fmt.Errorf("invalid log level: %d", raw)
+	}
+}
+
+func ParseStringLogLevel(raw string) (LogLevel, error) {
+	for _, level := range LogLevels() {
+		if strings.EqualFold(level.String(), raw) {
+			return level, nil
+		}
+	}
+	return LogInvalid, fmt.Errorf("invalid log level: %q", raw)
+}
+
+func (ll LogLevel) String() string {
+	switch ll {
+	case LogCritical:
+		return "CRIT"
+	case LogInfo:
+		return "INFO"
+	case LogDebug:
+		return "DEBUG"
+	case LogTrace:
+		return "TRACE"
+	default:
+		panic("invalid log level")
+	}
+}
+
 type MessageMetadata struct {
 	MessageUID uint32
+	LogLevel   LogLevel
 	Format     Formatter
 	Filename   string
 	LineNum    uint32
@@ -200,8 +246,12 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 	if !strings.HasPrefix(sym.Name, "_msg_metadata") {
 		return nil, fmt.Errorf("invalid name: %q", sym.Name)
 	}
-	var metadata struct{ FormatPtr, FilenamePtr, LineNumber uint32 }
+	var metadata struct{ LogLevel, FormatPtr, FilenamePtr, LineNumber uint32 }
 	if err := f.ReadSymbolInto(sym, ".debugf_messages", &metadata); err != nil {
+		return nil, err
+	}
+	level, err := ParseLogLevel(metadata.LogLevel)
+	if err != nil {
 		return nil, err
 	}
 	fmtStr, err := f.ReadCStringFromAddress(metadata.FormatPtr, "_msg_format", ".debugf_messages")
@@ -218,6 +268,7 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 	}
 	return &MessageMetadata{
 		MessageUID: uid,
+		LogLevel:   level,
 		Format:     format,
 		Filename:   filename,
 		LineNum:    metadata.LineNumber,
@@ -249,6 +300,7 @@ func LoadDebugData(paths []string) (*DebugData, error) {
 		Format:     formatJunk,
 		Filename:   "<unknown>",
 		LineNum:    0,
+		LogLevel:   LogCritical,
 	}
 	formatInvalid, err := ParseFormat("Invalid Record with UID=%08x: '%s'")
 	if err != nil {
@@ -259,6 +311,7 @@ func LoadDebugData(paths []string) (*DebugData, error) {
 		Format:     formatInvalid,
 		Filename:   "<unknown>",
 		LineNum:    0,
+		LogLevel:   LogCritical,
 	}
 	dd.RecordTypes = map[uint32]*MessageMetadata{
 		JunkDataUID:      nil,

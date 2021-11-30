@@ -73,14 +73,15 @@ retry:
     status = rmap_write(&mag->rctx, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, reg, 2, &value);
     if (status != RS_OK) {
         if (!magnetometer_is_error_recoverable(status)) {
-            debugf("Magnetometer: encountered unrecoverable error while setting register %u: 0x%03x", reg, status);
+            debugf(CRITICAL, "Magnetometer: encountered unrecoverable error while setting register %u: 0x%03x",
+                   reg, status);
             return false;
         } else if (retries > 0) {
-            debugf("Magnetometer: retrying register %u set after recoverable error: 0x%03x", reg, status);
+            debugf(CRITICAL, "Magnetometer: retrying register %u set after recoverable error: 0x%03x", reg, status);
             retries -= 1;
             goto retry;
         } else {
-            debugf("Magnetometer: after %d retries, erroring out during register %u set: 0x%03x",
+            debugf(CRITICAL, "Magnetometer: after %d retries, erroring out during register %u set: 0x%03x",
                    TRANSACTION_RETRIES, reg, status);
             return false;
         }
@@ -120,19 +121,20 @@ retry:
 
         if (status != RS_OK) {
             if (!magnetometer_is_error_recoverable(status)) {
-                debugf("Magnetometer: encountered unrecoverable error while reading registers: 0x%03x", status);
+                debugf(CRITICAL, "Magnetometer: encountered unrecoverable error while reading registers: 0x%03x",
+                       status);
                 return false;
             } else if (retries > 0) {
-                debugf("Magnetometer: retrying register read after recoverable error: 0x%03x", status);
+                debugf(CRITICAL, "Magnetometer: retrying register read after recoverable error: 0x%03x", status);
                 goto retry;
             } else {
-                debugf("Magnetometer: after %d retries, erroring out during register read: 0x%03x",
+                debugf(CRITICAL, "Magnetometer: after %d retries, erroring out during register read: 0x%03x",
                        TRANSACTION_RETRIES, status);
                 return false;
             }
         }
         if (data_length != sizeof(registers)) {
-            debugf("Magnetometer: invalid length while reading registers: %zu instead of %zu",
+            debugf(CRITICAL, "Magnetometer: invalid length while reading registers: %zu instead of %zu",
                    data_length, sizeof(registers));
             return false;
         }
@@ -151,7 +153,7 @@ retry:
 
         usleep(200);
     }
-    debugf("Magnetometer: ran out of loop retries while trying to take a reading.");
+    debugf(CRITICAL, "Magnetometer: ran out of loop retries while trying to take a reading.");
     return false;
 }
 
@@ -160,17 +162,17 @@ static void *magnetometer_mainloop(void *mag_opaque) {
     assert(mag != NULL);
 
     for (;;) {
-        debugf("Checking for magnetometer power command...");
+        debugf(DEBUG, "Checking for magnetometer power command...");
         // wait for magnetometer power command
         while (!atomic_load_relaxed(mag->should_be_powered)) {
-            debugf("Waiting for magnetometer power command...");
+            debugf(DEBUG, "Waiting for magnetometer power command...");
             semaphore_take(&mag->flag_change);
         }
-        debugf("Turning on magnetometer power...");
+        debugf(DEBUG, "Turning on magnetometer power...");
 
         // turn on power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_ON)) {
-            debugf("Magnetometer: quitting read loop due to RMAP error.");
+            debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
         uint64_t powered_at = clock_timestamp_monotonic();
@@ -190,23 +192,23 @@ static void *magnetometer_mainloop(void *mag_opaque) {
 
             // take and report reading
             tlm_mag_reading_t reading;
-            debugf("Taking magnetometer reading...");
+            debugf(DEBUG, "Taking magnetometer reading...");
             if (!magnetometer_take_reading(mag, &reading)) {
-                debugf("Magnetometer: quitting read loop due to RMAP error.");
+                debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
                 return NULL;
             }
 
             if (!queue_send_try(&mag->readings, &reading)) {
-                debugf("Magnetometer: out of space in queue to write readings.");
+                debugf(CRITICAL, "Magnetometer: out of space in queue to write readings.");
             }
-            debugf("Took magnetometer reading!");
+            debugf(DEBUG, "Took magnetometer reading!");
 
             reading_time += READING_DELAY_NS;
         }
 
         // turn off power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF)) {
-            debugf("Magnetometer: quitting read loop due to RMAP error.");
+            debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
         tlm_mag_pwr_state_changed(false);

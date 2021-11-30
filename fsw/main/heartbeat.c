@@ -8,8 +8,6 @@
 static void *heartbeat_mainloop(void *opaque) {
     (void) opaque;
 
-    debugf("Welcome to heartbeat_mainloop");
-
     // beat every 120 milliseconds (requirement is 150 milliseconds, so this is plenty fast)
     for (;;) {
         tlm_heartbeat();
@@ -22,6 +20,5 @@ static void *heartbeat_mainloop(void *opaque) {
 }
 
 void heartbeat_init(heartbeat_t *heart) {
-    debugf("Calling heartbeat_init");
     thread_create(&heart->thread, "heartbeat_loop", PRIORITY_WORKERS, heartbeat_mainloop, NULL, RESTARTABLE);
 }

@@ -4,7 +4,8 @@
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 
-void debugf(const char* format, ...) {
+void debugf(loglevel_t level, const char* format, ...) {
+    (void) level;
     va_list va;
     va_start(va, format);
     printf("[%3.9f] ", clock_timestamp() / 1000000000.0);

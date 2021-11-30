@@ -61,7 +61,7 @@ static void *exchange_reader(void *opaque) {
         }
 
         assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(&rc->read_chart));
-        debugf("[%s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
+        debugf(DEBUG, "[%s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
 
         last_packet_marker = ent->data[0];
         assert(last_packet_marker == 0 || last_packet_marker == 1);
@@ -111,12 +111,12 @@ static void *exchange_writer(void *opaque) {
         buffer[0] = (chain->next != NULL); // whether or not this is the last packet
         memcpy(&buffer[1], chain->packet_data, chain->packet_len);
 
-        debugf("[%s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
+        debugf(DEBUG, "[%s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
         hole_send(&wc->pigeon_hole, chain->packet_len + 1);
         while (hole_peek(&wc->pigeon_hole) != NULL) {
             semaphore_take(&wc->pigeon_wake);
         }
-        debugf("[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
+        debugf(DEBUG, "[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
         chain = chain->next;
     }
@@ -174,14 +174,14 @@ static void *exchange_controller(void *opaque) {
         .flags = ec->flags,
     };
 
-    debugf("[%s] initializing exchange...", ec->name);
+    debugf(INFO, "[%s] initializing exchange...", ec->name);
     if (fakewire_exc_init(&est->exc, options, &est->rc.read_chart) < 0) {
-        debugf("[%s] could not initialize exchange", ec->name);
+        debugf(CRITICAL, "[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
         return NULL;
     }
-    debugf("Attached!");
+    debugf(DEBUG, "Attached!");
 
     est->wc.name = ec->name;
     semaphore_init(&est->wc.pigeon_wake);
@@ -202,14 +202,14 @@ static void *exchange_controller(void *opaque) {
     bool pass = true;
 
     if (!thread_join_timed(reader_thread, &ts)) {
-        debugf("[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
+        debugf(CRITICAL, "[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
         pass = false;
     }
     if (!thread_join_timed(writer_thread, &ts)) {
-        debugf("[%s] exchange controller: could not join writer thread by 5 second deadline", ec->name);
+        debugf(CRITICAL, "[%s] exchange controller: could not join writer thread by 5 second deadline", ec->name);
         pass = false;
     } else if (!est->wc.pass) {
-        debugf("[%s] exchange controller: failed due to writer failure", ec->name);
+        debugf(CRITICAL, "[%s] exchange controller: failed due to writer failure", ec->name);
         pass = false;
     }
 
@@ -225,7 +225,7 @@ static struct packet_chain *random_packet_chain(void) {
     int packet_count = rand() % 20 + 10;
 
     struct packet_chain *out = NULL;
-    debugf("Generating packets...");
+    debugf(DEBUG, "Generating packets...");
     for (int i = 0; i < packet_count; i++) {
         struct packet_chain *next = check_malloc(sizeof(struct packet_chain));
         size_t new_len = (rand() % 2 == 0) ? (rand() % 4000) : (rand() % 10);
@@ -235,10 +235,10 @@ static struct packet_chain *random_packet_chain(void) {
             next->packet_data[j] = rand() % 256;
         }
         next->next = out;
-        debugf("[%d] => packet of size %lu", i, new_len);
+        debugf(DEBUG, "[%d] => packet of size %lu", i, new_len);
         out = next;
     }
-    debugf("Generated packet chain of length %d", packet_count);
+    debugf(INFO, "Generated packet chain of length %d", packet_count);
 
     return out;
 }
@@ -251,10 +251,10 @@ static bool compare_packets(uint8_t *baseline, size_t baseline_len, uint8_t *act
         }
     }
     if (mismatches > 0) {
-        debugf("Mismatch: out of %lu bytes, found %lu mismatches", i, mismatches);
+        debugf(CRITICAL, "Mismatch: out of %lu bytes, found %lu mismatches", i, mismatches);
     }
     if (baseline_len != actual_len) {
-        debugf("Mismatch: packet length should have been %lu, but found %lu", baseline_len, actual_len);
+        debugf(CRITICAL, "Mismatch: packet length should have been %lu, but found %lu", baseline_len, actual_len);
         return false;
     }
     return mismatches == 0;
@@ -265,7 +265,7 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
     int nb = 0, na = 0;
     while (baseline != NULL && actual != NULL) {
         if (!compare_packets(baseline->packet_data, baseline->packet_len, actual->packet_data, actual->packet_len)) {
-            debugf("%s mismatch: data error in packet %d received.", prefix, nb);
+            debugf(CRITICAL, "%s mismatch: data error in packet %d received.", prefix, nb);
             ok = false;
         }
         baseline = baseline->next;
@@ -278,14 +278,14 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
             baseline = baseline->next;
             nb++;
         }
-        debugf("%s mismatch: fewer packets received (%d) than sent (%d).", prefix, na, nb);
+        debugf(CRITICAL, "%s mismatch: fewer packets received (%d) than sent (%d).", prefix, na, nb);
         ok = false;
     } else if (actual != NULL) {
         while (actual != NULL) {
             actual = actual->next;
             na++;
         }
-        debugf("%s mismatch: more packets received (%d) than sent (%d).", prefix, na, nb);
+        debugf(CRITICAL, "%s mismatch: more packets received (%d) than sent (%d).", prefix, na, nb);
         ok = false;
     }
     return ok;
@@ -319,31 +319,31 @@ int test_main(void) {
     thread_create(&left, "ec_left", 1, exchange_controller, &ec_left, NOT_RESTARTABLE);
     thread_create(&right, "ec_right", 1, exchange_controller, &ec_right, NOT_RESTARTABLE);
 
-    debugf("Waiting for test to complete...");
+    debugf(INFO, "Waiting for test to complete...");
     thread_join(left);
     thread_join(right);
-    debugf("Controller threads finished!");
+    debugf(INFO, "Controller threads finished!");
 
     int code = 0;
     if (!ec_left.pass) {
-        debugf("Left controller failed");
+        debugf(CRITICAL, "Left controller failed");
         code = -1;
     }
     if (!ec_right.pass) {
-        debugf("Right controller failed");
+        debugf(CRITICAL, "Right controller failed");
         code = -1;
     }
     if (!compare_packet_chains("[left->right]", ec_left.chain_in, ec_right.chain_out)) {
-        debugf("Invalid packet chain transmitted from left to right");
+        debugf(CRITICAL, "Invalid packet chain transmitted from left to right");
         code = -1;
     } else {
-        debugf("Valid packet chain transmitted from left to right.");
+        debugf(INFO, "Valid packet chain transmitted from left to right.");
     }
     if (!compare_packet_chains("[right->left]", ec_right.chain_in, ec_left.chain_out)) {
-        debugf("Invalid packet chain transmitted from right to left");
+        debugf(CRITICAL, "Invalid packet chain transmitted from right to left");
         code = -1;
     } else {
-        debugf("Valid packet chain transmitted from right to left.");
+        debugf(INFO, "Valid packet chain transmitted from right to left.");
     }
 
     return code;

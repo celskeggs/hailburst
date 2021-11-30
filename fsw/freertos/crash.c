@@ -19,11 +19,11 @@ void abort(void) {
 
 static __attribute__((noreturn)) void suspend_current_task(void) {
     for (;;) {
-        debugf("SUSPENDING TASK.");
+        debugf(CRITICAL, "SUSPENDING TASK.");
         // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
         // to return all the way back to the interrupted task.
         vTaskSuspend(NULL);
-        debugf("Aborted task unexpectedly woke up!");
+        debugf(CRITICAL, "Aborted task unexpectedly woke up!");
     }
 }
 
@@ -35,9 +35,9 @@ static void restart_other_task(TaskHandle_t task) {
     assert(task != NULL && task != xTaskGetCurrentTaskHandle() && task != xTaskGetIdleTaskHandle());
     task_restart_hook_t *hook = (task_restart_hook_t *) xTaskGetApplicationTaskTag(task);
     assert(hook != NULL && hook->hook_callback != NULL);
-    debugf("Performing restart action for task '%s'", pcTaskGetName(task));
+    debugf(CRITICAL, "Performing restart action for task '%s'", pcTaskGetName(task));
     hook->hook_callback(hook->hook_param, task);
-    debugf("Finished performing restart action for task '%s'", pcTaskGetName(task));
+    debugf(CRITICAL, "Finished performing restart action for task '%s'", pcTaskGetName(task));
 }
 
 static void *restart_task_mainloop(void *opaque) {
@@ -63,7 +63,7 @@ static __attribute__((noreturn)) void restart_current_task(void) {
         assert(task_restart_queue_initialized == true);
         queue_send(&task_restart_queue, &cur);
     } else {
-        debugf("Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
+        debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
     }
     // wait forever for the restart task to run
     suspend_current_task();
@@ -103,15 +103,15 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     uint64_t now = timer_now_ns();
 
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
-    debugf("%s", trap_name);
+    debugf(CRITICAL, "%s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     const char *name = pcTaskGetName(failed_task);
-    debugf("%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x", trap_name, name, state->lr, spsr);
-    debugf("Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x", state->r0, state->r1, state->r2, state->r3);
-    debugf("Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x", state->r4, state->r5, state->r6, state->r7);
-    debugf("Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x", state->r8, state->r9, state->r10, state->r11);
-    debugf("Registers: R12=0x%08x", state->r12);
-    debugf("HALTING RTOS IN REACTION TO %s AT TIME=%" PRIu64, trap_name, now);
+    debugf(CRITICAL, "%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x", trap_name, name, state->lr, spsr);
+    debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x", state->r0, state->r1, state->r2, state->r3);
+    debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x", state->r4, state->r5, state->r6, state->r7);
+    debugf(CRITICAL, "Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x", state->r8, state->r9, state->r10, state->r11);
+    debugf(CRITICAL, "Registers: R12=0x%08x", state->r12);
+    debugf(CRITICAL, "HALTING RTOS IN REACTION TO %s AT TIME=%" PRIu64, trap_name, now);
     // returns to an abort() call
 }
 
@@ -122,22 +122,20 @@ static volatile TaskHandle_t last_failed_task = NULL;
 
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
-    debugf("TASK %s", trap_name);
+    debugf(CRITICAL, "TASK %s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     assert(failed_task != NULL);
     const char *name = pcTaskGetName(failed_task);
-    debugf("%s occurred in task '%s'", trap_name, name);
+    debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
 
     if (failed_task == xTaskGetIdleTaskHandle()) {
         // cannot suspend the IDLE task safely, because FreeRTOS requires that there always be an IDLE task
-        debugf("EXCEPTION OCCURRED IN IDLE TASK; HALTING RTOS.");
-        abort();
+        abortf("EXCEPTION OCCURRED IN IDLE TASK; HALTING RTOS.");
     }
 
     if (last_failed_task == failed_task) {
         // should be different, because we shouldn't hit any aborts past this point
-        debugf("RECURSIVE ABORT; HALTING RTOS.");
-        abort();
+        abortf("RECURSIVE ABORT; HALTING RTOS.");
     }
 
     last_failed_task = failed_task;
@@ -157,7 +155,6 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
 
     uint64_t now = timer_now_ns();
 
-    debugf("STACK OVERFLOW occurred in task '%s'", pcTaskName);
-    debugf("HALTING IN REACTION TO STACK OVERFLOW AT TIME=%" PRIu64, now);
-    abort();
+    debugf(CRITICAL, "STACK OVERFLOW occurred in task '%s'", pcTaskName);
+    abortf("HALTING IN REACTION TO STACK OVERFLOW AT TIME=%" PRIu64, now);
 }

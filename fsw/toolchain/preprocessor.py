@@ -120,9 +120,11 @@ def decode_string(argument):
 
 
 def debugf(args, filename, line_num):
-    if len(args) == 0:
-        raise MacroError("debugf requires at least one argument")
-    format_raw, args = args[0], args[1:]
+    if len(args) < 2:
+        raise MacroError("debugf requires at least two arguments")
+    loglevel, format_raw, args = args[0], args[1], args[2:]
+    if loglevel.strip() not in ("CRITICAL", "INFO", "DEBUG", "TRACE"):
+        raise MacroError("debugf requires a valid log level, not %r" % loglevel)
     format = decode_string(format_raw)
     arg_types = parse_printf_format(format)
     if len(arg_types) != len(args):
@@ -133,7 +135,7 @@ def debugf(args, filename, line_num):
         'static __attribute__((section (".debugf_messages"))) const char _msg_filename[] = "%s";'
             % filename.replace("\\", "\\\\").replace('"', '\\"'),
         'static __attribute__((section (".debugf_messages"))) const struct debugf_metadata _msg_metadata = {',
-        '.format = _msg_format, .filename = _msg_filename, .line_number = %u,' % (line_num,),
+        '.loglevel = (%s), .format = _msg_format, .filename = _msg_filename, .line_number = %u,' % (loglevel, line_num),
         '};',
         "struct {",
         "const struct debugf_metadata *metadata;",

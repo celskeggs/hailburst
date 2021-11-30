@@ -31,16 +31,16 @@ static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size
 
 // first entrypoint from assembly; returns new stack relocation address.
 uint32_t boot_phase_1(void) {
-    debugf("[BOOT ROM] Booting from ROM kernel");
+    debugf(CRITICAL, "[BOOT ROM] Booting from ROM kernel");
     if (!elf_validate_header(embedded_kernel)) {
-        debugf("[BOOT ROM] Halting for repair");
+        debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();
     }
 
     // scan segments to find a place to put our stack
     uint32_t stack_relocate_to = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, no_load);
     if (stack_relocate_to == 0) {
-        debugf("[BOOT ROM] Halting for repair");
+        debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();
     }
 
@@ -52,15 +52,15 @@ void *boot_phase_2(void) {
     // with our stack safely out of the way, we can now load the kernel
     uint32_t end_ptr = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, load_segment);
     if (end_ptr == 0) {
-        debugf("[BOOT ROM] Halting for repair");
+        debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();
     }
 
     // validate entrypoint
     Elf32_Ehdr *header = (Elf32_Ehdr*) embedded_kernel;
     if (header->e_entry < MEMORY_LOW || header->e_entry >= end_ptr) {
-        debugf("[BOOT ROM] Invalid entrypoint in kernel");
-        debugf("[BOOT ROM] Halting for repair");
+        debugf(CRITICAL, "[BOOT ROM] Invalid entrypoint in kernel");
+        debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();
     }
 
@@ -81,6 +81,5 @@ void abort(void) {
 // entrypoint on abort
 void abort_report(void) {
     // TODO: figure out a better fallback here?
-    debugf("[BOOT ROM] ABORT");
-    abort();
+    abortf("[BOOT ROM] ABORT");
 }

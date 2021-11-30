@@ -344,8 +344,8 @@ func (opt Options) StartViewer(p *util.Processes) {
 	p.LaunchInTerminal(
 		[]string{
 			opt.LogDecoderBinaryPath(),
+			"--loglevel", "INFO",
 			opt.GuestLog(),
-			"--",
 			path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
 			path.Join(opt.FswSourceDir(), "build-freertos/bootrom-elf"),
 		},

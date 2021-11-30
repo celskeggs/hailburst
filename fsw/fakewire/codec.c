@@ -162,7 +162,7 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
             assert(subdec.data_actual_len == 0);
             // if we receive another control character while still working on a parameter, report it as a codec error.
             assert(fakewire_is_parametrized(fwd->recv_current));
-            debugf("[fakewire_codec] Encountered unexpected control character %s while decoding parameterized control "
+            debugf(CRITICAL, "Encountered unexpected control character %s while decoding parameterized control "
                    "character %s.", fakewire_codec_symbol(subdec.ctrl_out), fakewire_codec_symbol(fwd->recv_current));
             decoded->ctrl_out = FWC_CODEC_ERROR;
             decoded->ctrl_param = 0;
@@ -227,7 +227,7 @@ static void fakewire_enc_flush_all(fw_encoder_t *fwe) {
         chart_request_send(fwe->tx_chart, fwe->tx_entry);
         fwe->tx_entry = NULL;
 #ifdef DEBUG
-        debugf("[fakewire_codec] Wrote %zu line bytes in flush.", fwe->enc_idx);
+        debugf(TRACE, "Wrote %zu line bytes in flush.", fwe->enc_idx);
 #endif
     }
 }
@@ -252,7 +252,7 @@ size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size
     assert(byte_count > 0);
 
 #ifdef DEBUG
-    debugf("[fakewire_codec] Beginning encoding of %zu raw data bytes.", byte_count);
+    debugf(TRACE, "Beginning encoding of %zu raw data bytes.", byte_count);
 #endif
     size_t in_offset;
     for (in_offset = 0; in_offset < byte_count; in_offset++) {
@@ -270,7 +270,7 @@ size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size
         fwe->tx_entry->data[fwe->tx_entry->actual_length++] = byte;
     }
 #ifdef DEBUG
-    debugf("[fakewire_codec] Finished encoding %zu/%zu raw data bytes.", in_offset, byte_count);
+    debugf(TRACE, "Finished encoding %zu/%zu raw data bytes.", in_offset, byte_count);
 #endif
     return in_offset;
 }
@@ -286,7 +286,7 @@ bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t para
     }
 
 #ifdef DEBUG
-    debugf("[fakewire_codec] Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
+    debugf(TRACE, "Transmitting control character: %s(%u).", fakewire_codec_symbol(symbol), param);
 #endif
 
     fwe->tx_entry->data[fwe->tx_entry->actual_length++] = (uint8_t) symbol;

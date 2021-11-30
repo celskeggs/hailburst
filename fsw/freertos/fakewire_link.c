@@ -20,7 +20,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
     // initialize serial port
     if (!virtio_console_init(&fwl->console, data_rx, data_tx)) {
-        debugf("Could not configure VIRTIO serial port.");
+        debugf(CRITICAL, "Could not configure VIRTIO serial port.");
         return -1;
     }
 

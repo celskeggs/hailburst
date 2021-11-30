@@ -5,11 +5,12 @@
 
 // for timer_now_ns() needed by debugf macro
 #include <rtos/timer_min.h>
+#include <fsw/loglevel.h>
 
 #ifndef __PYTHON_PREPROCESS__
 
 #warning Need python preprocessor phase to deal with debugf substitution
-extern void debugf(const char *format, ...);
+extern void debugf(loglevel_t level, const char *format, ...);
 
 #endif
 
@@ -17,6 +18,7 @@ extern void debugf(const char *format, ...);
 extern void debugf_internal(const void **data_sequences, const size_t *data_sizes, size_t data_num);
 
 struct debugf_metadata {
+    uint32_t loglevel;
     const char *format;
     const char *filename;
     uint32_t line_number;
@@ -24,13 +26,18 @@ struct debugf_metadata {
 
 #define _assert_raw(x,fmt,...) do { \
     if (!(x)) {                     \
-        debugf(fmt, ## __VA_ARGS__); \
+        debugf(CRITICAL, fmt, ## __VA_ARGS__); \
         abort(); \
     } \
 } while (0)
 
 #define assertf(x,fmt,...) _assert_raw(x, "ASSERT: " fmt, __VA_ARGS__)
 #define assert(x)          _assert_raw(x, "ASSERT")
+
+#define abortf(fmt,...) do { \
+    debugf(CRITICAL, fmt, ## __VA_ARGS__); \
+    abort(); \
+} while (0)
 
 #define static_assert _Static_assert
 

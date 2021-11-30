@@ -70,8 +70,7 @@ void radio_init(radio_t *radio, rmap_monitor_t *mon, rmap_addr_t *address, strea
 
     // arbitrarily use up_ctx for this initial configuration
     if (!radio_initialize(radio, &radio->up_ctx)) {
-        debugf("Radio: could not identify device settings.");
-        exit(1);
+        abortf("Radio: could not identify device settings.");
     }
 
     thread_create(&radio->up_thread, "radio_up_loop", PRIORITY_WORKERS, radio_uplink_loop, radio, RESTARTABLE);
@@ -119,22 +118,22 @@ retry:
 
     if (status != RS_OK) {
         if (!radio_is_error_recoverable(status)) {
-            debugf("Radio: encountered unrecoverable error while reading memory at 0x%x of length 0x%zx: 0x%03x",
+            debugf(CRITICAL, "Radio: encountered unrecoverable error while reading memory at 0x%x of length 0x%zx: 0x%03x",
                    rel_address, read_len, status);
             return false;
         } else if (retries > 0) {
-            debugf("Radio: retrying memory read at 0x%x of length 0x%zx after recoverable error: 0x%03x",
+            debugf(CRITICAL, "Radio: retrying memory read at 0x%x of length 0x%zx after recoverable error: 0x%03x",
                    rel_address, read_len, status);
             retries -= 1;
             goto retry;
         } else {
-            debugf("Radio: after %d retries, erroring out during memory read at 0x%x of length 0x%zx: 0x%03x",
+            debugf(CRITICAL, "Radio: after %d retries, erroring out during memory read at 0x%x of length 0x%zx: 0x%03x",
                    TRANSACTION_RETRIES, rel_address, read_len, status);
             return false;
         }
     }
     if (actual_read != read_len) {
-        debugf("Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx",
+        debugf(CRITICAL, "Radio: invalid read length while reading memory at 0x%x of length 0x%zx: 0x%zx",
                rel_address, read_len, actual_read);
         return false;
     }
@@ -153,15 +152,17 @@ retry:
 
     if (status != RS_OK) {
         if (!radio_is_error_recoverable(status)) {
-            debugf("Radio: encountered unrecoverable error while writing memory at 0x%x of length 0x%zx: 0x%03x",
+            debugf(CRITICAL,
+                   "Radio: encountered unrecoverable error while writing memory at 0x%x of length 0x%zx: 0x%03x",
                    rel_address, write_len, status);
             return false;
         } else if (retries > 0) {
-            debugf("Radio: retrying memory write at 0x%x of length 0x%zx after recoverable error: 0x%03x",
+            debugf(CRITICAL, "Radio: retrying memory write at 0x%x of length 0x%zx after recoverable error: 0x%03x",
                    rel_address, write_len, status);
             goto retry;
         } else {
-            debugf("Radio: after %d retries, erroring out during memory write at 0x%x of length 0x%zx: 0x%03x",
+            debugf(CRITICAL,
+                   "Radio: after %d retries, erroring out during memory write at 0x%x of length 0x%zx: 0x%03x",
                    TRANSACTION_RETRIES, rel_address, write_len, status);
             return false;
         }
@@ -185,21 +186,21 @@ retry:
     status = rmap_read(ctx, &radio->address, RF_INCREMENT, 0x00, first_reg * 4, &actual_read_len, output);
     if (status != RS_OK) {
         if (!radio_is_error_recoverable(status)) {
-            debugf("Radio: encountered unrecoverable error while querying registers [%u, %u]: 0x%03x",
+            debugf(CRITICAL, "Radio: encountered unrecoverable error while querying registers [%u, %u]: 0x%03x",
                    first_reg, last_reg, status);
             return false;
         } else if (retries > 0) {
-            debugf("Radio: retrying register query [%u, %u] after recoverable error: 0x%03x",
+            debugf(CRITICAL, "Radio: retrying register query [%u, %u] after recoverable error: 0x%03x",
                    first_reg, last_reg, status);
             goto retry;
         } else {
-            debugf("Radio: after %d retries, erroring out during register query [%u, %u]: 0x%03x",
+            debugf(CRITICAL, "Radio: after %d retries, erroring out during register query [%u, %u]: 0x%03x",
                    TRANSACTION_RETRIES, first_reg, last_reg, status);
             return false;
         }
     }
     if (actual_read_len != expected_read_len) {
-        debugf("Radio: invalid read length while querying registers [%u, %u]: %zu instead of %zu",
+        debugf(CRITICAL, "Radio: invalid read length while querying registers [%u, %u]: %zu instead of %zu",
                first_reg, last_reg, actual_read_len, expected_read_len);
         return false;
     }
@@ -233,15 +234,15 @@ retry:
     status = rmap_write(ctx, &radio->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, first_reg * 4, num_regs * 4, input_copy);
     if (status != RS_OK) {
         if (!radio_is_error_recoverable(status)) {
-            debugf("Radio: encountered unrecoverable error while updating registers [%u, %u]: 0x%03x",
+            debugf(CRITICAL, "Radio: encountered unrecoverable error while updating registers [%u, %u]: 0x%03x",
                    first_reg, last_reg, status);
             return false;
         } else if (retries > 0) {
-            debugf("Radio: retrying register update [%u, %u] after recoverable error: 0x%03x",
+            debugf(CRITICAL, "Radio: retrying register update [%u, %u] after recoverable error: 0x%03x",
                    first_reg, last_reg, status);
             goto retry;
         } else {
-            debugf("Radio: after %d retries, erroring out during register update [%u, %u]: 0x%03x",
+            debugf(CRITICAL, "Radio: after %d retries, erroring out during register update [%u, %u]: 0x%03x",
                    TRANSACTION_RETRIES, first_reg, last_reg, status);
             return false;
         }
@@ -259,7 +260,7 @@ static bool radio_initialize(radio_t *radio, rmap_context_t *ctx) {
         return false;
     }
     if (magic_num != RADIO_MAGIC) {
-        debugf("Radio: invalid magic number 0x%08x when 0x%08x was expected.", magic_num, RADIO_MAGIC);
+        debugf(CRITICAL, "Radio: invalid magic number 0x%08x when 0x%08x was expected.", magic_num, RADIO_MAGIC);
         return false;
     }
     uint32_t mem_base, mem_size;
@@ -271,7 +272,7 @@ static bool radio_initialize(radio_t *radio, rmap_context_t *ctx) {
     if (mem_base % 0x100 != 0 || mem_size % 0x100 != 0 ||
             mem_base < 0x100 || mem_size < 0x100 ||
             mem_base > RMAP_MAX_DATA_LEN || mem_size > RMAP_MAX_DATA_LEN) {
-        debugf("Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.", mem_base, mem_size);
+        debugf(CRITICAL, "Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.", mem_base, mem_size);
         return false;
     }
     radio->mem_access_base = mem_base;
@@ -325,7 +326,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     if (reg[REG_RX_STATE] == RX_STATE_IDLE) {
-        debugf("Radio: initializing uplink out of IDLE mode");
+        debugf(INFO, "Radio: initializing uplink out of IDLE mode");
 
         radio->bytes_extracted = 0;
         reg[REG_RX_PTR] = radio->rx_halves[0].base;
@@ -335,7 +336,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         reg[REG_RX_STATE] = RX_STATE_LISTENING;
 
 #ifdef DEBUGIDX
-        debugf("Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
+        debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
 
@@ -354,7 +355,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     uint32_t end_index_prime = reg[REG_RX_PTR] + reg[REG_RX_LEN];
     uint32_t end_index_alt = reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT];
 #ifdef DEBUGIDX
-    debugf("Radio indices: end_index_h0=%u, end_index_h1=%u, end_index_prime=%u, end_index_alt=%u, extracted=%u",
+    debugf(TRACE, "Radio indices: end_index_h0=%u, end_index_h1=%u, end_index_prime=%u, end_index_alt=%u, extracted=%u",
            end_index_h0, end_index_h1, end_index_prime, end_index_alt, radio->bytes_extracted);
 #endif
     assert(end_index_prime == end_index_h0
@@ -438,7 +439,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
                                      || (reread_half == 1 && end_index_prime == end_index_h0);
 
 #ifdef DEBUGIDX
-    debugf("Unread stats: bytes_extracted=%u, reread_half=%d, a_u_d_i_a=%d, ptr=%u, ptr_alt=%u",
+    debugf(TRACE, "Unread stats: bytes_extracted=%u, reread_half=%d, a_u_d_i_a=%d, ptr=%u, ptr_alt=%u",
            radio->bytes_extracted, reread_half, any_unread_data_in_alternate, reg[REG_RX_PTR], reg[REG_RX_PTR_ALT]);
 #endif
 
@@ -455,9 +456,9 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             reg[REG_RX_PTR_ALT] = 0;
             reg[REG_RX_LEN_ALT] = 0;
             reg[REG_RX_STATE] = RX_STATE_LISTENING;
-            debugf("Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
+            debugf(CRITICAL, "Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
 #ifdef DEBUGIDX
-            debugf("Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
+            debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                    reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
             if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
@@ -469,7 +470,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             reg[REG_RX_PTR_ALT] = new_region.base;
             reg[REG_RX_LEN_ALT] = new_region.size;
 #ifdef DEBUGIDX
-            debugf("Radio UPDATED indices: end_index_prime=<unchanged>, end_index_alt=%u",
+            debugf(TRACE, "Radio UPDATED indices: end_index_prime=<unchanged>, end_index_alt=%u",
                    reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
             if (!radio_write_registers(radio, &radio->up_ctx, REG_RX_PTR_ALT, REG_RX_LEN_ALT, reg + REG_RX_PTR_ALT)) {
@@ -489,7 +490,7 @@ static void *radio_uplink_loop(void *radio_opaque) {
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
-            debugf("Radio: hit error in uplink loop; halting uplink thread.");
+            debugf(CRITICAL, "Radio: hit error in uplink loop; halting uplink thread.");
             return NULL;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
@@ -555,7 +556,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     }
     assert(state == TX_STATE_IDLE);
 
-    debugf("Radio: finished transmitting %zu bytes.", append_len);
+    debugf(DEBUG, "Radio: finished transmitting %zu bytes.", append_len);
 
     return true;
 }
@@ -573,7 +574,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {
-            debugf("Radio: hit error in downlink loop; halting downlink thread.");
+            debugf(CRITICAL, "Radio: hit error in downlink loop; halting downlink thread.");
             return NULL;
         }
 
