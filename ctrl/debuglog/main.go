@@ -12,6 +12,7 @@ func main() {
 	var guestLog string
 	var binaries []string
 	var usage bool
+	var follow bool
 	minLogLevel := readlog.LogTrace
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--loglevel" && i+1 < len(os.Args) {
@@ -22,6 +23,8 @@ func main() {
 			}
 			minLogLevel = level
 			i += 1
+		} else if os.Args[i] == "--follow" {
+			follow = true
 		} else if strings.HasPrefix(os.Args[i], "-") {
 			usage = true
 			break
@@ -47,8 +50,10 @@ func main() {
 	var parseError error
 	go func() {
 		defer close(recordCh)
-		parseError = readlog.Parse(binaries, input, recordCh, true)
+		parseError = readlog.Parse(binaries, input, recordCh, follow)
 	}()
 	renderError := readlog.Renderer(recordCh, os.Stdout, minLogLevel, false)
-	log.Fatalf("Errors: parse: %v, render: %v", parseError, renderError)
+	if parseError != nil || renderError != nil || follow {
+		log.Fatalf("Errors: parse: %v, render: %v", parseError, renderError)
+	}
 }

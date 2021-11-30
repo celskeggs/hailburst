@@ -344,6 +344,7 @@ func (opt Options) StartViewer(p *util.Processes) {
 	p.LaunchInTerminal(
 		[]string{
 			opt.LogDecoderBinaryPath(),
+			"--follow",
 			"--loglevel", "INFO",
 			opt.GuestLog(),
 			path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
