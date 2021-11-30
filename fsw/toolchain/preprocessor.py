@@ -349,7 +349,7 @@ class Parser:
     def translate_line(self, line):
         if line.startswith('#'):
             parts = line.split(" ")
-            if len(parts) == 4 and parts[0] == '#' and parts[1].isdigit() and parts[2].startswith('"'):
+            if len(parts) >= 3 and parts[0] == '#' and parts[1].isdigit() and parts[2].startswith('"'):
                 self.source_file = decode_string(parts[2])
                 self.source_line = int(parts[1]) - 1
             return line

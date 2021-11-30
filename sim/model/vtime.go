@@ -1,7 +1,10 @@
 package model
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -16,6 +19,42 @@ func (t VirtualTime) String() string {
 	} else {
 		return "never"
 	}
+}
+
+func ParseTime(s string) (VirtualTime, error) {
+	if s == "never" {
+		return TimeNever, nil
+	}
+	parts := strings.Split(s, ".")
+	if len(parts) > 2 {
+		return TimeNever, fmt.Errorf("too many decimal points in string: %q", s)
+	}
+	sec, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return TimeNever, err
+	}
+	var nanosec uint64
+	if len(parts) > 1 {
+		if len(parts[1]) < 1 || len(parts[1]) > 9 {
+			return TimeNever, fmt.Errorf("invalid decimal component: %q", s)
+		}
+		segment := parts[1]
+		for len(segment) < 9 {
+			segment += "0"
+		}
+		nanosec, err = strconv.ParseUint(segment, 10, 64)
+		if err != nil {
+			return TimeNever, err
+		}
+		if nanosec >= uint64(NanosecondsPerSecond) {
+			panic("inconsistent; should never happen")
+		}
+	}
+	vt, ok := FromNanoseconds(sec * uint64(NanosecondsPerSecond) + nanosec)
+	if !ok {
+		return TimeNever, errors.New("invalid total value")
+	}
+	return vt, nil
 }
 
 func (t VirtualTime) TimeExists() bool {

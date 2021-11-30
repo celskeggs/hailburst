@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/celskeggs/hailburst/sim/model"
 	"log"
 	"os"
 	"strings"
@@ -10,9 +11,13 @@ import (
 
 func main() {
 	var guestLog string
+	var srcDir string
 	var binaries []string
+	earliest := model.TimeNever
+	latest := model.TimeNever
 	var usage bool
 	var follow bool
+	var full bool
 	minLogLevel := readlog.LogTrace
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--loglevel" && i+1 < len(os.Args) {
@@ -23,8 +28,25 @@ func main() {
 			}
 			minLogLevel = level
 			i += 1
+		} else if os.Args[i] == "--srcdir" && i+1 < len(os.Args) {
+			srcDir = os.Args[i+1]
+			i += 1
 		} else if os.Args[i] == "--follow" {
 			follow = true
+		} else if os.Args[i] == "--full" {
+			full = true
+		} else if (os.Args[i] == "--from" || os.Args[i] == "--until") && i+1 < len(os.Args) {
+			time, err := model.ParseTime(os.Args[i+1])
+			if err != nil {
+				log.Printf("Error: %v", err)
+				os.Exit(1)
+			}
+			if os.Args[i] == "--from" {
+				earliest = time
+			} else {
+				latest = time
+			}
+			i += 1
 		} else if strings.HasPrefix(os.Args[i], "-") {
 			usage = true
 			break
@@ -35,7 +57,7 @@ func main() {
 		}
 	}
 	if guestLog == "" || usage {
-		log.Printf("Usage: %s [--loglevel <level>] <guest.log> [-- <source binary> [<source binary> [...]]]",
+		log.Printf("Usage: %s [--loglevel <level>] [--full] [--follow] [--from <time>] [--until <time>] <guest.log> [<source binary> [<source binary> [...]]]",
 			os.Args[0])
 		os.Exit(1)
 	}
@@ -52,7 +74,9 @@ func main() {
 		defer close(recordCh)
 		parseError = readlog.Parse(binaries, input, recordCh, follow)
 	}()
-	renderError := readlog.Renderer(recordCh, os.Stdout, minLogLevel, false)
+	renderCh := make(chan readlog.Record)
+	readlog.Filter(recordCh, renderCh, minLogLevel, earliest, latest)
+	renderError := readlog.Renderer(renderCh, os.Stdout, srcDir, full)
 	if parseError != nil || renderError != nil || follow {
 		log.Fatalf("Errors: parse: %v, render: %v", parseError, renderError)
 	}
