@@ -1,0 +1,104 @@
+# This file is not used for actual compilation!
+# It is ONLY used for syntax highlighting in CLion.
+
+cmake_minimum_required(VERSION 3.19)
+project(hailburst)
+
+set(CMAKE_CXX_STANDARD 14)
+
+include_directories(fsw/freertos/include)
+include_directories(fsw/freertos/include/fsw)
+include_directories(fsw/freertos/include/hal)
+include_directories(fsw/freertos/include/rtos)
+include_directories(fsw/freertos/include/sys)
+include_directories(fsw/include)
+include_directories(fsw/include/elf)
+include_directories(fsw/include/fsw)
+include_directories(fsw/include/fsw/fakewire)
+include_directories(fsw/include/hal)
+include_directories(fsw/linux/include)
+include_directories(fsw/linux/include/fsw)
+include_directories(fsw/linux/include/hal)
+
+include_directories(../llvm-project-13/llvm/include)
+include_directories(../llvm-project-13/clang/include)
+include_directories(../llvm-project-13/build/include)
+include_directories(../llvm-project-13/build/tools/clang/include)
+
+add_executable(hailburst
+        fsw/bootrom/boot.c
+        fsw/elf/elf.c
+        fsw/fakewire/test/fakewire_exc_test.c
+        fsw/fakewire/test/test_common.c
+        fsw/fakewire/test/test_common.h
+        fsw/fakewire/codec.c
+        fsw/fakewire/exchange.c
+        fsw/fakewire/rmap.c
+        fsw/freertos/include/fsw/clock.h
+        fsw/freertos/include/hal/fakewire_link.h
+        fsw/freertos/include/hal/thread.h
+        fsw/freertos/include/hal/watchdog.h
+        fsw/freertos/include/rtos/arm.h
+        fsw/freertos/include/rtos/crash.h
+        fsw/freertos/include/rtos/gic.h
+        fsw/freertos/include/rtos/scrubber.h
+        fsw/freertos/include/rtos/timer.h
+        fsw/freertos/include/rtos/timer_min.h
+        fsw/freertos/include/rtos/virtio.h
+        fsw/freertos/include/rtos/virtqueue.h
+        fsw/freertos/include/sys/types.h
+        fsw/freertos/include/FreeRTOSConfig.h
+        fsw/freertos/include/portmacro.h
+        fsw/freertos/include/unistd.h
+        fsw/freertos/clock.c
+        fsw/freertos/crash.c
+        fsw/freertos/fakewire_link.c
+        fsw/freertos/gic.c
+        fsw/freertos/port.c
+        fsw/freertos/scrubber.c
+        fsw/freertos/stubs.c
+        fsw/freertos/thread.c
+        fsw/freertos/timer.c
+        fsw/freertos/virtio.c
+        fsw/freertos/virtio_console.c
+        fsw/freertos/watchdog.c
+        fsw/include/elf/elf.h
+        fsw/include/fsw/fakewire/codec.h
+        fsw/include/fsw/fakewire/exchange.h
+        fsw/include/fsw/fakewire/link.h
+        fsw/include/fsw/fakewire/rmap.h
+        fsw/include/fsw/chart.h
+        fsw/include/fsw/clock_init.h
+        fsw/include/fsw/cmd.h
+        fsw/include/fsw/comm.h
+        fsw/include/fsw/heartbeat.h
+        fsw/include/fsw/io.h
+        fsw/include/fsw/magnetometer.h
+        fsw/include/fsw/radio.h
+        fsw/include/fsw/spacecraft.h
+        fsw/include/fsw/tlm.h
+        fsw/include/fsw/wall.h
+        fsw/include/hal/atomic.h
+        fsw/include/hal/platform.h
+        fsw/linux/include/fsw/clock.h
+        fsw/linux/include/fsw/debug.h
+        fsw/linux/include/hal/fakewire_link.h
+        fsw/linux/include/hal/thread.h
+        fsw/linux/include/hal/watchdog.h
+        fsw/linux/clock.c
+        fsw/linux/debug.c
+        fsw/linux/fakewire_link.c
+        fsw/linux/platform.c
+        fsw/linux/queue.c
+        fsw/linux/semaphore.c
+        fsw/linux/stream.c
+        fsw/main/chart.c
+        fsw/main/cmd.c
+        fsw/main/comm.c
+        fsw/main/heartbeat.c
+        fsw/main/magnetometer.c
+        fsw/main/radio.c
+        fsw/main/spacecraft.c
+        fsw/main/tlm.c
+        fsw/main/wall.c
+        fsw/toolchain/log_plugin.cpp)

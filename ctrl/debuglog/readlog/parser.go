@@ -1,4 +1,4 @@
-package main
+package readlog
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"github.com/celskeggs/hailburst/sim/model"
 	"io"
 	"log"
-	"os"
 	"time"
 )
 
@@ -21,6 +20,7 @@ type WaitingReader struct {
 	buffer []byte
 	cur    []byte
 	stream io.Reader
+	follow bool
 }
 
 func (w *WaitingReader) Read() (b byte, err error) {
@@ -29,7 +29,7 @@ func (w *WaitingReader) Read() (b byte, err error) {
 		if err == nil || (err == io.EOF && n > 0) {
 			w.cur = w.buffer[:n]
 			continue
-		} else if err == io.EOF {
+		} else if err == io.EOF && w.follow {
 			// handle EOF case by waiting
 			// TODO: better way to do this?
 			time.Sleep(time.Millisecond * 100)
@@ -63,15 +63,18 @@ func decodeBody(in []byte) (output []byte, junk bool) {
 	return bytes.Join(fragments, nil), false
 }
 
-func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []byte) error {
+func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []byte, follow bool) error {
 	wr := WaitingReader{
 		buffer: make([]byte, 4096),
 		stream: inputStream,
+		follow: follow,
 	}
 	for {
 		// read bytes until we get to the start of the next segment
 		b, err := wr.Read()
-		if err != nil {
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
 			return err
 		}
 		var junk []byte
@@ -82,7 +85,6 @@ func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []
 			}
 		}
 		if len(junk) > 0 {
-			log.Printf("JUNK 1")
 			junkCh <- junk
 		}
 		// read bytes until we find the end of the segment
@@ -93,7 +95,6 @@ func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []
 		for b != DebugSegmentEnd {
 			if b == DebugSegmentStart {
 				// turns out that our original start was actually a false start to a segment... treat it as junk!
-				log.Printf("JUNK 2")
 				junkCh <- append([]byte{DebugSegmentStart}, body...)
 				body = nil
 			} else {
@@ -106,7 +107,6 @@ func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []
 		// hit start, body, and then end
 		decoded, isJunk := decodeBody(body)
 		if isJunk || len(decoded) < 12 {
-			log.Printf("JUNK 3")
 			// reconstruct the original sequence of bytes for maximally accurate junk reporting
 			junk := append([]byte{DebugSegmentStart}, body...)
 			junk = append(junk, DebugSegmentEnd)
@@ -117,7 +117,7 @@ func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []
 	}
 }
 
-func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record) error {
+func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record, follow bool) error {
 	dd, err := LoadDebugData(elfPaths)
 	if err != nil {
 		return err
@@ -128,7 +128,7 @@ func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record) e
 	var streamErr error
 	go func() {
 		defer close(stopCh)
-		streamErr = ParseStream(inputStream, recordCh, junkCh)
+		streamErr = ParseStream(inputStream, recordCh, junkCh, follow)
 	}()
 	var done bool
 	for !done {
@@ -149,33 +149,8 @@ func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record) e
 			done = true
 		}
 	}
-	if streamErr == nil {
+	if streamErr == nil && follow {
 		streamErr = errors.New("unexpected halt in ParseStream")
 	}
 	return streamErr
-}
-
-func main() {
-	if len(os.Args) < 2 || (len(os.Args) > 2 && (len(os.Args) < 4 || os.Args[2] != "--")) {
-		log.Printf("Usage: %s <guest.log> [-- <source binary> [<source binary> [...]]]", os.Args[0])
-		os.Exit(1)
-	}
-	var binaries []string
-	if len(os.Args) > 2 {
-		binaries = os.Args[3:]
-	} else {
-		binaries = []string{"fsw/build-freertos/kernel", "fsw/build-freertos/bootrom-elf"}
-	}
-	input, err := os.Open(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-	recordCh := make(chan Record)
-	var parseError error
-	go func() {
-		defer close(recordCh)
-		parseError = Parse(binaries, input, recordCh)
-	}()
-	renderError := Renderer(recordCh, os.Stdout, false)
-	log.Fatalf("Errors: parse: %v, render: %v", parseError, renderError)
 }

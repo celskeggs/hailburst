@@ -24,6 +24,7 @@ type Options struct {
 	ShowInjections    bool
 	ShowIoLog         bool
 	ShowSystemDetails bool
+	ShowLogs          bool
 }
 
 func DefaultOptions() Options {
@@ -35,6 +36,7 @@ func DefaultOptions() Options {
 		ShowSchedule:      false,
 		ShowInjections:    true,
 		ShowIoLog:         true,
+		ShowLogs:          true,
 	}
 }
 
@@ -59,7 +61,7 @@ func (o *Options) SetOption(name string, value bool) bool {
 	return false
 }
 
-func ScanAll(dir string, options Options) (out []scans.ScannedLine, err error) {
+func ScanAll(dir string, fswBin string, options Options) (out []scans.ScannedLine, err error) {
 	if options.ShowSummary {
 		records, err := scans.ScanReqSummary(path.Join(dir, "reqs-raw.log"), options.ShowSystemDetails)
 		if err != nil {
@@ -113,6 +115,16 @@ func ScanAll(dir string, options Options) (out []scans.ScannedLine, err error) {
 			ioLog,
 		)
 	}
+	if options.ShowLogs && fswBin != "" {
+		debuglog, err := scans.ScanDebugLog(path.Join(dir, "guest.log"),
+			[]string{path.Join(fswBin, "kernel"), path.Join(fswBin, "bootrom-elf")})
+		if err != nil {
+			return nil, errors.Wrap(err, "while scanning debug log")
+		}
+		out = append(out,
+			debuglog,
+		)
+	}
 	return out, nil
 }
 
@@ -126,7 +138,7 @@ func (p PreciseTicks) Ticks(min, max float64) []plot.Tick {
 	return ticks
 }
 
-func GeneratePlot(dirs []string, options Options) (*plot.Plot, error) {
+func GeneratePlot(dirs []string, fswBin string, options Options) (*plot.Plot, error) {
 	p := plot.New()
 	if len(dirs) == 1 {
 		p.Title.Text = "Timeline: " + path.Base(dirs[0])
@@ -138,7 +150,7 @@ func GeneratePlot(dirs []string, options Options) (*plot.Plot, error) {
 
 	var lines []scans.ScannedLine
 	for _, dir := range dirs {
-		scanResults, err := ScanAll(dir, options)
+		scanResults, err := ScanAll(dir, fswBin, options)
 		if err != nil {
 			return nil, err
 		}
@@ -164,6 +176,7 @@ func main() {
 	options := DefaultOptions()
 	var trialDirs []string
 	var usage bool
+	var fswBin string
 	for i := 1; i < len(os.Args); i++ {
 		if strings.HasPrefix(os.Args[i], "--show-") {
 			if !options.SetOption(os.Args[i][7:], true) {
@@ -173,6 +186,9 @@ func main() {
 			if !options.SetOption(os.Args[i][7:], false) {
 				log.Fatalf("Invalid option: %q", os.Args[i][7:])
 			}
+		} else if os.Args[i] == "--fswbin" && i+1 < len(os.Args) {
+			fswBin = os.Args[i+1]
+			i += 1
 		} else if strings.HasPrefix(os.Args[i], "-") {
 			usage = true
 			break
@@ -184,10 +200,10 @@ func main() {
 		usage = true
 	}
 	if usage {
-		log.Fatalf("Usage: %s (--show X | --hide X)* <trial-dir> <trial-dir> ...", path.Base(os.Args[0]))
+		log.Fatalf("Usage: %s (--show X | --hide X)* [--fswbin <fsw-dir>] <trial-dir> <trial-dir> ...", path.Base(os.Args[0]))
 	}
 
-	p, err := GeneratePlot(trialDirs, options)
+	p, err := GeneratePlot(trialDirs, fswBin, options)
 	if err != nil {
 		log.Fatal("error while generating plot: ", err)
 	}

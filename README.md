@@ -52,4 +52,4 @@ Next, compile GDB and install it to a local directory:
     $ make -j4
     $ make install
 
-(If this doesn't work, make sure you have the crypt.h header available on your system.)
+(If this doesn't work, make sure you have the crypt.h header available on your system, and make sure you've installed the texinfo, bison, libpython3-dev, and flex packages.)

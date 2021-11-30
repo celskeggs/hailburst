@@ -36,7 +36,7 @@ func wrapInXterm(argv []string, title string, i int) []string {
 		"xterm",
 		"-fa", "Monospace", "-fs", "10", // font configuration
 		"-T", title,
-		"-geometry", "117x25+" + locations[i % 4],
+		"-geometry", "117x25+" + locations[i%4],
 		"-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", cmdline),
 	}
 }

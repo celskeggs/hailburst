@@ -1,4 +1,4 @@
-package main
+package readlog
 
 import (
 	"debug/elf"

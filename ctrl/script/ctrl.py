@@ -12,7 +12,7 @@ def qemu_hmp(cmdstr):
 
 def now():
     text = qemu_hmp("info vtime")
-    assert text.startswith("virtual time: ") and text.endswith(" ns") and text.count(" ") == 3,\
+    assert text.startswith("virtual time: ") and text.endswith(" ns") and text.count(" ") == 3, \
         "invalid output: %r" % text
     return int(text.split(" ")[2])
 
@@ -192,7 +192,7 @@ def inject_bitflip(address, bytewidth):
 
     rnvalue = int.from_bytes(inferior.read_memory(address, bytewidth), "little")
 
-    assert nvalue == rnvalue and nvalue != ovalue,\
+    assert nvalue == rnvalue and nvalue != ovalue, \
         "mismatched values: o=0x%x n=0x%x rn=0x%x" % (ovalue, nvalue, rnvalue)
     global_writer.write(address, ovalue, nvalue)
     print("Injected bitflip into address 0x%x: old value 0x%x -> new value 0x%x" % (address, ovalue, nvalue))

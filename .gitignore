@@ -7,3 +7,4 @@
 /sim/requirements-bin
 /sim/debuglog-bin
 /ctrl/batch-bin
+/cmake-build-debug
