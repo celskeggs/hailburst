@@ -326,7 +326,7 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
 
         num_readings++;
     }
-    debugf("  Total number of readings: %zu\n", num_readings);
+    debugf("  Total number of readings: %zu", num_readings);
     assert((uint8_t*) out - sync->data_bytes == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream

@@ -12,9 +12,18 @@ enum {
 enum {
     ARM_FPEXC_EN = 0x40000000, // enable bit
 
+    ARM_CPSR_MASK_INTERRUPTS = 0x80,
+
     ARM_CPACR_CP10_FULL_ACCESS = 0x300000, // enable CP10 with full access
     ARM_CPACR_CP11_FULL_ACCESS = 0xC00000, // enable CP11 with full access
 };
+
+/** Current Program Status Register (CPSR) **/
+static inline uint32_t arm_get_cpsr(void) {
+    uint32_t v;
+    asm volatile("MRS %0, CPSR" : "=r" (v));
+    return v;
+}
 
 /** Physical Timer Control Register (CNTP_CTL) **/
 static inline void arm_set_cntp_ctl(uint32_t v) {

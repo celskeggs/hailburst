@@ -1,3 +1,5 @@
+import SCons.Defaults
+import SCons.Tool
 import os
 import subprocess
 
@@ -45,92 +47,68 @@ def configure_linux():
 
 
 # ============================= FreeRTOS =============================
-
-def configure_host_plugin(LLVM_BASE):
-    host_env = Environment(
-        CCFLAGS=[
-            "-Wall", "-Wextra", "-Werror",
-            "-Wno-unused-parameter",
-            "-fno-rtti",
-            "-std=gnu++14",
-        ],
-        CPPPATH=[
-            os.path.join(LLVM_BASE, "llvm/include"),
-            os.path.join(LLVM_BASE, "clang/include"),
-            os.path.join(LLVM_BASE, "build/include"),
-            os.path.join(LLVM_BASE, "build/tools/clang/include"),
-        ],
-    )
-
-    plugin = host_env.SharedLibrary("log-plugin", ["toolchain/log_plugin.cpp"])
-
-    return plugin
-
-
-def inject_dependency(builder, dependency):
-    original = builder.emitter
-
-    def custom_emitter(target, source, env):
-        target, source = original(target, source, env)
-        env.Depends(target, dependency)
-        return target, source
-    builder.builder.emitter = custom_emitter
-
-
 def configure_freertos():
     ROOT_DIR = os.path.abspath("../../..")
 
-    LLVM_BASE = os.path.join(ROOT_DIR, "llvm-project-13")
-    CLANG_PATH = os.path.join(LLVM_BASE, "build/bin/clang-13")
-
-    clang_plugin = configure_host_plugin(LLVM_BASE)
-
     COMMON_FLAGS = [
         "-ggdb",
-        "-target", "arm-none-eabi",
         "-mcpu=cortex-a15", "-mfpu=vfpv4", "-mfloat-abi=softfp",
     ]
 
     rtos_env = Environment(
-        CC=CLANG_PATH,
-        AS=CLANG_PATH,
+        CC="arm-none-eabi-gcc",
+        AS="arm-none-eabi-gcc",
         LINK="arm-none-eabi-ld",
         OBJCOPY="arm-none-eabi-objcopy",
         STRIP="arm-none-eabi-strip",
         LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
-        CLANGPLUGIN=clang_plugin,
         CCFLAGS=COMMON_FLAGS + ["-Wall", "-Wextra", "-Werror",
                                 # because ealibc uses #pragma mark, and that causes trouble
                                 "-Wno-unknown-pragmas",
                                 "-nostdlib", "-nostdinc", "-ffreestanding",
-                                "-fplugin=$CLANGPLUGIN",
                                 "-std=gnu11",
                                 "-D_BITSIZE=32", "-D__FREERTOS__"],
         ASFLAGS=COMMON_FLAGS + ["-c", "-Wa,--fatal-warnings"],
         CPPPATH=[],
+        PPSUFFIX=".iraw",
+        RWSUFFIX=".i",
+        PPCOM='$CC -o $TARGET -E $CFLAGS $CCFLAGS -D__PYTHON_PREPROCESS__ $_CCCOMCOM $SOURCES',
+        PYTHONPP='toolchain/preprocessor.py',
+        PPMODCOM='python3 $PYTHONPP $SOURCES $TARGET',
+        # eliminate $_CCCOMCOM here because it's used for preprocessor flags that are not needed here
+        OBJCOM='$CC -o $TARGET -c $CFLAGS $CCFLAGS $SOURCES',
     )
-    inject_dependency(rtos_env['BUILDERS']['Object'], clang_plugin)
 
-    # If we were using a fully working version of clang (i.e. not a clang-13 we baked ourselves), perhaps we could call
-    # into the compiler to get a path to a working compiler_rt library (the clang equivalent libgcc).
-    # we might do that like the following (which works for GCC)
-    if rtos_env['CC'].endswith("gcc"):
-        COMPILER_LIBRARY_PATH = subprocess.check_output([rtos_env['CC'], "-print-libgcc-file-name"]).decode().strip()
-    # Unfortunately, clang's compiler_rt cannot be easily cross-compiled due to assumptions baked into the cmake
-    # scripts, which means we need to build the library ourselves
-    else:
-        BUILTINS_PATH = os.path.join(LLVM_BASE, "compiler-rt/lib/builtins")
-        BUILTINS_ARCH_PATH = os.path.join(BUILTINS_PATH, "arm")
-        builtins = {filename.rsplit(".", 1)[0]: os.path.join(BUILTINS_PATH, filename)
-                    for filename in os.listdir(BUILTINS_PATH)
-                    if filename.endswith(".c")}
-        for x in ["emutls", "enable_execute_stack", "eprintf", "gcc_personality_v0"]:
-            del builtins[x]
-        builtins.update({filename.rsplit(".", 1)[0]: os.path.join(BUILTINS_ARCH_PATH, filename)
-                         for filename in os.listdir(BUILTINS_ARCH_PATH)
-                         if filename.endswith(".c") or filename.endswith(".S")})
-        COMPILER_LIBRARY_PATH = rtos_env.Library("compiler-rt-builtins", sorted(builtins.values()),
-                                                 CCFLAGS=rtos_env['CCFLAGS'] + ["-Wno-unused-parameter"])
+    rtos_env['BUILDERS']['PP'] = Builder(action=Action("$PPCOM", "$PPCOMSTR"),
+                                         suffix='$PPSUFFIX',
+                                         src_suffix='.c',
+                                         source_scanner=SourceFileScanner,
+                                         single_source=1)
+
+    def plugin_dep_emitter(target, source, env):
+        env.Depends(target, "$PYTHONPP")
+        return target, source
+
+    rtos_env['BUILDERS']['PPMOD'] = Builder(action=Action("$PPMODCOM", "$PPMODCOMSTR"),
+                                            emitter=plugin_dep_emitter,
+                                            suffix='$RWSUFFIX',
+                                            src_suffix='$PPSUFFIX',
+                                            src_builder='PP',
+                                            single_source=1)
+    ObjAction = Action("$OBJCOM", "$OBJCOMSTR")
+    ASAction = Action("$ASCOM", "$ASCOMSTR")
+    CAction = Action("$CCCOM", "$CCCOMSTR")
+    static_object_builder = Builder(action={'$RWSUFFIX': ObjAction, '.s': ASAction, '.S': CAction},
+                                    emitter=SCons.Defaults.StaticObjectEmitter,
+                                    prefix='$OBJPREFIX',
+                                    suffix='$OBJSUFFIX',
+                                    src_suffix=['$RWSUFFIX', '.s', '.S'],
+                                    src_builder='PPMOD',
+                                    single_source=1)
+    rtos_env['BUILDERS']['Object'] = static_object_builder
+    rtos_env['BUILDERS']['StaticObject'] = static_object_builder
+
+    COMPILER_LIBRARY_PATH = subprocess.check_output([rtos_env['CC'], "-print-libgcc-file-name"]).decode().strip()
 
     # embedded artistry's libc
     EALIBC_ROOT = os.path.join(ROOT_DIR, "ealibc")
@@ -153,7 +131,7 @@ def configure_freertos():
     ealibc = rtos_env.Library(
         "ealibc",
         [os.path.join(EALIBC_ROOT, "src", x) for x in
-         ["string/memset.c", "string/memcpy.c", "string/memmove.c", "crt/exit.c", "stdlib/rand.c"]]
+         ["string/memset.c", "string/memcpy.c", "string/memmove.c", "string/strlen.c", "crt/exit.c", "stdlib/rand.c"]]
     )
 
     RTOS_SRC = ["freertos/clock.c", "freertos/crash.c", "freertos/entrypoint.s", "freertos/fakewire_link.c",
@@ -175,7 +153,7 @@ def configure_freertos():
     stripped_kernel = rtos_env.Command(
         target='stripped-kernel',
         source=rtos_kernel,
-        action='$STRIP --strip-all $SOURCE -o $TARGET',
+        action='$STRIP --strip-all --remove-section=.debugf_messages $SOURCE -o $TARGET',
     )
 
     embedding = rtos_env.Command(

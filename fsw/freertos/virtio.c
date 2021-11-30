@@ -172,7 +172,7 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
             assert(elem->len > 0);
             // if this trips, it might be because the device tried to write more data than there was actually room
             assertf(elem->len <= io_rx_size(queue->chart),
-                "elem->len=%u, rx_size=%u, offset=%u, desc len=%u",
+                "elem->len=%u, rx_size=%u, desc len=%u",
                 elem->len, io_rx_size(queue->chart), queue->desc[ring_index].len);
 
             struct io_rx_ent *request = chart_request_start(queue->chart);

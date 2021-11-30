@@ -13,7 +13,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_printf(fmt, ...) debugf("[  fakewire_exc] [%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
+#define debug_printf(fmt, ...) debugf("[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
 
 static void fakewire_exc_chart_notify_exchange(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
@@ -325,7 +325,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                     do_reset = true;
                 } else if (read_entry->actual_length >= io_rx_size(fwe->read_chart)) {
                     assert(rx_ent.data_out == NULL);
-                    debug_printf("Packet exceeded buffer size %zu (at least %zu + %z bytes); discarding.",
+                    debug_printf("Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
                                  io_rx_size(fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
                     recv_state = FW_RECV_OVERFLOWED;
                 } else {

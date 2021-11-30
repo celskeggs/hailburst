@@ -9,7 +9,7 @@
 static void panic_unpopulated(void *param) {
     assert(param == NULL);
 
-    debugf("chart %p never had a proper notify function registered; crashing.");
+    debugf("chart never had a proper notify function registered; crashing.");
     abort();
 }
 

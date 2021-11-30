@@ -12,9 +12,9 @@ const NanosecondsPerSecond = int64(time.Second / time.Nanosecond)
 func (t VirtualTime) String() string {
 	if t.TimeExists() {
 		ns := int64(t)
-		return fmt.Sprintf("[%ds+%09dns]", ns/NanosecondsPerSecond, ns%NanosecondsPerSecond)
+		return fmt.Sprintf("%d.%09d", ns/NanosecondsPerSecond, ns%NanosecondsPerSecond)
 	} else {
-		return "[never]"
+		return "never"
 	}
 }
 

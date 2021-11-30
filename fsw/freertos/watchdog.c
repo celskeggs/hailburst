@@ -91,7 +91,7 @@ static bool watchdog_aspects_ok(void) {
 
     for (watchdog_aspect_t w = 0; w < WATCHDOG_ASPECT_NUM; w++) {
         if (watchdog_aspect_timestamps[w] + WATCHDOG_ASPECT_MAX_AGE < now || watchdog_aspect_timestamps[w] > now) {
-            debugf("[watchdog] aspect %s not confirmed ok", watchdog_aspect_name(w));
+            debugf("aspect %s not confirmed ok", watchdog_aspect_name(w));
             ok = false;
         }
     }
@@ -117,7 +117,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
         // how long until then?
         int32_t delay_until_earliest = earliest - now;
 
-        debugf("[watchdog] now=%" PRIu64 ", deadline=%+d, earliest=%+d",
+        debugf("now=%" PRIu64 ", deadline=%+d, earliest=%+d",
                now_full, delay_until_deadline, delay_until_earliest);
 
         // if we can't feed yet, wait until we can
@@ -129,7 +129,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
 
         if (!watchdog_aspects_ok()) {
             // something is wrong! DO NOT FEED WATCHDOG!
-            debugf("[watchdog] something is wrong");
+            debugf("something is wrong");
             watchdog_force_reset();
             return NULL;
         }
@@ -137,7 +137,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
         // greet watchdog, prepare food, feed watchdog
         uint32_t recipe = mmio->r_greet;
         uint32_t food = wdt_strict_food_from_recipe(recipe);
-        debugf("[watchdog] recipe: 0x%08x -> food: 0x%08x", recipe, food);
+        debugf("recipe: 0x%08x -> food: 0x%08x", recipe, food);
         mmio->r_feed = food;
 
         // ensure that deadline has been updated
@@ -158,9 +158,9 @@ void watchdog_force_reset(void) {
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
 
     // writes to the greet register are forbidden
-    debugf("[watchdog] forcing reset");
+    debugf("forcing reset");
     mmio->r_greet = 0;
     // if we continue here, something is really wrong... that should have killed the watchdog!
-    debugf("[watchdog] reset did not occur! aborting.");
+    debugf("reset did not occur! aborting.");
     abort();
 }

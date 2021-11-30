@@ -89,6 +89,10 @@ func (opt Options) ExperimentBinaryPath() string {
 	return path.Join(opt.HailburstDir, "sim/requirements-bin")
 }
 
+func (opt Options) LogDecoderBinaryPath() string {
+	return path.Join(opt.HailburstDir, "sim/debuglog-bin")
+}
+
 func (opt Options) BatchBinaryPath() string {
 	return path.Join(opt.HailburstDir, "ctrl/batch-bin")
 }
@@ -97,6 +101,8 @@ func (opt Options) BuildHostTools() {
 	if opt.Rebuild {
 		RunBuildCmd(opt.HailburstDir, "go", "build",
 			"-o", opt.ExperimentBinaryPath(), "./sim/experiments/requirements")
+		RunBuildCmd(opt.HailburstDir, "go", "build",
+			"-o", opt.LogDecoderBinaryPath(), "./ctrl/debuglog")
 		RunBuildCmd(opt.HailburstDir, "go", "build",
 			"-o", opt.BatchBinaryPath(), "./ctrl/batch")
 	}
@@ -335,7 +341,17 @@ func (opt Options) StartQEMU(p *util.Processes) {
 
 func (opt Options) StartViewer(p *util.Processes) {
 	WaitUntilExists(opt.GuestLog(), time.Second)
-	p.LaunchInTerminal([]string{"tail", "-f", opt.GuestLog()}, "Guest Log", opt.TrialDir)
+	p.LaunchInTerminal(
+		[]string{
+			opt.LogDecoderBinaryPath(),
+			opt.GuestLog(),
+			"--",
+			path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
+			path.Join(opt.FswSourceDir(), "build-freertos/bootrom-elf"),
+		},
+		"Decoded Guest Log",
+		opt.TrialDir,
+	)
 }
 
 func (opt Options) Launch() {

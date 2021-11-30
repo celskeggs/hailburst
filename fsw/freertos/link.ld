@@ -12,4 +12,6 @@ SECTIONS
     .text : { *(.text*) *(.rodata*) } :text
     .data : { *(.data*) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
+    . = 0xF8000000;
+    .debugf_messages (INFO) : { *(.debugf_messages) }
 }

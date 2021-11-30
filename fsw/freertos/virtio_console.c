@@ -81,12 +81,12 @@ static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct v
 static bool virtio_console_feature_select(uint64_t *features) {
     // check feature bits
     if (!(*features & VIRTIO_F_VERSION_1)) {
-        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016x). "
+        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016llx). "
                "Legacy devices are not supported.", *features, VIRTIO_F_VERSION_1);
         return false;
     }
     if (!(*features & VIRTIO_CONSOLE_F_MULTIPORT)) {
-        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016x). "
+        debugf("VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016llx). "
                "This configuration is not yet supported.", *features, VIRTIO_CONSOLE_F_MULTIPORT);
         return false;
     }
