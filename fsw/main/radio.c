@@ -159,6 +159,7 @@ retry:
         } else if (retries > 0) {
             debugf(CRITICAL, "Radio: retrying memory write at 0x%x of length 0x%zx after recoverable error: 0x%03x",
                    rel_address, write_len, status);
+            retries -= 1;
             goto retry;
         } else {
             debugf(CRITICAL,
@@ -240,6 +241,7 @@ retry:
         } else if (retries > 0) {
             debugf(CRITICAL, "Radio: retrying register update [%u, %u] after recoverable error: 0x%03x",
                    first_reg, last_reg, status);
+            retries -= 1;
             goto retry;
         } else {
             debugf(CRITICAL, "Radio: after %d retries, erroring out during register update [%u, %u]: 0x%03x",

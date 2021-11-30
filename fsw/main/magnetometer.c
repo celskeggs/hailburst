@@ -126,6 +126,7 @@ retry:
                 return false;
             } else if (retries > 0) {
                 debugf(CRITICAL, "Magnetometer: retrying register read after recoverable error: 0x%03x", status);
+                retries -= 1;
                 goto retry;
             } else {
                 debugf(CRITICAL, "Magnetometer: after %d retries, erroring out during register read: 0x%03x",
