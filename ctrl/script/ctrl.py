@@ -337,6 +337,21 @@ def inject(args):
     inject_bitflip(address, bytewidth)
 
 
+def inject_restart():
+    # this is a UDF instruction
+    gdb.execute("set *(unsigned int*)$pc = 0xE7F000F0")
+
+
+@BuildCmd
+def task_restart(args):
+    """Inject a UDF instruction to force a task restart."""
+    if args.strip():
+        print("usage: task_restart")
+        return
+
+    inject_restart()
+
+
 def inject_reg_internal(register_name):
     registers = [r.name for r, nb in list_registers()]
     if register_name:
@@ -398,6 +413,7 @@ def campaign(args):
         print("bytewidth defaults to 4 bytes if address specified")
         print("if <address> starts with reg, then register injections are performed instead")
         print("specify address as reg:X to specify register X for the register injection")
+        print("if <address> is 'restart', then an undefined instruction is injected")
         return
 
     iterations = int(args[0])
@@ -405,10 +421,14 @@ def campaign(args):
     assert mtbf > 0
 
     is_reg = False
+    is_restart = False
 
     if args[2:]:
         rand_addr = False
-        if args[2].startswith("reg") and args[2][3:4] in (":", ""):
+        if args[2] == "restart":
+            is_restart = True
+            address = None
+        elif args[2].startswith("reg") and args[2][3:4] in (":", ""):
             is_reg = True
             address = args[2][4:]
         else:
@@ -422,7 +442,9 @@ def campaign(args):
         bytewidth = 1
 
     for i in range(iterations):
-        if is_reg:
+        if is_restart:
+            inject_restart()
+        elif is_reg:
             inject_reg_internal(address)
         else:
             if rand_addr:
