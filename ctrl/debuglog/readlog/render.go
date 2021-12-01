@@ -116,17 +116,24 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 				firstLine = 1
 				countLines = line.Metadata.LineNum + 5
 			}
-			lines, sourceError := GetLines(path.Join(srcPath, line.Metadata.Filename), firstLine, countLines)
+			filePath := line.Metadata.Filename
+			shortPath := line.Metadata.Filename
+			if path.IsAbs(filePath) {
+				shortPath = path.Join("...", path.Base(path.Dir(filePath)), path.Base(filePath))
+			} else {
+				filePath = path.Join(srcPath, filePath)
+			}
+			lines, sourceError := GetLines(filePath, firstLine, countLines)
 			var msgs []string
 			if sourceError != nil || len(lines) == 0 {
 				msgs = []string{
 					fmt.Sprintf("CANNOT ACCESS SOURCE %s:%d ==> %v",
-						line.Metadata.Filename, line.Metadata.LineNum, sourceError),
+						filePath, line.Metadata.LineNum, sourceError),
 				}
 			} else {
 				for i, lineText := range lines {
 					msg := fmt.Sprintf("%30s %s",
-						fmt.Sprintf("[%s:%d]", line.Metadata.Filename, firstLine + uint32(i)),
+						fmt.Sprintf("[%s:%d]", shortPath, firstLine + uint32(i)),
 						lineText,
 					)
 					if firstLine + uint32(i) == line.Metadata.LineNum {
