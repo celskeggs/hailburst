@@ -7,20 +7,12 @@ Under the same parent directory, clone the following repositories:
  - https://github.com/celskeggs/qemu
  - https://sourceware.org/git/binutils-gdb.git
  - https://github.com/embeddedartistry/libc (as ealibc/; remember to use --recursive)
- - https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+ - https://github.com/FreeRTOS/FreeRTOS-Kernel.git @ commit 68ddb32b55be1bbe74977f79aedb8470a97b7542
 
 Then, download and extract https://buildroot.org/downloads/buildroot-2021.02.tar.bz2 somewhere on
 your system, such as to ~/Binary/buildroot-2021.02/. Make sure to use THIS EXACT VERSION!
 
 Download and extract https://www.zlib.net/zlib-1.2.11.tar.gz such that there is a zlib-1.2.11/ directory under the same parent directory as hailburst.
-
-Download and extract https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/llvm-project-13.0.0.src.tar.xz such that there is a llvm-project-13/ directory under the same parent directory as hailburst.
-
-Compile LLVM using:
-
-    $ cd build
-    $ cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=On ../llvm
-    $ cmake --build .
 
 In the hailburst repository, copy local.config.template to local.config, and fill in the buildroot
 path where you installed it.
