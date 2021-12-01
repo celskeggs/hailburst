@@ -7,6 +7,8 @@
 
 void debugf(loglevel_t level, const char *format, ...);
 
+#define debugf_stable(level, stable_id, fmt, ...) debugf(level, fmt, ## __VA_ARGS)
+
 // generic but messier implementation
 #define assertf(x, ...) assert((x) || (debugf(CRITICAL, "[assert] " __VA_ARGS__), 0))
 #define abortf(...) (debugf(CRITICAL, "[assert]" __VA_ARGS__), abort())

@@ -85,6 +85,9 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 		rendered := Render(line)
 		var text string
 		if full {
+			if line.Metadata.StableID != "" {
+				rendered = line.Metadata.StableID + " - " + rendered
+			}
 			text = fmt.Sprintf(
 				"%08X - %-25s - %15v - %5v - %s",
 				line.Metadata.MessageUID,
@@ -106,7 +109,7 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 		if err != nil {
 			return err
 		}
-		if srcPath != "" && strings.HasPrefix(rendered, "ASSERT") && line.Metadata.LineNum != 0 {
+		if srcPath != "" && line.Metadata.StableID == "Assertion" && line.Metadata.LineNum != 0 {
 			firstLine := line.Metadata.LineNum - 5
 			var countLines uint32 = 11
 			if line.Metadata.LineNum <= 5 {

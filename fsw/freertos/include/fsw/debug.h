@@ -10,15 +10,19 @@
 #ifndef __PYTHON_PREPROCESS__
 
 #warning Need python preprocessor phase to deal with debugf substitution
-extern void debugf(loglevel_t level, const char *format, ...);
+extern void debugf_core(loglevel_t level, const char *stable_id, const char *format, ...);
 
 #endif
+
+#define debugf(level, fmt, ...)                   debugf_core(level, "",         fmt, ## __VA_ARGS__)
+#define debugf_stable(level, stable_id, fmt, ...) debugf_core(level, #stable_id, fmt, ## __VA_ARGS__)
 
 // invocations to debugf_internal are injected by the clang AST rewriter plugin
 extern void debugf_internal(const void **data_sequences, const size_t *data_sizes, size_t data_num);
 
 struct debugf_metadata {
     uint32_t loglevel;
+    const char *stable_id;
     const char *format;
     const char *filename;
     uint32_t line_number;
@@ -26,7 +30,7 @@ struct debugf_metadata {
 
 #define _assert_raw(x,fmt,...) do { \
     if (!(x)) {                     \
-        debugf(CRITICAL, fmt, ## __VA_ARGS__); \
+        debugf_stable(CRITICAL, Assertion, fmt, ## __VA_ARGS__); \
         abort(); \
     } \
 } while (0)

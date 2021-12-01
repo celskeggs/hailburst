@@ -200,7 +200,7 @@ func main() {
 		usage = true
 	}
 	if usage {
-		log.Fatalf("Usage: %s (--show X | --hide X)* [--fswbin <fsw-dir>] <trial-dir> <trial-dir> ...", path.Base(os.Args[0]))
+		log.Fatalf("Usage: %s (--show-X | --hide-X)* [--fswbin <fsw-dir>] <trial-dir> <trial-dir> ...", path.Base(os.Args[0]))
 	}
 
 	p, err := GeneratePlot(trialDirs, fswBin, options)

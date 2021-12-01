@@ -31,7 +31,7 @@ static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size
 
 // first entrypoint from assembly; returns new stack relocation address.
 uint32_t boot_phase_1(void) {
-    debugf(CRITICAL, "[BOOT ROM] Booting from ROM kernel");
+    debugf_stable(CRITICAL, BootFromROMKernel, "[BOOT ROM] Booting from ROM kernel");
     if (!elf_validate_header(embedded_kernel)) {
         debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();

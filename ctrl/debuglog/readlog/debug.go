@@ -63,6 +63,7 @@ func (ll LogLevel) String() string {
 
 type MessageMetadata struct {
 	MessageUID uint32
+	StableID   string
 	LogLevel   LogLevel
 	Format     Formatter
 	Filename   string
@@ -246,13 +247,23 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 	if !strings.HasPrefix(sym.Name, "_msg_metadata") {
 		return nil, fmt.Errorf("invalid name: %q", sym.Name)
 	}
-	var metadata struct{ LogLevel, FormatPtr, FilenamePtr, LineNumber uint32 }
+	var metadata struct{ LogLevel, StableIdPtr, FormatPtr, FilenamePtr, LineNumber uint32 }
 	if err := f.ReadSymbolInto(sym, ".debugf_messages", &metadata); err != nil {
 		return nil, err
 	}
 	level, err := ParseLogLevel(metadata.LogLevel)
 	if err != nil {
 		return nil, err
+	}
+	var stableId string
+	if metadata.StableIdPtr != 0 {
+		stableId, err = f.ReadCStringFromAddress(metadata.StableIdPtr, "_msg_stable", ".debugf_messages")
+		if err != nil {
+			return nil, err
+		}
+		if len(stableId) == 0 {
+			return nil, fmt.Errorf("invalid empty stable id")
+		}
 	}
 	fmtStr, err := f.ReadCStringFromAddress(metadata.FormatPtr, "_msg_format", ".debugf_messages")
 	if err != nil {
@@ -268,6 +279,7 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 	}
 	return &MessageMetadata{
 		MessageUID: uid,
+		StableID:   stableId,
 		LogLevel:   level,
 		Format:     format,
 		Filename:   filename,

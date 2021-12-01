@@ -119,12 +119,26 @@ def decode_string(argument):
     return textual
 
 
-def debugf(args, filename, line_num):
-    if len(args) < 2:
+def validate_stable_id(stable_id):
+    stable_id = stable_id.strip()
+    if not stable_id:
+        return None
+    if not stable_id.isupper() or not stable_id.replace("_", "").isalnum():
+        raise MacroError("invalid stable id: %r" % stable_id)
+    return stable_id
+
+
+def debugf_core(args, filename, line_num):
+    if len(args) < 3:
         raise MacroError("debugf requires at least two arguments")
-    loglevel, format_raw, args = args[0], args[1], args[2:]
+    loglevel, stable_id_raw, format_raw, args = args[0], args[1], args[2], args[3:]
     if loglevel.strip() not in ("CRITICAL", "INFO", "DEBUG", "TRACE"):
         raise MacroError("debugf requires a valid log level, not %r" % loglevel)
+    stable_id = decode_string(stable_id_raw)
+    if not stable_id:
+        stable_id = None
+    elif not stable_id.isalnum():
+        raise MacroError("debugf stable id is invalid: %r" % stable_id)
     format = decode_string(format_raw)
     arg_types = parse_printf_format(format)
     if len(arg_types) != len(args):
@@ -134,8 +148,27 @@ def debugf(args, filename, line_num):
         'static __attribute__((section (".debugf_messages"))) const char _msg_format[] = (%s);' % format_raw,
         'static __attribute__((section (".debugf_messages"))) const char _msg_filename[] = "%s";'
             % filename.replace("\\", "\\\\").replace('"', '\\"'),
+    ]
+    if stable_id is not None:
+        fragments += [
+            'static __attribute__((section (".debugf_messages"))) const char _msg_stable[] = "%s";' % stable_id,
+        ]
+    fragments += [
         'static __attribute__((section (".debugf_messages"))) const struct debugf_metadata _msg_metadata = {',
-        '.loglevel = (%s), .format = _msg_format, .filename = _msg_filename, .line_number = %u,' % (loglevel, line_num),
+        '.loglevel = (%s),' % loglevel,
+    ]
+    if stable_id is not None:
+        fragments += [
+            '.stable_id = _msg_stable,'
+        ]
+    else:
+        fragments += [
+            '.stable_id = (void *) 0,',
+        ]
+    fragments += [
+        '.format = _msg_format,',
+        '.filename = _msg_filename,',
+        '.line_number = %u,' % line_num,
         '};',
         "struct {",
         "const struct debugf_metadata *metadata;",
@@ -188,7 +221,7 @@ def debugf(args, filename, line_num):
 
 def default_parser():
     parser = Parser()
-    parser.add_macro("debugf", debugf)
+    parser.add_macro("debugf_core", debugf_core)
     return parser
 
 
