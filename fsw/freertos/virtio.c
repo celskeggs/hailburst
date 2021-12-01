@@ -346,6 +346,18 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     return true;
 }
 
+void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t queue_index) {
+    // validate device initialized
+    assert(device != NULL && device->initialized == true && device->queues != NULL);
+    // validate queue index
+    assert(queue_index < device->num_queues);
+    // make sure this queue has actually been set up.
+    assert(device->queues[queue_index].chart != NULL);
+
+    // spuriously notify the queue.
+    atomic_store_relaxed(device->mmio->queue_notify, queue_index);
+}
+
 static void virtio_device_teardown_queue(struct virtio_device *device, uint32_t queue_index) {
     assert(device != NULL);
     assert(device->initialized == true && device->monitor_task == NULL);

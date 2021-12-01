@@ -210,7 +210,9 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                         recv_handshake_id = param;
                         send_secondary_handshake = true;
                     } else {
-                        debug_printf(CRITICAL, "Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
+                        // There's no point in being loud about this; if we're seeing it, we're ALREADY in a broken
+                        // state, and continuing to spew messages about how everything is still broken is not helpful.
+                        debug_printf(TRACE, "Unexpected %s(0x%08x) instead of HANDSHAKE_1(*); resetting.",
                                      fakewire_codec_symbol(symbol), param);
                         do_reset = true;
                     }

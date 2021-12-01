@@ -119,6 +119,14 @@ static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_
     chart_request_send(&console->control_tx, entry);
 }
 
+static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
+    port *= 2;
+    if (port >= VIRTIO_CONSOLE_VQ_CTRL_BASE) {
+        port += 2;
+    }
+    return port;
+}
+
 static void *virtio_console_control_loop(void *opaque) {
     struct virtio_console *console = (struct virtio_console *) opaque;
     assert(console != NULL && console->initialized);
@@ -168,8 +176,22 @@ static void *virtio_console_control_loop(void *opaque) {
                 // nothing to do
             } else if (recv->event == VIRTIO_CONSOLE_PORT_OPEN) {
                 assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
+                assert(recv->id == VIRTIO_FAKEWIRE_PORT_INDEX);
                 assert(recv->value == 1);
-                // nothing to do
+                // okay... this is a little messy. basically, QEMU's virtio implementation doesn't re-check whether it
+                // should request data from the underlying serial port except at a very specific time: when the receive
+                // queue has been notified AND it is connected on the guest end.
+                // the problem is that we set up the descriptors and the receive queue BEFORE we configure them via the
+                // control queue. so the notification to tell the virtio device that there are buffers for it to load
+                // data into doesn't actually cause any data to be loaded. and actually opening the port doesn't do
+                // anything either.
+                // so we need to remind the virtio device that, yes, we DID give it a bunch of descriptors, and could
+                // you please load those now, thank you. so I've added virtio_device_force_notify_queue as a "backdoor"
+                // function to let us send this seemingly-spurious notification.
+                uint32_t queue = virtio_console_port_to_queue_index(recv->id) + VIRTIO_CONSOLE_VQ_RECEIVE;
+                debugf(DEBUG, "Serial port %u confirmed open for fakewire connection; re-notifying queue %u.",
+                       recv->id, queue);
+                virtio_device_force_notify_queue(&console->device, queue);
             } else {
                 debugf(CRITICAL, "Unhandled console control event: %u.", recv->event);
             }
@@ -181,14 +203,6 @@ static void *virtio_console_control_loop(void *opaque) {
             semaphore_take(&console->control_wake);
         }
     }
-}
-
-static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
-    port *= 2;
-    if (port >= VIRTIO_CONSOLE_VQ_CTRL_BASE) {
-        port += 2;
-    }
-    return port;
 }
 
 bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx) {
