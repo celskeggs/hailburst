@@ -48,16 +48,16 @@ void entrypoint(void *kernel_elf_rom) {
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
 
-#if ( configOVERRIDE_IDLE_TASK == 1 )
-    // enable idle task
-    task_idle_init();
-#endif
-
     // enable task restarting
     task_restart_init();
 
     // enable scrubber
     scrubber_init(kernel_elf_rom);
+
+#if ( configOVERRIDE_IDLE_TASK == 1 )
+    // enable idle task
+    task_idle_init();
+#endif
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
     if (status != pdPASS) {

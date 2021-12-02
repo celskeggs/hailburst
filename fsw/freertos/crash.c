@@ -124,6 +124,14 @@ extern volatile uint32_t trap_recursive_flag;
 
 static volatile TaskHandle_t last_failed_task = NULL;
 
+void task_clear_crash(void) {
+    taskENTER_CRITICAL();
+    if (last_failed_task == xTaskGetCurrentTaskHandle()) {
+        last_failed_task = NULL;
+    }
+    taskEXIT_CRITICAL();
+}
+
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "TASK %s", trap_name);

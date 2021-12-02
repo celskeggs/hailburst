@@ -45,6 +45,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
 
 static uint64_t scrubber_iteration = 0;
 static semaphore_t scrubber_wake;
+static semaphore_t idle_wake;
 
 static void *scrubber_mainloop(void *opaque) {
     uint8_t *kernel_elf_rom = (uint8_t *) opaque;
@@ -65,6 +66,7 @@ static void *scrubber_mainloop(void *opaque) {
         }
 
         atomic_store_relaxed(scrubber_iteration, scrubber_iteration + 1);
+        (void) semaphore_give(&idle_wake);
 
         debugf(DEBUG, "scrub cycle complete.");
 
@@ -73,7 +75,7 @@ static void *scrubber_mainloop(void *opaque) {
     }
 }
 
-void scrubber_cycle_wait(void) {
+void scrubber_cycle_wait(bool is_idle) {
     // if we're currently in an iteration, consider the 'start iteration' to be the next one; otherwise, if we're
     // waiting for an iteration, consider the 'start iteration' to be the one that's about to start.
     uint64_t start_iteration = (atomic_load_relaxed(scrubber_iteration) + 1) & ~1;
@@ -87,7 +89,15 @@ void scrubber_cycle_wait(void) {
     int max_attempts = 200; // wait at most two seconds, regardless.
     // wait until the iteration ends.
     while (atomic_load_relaxed(scrubber_iteration) < start_iteration + 2) {
-        usleep(10 * 1000); // wait about 10 milliseconds and then recheck
+        if (is_idle) {
+            // we initialize the scrubber before the IDLE task, so this is safe.
+            assert(scrubber_initialized == true);
+            // need a dedicated wakeup for IDLE task recovery, because otherwise there is a period of time without any
+            // idle-priority task running. but we can't do this for everything, or the signals would clash.
+            semaphore_take(&idle_wake);
+        } else {
+            usleep(10 * 1000); // wait about 10 milliseconds and then recheck
+        }
         max_attempts -= 1;
         if (max_attempts <= 0) {
             // this whole thing is a heuristic, anyway. better to not sleep forever than to insist on a scrub cycle
@@ -101,6 +111,7 @@ void scrubber_init(void *kernel_elf_rom) {
     assert(!scrubber_initialized);
 
     semaphore_init(&scrubber_wake);
+    semaphore_init(&idle_wake);
     thread_create(&scrubber_thread, "scrubber", PRIORITY_IDLE, scrubber_mainloop, kernel_elf_rom, RESTARTABLE);
 
     atomic_store(scrubber_initialized, true);

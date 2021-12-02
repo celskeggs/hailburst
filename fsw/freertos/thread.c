@@ -6,6 +6,10 @@
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
+#if ( configOVERRIDE_IDLE_TASK == 1 )
+static thread_t idle_task_thread = NULL;
+#endif
+
 static void thread_restart_hook(void *opaque, TaskHandle_t task);
 
 static void thread_entrypoint(void *opaque) {
@@ -13,8 +17,14 @@ static void thread_entrypoint(void *opaque) {
 
     if (state->hit_restart) {
         debugf(CRITICAL, "Pending restart on next scrubber cycle.");
-        scrubber_cycle_wait();
+#if ( configOVERRIDE_IDLE_TASK == 1 )
+        scrubber_cycle_wait(state == idle_task_thread);
+#else
+        scrubber_cycle_wait(false);
+#endif
     }
+
+    task_clear_crash();
 
     // discard return value
     (void) state->start_routine(state->arg);
@@ -57,8 +67,6 @@ static void thread_restart_hook(void *opaque, TaskHandle_t task) {
 }
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
-static thread_t idle_task_thread = NULL;
-
 extern void prvIdleTask(void *pvParameters);
 
 static void *idle_task_main(void *opaque) {
@@ -70,7 +78,7 @@ static void *idle_task_main(void *opaque) {
 void task_idle_init(void) {
     assert(idle_task_thread == NULL);
 
-    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, idle_task_main, NULL, NOT_RESTARTABLE);
+    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, idle_task_main, NULL, RESTARTABLE);
 
     assert(idle_task_thread != NULL);
 }
