@@ -32,7 +32,7 @@
 #define configUSE_TASK_FPU_SUPPORT              2
 #define configUSE_APPLICATION_TASK_TAG          1
 
-#define configOVERRIDE_IDLE_TASK                0
+#define configOVERRIDE_IDLE_TASK                1
 
 enum {
     PRIORITY_REPAIR  = 5, // only used for critical repair tasks!
@@ -107,7 +107,7 @@ extern void vConfigureTickInterrupt(void);
 #define INCLUDE_xTaskGetSchedulerState          0
 #define INCLUDE_xTaskGetCurrentTaskHandle       1
 #define INCLUDE_uxTaskGetStackHighWaterMark     0
-#define INCLUDE_xTaskGetIdleTaskHandle          1
+#define INCLUDE_xTaskGetIdleTaskHandle          0
 #define INCLUDE_eTaskGetState                   0
 #define INCLUDE_xEventGroupSetBitFromISR        0
 #define INCLUDE_xTimerPendFunctionCall          0
