@@ -11,6 +11,7 @@ typedef struct {
 
 typedef void (*task_restart_hook)(TaskHandle_t task);
 
+void task_idle_init(void);
 void task_restart_init(void);
 void task_set_restart_handler(TaskHandle_t task, task_restart_hook_t *hook);
 void restart_task(TaskHandle_t task);

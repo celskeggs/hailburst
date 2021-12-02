@@ -44,6 +44,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
 }
 
 static uint64_t scrubber_iteration = 0;
+static semaphore_t scrubber_wake;
 
 static void *scrubber_mainloop(void *opaque) {
     uint8_t *kernel_elf_rom = (uint8_t *) opaque;
@@ -67,8 +68,8 @@ static void *scrubber_mainloop(void *opaque) {
 
         debugf(DEBUG, "scrub cycle complete.");
 
-        // scrub about once per second
-        usleep(1000000);
+        // scrub about once per second, or more often if requested. (don't care which.)
+        (void) semaphore_take_timed(&scrubber_wake, TIMER_NS_PER_SEC);
     }
 }
 
@@ -76,6 +77,13 @@ void scrubber_cycle_wait(void) {
     // if we're currently in an iteration, consider the 'start iteration' to be the next one; otherwise, if we're
     // waiting for an iteration, consider the 'start iteration' to be the one that's about to start.
     uint64_t start_iteration = (atomic_load_relaxed(scrubber_iteration) + 1) & ~1;
+
+    // force the scrubber to start a cycle NOW
+    if (atomic_load(scrubber_initialized)) {
+        // ignore duplicates, because that indicates a cycle has already been requested
+        (void) semaphore_give(&scrubber_wake);
+    }
+
     int max_attempts = 200; // wait at most two seconds, regardless.
     // wait until the iteration ends.
     while (atomic_load_relaxed(scrubber_iteration) < start_iteration + 2) {
@@ -91,7 +99,9 @@ void scrubber_cycle_wait(void) {
 
 void scrubber_init(void *kernel_elf_rom) {
     assert(!scrubber_initialized);
-    scrubber_initialized = true;
 
+    semaphore_init(&scrubber_wake);
     thread_create(&scrubber_thread, "scrubber", PRIORITY_IDLE, scrubber_mainloop, kernel_elf_rom, RESTARTABLE);
+
+    atomic_store(scrubber_initialized, true);
 }

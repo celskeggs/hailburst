@@ -56,6 +56,36 @@ static void thread_restart_hook(void *opaque, TaskHandle_t task) {
     taskEXIT_CRITICAL();
 }
 
+#if ( configOVERRIDE_IDLE_TASK == 1 )
+static thread_t idle_task_thread = NULL;
+
+extern void prvIdleTask(void *pvParameters);
+
+static void *idle_task_main(void *opaque) {
+    (void) opaque;
+    prvIdleTask(NULL);
+    return NULL;
+}
+
+void task_idle_init(void) {
+    assert(idle_task_thread == NULL);
+
+    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, idle_task_main, NULL, NOT_RESTARTABLE);
+
+    assert(idle_task_thread != NULL);
+}
+#else
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
+                                   uint32_t *pulIdleTaskStackSize) {
+
+    *ppxIdleTaskTCBBuffer = malloc(sizeof(StaticTask_t));
+    assert(*ppxIdleTaskTCBBuffer != NULL);
+    *ppxIdleTaskStackBuffer = malloc(sizeof(StackType_t) * configMINIMAL_STACK_SIZE);
+    assert(*ppxIdleTaskStackBuffer != NULL);
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
+#endif
+
 void thread_create(thread_t *out, const char *name, unsigned int priority,
                    void *(*start_routine)(void*), void *arg, restartable_t restartable) {
     assert(out != NULL);

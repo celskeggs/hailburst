@@ -39,15 +39,6 @@ static void main_entrypoint(void *opaque) {
     exit(main(1, argv, envp));
 }
 
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
-                                   uint32_t *pulIdleTaskStackSize) {
-    *ppxIdleTaskTCBBuffer = malloc(sizeof(StaticTask_t));
-    assert(*ppxIdleTaskTCBBuffer != NULL);
-    *ppxIdleTaskStackBuffer = malloc(sizeof(StackType_t) * configMINIMAL_STACK_SIZE);
-    assert(*ppxIdleTaskStackBuffer != NULL);
-    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-}
-
 void entrypoint(void *kernel_elf_rom) {
     configure_gic();
 
@@ -56,6 +47,11 @@ void entrypoint(void *kernel_elf_rom) {
 
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
+
+#if ( configOVERRIDE_IDLE_TASK == 1 )
+    // enable idle task
+    task_idle_init();
+#endif
 
     // enable task restarting
     task_restart_init();
