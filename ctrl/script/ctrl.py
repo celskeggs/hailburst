@@ -5,6 +5,9 @@ import re
 
 import gdb
 
+from elftools.elf.constants import P_FLAGS
+from elftools.elf.elffile import ELFFile
+
 
 def qemu_hmp(cmdstr):
     return gdb.execute("monitor %s" % cmdstr, to_string=True).strip()
@@ -337,19 +340,65 @@ def inject(args):
     inject_bitflip(address, bytewidth)
 
 
-def inject_restart():
+class ExecutableLayout:
+    def __init__(self, objfiles):
+        self.code_regions = []
+        self.data_regions = []
+        for objfile in objfiles:
+            assert objfile.is_valid()
+            with open(objfile.filename, "rb") as f:
+                elf = ELFFile(f)
+                for si in range(elf.num_segments()):
+                    seg = elf.get_segment(si)
+                    if seg.header.p_type == "PT_LOAD":
+                        flags = seg.header.p_flags
+                        if flags == (P_FLAGS.PF_R | P_FLAGS.PF_X):
+                            self.code_regions.append((seg.header.p_paddr, seg.header.p_memsz))
+                        elif flags == (P_FLAGS.PF_R | P_FLAGS.PF_W):
+                            self.data_regions.append((seg.header.p_paddr, seg.header.p_memsz))
+                        else:
+                            raise NotImplementedError("no support yet for parsing ELF segments besides R/X and R/W")
+
+    def random_instruction(self):
+        total_size = sum(size for addr, size in self.code_regions)
+        assert total_size > 0 and total_size % 4 == 0
+        offset = random.randint(0, (total_size // 4) - 1) * 4
+        for addr, size in self.code_regions:
+            if offset < size:
+                return addr + offset
+            offset -= size
+        assert False, "should never get here"
+
+
+def inject_instant_restart():
     # this is a UDF instruction
     gdb.execute("set *(unsigned int*)$pc = 0xE7F000F0")
 
 
+def inject_spatial_restart(layout):
+    address = layout.random_instruction()
+    gdb.execute("set *(unsigned int*)0x%x = 0xE7F000F0" % (address,))
+    print("Injected restart at address 0x%08x" % (address,))
+
+
 @BuildCmd
 def task_restart(args):
-    """Inject a UDF instruction to force a task restart."""
+    """Inject a UDF insttaruction to force a task restart."""
     if args.strip():
         print("usage: task_restart")
         return
 
-    inject_restart()
+    inject_instant_restart()
+
+
+@BuildCmd
+def task_disrupt(args):
+    """Inject a UDF instruction somewhere in the code segment, to force a task restart."""
+    if args.strip():
+        print("usage: task_disrupt")
+        return
+
+    inject_spatial_restart(ExecutableLayout(gdb.objfiles()))
 
 
 def inject_reg_internal(register_name):
@@ -413,7 +462,7 @@ def campaign(args):
         print("bytewidth defaults to 4 bytes if address specified")
         print("if <address> starts with reg, then register injections are performed instead")
         print("specify address as reg:X to specify register X for the register injection")
-        print("if <address> is 'restart', then an undefined instruction is injected")
+        print("if <address> is 'restart' or 'restart-later', then an undefined instruction is injected")
         return
 
     iterations = int(args[0])
@@ -427,7 +476,10 @@ def campaign(args):
         rand_addr = False
         if args[2] == "restart":
             is_restart = True
-            address = None
+            layout = None
+        elif args[2] == "restart-later":
+            is_restart = True
+            layout = ExecutableLayout(gdb.objfiles())
         elif args[2].startswith("reg") and args[2][3:4] in (":", ""):
             is_reg = True
             address = args[2][4:]
@@ -443,7 +495,10 @@ def campaign(args):
 
     for i in range(iterations):
         if is_restart:
-            inject_restart()
+            if layout is None:
+                inject_instant_restart()
+            else:
+                inject_spatial_restart(layout)
         elif is_reg:
             inject_reg_internal(address)
         else:
