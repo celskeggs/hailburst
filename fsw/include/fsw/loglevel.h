@@ -1,5 +1,5 @@
-#ifndef FSW_DEBUG_H
-#define FSW_DEBUG_H
+#ifndef FSW_LOGLEVEL_H
+#define FSW_LOGLEVEL_H
 
 typedef enum {
     CRITICAL = 1, // regarding major system events, or any system faults
@@ -8,4 +8,4 @@ typedef enum {
     TRACE    = 4, // low-level information; can be arbitrary amounts of spew.
 } loglevel_t;
 
-#endif /* FSW_DEBUG_H */
+#endif /* FSW_LOGLEVEL_H */
