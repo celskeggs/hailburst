@@ -341,19 +341,29 @@ func (opt Options) StartQEMU(p *util.Processes) {
 
 func (opt Options) StartViewer(p *util.Processes) {
 	WaitUntilExists(opt.GuestLog(), time.Second)
-	p.LaunchInTerminal(
-		[]string{
-			opt.LogDecoderBinaryPath(),
-			"--follow",
-			"--srcdir", opt.FswSourceDir(),
-			"--loglevel", "INFO",
-			opt.GuestLog(),
-			path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
-			path.Join(opt.FswSourceDir(), "build-freertos/bootrom-elf"),
-		},
-		"Decoded Guest Log",
-		opt.TrialDir,
-	)
+	if opt.Linux {
+		p.LaunchInTerminal(
+			[]string{
+				"tail", "-f", opt.GuestLog(),
+			},
+			"Guest Log",
+			opt.TrialDir,
+		)
+	} else {
+		p.LaunchInTerminal(
+			[]string{
+				opt.LogDecoderBinaryPath(),
+				"--follow",
+				"--srcdir", opt.FswSourceDir(),
+				"--loglevel", "INFO",
+				opt.GuestLog(),
+				path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
+				path.Join(opt.FswSourceDir(), "build-freertos/bootrom-elf"),
+			},
+			"Decoded Guest Log",
+			opt.TrialDir,
+		)
+	}
 }
 
 func (opt Options) Launch() {
