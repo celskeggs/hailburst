@@ -103,6 +103,8 @@ static const char *trap_mode_names[3] = {
     "DATA ABORT",
 };
 
+extern volatile uint32_t ulCriticalNesting;
+
 void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_mode) {
     uint64_t now = timer_now_ns();
 
@@ -110,11 +112,14 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     debugf(CRITICAL, "%s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     const char *name = pcTaskGetName(failed_task);
-    debugf(CRITICAL, "%s occurred in task '%s' at PC=0x%08x SPSR=0x%08x", trap_name, name, state->lr, spsr);
+    debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
+    debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x CriticalNesting=%u", state->lr, spsr, ulCriticalNesting);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x", state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x", state->r4, state->r5, state->r6, state->r7);
     debugf(CRITICAL, "Registers:  R8=0x%08x  R9=0x%08x R10=0x%08x R11=0x%08x", state->r8, state->r9, state->r10, state->r11);
     debugf(CRITICAL, "Registers: R12=0x%08x", state->r12);
+
+    debugf_stable(CRITICAL, StackEntry, "Traceback: 0x%08x", state->lr);
     debugf(CRITICAL, "HALTING RTOS IN REACTION TO %s AT TIME=%" PRIu64, trap_name, now);
     // returns to an abort() call
 }
