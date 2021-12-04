@@ -610,19 +610,24 @@ static void *rmap_monitor_loop(void *mon_opaque) {
     assert(mon != NULL);
 
     while (true) {
-        struct io_rx_ent *ent = chart_reply_start(&mon->exc_read_chart);
-        if (ent == NULL) {
+        chart_index_t avail = chart_reply_avail(&mon->exc_read_chart);
+        if (avail == 0) {
             semaphore_take(&mon->monitor_wake);
             continue;
         }
 
-        assert(ent->actual_length <= io_rx_size(&mon->exc_read_chart));
-        assert(ent->receive_timestamp > 0);
+        for (chart_index_t i = 0; i < avail; i++) {
+            struct io_rx_ent *ent = chart_reply_peek(&mon->exc_read_chart, i);
 
-        if (!rmap_recv_handle(mon, ent->data, ent->actual_length, ent->receive_timestamp)) {
-            debugf(CRITICAL, "RMAP packet received was corrupted or unexpected.");
+            assert(ent != NULL);
+            assert(ent->actual_length <= io_rx_size(&mon->exc_read_chart));
+            assert(ent->receive_timestamp > 0);
+
+            if (!rmap_recv_handle(mon, ent->data, ent->actual_length, ent->receive_timestamp)) {
+                debugf(CRITICAL, "RMAP packet received was corrupted or unexpected.");
+            }
         }
 
-        chart_reply_send(&mon->exc_read_chart, ent);
+        chart_reply_send(&mon->exc_read_chart, avail);
     }
 }

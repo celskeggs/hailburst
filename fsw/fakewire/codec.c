@@ -49,7 +49,7 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
 
     for (;;) {
         if (fwd->rx_entry != NULL && fwd->rx_offset == fwd->rx_entry->actual_length) {
-            chart_reply_send(fwd->rx_chart, fwd->rx_entry);
+            chart_reply_send(fwd->rx_chart, 1);
             fwd->rx_entry = NULL;
         }
         if (fwd->rx_entry == NULL) {
@@ -206,16 +206,11 @@ static inline size_t fakewire_enc_space(fw_encoder_t *fwe) {
 
 static bool fakewire_enc_pump(fw_encoder_t *fwe) {
     if (fwe->tx_entry == NULL) {
-        struct io_tx_ent *ack_ent;
-        // if something still needs to be acknowledged, acknowledge it.
-        // TODO: this suggests that charts are not exactly the right data structure here
-        while ((ack_ent = chart_ack_start(fwe->tx_chart)) != NULL) {
-            chart_ack_send(fwe->tx_chart, ack_ent);
-        }
-
         fwe->tx_entry = chart_request_start(fwe->tx_chart);
-        fwe->tx_entry->actual_length = 0;
-        fwe->is_flush_worthwhile = false;
+        if (fwe->tx_entry != NULL) {
+            fwe->tx_entry->actual_length = 0;
+            fwe->is_flush_worthwhile = false;
+        }
     }
     return fwe->tx_entry != NULL;
 }
@@ -224,7 +219,7 @@ static bool fakewire_enc_pump(fw_encoder_t *fwe) {
 static void fakewire_enc_flush_all(fw_encoder_t *fwe) {
     if (fwe->tx_entry != NULL && fwe->tx_entry->actual_length > 0) {
         // transmit buffer entry
-        chart_request_send(fwe->tx_chart, fwe->tx_entry);
+        chart_request_send(fwe->tx_chart, 1);
         fwe->tx_entry = NULL;
 #ifdef DEBUG
         debugf(TRACE, "Wrote %zu line bytes in flush.", fwe->enc_idx);

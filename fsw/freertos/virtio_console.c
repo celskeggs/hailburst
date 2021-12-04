@@ -116,7 +116,7 @@ static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_
         .event = event,
         .value = value,
     };
-    chart_request_send(&console->control_tx, entry);
+    chart_request_send(&console->control_tx, 1);
 }
 
 static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
@@ -135,73 +135,63 @@ static void *virtio_console_control_loop(void *opaque) {
     virtio_console_send_ctrl_msg(console, 0xFFFFFFFF, VIRTIO_CONSOLE_DEVICE_READY, 1);
 
     for (;;) {
-        // perform any required acknowledgements for the transmit queue
-        struct io_tx_ent *tx_ack_entry = chart_ack_start(&console->control_tx);
-        if (tx_ack_entry != NULL) {
-#ifdef DEBUG_INIT
-            debugf(DEBUG, "Completed transmit of VIRTIO CONSOLE control message.");
-#endif
-            chart_ack_send(&console->control_tx, tx_ack_entry);
-        }
-
         // receive any requests on the receive queue
         struct io_rx_ent *rx_entry = chart_reply_start(&console->control_rx);
-        if (rx_entry != NULL) {
-            struct virtio_console_control *recv = (struct virtio_console_control *) rx_entry->data;
-
-#ifdef DEBUG_INIT
-            debugf(DEBUG, "Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
-                   recv->id, recv->event, recv->value, rx_entry->actual_length);
-#endif
-
-            if (recv->event == VIRTIO_CONSOLE_DEVICE_ADD) {
-                assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
-
-                if (recv->id != VIRTIO_FAKEWIRE_PORT_INDEX) {
-                    debugf(CRITICAL, "WARNING: Did not expect to find serial port %u attached to anything.", recv->id);
-                } else if (console->confirmed_port_present) {
-                    debugf(CRITICAL, "WARNING: Did not expect to receive duplicate message about fakewire port %u.", recv->id);
-                } else {
-#ifdef DEBUG_INIT
-                    debugf(DEBUG, "Discovered serial port %u as expected for fakewire connection.", recv->id);
-#endif
-                    console->confirmed_port_present = true;
-
-                    // send messages to allow the serial port to receive data.
-                    virtio_console_send_ctrl_msg(console, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_READY, 1);
-                    virtio_console_send_ctrl_msg(console, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_OPEN, 1);
-                }
-            } else if (recv->event == VIRTIO_CONSOLE_PORT_NAME) {
-                assert(rx_entry->actual_length >= sizeof(struct virtio_console_control));
-                // nothing to do
-            } else if (recv->event == VIRTIO_CONSOLE_PORT_OPEN) {
-                assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
-                assert(recv->id == VIRTIO_FAKEWIRE_PORT_INDEX);
-                assert(recv->value == 1);
-                // okay... this is a little messy. basically, QEMU's virtio implementation doesn't re-check whether it
-                // should request data from the underlying serial port except at a very specific time: when the receive
-                // queue has been notified AND it is connected on the guest end.
-                // the problem is that we set up the descriptors and the receive queue BEFORE we configure them via the
-                // control queue. so the notification to tell the virtio device that there are buffers for it to load
-                // data into doesn't actually cause any data to be loaded. and actually opening the port doesn't do
-                // anything either.
-                // so we need to remind the virtio device that, yes, we DID give it a bunch of descriptors, and could
-                // you please load those now, thank you. so I've added virtio_device_force_notify_queue as a "backdoor"
-                // function to let us send this seemingly-spurious notification.
-                uint32_t queue = virtio_console_port_to_queue_index(recv->id) + VIRTIO_CONSOLE_VQ_RECEIVE;
-                debugf(DEBUG, "Serial port %u confirmed open for fakewire connection; re-notifying queue %u.",
-                       recv->id, queue);
-                virtio_device_force_notify_queue(&console->device, queue);
-            } else {
-                debugf(CRITICAL, "Unhandled console control event: %u.", recv->event);
-            }
-
-            chart_reply_send(&console->control_rx, rx_entry);
-        }
-
-        if (tx_ack_entry == NULL && rx_entry == NULL) {
+        if (rx_entry == NULL) {
             semaphore_take(&console->control_wake);
+            continue;
         }
+
+        struct virtio_console_control *recv = (struct virtio_console_control *) rx_entry->data;
+
+#ifdef DEBUG_INIT
+        debugf(DEBUG, "Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
+               recv->id, recv->event, recv->value, rx_entry->actual_length);
+#endif
+
+        if (recv->event == VIRTIO_CONSOLE_DEVICE_ADD) {
+            assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
+
+            if (recv->id != VIRTIO_FAKEWIRE_PORT_INDEX) {
+                debugf(CRITICAL, "WARNING: Did not expect to find serial port %u attached to anything.", recv->id);
+            } else if (console->confirmed_port_present) {
+                debugf(CRITICAL, "WARNING: Did not expect to receive duplicate message about fakewire port %u.", recv->id);
+            } else {
+#ifdef DEBUG_INIT
+                debugf(DEBUG, "Discovered serial port %u as expected for fakewire connection.", recv->id);
+                console->confirmed_port_present = true;
+#endif
+
+                // send messages to allow the serial port to receive data.
+                virtio_console_send_ctrl_msg(console, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_READY, 1);
+                virtio_console_send_ctrl_msg(console, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_OPEN, 1);
+            }
+        } else if (recv->event == VIRTIO_CONSOLE_PORT_NAME) {
+            assert(rx_entry->actual_length >= sizeof(struct virtio_console_control));
+            // nothing to do
+        } else if (recv->event == VIRTIO_CONSOLE_PORT_OPEN) {
+            assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
+            assert(recv->id == VIRTIO_FAKEWIRE_PORT_INDEX);
+            assert(recv->value == 1);
+            // okay... this is a little messy. basically, QEMU's virtio implementation doesn't re-check whether it
+            // should request data from the underlying serial port except at a very specific time: when the receive
+            // queue has been notified AND it is connected on the guest end.
+            // the problem is that we set up the descriptors and the receive queue BEFORE we configure them via the
+            // control queue. so the notification to tell the virtio device that there are buffers for it to load
+            // data into doesn't actually cause any data to be loaded. and actually opening the port doesn't do
+            // anything either.
+            // so we need to remind the virtio device that, yes, we DID give it a bunch of descriptors, and could
+            // you please load those now, thank you. so I've added virtio_device_force_notify_queue as a "backdoor"
+            // function to let us send this seemingly-spurious notification.
+            uint32_t queue = virtio_console_port_to_queue_index(recv->id) + VIRTIO_CONSOLE_VQ_RECEIVE;
+            debugf(DEBUG, "Serial port %u confirmed open for fakewire connection; re-notifying queue %u.",
+                   recv->id, queue);
+            virtio_device_force_notify_queue(&console->device, queue);
+        } else {
+            debugf(CRITICAL, "Unhandled console control event: %u.", recv->event);
+        }
+
+        chart_reply_send(&console->control_rx, 1);
     }
 }
 

@@ -20,12 +20,7 @@ static void *fakewire_link_rx_loop(void *opaque) {
     fw_link_t *fwl = (fw_link_t*) opaque;
 
     while (true) {
-        struct io_rx_ent *entry = chart_ack_start(fwl->rx_chart);
-        if (entry != NULL) {
-            chart_ack_send(fwl->rx_chart, entry);
-            continue;
-        }
-        entry = chart_request_start(fwl->rx_chart);
+        struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
             semaphore_take(&fwl->receive_wake);
@@ -47,7 +42,7 @@ static void *fakewire_link_rx_loop(void *opaque) {
         entry->receive_timestamp = clock_timestamp();
         entry->actual_length = (uint32_t) actual;
 
-        chart_request_send(fwl->rx_chart, entry);
+        chart_request_send(fwl->rx_chart, 1);
     }
 }
 
@@ -75,7 +70,7 @@ static void *fakewire_link_tx_loop(void *opaque) {
             debug_printf(CRITICAL, "Write failed: %zd bytes instead of %zu bytes", actual, entry->actual_length);
         }
 
-        chart_reply_send(fwl->tx_chart, entry);
+        chart_reply_send(fwl->tx_chart, 1);
     }
 }
 

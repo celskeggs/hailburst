@@ -259,7 +259,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
                         } else if (recv_state == FW_RECV_RECEIVING) {
                             assert(read_entry != NULL);
                             // notify read task that data is ready to consume
-                            chart_request_send(fwe->read_chart, read_entry);
+                            chart_request_send(fwe->read_chart, 1);
                             recv_state = FW_RECV_PREPARING;
                             read_entry = NULL;
                         } else {
@@ -364,11 +364,6 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
         // we only need to check for starting reads once per iteration, because we are gated on decoded line data
         if (read_entry == NULL) {
-            struct io_rx_ent *ent;
-            while ((ent = chart_ack_start(fwe->read_chart)) != NULL) {
-                chart_ack_send(fwe->read_chart, ent);
-            }
-
             read_entry = chart_request_start(fwe->read_chart);
             if (read_entry != NULL) {
                 read_entry->actual_length = 0;

@@ -80,7 +80,7 @@ static void *exchange_reader(void *opaque) {
         rc->chain_out = new_link;
         mutex_unlock(&rc->out_mutex);
 
-        chart_reply_send(&rc->read_chart, ent);
+        chart_reply_send(&rc->read_chart, 1);
     } while (last_packet_marker != 0);
 
     return NULL;

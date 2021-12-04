@@ -2,49 +2,37 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fsw/chart.h>
+#include <hal/atomic.h>
 #include <fsw/debug.h>
-#include <hal/thread.h>
-
-static void panic_unpopulated(void *param) {
-    assert(param == NULL);
-
-    abortf("chart never had a proper notify function registered; crashing.");
-}
+#include <fsw/chart.h>
 
 void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count) {
     assert(chart != NULL && note_size > 0 && note_count > 0);
-    critical_init(&chart->critical_section);
 
-    chart->notify_server = panic_unpopulated;
+    chart->notify_server = NULL;
     chart->notify_server_param = NULL;
-    chart->notify_client = panic_unpopulated;
+    chart->notify_client = NULL;
     chart->notify_client_param = NULL;
 
     chart->note_size = note_size;
     chart->note_count = note_count;
     chart->note_storage = (uint8_t *) malloc(note_count * note_size);
     assert(chart->note_storage != NULL);
-    chart->note_info = (chart_note_state_t *) malloc(note_count * sizeof(chart_note_state_t));
-    assert(chart->note_info != NULL);
 
-    for (chart_index_t i = 0; i < note_count; i++) {
-        chart->note_info[i] = CHART_NOTE_BLANK;
-    }
-
-    chart->next_blank = chart->next_reply = chart->next_request = 0;
+    chart->request_ptr = 0;
+    chart->reply_ptr = 0;
 }
 
 void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param) {
     assert(chart != NULL && notify_server != NULL);
-    assert(chart->notify_server == panic_unpopulated && chart->notify_server_param == NULL);
+    assert(chart->notify_server == NULL && chart->notify_server_param == NULL);
     chart->notify_server = notify_server;
     chart->notify_server_param = param;
 }
 
 void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *param) {
     assert(chart != NULL && notify_client != NULL);
-    assert(chart->notify_client == panic_unpopulated && chart->notify_client_param == NULL);
+    assert(chart->notify_client == NULL && chart->notify_client_param == NULL);
     chart->notify_client = notify_client;
     chart->notify_client_param = param;
 }
@@ -53,96 +41,86 @@ void chart_destroy(chart_t *chart) {
     assert(chart != NULL);
     assert(chart->note_storage != NULL);
     free(chart->note_storage);
-    assert(chart->note_info != NULL);
-    free(chart->note_info);
-    critical_destroy(&chart->critical_section);
     // wipe entire structure
     memset(chart, 0, sizeof(chart_t));
 }
 
-static inline void chart_validate_state(chart_note_state_t state) {
-    assert(state == CHART_NOTE_BLANK || state == CHART_NOTE_REQUEST || state == CHART_NOTE_REPLY);
-}
-
-static inline void chart_consistency_check(chart_t *chart) {
-    assert(chart->next_blank < chart->note_count
-              && chart->next_request < chart->note_count
-              && chart->next_reply < chart->note_count);
-}
-
-static void *chart_any_start(chart_t *chart, chart_note_state_t expected_state, chart_index_t next) {
-    chart_validate_state(expected_state);
-
-    critical_enter(&chart->critical_section);
-    chart_consistency_check(chart);
-    chart_note_state_t state = chart->note_info[next];
-
-    // validate local coherence of structure
-    assert((state == CHART_NOTE_BLANK   && next == chart->next_blank)
-        || (state == CHART_NOTE_REQUEST && next == chart->next_request)
-        || (state == CHART_NOTE_REPLY   && next == chart->next_reply));
-
-    void *note = (state == expected_state ? chart_get_note(chart, next) : NULL);
-
-#ifdef DEBUG
-    debugf("indices (START): blank=%d, request=%d, reply=%d\n", chart->next_blank, chart->next_request, chart->next_reply);
-#endif
-    critical_exit(&chart->critical_section);
-    return note;
-}
-
-static void chart_any_send(chart_t *chart, void *note, chart_note_state_t expected_state, chart_note_state_t next_state, chart_index_t *next) {
-    critical_enter(&chart->critical_section);
-    chart_consistency_check(chart);
-    assert(chart->note_info[*next] == expected_state);
-    assert(note == chart_get_note(chart, *next));
-
-    chart->note_info[*next] = next_state;
-    *next = (*next + 1) % chart->note_count;
-
-#ifdef DEBUG
-    debugf("indices  (SEND): blank=%d, request=%d, reply=%d\n", chart->next_blank, chart->next_request, chart->next_reply);
-#endif
-    critical_exit(&chart->critical_section);
-}
-
-// if any note is blank, return a pointer to its memory, otherwise NULL.
+// if a request can be sent on any note, return a pointer to the note's memory, otherwise NULL.
+// if called multiple times, will return the same note.
 void *chart_request_start(chart_t *chart) {
-    return chart_any_start(chart, CHART_NOTE_BLANK, chart->next_blank);
+    assert(chart != NULL);
+    if (chart_request_avail(chart) > 0) {
+        return chart_request_peek(chart, 0);
+    } else {
+        return NULL;
+    }
 }
 
-// write back a request.
-void chart_request_send(chart_t *chart, void *note) {
-    chart_any_send(chart, note, CHART_NOTE_BLANK, CHART_NOTE_REQUEST, &chart->next_blank);
+// confirm and send one or more requests, which will be in the first notes available.
+void chart_request_send(chart_t *chart, chart_index_t count) {
+    assert(chart != NULL);
+    assert(1 <= count && count <= chart_request_avail(chart));
+    // TODO: can this be relaxed, since it's limited to a single processor?
+    atomic_store(chart->request_ptr, chart->request_ptr + count);
 
-    assert(chart->notify_server != NULL);
+    assert(chart->notify_server != NULL); // no server registered???
     chart->notify_server(chart->notify_server_param);
 }
 
-// if any unhandled requests are available, return a pointer to the memory of one of them, otherwise NULL.
-void *chart_reply_start(chart_t *chart) {
-    return chart_any_start(chart, CHART_NOTE_REQUEST, chart->next_request);
+// count the number of notes currently available for sending requests.
+chart_index_t chart_request_avail(chart_t *chart) {
+    assert(chart != NULL);
+    // request leads, reply lags
+    uint32_t ahead = (chart->request_ptr - atomic_load(chart->reply_ptr) + 2 * chart->note_count)
+                        % (2 * chart->note_count);
+    assert(ahead <= chart->note_count);
+    return chart->note_count - ahead;
 }
 
-// write back a reply.
-void chart_reply_send(chart_t *chart, void *note) {
-    chart_any_send(chart, note, CHART_NOTE_REQUEST, CHART_NOTE_REPLY, &chart->next_request);
+// grab the nth note available for sending requests. newly available notes are always added to the end.
+// asserts if index is invalid.
+void *chart_request_peek(chart_t *chart, chart_index_t offset) {
+    assert(chart != NULL);
+    assert(offset < chart_request_avail(chart));
+    return chart_get_note(chart, (chart->request_ptr + offset) % chart->note_count);
+}
 
-    assert(chart->notify_client != NULL);
+// if a request has been received on any note (and therefore a reply can be written), return a pointer to that note's
+// memory, otherwise NULL. if called multiple times, will return the same note.
+void *chart_reply_start(chart_t *chart) {
+    assert(chart != NULL);
+    if (chart_reply_avail(chart) > 0) {
+        return chart_reply_peek(chart, 0);
+    } else {
+        return NULL;
+    }
+}
+
+// confirm and send one or more replies, which will be in the first notes available.
+void chart_reply_send(chart_t *chart, chart_index_t count) {
+    assert(chart != NULL);
+    assert(1 <= count && count <= chart_reply_avail(chart));
+    // TODO: can this be relaxed, since it's limited to a single processor?
+    atomic_store(chart->reply_ptr, chart->reply_ptr + count);
+
+    assert(chart->notify_client != NULL); // no client registered???
     chart->notify_client(chart->notify_client_param);
 }
 
-// acknowledgements are sent by the CLIENT
-
-// if any unacknowledged requests are available, return a pointer to its memory, otherwise NULL.
-void *chart_ack_start(chart_t *chart) {
-    return chart_any_start(chart, CHART_NOTE_REPLY, chart->next_reply);
+// count the number of notes with requests currently available for replies.
+chart_index_t chart_reply_avail(chart_t *chart) {
+    assert(chart != NULL);
+    // request leads, reply lags
+    uint32_t ahead = (atomic_load(chart->request_ptr) - chart->reply_ptr + 2 * chart->note_count)
+                        % (2 * chart->note_count);
+    assert(ahead <= chart->note_count);
+    return ahead;
 }
 
-// write back an acknowledgement.
-void chart_ack_send(chart_t *chart, void *note) {
-    chart_any_send(chart, note, CHART_NOTE_REPLY, CHART_NOTE_BLANK, &chart->next_reply);
-
-    // no notification is necessary; the client is the only next communicator that can do anything with it, but they
-    // were the one who called this function!
+// grab the nth note with a pending request. newly available notes are always added to the end.
+// asserts if index is invalid.
+void *chart_reply_peek(chart_t *chart, chart_index_t offset) {
+    assert(chart != NULL);
+    assert(offset < chart_reply_avail(chart));
+    return chart_get_note(chart, (chart->reply_ptr + offset) % chart->note_count);
 }
