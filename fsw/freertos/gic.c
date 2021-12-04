@@ -70,6 +70,13 @@ void enable_irq(uint32_t irq, gic_callback_t callback, void *param) {
     assert(irq < sizeof(callbacks) / sizeof(callbacks[0]));
     assert(irq < num_interrupts);
 
+    debugf(DEBUG, "Registering IRQ callback for IRQ %u.", irq);
+
+    assert(callbacks[irq] == NULL);
+    assert(callback_params[irq] == NULL);
+    callbacks[irq] = callback;
+    callback_params[irq] = param;
+
     uint32_t off = irq / 32;
     uint32_t mask = 1 << (irq % 32);
 
@@ -78,11 +85,6 @@ void enable_irq(uint32_t irq, gic_callback_t callback, void *param) {
     dist->gicd_icpendr[off]    = mask;  // clear pending bit
     dist->gicd_ipriorityr[irq] = 0xF0;  // set priority allowing FreeRTOS calls
     dist->gicd_isenabler[off]  = mask;  // enable IRQ
-
-    assert(callbacks[irq] == NULL);
-    assert(callback_params[irq] == NULL);
-    callbacks[irq] = callback;
-    callback_params[irq] = param;
 }
 
 void shutdown_gic(void) {
@@ -130,6 +132,6 @@ void configure_gic(void) {
 // entrypoint via FreeRTOS
 void vApplicationIRQHandler(uint32_t irq) {
     asm volatile("CPSIE I");
-    assert(callbacks[irq] != NULL);
+    assertf(callbacks[irq] != NULL, "missing callback function for IRQ %u", irq);
     callbacks[irq](callback_params[irq]);
 }
