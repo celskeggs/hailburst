@@ -10,9 +10,6 @@
 #include <fsw/debug.h>
 #include <fsw/io.h>
 
-// #define DEBUG_INIT
-// #define DEBUG_VIRTQ
-
 enum {
     VIRTIO_MMIO_ADDRESS_BASE   = 0x0A000000,
     VIRTIO_MMIO_ADDRESS_STRIDE = 0x200,
@@ -144,10 +141,8 @@ static void *virtio_console_control_loop(void *opaque) {
 
         struct virtio_console_control *recv = (struct virtio_console_control *) rx_entry->data;
 
-#ifdef DEBUG_INIT
         debugf(DEBUG, "Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
                recv->id, recv->event, recv->value, rx_entry->actual_length);
-#endif
 
         if (recv->event == VIRTIO_CONSOLE_DEVICE_ADD) {
             assert(rx_entry->actual_length == sizeof(struct virtio_console_control));
@@ -157,10 +152,8 @@ static void *virtio_console_control_loop(void *opaque) {
             } else if (console->confirmed_port_present) {
                 debugf(CRITICAL, "WARNING: Did not expect to receive duplicate message about fakewire port %u.", recv->id);
             } else {
-#ifdef DEBUG_INIT
                 debugf(DEBUG, "Discovered serial port %u as expected for fakewire connection.", recv->id);
                 console->confirmed_port_present = true;
-#endif
 
                 // send messages to allow the serial port to receive data.
                 virtio_console_send_ctrl_msg(console, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_READY, 1);
@@ -211,9 +204,7 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     struct virtio_console_config *config =
             (struct virtio_console_config *) virtio_device_config_space(&console->device);
 
-#ifdef DEBUG_INIT
     debugf(DEBUG, "Maximum number of ports supported by VIRTIO device: %d", config->max_nr_ports);
-#endif
 
     // TODO: should I really be treating 'num_queues' as public?
     assert(console->device.num_queues == (config->max_nr_ports + 1) * 2);

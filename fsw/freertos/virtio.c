@@ -11,7 +11,6 @@
 #include <fsw/debug.h>
 #include <fsw/io.h>
 
-// #define DEBUG_INIT
 // #define DEBUG_VIRTQ
 
 enum {
@@ -336,9 +335,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     // set chart ONLY if we succeed, because it's what marks the queue as being valid
     queue->chart = chart;
 
-#ifdef DEBUG_INIT
     debugf(DEBUG, "VIRTIO queue %d now configured", queue_index);
-#endif
 
     return true;
 }
@@ -384,9 +381,7 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     device->config_space = mmio + 1;
     device->irq = irq;
 
-#ifdef DEBUG_INIT
     debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", mem_addr, irq);
-#endif
 
     if (le32toh(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
         debugf(CRITICAL, "VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; failing.",
@@ -406,9 +401,7 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
 
     // make sure this is a serial port
     if (le32toh(mmio->device_id) != device_id) {
-#ifdef DEBUG_INIT
         debugf(CRITICAL, "VIRTIO device ID=%u instead of ID=%u; failing.", le32toh(mmio->device_id), device_id);
-#endif
         return false;
     }
 
@@ -465,9 +458,7 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
         return false;
     }
 
-#ifdef DEBUG_INIT
     debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->num_queues);
-#endif
 
     device->queues = malloc(sizeof(struct virtio_device_queue) * device->num_queues);
     assert(device->queues != NULL);
