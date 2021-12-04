@@ -101,7 +101,7 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 			}
 			filename = strings.ToUpper(filename)
 			text = fmt.Sprintf(
-				"[%13v] [%12s] [%5v] %s",
+				"[%13v] [%14s] [%5v] %s",
 				line.Timestamp, filename, line.Metadata.LogLevel, rendered,
 			)
 		}
