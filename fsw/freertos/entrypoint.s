@@ -215,8 +215,13 @@ trap_recursive_flag:
     ADD     r14, r14, #1
     STR     r14, [r12]
 
-    @ Check also if we're in a critical section, where we cannot be safely suspended
+    @ Check also if we're in a critical section, where we cannot be safely suspended or restarted
     LDR     r14, ulCriticalNestingConst
+    LDR     r14, [r14]
+    CMPEQ   r14, #0
+
+    @ And also check if we're in a nested interrupt, where we also cannot be safely suspended or restarted
+    LDR     r14, ulPortInterruptNestingConst
     LDR     r14, [r14]
     CMPEQ   r14, #0
 
