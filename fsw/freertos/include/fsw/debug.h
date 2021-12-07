@@ -39,7 +39,7 @@ struct debugf_metadata {
 #define assert(x)          _assert_raw(x, "ASSERT")
 
 #define abortf(fmt,...) do { \
-    debugf(CRITICAL, fmt, ## __VA_ARGS__); \
+    debugf_stable(CRITICAL, Assertion, "ABORT: " fmt, ## __VA_ARGS__); \
     abort(); \
 } while (0)
 
