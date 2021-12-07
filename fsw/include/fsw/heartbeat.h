@@ -4,9 +4,11 @@
 #include <stdint.h>
 
 #include <hal/thread.h>
+#include <fsw/tlm.h>
 
 typedef struct {
-    thread_t thread;
+    tlm_async_endpoint_t telemetry;
+    thread_t             thread;
 } heartbeat_t;
 
 void heartbeat_init(heartbeat_t *heart);

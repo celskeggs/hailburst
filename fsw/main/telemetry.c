@@ -9,15 +9,14 @@
 #include <fsw/tlm.h>
 
 enum {
-    TLM_MAX_ASYNC_BUFFERS = 1024,
-    TLM_MAX_ASYNC_SIZE    = 16,
-    TLM_MAX_SYNC_BUFFERS  = 1,
-    TLM_MAX_SYNC_SIZE     = 64 * 1024,
+    TLM_MAX_ASYNC_CLIENT_BUFFERS = 128,
+    TLM_MAX_ASYNC_SIZE           = 16,
+    TLM_MAX_SYNC_BUFFERS         = 1,
+    TLM_MAX_SYNC_SIZE            = 64 * 1024,
 };
 
 typedef struct {
-    uint32_t telemetry_id; // can be TLM_SYNC_MARKER to indicate that this is just a wakeup
-    uint64_t timestamp_ns;
+    uint32_t telemetry_id;
     uint32_t data_len;
     uint8_t  data_bytes[TLM_MAX_ASYNC_SIZE];
 } tlm_async_t;
@@ -31,10 +30,11 @@ typedef struct {
 struct {
     bool initialized;
 
-    queue_t  async_queue;
-    uint32_t async_dropped; // atomic
-    wall_t   sync_wall;
-    thread_t thread;
+    semaphore_t         wakeup;
+    multichart_server_t async_chart;
+    uint32_t            async_dropped; // atomic
+    wall_t              sync_wall;
+    thread_t            thread;
 
     comm_enc_t *comm_encoder;
 } telemetry = {
@@ -43,9 +43,6 @@ struct {
 };
 
 enum {
-    // indicates that this is a wakeup notification for the mainloop to check on the sync wall
-    TLM_SYNC_TID = 0xFFFFFFFF,
-
     CMD_RECEIVED_TID          = 0x01000001,
     CMD_COMPLETED_TID         = 0x01000002,
     CMD_NOT_RECOGNIZED_TID    = 0x01000003,
@@ -59,26 +56,20 @@ enum {
 
 static void *telemetry_mainloop(void *encoder_opaque);
 
-static void telemetry_wall_notify(void *opaque) {
+static void telemetry_mainloop_notify(void *opaque) {
     (void) opaque;
 
-    // we only send a TLM_SYNC_TID notification if the async queue is empty.
-    // otherwise, the main loop will be woken up anyway.
-    if (queue_is_empty(&telemetry.async_queue)) {
-        tlm_async_t tlm = {
-            .telemetry_id = TLM_SYNC_TID,
-        };
-        // no big deal if we can't send; that just means that there's a wakeup pending.
-        (void) queue_send_try(&telemetry.async_queue, &tlm);
-    }
+    // wake up main loop; fine for this to fail, because that just means there's already a wakeup pending.
+    (void) semaphore_give(&telemetry.wakeup);
 }
 
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry.initialized);
 
     // set up message paths
-    queue_init(&telemetry.async_queue, sizeof(tlm_async_t), TLM_MAX_ASYNC_BUFFERS);
-    wall_init(&telemetry.sync_wall, telemetry_wall_notify, NULL);
+    semaphore_init(&telemetry.wakeup);
+    multichart_init_server(&telemetry.async_chart, sizeof(tlm_async_t), telemetry_mainloop_notify, NULL);
+    wall_init(&telemetry.sync_wall, telemetry_mainloop_notify, NULL);
 
     telemetry.comm_encoder = encoder;
 
@@ -87,22 +78,19 @@ void telemetry_init(comm_enc_t *encoder) {
     thread_create(&telemetry.thread, "tlm_mainloop", PRIORITY_WORKERS, telemetry_mainloop, NULL, RESTARTABLE);
 }
 
-static void telemetry_record_async(tlm_async_t *insert) {
-    bool written = false;
-    assert(insert->data_len <= TLM_MAX_ASYNC_SIZE);
-    if (telemetry.initialized) {
-        // first, snapshot current time
-        insert->timestamp_ns = clock_timestamp();
-        // then write element to ring buffer without blocking
-        written = queue_send_try(&telemetry.async_queue, insert);
-    }
-    if (!written) {
-        // can be relaxed because we don't care about previous writes being retired first
-        atomic_fetch_add_relaxed(telemetry.async_dropped, 1);
-    }
+static void tlm_async_notify(void *opaque) {
+    (void) opaque;
+    // no notification needs to be sent; asynchronous telemetry messages do not block
 }
 
-static void telemetry_hole_notify(void *opaque) {
+void tlm_async_init(tlm_async_endpoint_t *tep) {
+    assert(tep != NULL);
+    assert(telemetry.initialized);
+
+    multichart_init_client(&tep->client, &telemetry.async_chart, TLM_MAX_ASYNC_CLIENT_BUFFERS, tlm_async_notify, NULL);
+}
+
+static void tlm_sync_notify(void *opaque) {
     tlm_sync_endpoint_t *tep = (tlm_sync_endpoint_t *) opaque;
     assert(tep != NULL);
 
@@ -115,7 +103,23 @@ void tlm_sync_init(tlm_sync_endpoint_t *tep) {
     assert(telemetry.initialized);
 
     semaphore_init(&tep->sync_wake);
-    hole_init(&tep->sync_hole, sizeof(tlm_sync_t), &telemetry.sync_wall, telemetry_hole_notify, tep);
+    hole_init(&tep->sync_hole, sizeof(tlm_sync_t), &telemetry.sync_wall, tlm_sync_notify, tep);
+}
+
+static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
+    assert(tep != NULL);
+    tlm_async_t *async = multichart_request_start(&tep->client);
+    if (async == NULL) {
+        // can be relaxed because we don't care about previous writes being retired first
+        atomic_fetch_add_relaxed(telemetry.async_dropped, 1);
+    }
+    return async;
+}
+
+static void telemetry_async_send(tlm_async_endpoint_t *tep, tlm_async_t *async) {
+    assert(tep != NULL && async != NULL);
+
+    multichart_request_send(&tep->client, async);
 }
 
 static tlm_sync_t *telemetry_start_sync(tlm_sync_endpoint_t *tep) {
@@ -170,12 +174,24 @@ static void *telemetry_mainloop(void *opaque) {
             // (and that we don't just keep dropping everything)
         }
 
-        tlm_async_t async_elm;
+        // pull telemetry from multichart
+        uint64_t timestamp_ns = 0;
+        tlm_async_t *async_elm = multichart_reply_start(&telemetry.async_chart, &timestamp_ns);
+        if (async_elm != NULL) {
+            // convert async element to packet
+            packet.cmd_tlm_id   = async_elm->telemetry_id;
+            packet.timestamp_ns = timestamp_ns;
+            packet.data_len     = async_elm->data_len;
+            packet.data_bytes   = async_elm->data_bytes; // array->pointer
 
-        // pull telemetry from ring buffer
-        if (!queue_recv_try(&telemetry.async_queue, &async_elm)) {
-            // nothing immediately ready, so let's check on the wall before we sleep
+            // transmit this packet
+            comm_enc_encode(telemetry.comm_encoder, &packet);
 
+            multichart_reply_send(&telemetry.async_chart, async_elm);
+
+            watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
+        } else {
+            // pull synchronous telemetry from wall
             size_t sync_size = 0;
             const tlm_sync_t *sync_elm = wall_query(&telemetry.sync_wall, &sync_size);
             if (sync_elm != NULL) {
@@ -192,107 +208,121 @@ static void *telemetry_mainloop(void *opaque) {
 
                 // let the synchronous sender know they can continue
                 wall_reply(&telemetry.sync_wall, sync_elm);
-
-                // back to the top; see what's available now
-                continue;
+            } else {
+                // no asynchronous telemetry AND no synchronous telemetry... time to sleep!
+                semaphore_take(&telemetry.wakeup);
             }
-
-            // nothing on the wall, so go to sleep until we have something
-            queue_recv(&telemetry.async_queue, &async_elm);
         }
-
-        if (async_elm.telemetry_id == TLM_SYNC_TID) {
-            // this just happens to wake us up to remind us to pull from the sync wall. go back to the top and recheck.
-            continue;
-        }
-
-        // this is the case where we have an async telemetry element to process
-
-        // convert async element to packet
-        packet.cmd_tlm_id   = async_elm.telemetry_id;
-        packet.timestamp_ns = async_elm.timestamp_ns;
-        packet.data_len     = async_elm.data_len;
-        packet.data_bytes   = async_elm.data_bytes; // array->pointer
-
-        // transmit this packet
-        comm_enc_encode(telemetry.comm_encoder, &packet);
-
-        watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
-
-        // go back around to see if we can transmit somethng else now
     }
 }
 
-void tlm_cmd_received(uint64_t original_timestamp, uint32_t original_command_id) {
+void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id) {
     debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
            original_timestamp, original_command_id);
 
-    tlm_async_t tlm = { .telemetry_id = CMD_RECEIVED_TID, .data_len = 12 };
-    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = CMD_RECEIVED_TID;
+    tlm->data_len = 12;
+    uint32_t *out = (uint32_t*) tlm->data_bytes;
     *out++ = htobe32((uint32_t) (original_timestamp >> 32));
     *out++ = htobe32((uint32_t) original_timestamp);
     *out++ = htobe32(original_command_id);
-    telemetry_record_async(&tlm);
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_cmd_completed(uint64_t original_timestamp, uint32_t original_command_id, bool success) {
+void tlm_cmd_completed(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id,
+                       bool success) {
     debugf(DEBUG, "Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
            original_timestamp, original_command_id, success);
 
-    tlm_async_t tlm = { .telemetry_id = CMD_COMPLETED_TID, .data_len = 13 };
-    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = CMD_COMPLETED_TID;
+    tlm->data_len = 13;
+    uint32_t *out = (uint32_t*) tlm->data_bytes;
     *out++ = htobe32((uint32_t) (original_timestamp >> 32));
     *out++ = htobe32((uint32_t) original_timestamp);
     *out++ = htobe32(original_command_id);
-    tlm.data_bytes[12] = (success ? 1 : 0);
-    telemetry_record_async(&tlm);
+    tlm->data_bytes[12] = (success ? 1 : 0);
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_cmd_not_recognized(uint64_t original_timestamp, uint32_t original_command_id, uint32_t length) {
+void tlm_cmd_not_recognized(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id,
+                            uint32_t length) {
     debugf(CRITICAL, "Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
            original_timestamp, original_command_id, length);
 
-    tlm_async_t tlm = { .telemetry_id = CMD_NOT_RECOGNIZED_TID, .data_len = 16 };
-    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = CMD_NOT_RECOGNIZED_TID;
+    tlm->data_len = 16;
+    uint32_t *out = (uint32_t*) tlm->data_bytes;
     *out++ = htobe32((uint32_t) (original_timestamp >> 32));
     *out++ = htobe32((uint32_t) original_timestamp);
     *out++ = htobe32(original_command_id);
     *out++ = htobe32(length);
-    telemetry_record_async(&tlm);
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_pong(uint32_t ping_id) {
+void tlm_pong(tlm_async_endpoint_t *tep, uint32_t ping_id) {
     debugf(INFO, "Pong: PingId=%08x", ping_id);
 
-    tlm_async_t tlm = { .telemetry_id = PONG_TID, .data_len = 4 };
-    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = PONG_TID;
+    tlm->data_len = 4;
+    uint32_t *out = (uint32_t*) tlm->data_bytes;
     *out++ = htobe32(ping_id);
-    telemetry_record_async(&tlm);
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_clock_calibrated(int64_t adjustment) {
+void tlm_clock_calibrated(tlm_async_endpoint_t *tep, int64_t adjustment) {
     debugf(INFO, "ClockCalibrated: Adjustment=%"PRId64"", adjustment);
 
-    tlm_async_t tlm = { .telemetry_id = CLOCK_CALIBRATED_TID, .data_len = 8 };
-    uint32_t *out = (uint32_t*) tlm.data_bytes;
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = CLOCK_CALIBRATED_TID;
+    tlm->data_len = 8;
+    uint32_t *out = (uint32_t*) tlm->data_bytes;
     *out++ = htobe32((uint32_t) (adjustment >> 32));
     *out++ = htobe32((uint32_t) (adjustment >> 0));
-    telemetry_record_async(&tlm);
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_heartbeat(void) {
+void tlm_heartbeat(tlm_async_endpoint_t *tep) {
     debugf(DEBUG, "Heartbeat");
 
-    tlm_async_t tlm = { .telemetry_id = HEARTBEAT_TID, .data_len = 0 };
-    telemetry_record_async(&tlm);
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = HEARTBEAT_TID;
+    tlm->data_len = 0;
+    telemetry_async_send(tep, tlm);
 }
 
-void tlm_mag_pwr_state_changed(bool power_state) {
+void tlm_mag_pwr_state_changed(tlm_async_endpoint_t *tep, bool power_state) {
     debugf(INFO, "Magnetometer Power State Changed: PowerState=%d", power_state);
 
-    tlm_async_t tlm = { .telemetry_id = MAG_PWR_STATE_CHANGED_TID, .data_len = 1 };
-    tlm.data_bytes[0] = (power_state ? 1 : 0);
-    telemetry_record_async(&tlm);
+    tlm_async_t *tlm = telemetry_async_start(tep);
+    if (!tlm) {
+        return;
+    }
+    tlm->telemetry_id = MAG_PWR_STATE_CHANGED_TID;
+    tlm->data_len = 1;
+    tlm->data_bytes[0] = (power_state ? 1 : 0);
+    telemetry_async_send(tep, tlm);
 }
 
 void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,

@@ -50,7 +50,7 @@ void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *pa
 void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *param);
 void chart_destroy(chart_t *chart);
 
-static inline chart_index_t chart_note_size(chart_t *chart) {
+static inline size_t chart_note_size(chart_t *chart) {
     assert(chart != NULL);
     return chart->note_size;
 }

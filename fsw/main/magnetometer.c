@@ -177,7 +177,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             return NULL;
         }
         uint64_t powered_at = clock_timestamp_monotonic();
-        tlm_mag_pwr_state_changed(true);
+        tlm_mag_pwr_state_changed(&mag->telemetry_async, true);
 
         // take readings every 100ms until told to stop
         uint64_t reading_time = powered_at + READING_DELAY_NS;
@@ -212,7 +212,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
-        tlm_mag_pwr_state_changed(false);
+        tlm_mag_pwr_state_changed(&mag->telemetry_async, false);
     }
 }
 
@@ -233,7 +233,7 @@ static void *magnetometer_telemloop(void *mag_opaque) {
 
         // see if we have readings to downlink
         if (!queue_is_empty(&mag->readings)) {
-            tlm_sync_mag_readings_iterator(&mag->telem_endpoint, magnetometer_telem_iterator_next, mag);
+            tlm_sync_mag_readings_iterator(&mag->telemetry_sync, magnetometer_telem_iterator_next, mag);
         }
 
         sleep_until(last_telem_time + (uint64_t) 5500000000);
@@ -243,7 +243,8 @@ static void *magnetometer_telemloop(void *mag_opaque) {
 void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(mag != NULL && mon != NULL && address != NULL);
     queue_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
-    tlm_sync_init(&mag->telem_endpoint);
+    tlm_async_init(&mag->telemetry_async);
+    tlm_sync_init(&mag->telemetry_sync);
     semaphore_init(&mag->flag_change);
     mag->should_be_powered = false;
     rmap_init_context(&mag->rctx, mon, 4);

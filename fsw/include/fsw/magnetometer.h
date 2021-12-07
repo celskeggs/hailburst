@@ -19,7 +19,8 @@ typedef struct {
     queue_t readings;
 
     // telemetry output endpoint
-    tlm_sync_endpoint_t telem_endpoint;
+    tlm_async_endpoint_t telemetry_async;
+    tlm_sync_endpoint_t  telemetry_sync;
 
     thread_t query_thread;
     thread_t telem_thread;

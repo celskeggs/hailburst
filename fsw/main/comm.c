@@ -123,6 +123,7 @@ void comm_enc_init(comm_enc_t *enc, stream_t *downlink) {
     assert(enc != NULL && downlink != NULL);
     enc->downlink = downlink;
     enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
+    assert(enc->scratch_buffer != NULL);
 }
 
 static void comm_enc_escape_limited(comm_enc_t *enc, const uint8_t *data, size_t len) {

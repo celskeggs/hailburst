@@ -15,6 +15,7 @@ typedef struct {
     bool initialized;
     rmap_context_t context;
     rmap_addr_t *address;
+    tlm_async_endpoint_t telemetry;
 } clock_device_t;
 
 enum {
@@ -98,6 +99,8 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(!clock_device.initialized);
     clock_device.initialized = true;
 
+    tlm_async_init(&clock_device.telemetry);
+
     rmap_init_context(&clock_device.context, mon, 0);
     clock_device.address = address;
 
@@ -124,5 +127,5 @@ void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
     clock_offset_adj = ref_time_sampled - local_time_postsampled;
 
     // and log our success, which will include a time using our new adjustment
-    tlm_clock_calibrated(clock_offset_adj);
+    tlm_clock_calibrated(&clock_device.telemetry, clock_offset_adj);
 }

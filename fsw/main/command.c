@@ -12,6 +12,12 @@ enum {
 	MAG_SET_PWR_STATE_CID = 0x02000001,
 };
 
+typedef enum {
+    CMD_STATUS_OK = 0,            // command succeeded
+    CMD_STATUS_FAIL = 1,          // command failed
+    CMD_STATUS_UNRECOGNIZED = 2,  // command not valid
+} cmd_status_t;
+
 typedef struct {
     const uint8_t *bytes_ptr;
     ssize_t        bytes_remaining;
@@ -59,10 +65,10 @@ static bool cmd_parse_bool(cmd_parser_t *parser) {
 
 typedef struct {
     uint32_t     id;
-    cmd_status_t (*cmd)(spacecraft_t *sc, cmd_parser_t *p);
+    cmd_status_t (*cmd)(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p);
 } cmd_t;
 
-static cmd_status_t cmd_ping(spacecraft_t *sc, cmd_parser_t *p) {
+static cmd_status_t cmd_ping(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
     (void) sc;
     // parse
     uint32_t ping_id = cmd_parse_u32(p);
@@ -70,11 +76,12 @@ static cmd_status_t cmd_ping(spacecraft_t *sc, cmd_parser_t *p) {
         return CMD_STATUS_UNRECOGNIZED;
     }
     // execute
-    tlm_pong(ping_id);
+    tlm_pong(telemetry, ping_id);
     return CMD_STATUS_OK;
 }
 
-static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, cmd_parser_t *p) {
+static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
+    (void) telemetry;
     // parse
     bool pwr_state = cmd_parse_bool(p);
     if (!cmd_parser_wrapup(p)) {
@@ -90,7 +97,8 @@ static cmd_t commands[] = {
     { .id = MAG_SET_PWR_STATE_CID, .cmd = cmd_mag_set_pwr_state },
 };
 
-cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, const uint8_t *args, size_t args_len) {
+static cmd_status_t cmd_execute(spacecraft_t *sc, tlm_async_endpoint_t *telemetry,
+                                uint32_t cid, const uint8_t *args, size_t args_len) {
     cmd_parser_t parser = {
         .bytes_ptr = args,
         .bytes_remaining = args_len,
@@ -98,7 +106,7 @@ cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, const uint8_t *args, si
     };
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (commands[i].id == cid) {
-            return commands[i].cmd(sc, &parser);
+            return commands[i].cmd(sc, telemetry, &parser);
         }
     }
     return CMD_STATUS_UNRECOGNIZED;
@@ -107,20 +115,23 @@ cmd_status_t cmd_execute(spacecraft_t *sc, uint32_t cid, const uint8_t *args, si
 void cmd_mainloop(spacecraft_t *sc) {
     comm_packet_t packet;
     cmd_status_t status;
+    tlm_async_endpoint_t telemetry;
+
+    tlm_async_init(&telemetry);
 
     for (;;) {
         // wait for and decode next command
         comm_dec_decode(&sc->comm_decoder, &packet);
         // report reception
-        tlm_cmd_received(packet.timestamp_ns, packet.cmd_tlm_id);
+        tlm_cmd_received(&telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
         // execute command
-        status = cmd_execute(sc, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
+        status = cmd_execute(sc, &telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
         // report completion
         if (status == CMD_STATUS_UNRECOGNIZED) {
-            tlm_cmd_not_recognized(packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
+            tlm_cmd_not_recognized(&telemetry, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
         } else {
             assert(status == CMD_STATUS_OK || status == CMD_STATUS_FAIL);
-            tlm_cmd_completed(packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
+            tlm_cmd_completed(&telemetry, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
         }
     }
 }
