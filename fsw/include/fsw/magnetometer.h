@@ -16,7 +16,7 @@ typedef struct {
     semaphore_t flag_change;
 
     // telemetry buffer
-    queue_t readings;
+    chart_t readings;
 
     // telemetry output endpoint
     tlm_async_endpoint_t telemetry_async;

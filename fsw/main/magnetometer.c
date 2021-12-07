@@ -101,7 +101,9 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     if (!magnetometer_set_register(mag, REG_LATCH, LATCH_ON)) {
         return false;
     }
-    reading_out->reading_time = rmap_get_ack_timestamp_ns(&mag->rctx);
+    if (reading_out != NULL) {
+        reading_out->reading_time = rmap_get_ack_timestamp_ns(&mag->rctx);
+    }
 
     usleep(15000);
 
@@ -146,9 +148,11 @@ retry:
 
         assert(registers[0] == LATCH_OFF || registers[0] == LATCH_ON);
         if (registers[0] == LATCH_OFF) {
-            reading_out->mag_x = registers[REG_X - REG_LATCH];
-            reading_out->mag_y = registers[REG_Y - REG_LATCH];
-            reading_out->mag_z = registers[REG_Z - REG_LATCH];
+            if (reading_out != NULL) {
+                reading_out->mag_x = registers[REG_X - REG_LATCH];
+                reading_out->mag_y = registers[REG_Y - REG_LATCH];
+                reading_out->mag_z = registers[REG_Z - REG_LATCH];
+            }
             return true;
         }
 
@@ -192,16 +196,18 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             }
 
             // take and report reading
-            tlm_mag_reading_t reading;
+            tlm_mag_reading_t *reading = chart_request_start(&mag->readings);
             debugf(DEBUG, "Taking magnetometer reading...");
-            if (!magnetometer_take_reading(mag, &reading)) {
+            if (!magnetometer_take_reading(mag, reading)) {
                 debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
                 return NULL;
             }
-
-            if (!queue_send_try(&mag->readings, &reading)) {
+            if (reading == NULL) {
                 debugf(CRITICAL, "Magnetometer: out of space in queue to write readings.");
+            } else {
+                chart_request_send(&mag->readings, 1);
             }
+
             debugf(DEBUG, "Took magnetometer reading!");
 
             reading_time += READING_DELAY_NS;
@@ -216,11 +222,11 @@ static void *magnetometer_mainloop(void *mag_opaque) {
     }
 }
 
-static bool magnetometer_telem_iterator_next(void *mag_opaque, tlm_mag_reading_t *reading_out) {
+static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tlm_mag_reading_t *reading_out) {
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL && reading_out != NULL);
 
-    return queue_recv_try(&mag->readings, reading_out);
+    *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(&mag->readings, index);
 }
 
 static void *magnetometer_telemloop(void *mag_opaque) {
@@ -232,17 +238,28 @@ static void *magnetometer_telemloop(void *mag_opaque) {
         uint64_t last_telem_time = clock_timestamp_monotonic();
 
         // see if we have readings to downlink
-        if (!queue_is_empty(&mag->readings)) {
-            tlm_sync_mag_readings_iterator(&mag->telemetry_sync, magnetometer_telem_iterator_next, mag);
+        size_t downlink_count = chart_reply_avail(&mag->readings);
+        if (downlink_count > 0) {
+            size_t write_count = downlink_count;
+            tlm_sync_mag_readings_map(&mag->telemetry_sync, &write_count, magnetometer_telem_iterator_fetch, mag);
+            assert(write_count >= 1 && write_count <= downlink_count);
+            chart_reply_send(&mag->readings, write_count);
         }
 
         sleep_until(last_telem_time + (uint64_t) 5500000000);
     }
 }
 
+static void magnetometer_drop_notification(void *opaque) {
+    (void) opaque;
+    // we're only using the chart as a datastructure, so no need for notifications.
+}
+
 void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address) {
     assert(mag != NULL && mon != NULL && address != NULL);
-    queue_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
+    chart_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
+    chart_attach_server(&mag->readings, magnetometer_drop_notification, NULL);
+    chart_attach_client(&mag->readings, magnetometer_drop_notification, NULL);
     tlm_async_init(&mag->telemetry_async);
     tlm_sync_init(&mag->telemetry_sync);
     semaphore_init(&mag->flag_change);

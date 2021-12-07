@@ -42,7 +42,7 @@ void tlm_mag_pwr_state_changed(tlm_async_endpoint_t *tep, bool power_state);
 
 // synchronous telemetry writes
 void tlm_sync_init(tlm_sync_endpoint_t *tep);
-void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
-                                    bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param);
+void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
+                               void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param);
 
 #endif /* FSW_TLM_H */

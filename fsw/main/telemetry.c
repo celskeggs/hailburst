@@ -325,8 +325,9 @@ void tlm_mag_pwr_state_changed(tlm_async_endpoint_t *tep, bool power_state) {
     telemetry_async_send(tep, tlm);
 }
 
-void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
-                                    bool (*iterator)(void *param, tlm_mag_reading_t *out), void *param) {
+void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
+                               void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param) {
+    assert(tep != NULL && fetch_count != NULL && fetch != NULL);
 
     // get the buffer
     tlm_sync_t *sync = telemetry_start_sync(tep);
@@ -334,17 +335,20 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
     // now fill up the buffer
     sync->telemetry_id = MAG_READINGS_ARRAY_TID;
     uint16_t *out = (uint16_t*) sync->data_bytes;
-    debugf(DEBUG, "Magnetometer Readings Array:");
-    size_t num_readings = 0;
-    while ((uint8_t*) out - sync->data_bytes + 14 <= (ssize_t) hole_max_msg_size(&tep->sync_hole)) {
+    size_t num_readings = *fetch_count;
+    if (num_readings * 14 > hole_max_msg_size(&tep->sync_hole)) {
+        num_readings = hole_max_msg_size(&tep->sync_hole) / 14;
+    }
+    assert(num_readings > 0);
+    debugf(DEBUG, "Magnetometer Readings Array: %zu readings", num_readings);
+    *fetch_count = num_readings;
+    for (size_t i = 0; i < num_readings; i++) {
         tlm_mag_reading_t rd;
 
-        if (!iterator(param, &rd)) {
-            break;
-        }
+        fetch(param, i, &rd);
 
         debugf(DEBUG, "  Readings[%zu]={%"PRIu64", %d, %d, %d}",
-               num_readings, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
+               i, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
 
         *out++ = htobe16((uint16_t) (rd.reading_time >> 48));
         *out++ = htobe16((uint16_t) (rd.reading_time >> 32));
@@ -354,10 +358,7 @@ void tlm_sync_mag_readings_iterator(tlm_sync_endpoint_t *tep,
         *out++ = htobe16(rd.mag_x);
         *out++ = htobe16(rd.mag_y);
         *out++ = htobe16(rd.mag_z);
-
-        num_readings++;
     }
-    debugf(DEBUG, "  Total number of readings: %zu", num_readings);
     assert((uint8_t*) out - sync->data_bytes == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream
