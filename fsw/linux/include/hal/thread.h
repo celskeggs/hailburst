@@ -26,20 +26,8 @@ typedef struct {
     bool           is_available;
 } semaphore_t;
 
-// queue and stream implementations based on the "good option" from here:
+// stream implementations based on the "good option" from here:
 // https://www.snellman.net/blog/archive/2016-12-13-ring-buffers/
-
-typedef struct {
-    mutex_t mutex;
-    pthread_cond_t cond;
-
-    uint8_t *memory;
-    size_t   item_size;
-    size_t   capacity;
-    // TODO: make sure I test integer overflow on these fields... SHOULD be fine, but needs to be tested
-    size_t   read_scroll;
-    size_t   write_scroll;
-} queue_t;
 
 typedef struct {
     mutex_t mutex;
@@ -116,18 +104,6 @@ bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
 // returns true if taken, false if timed out
 bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
 bool semaphore_give(semaphore_t *sema);
-
-extern void queue_init(queue_t *queue, size_t entry_size, size_t num_entries);
-extern void queue_destroy(queue_t *queue);
-extern bool queue_is_empty(queue_t *queue);
-extern void queue_send(queue_t *queue, const void *new_item);
-// returns true if sent, false if not
-extern bool queue_send_try(queue_t *queue, void *new_item);
-extern void queue_recv(queue_t *queue, void *new_item);
-// returns true if received, false if not
-extern bool queue_recv_try(queue_t *queue, void *new_item);
-// returns true if received, false if timed out
-extern bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns);
 
 extern void stream_init(stream_t *stream, size_t capacity);
 extern void stream_destroy(stream_t *stream);

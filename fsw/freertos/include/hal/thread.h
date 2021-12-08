@@ -37,7 +37,6 @@ typedef struct thread_st {
 } *thread_t;
 typedef SemaphoreHandle_t mutex_t;
 typedef SemaphoreHandle_t semaphore_t;
-typedef QueueHandle_t queue_t;
 typedef StreamBufferHandle_t stream_t;
 
 typedef int critical_t; // we use a FreeRTOS critical section
@@ -125,63 +124,6 @@ static inline bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline
 static inline bool semaphore_give(semaphore_t *sema) {
     assert(sema != NULL && *sema != NULL);
     return xSemaphoreGive(*sema) == pdTRUE;
-}
-
-static inline void queue_init(queue_t *queue, size_t entry_size, size_t num_entries) {
-    assert(queue != NULL);
-    assert(entry_size > 0);
-    assert(num_entries > 0);
-    *queue = xQueueCreate(num_entries, entry_size);
-    assert(*queue != NULL);
-}
-
-static inline void queue_destroy(queue_t *queue) {
-    assert(queue != NULL && *queue != NULL);
-    vQueueDelete(*queue);
-    *queue = NULL;
-}
-
-static inline bool queue_is_empty(queue_t *queue) {
-    assert(queue != NULL && *queue != NULL);
-    return uxQueueMessagesWaiting(*queue) == 0;
-}
-
-static inline void queue_send(queue_t *queue, const void *new_item) {
-    assert(queue != NULL && *queue != NULL);
-    BaseType_t status;
-    status = xQueueSend(*queue, new_item, portMAX_DELAY);
-    assert(status == pdTRUE);
-}
-
-// returns true if sent, false if not
-static inline bool queue_send_try(queue_t *queue, void *new_item) {
-    assert(queue != NULL && *queue != NULL);
-    BaseType_t status;
-    status = xQueueSend(*queue, new_item, 0);
-    return status == pdTRUE;
-}
-
-static inline void queue_recv(queue_t *queue, void *new_item) {
-    assert(queue != NULL && *queue != NULL);
-    BaseType_t status;
-    status = xQueueReceive(*queue, new_item, portMAX_DELAY);
-    assert(status == pdTRUE);
-}
-
-// returns true if received, false if not
-static inline bool queue_recv_try(queue_t *queue, void *new_item) {
-    assert(queue != NULL && *queue != NULL);
-    BaseType_t status;
-    status = xQueueReceive(*queue, new_item, 0);
-    return status == pdTRUE;
-}
-
-// returns true if received, false if timed out
-static inline bool queue_recv_timed_abs(queue_t *queue, void *new_item, uint64_t deadline_ns) {
-    assert(queue != NULL && *queue != NULL);
-    BaseType_t status;
-    status = xQueueReceive(*queue, new_item, timer_ticks_until_ns(deadline_ns));
-    return status == pdTRUE;
 }
 
 static inline void stream_init(stream_t *stream, size_t capacity) {
