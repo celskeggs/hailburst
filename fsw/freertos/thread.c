@@ -3,6 +3,7 @@
 
 #include <rtos/crash.h>
 #include <rtos/scrubber.h>
+#include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
@@ -10,7 +11,7 @@
 static thread_t idle_task_thread = NULL;
 #endif
 
-static void thread_restart_hook(void *opaque, TaskHandle_t task);
+thread_t iter_first_thread = NULL;
 
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
@@ -39,31 +40,32 @@ static void thread_entrypoint(void *opaque) {
     }
 }
 
-static void thread_start_internal(thread_t state, restartable_t restartable) {
+static void thread_start_internal(thread_t state) {
     state->handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
                                       state->preallocated_stack, &state->preallocated_task_memory);
     assert(state->handle != NULL);
     // just a check for implementation assumptions regarding task creation
     assert((void*) state->handle == (void*) &state->preallocated_task_memory);
 
-    if (restartable == RESTARTABLE) {
-        state->restart_hook.hook_callback = thread_restart_hook;
-        state->restart_hook.hook_param = state;
-        task_set_restart_handler(state->handle, &state->restart_hook);
-    }
+    vTaskSetApplicationTaskTag(state->handle, (void *) state);
 }
 
-static void thread_restart_hook(void *opaque, TaskHandle_t task) {
-    thread_t state = (thread_t) opaque;
-    assert(state != NULL && task != NULL && state->handle == task);
+void thread_restart_other_task(thread_t state) {
+    assert(state != NULL && state->handle != NULL);
+    assert(state->restartable == RESTARTABLE);
+    assert(state->handle != xTaskGetCurrentTaskHandle());
+
+    debugf(CRITICAL, "Restarting task '%s'", state->name);
 
     // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
     // the TaskHandle could refer to undefined memory.
     taskENTER_CRITICAL();
-    vTaskDelete(task);
+    vTaskDelete(state->handle);
     state->hit_restart = true;
-    thread_start_internal(state, RESTARTABLE);
+    thread_start_internal(state);
     taskEXIT_CRITICAL();
+
+    debugf(CRITICAL, "Completed restart for task '%s'", state->name);
 }
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
@@ -75,7 +77,7 @@ static void *idle_task_main(void *opaque) {
     return NULL;
 }
 
-void task_idle_init(void) {
+void thread_idle_init(void) {
     assert(idle_task_thread == NULL);
 
     thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, idle_task_main, NULL, RESTARTABLE);
@@ -107,16 +109,20 @@ void thread_create(thread_t *out, const char *name, unsigned int priority,
     state->priority = priority;
     state->start_routine = start_routine;
     state->arg = arg;
+    state->restartable = restartable;
+    state->needs_restart = false;
     state->hit_restart = false;
     state->done = xSemaphoreCreateBinary();
     assert(state->done != NULL);
     state->handle = NULL;
+    state->iter_next_thread = iter_first_thread;
+    atomic_store(iter_first_thread, state);
 
     if (name == NULL) {
         name = "anonymous_thread";
     }
 
-    thread_start_internal(state, restartable);
+    thread_start_internal(state);
 
     *out = state;
 }

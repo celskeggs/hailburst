@@ -4,17 +4,15 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
-typedef struct {
-    void (*hook_callback)(void *param, TaskHandle_t task);
-    void *hook_param;
-} task_restart_hook_t;
+#include <hal/thread.h>
 
-typedef void (*task_restart_hook)(TaskHandle_t task);
+extern thread_t iter_first_thread;
 
-void task_idle_init(void);
 void task_restart_init(void);
-void task_set_restart_handler(TaskHandle_t task, task_restart_hook_t *hook);
 void restart_task(TaskHandle_t task);
 void task_clear_crash(void);
+
+void thread_idle_init(void);
+void thread_restart_other_task(thread_t state);
 
 #endif /* FSW_FREERTOS_RTOS_CRASH_H */

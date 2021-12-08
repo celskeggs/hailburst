@@ -9,7 +9,6 @@
 #include <semphr.h>
 #include <stream_buffer.h>
 
-#include <rtos/crash.h>
 #include <rtos/timer.h>
 #include <fsw/debug.h>
 
@@ -17,17 +16,24 @@ enum {
     STACK_SIZE = 1000,
 };
 
-typedef struct {
+typedef enum {
+    NOT_RESTARTABLE = 0,
+    RESTARTABLE,
+} restartable_t;
+
+typedef struct thread_st {
     const char         *name;
     int                 priority;
     TaskHandle_t        handle;
     SemaphoreHandle_t   done;
     void             *(*start_routine)(void*);
     void               *arg;
-    task_restart_hook_t restart_hook;
+    restartable_t       restartable;
+    bool                needs_restart;
     bool                hit_restart;
     StaticTask_t        preallocated_task_memory;
     StackType_t         preallocated_stack[STACK_SIZE];
+    struct thread_st   *iter_next_thread;
 } *thread_t;
 typedef SemaphoreHandle_t mutex_t;
 typedef SemaphoreHandle_t semaphore_t;
@@ -35,11 +41,6 @@ typedef QueueHandle_t queue_t;
 typedef StreamBufferHandle_t stream_t;
 
 typedef int critical_t; // we use a FreeRTOS critical section
-
-typedef enum {
-    NOT_RESTARTABLE = 0,
-    RESTARTABLE,
-} restartable_t;
 
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
                           void *(*start_routine)(void*), void *arg, restartable_t restartable);

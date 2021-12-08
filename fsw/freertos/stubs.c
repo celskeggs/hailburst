@@ -56,7 +56,7 @@ void entrypoint(void *kernel_elf_rom) {
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
     // enable idle task
-    task_idle_init();
+    thread_idle_init();
 #endif
 
     BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);

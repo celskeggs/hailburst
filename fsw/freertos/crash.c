@@ -6,6 +6,7 @@
 #include <rtos/arm.h>
 #include <rtos/crash.h>
 #include <rtos/gic.h>
+#include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
@@ -23,49 +24,39 @@ static __attribute__((noreturn)) void suspend_current_task(void) {
         // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
         // to return all the way back to the interrupted task.
         vTaskSuspend(NULL);
-        debugf(CRITICAL, "Aborted task unexpectedly woke up!");
+        debugf(CRITICAL, "Suspended task unexpectedly woke up!");
     }
 }
 
-static bool task_restart_queue_initialized = false;
-static queue_t task_restart_queue;
-static thread_t task_restart_task;
-
-static void restart_other_task(TaskHandle_t task) {
-    assert(task != NULL && task != xTaskGetCurrentTaskHandle()
-#if ( configOVERRIDE_IDLE_TASK == 0 )
-            && task != xTaskGetIdleTaskHandle()
-#endif
-    );
-    task_restart_hook_t *hook = (task_restart_hook_t *) xTaskGetApplicationTaskTag(task);
-    assert(hook != NULL && hook->hook_callback != NULL);
-    debugf(CRITICAL, "Performing restart action for task '%s'", pcTaskGetName(task));
-    hook->hook_callback(hook->hook_param, task);
-    debugf(CRITICAL, "Finished performing restart action for task '%s'", pcTaskGetName(task));
-}
+static bool        task_restart_wake_initialized = false;
+static semaphore_t task_restart_wake;
+static thread_t    task_restart_task;
 
 static void *restart_task_mainloop(void *opaque) {
     (void) opaque;
 
-    TaskHandle_t task = NULL;
     for (;;) {
-        queue_recv(&task_restart_queue, &task);
-        restart_other_task(task);
+        for (thread_t thread = atomic_load(iter_first_thread); thread != NULL; thread = thread->iter_next_thread) {
+            if (thread->needs_restart == true) {
+                thread->needs_restart = false;
+                thread_restart_other_task(thread);
+            }
+        }
+        semaphore_take(&task_restart_wake);
     }
     return NULL;
 }
 
-void task_set_restart_handler(TaskHandle_t task, task_restart_hook_t *handler) {
-    assert(handler != NULL);
-    vTaskSetApplicationTaskTag(task, (TaskHookFunction_t) handler);
-}
-
 static __attribute__((noreturn)) void restart_current_task(void) {
-    TaskHandle_t cur = xTaskGetCurrentTaskHandle();
-    if (xTaskGetApplicationTaskTag(cur) != NULL) {
-        // we can't restart ourself, but we can ask the restart task to restart us
-        assert(task_restart_queue_initialized == true);
-        queue_send(&task_restart_queue, &cur);
+    thread_t current_thread = (void *) xTaskGetApplicationTaskTag(NULL);
+
+    if (current_thread != NULL && current_thread->restartable == RESTARTABLE) {
+        // mark ourself as pending restart
+        current_thread->needs_restart = true;
+        // wake up the restart task
+        if (atomic_load(task_restart_wake_initialized)) {
+            (void) semaphore_give(&task_restart_wake);
+        }
     } else {
         debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
     }
@@ -74,8 +65,8 @@ static __attribute__((noreturn)) void restart_current_task(void) {
 }
 
 void task_restart_init(void) {
-    queue_init(&task_restart_queue, sizeof(TaskHandle_t), 1);
-    task_restart_queue_initialized = true;
+    semaphore_init(&task_restart_wake);
+    atomic_store(task_restart_wake_initialized, true);
     thread_create(&task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
 }
 
