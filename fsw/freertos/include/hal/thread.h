@@ -25,8 +25,7 @@ typedef struct thread_st {
     const char         *name;
     int                 priority;
     TaskHandle_t        handle;
-    SemaphoreHandle_t   done;
-    void             *(*start_routine)(void*);
+    void              (*start_routine)(void*);
     void               *arg;
     restartable_t       restartable;
     bool                needs_restart;
@@ -41,8 +40,7 @@ typedef StreamBufferHandle_t stream_t;
 typedef int critical_t; // we use a FreeRTOS critical section
 
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
-                          void *(*start_routine)(void*), void *arg, restartable_t restartable);
-extern void thread_join(thread_t thread);
+                          void (*start_routine)(void*), void *arg, restartable_t restartable);
 
 static inline void critical_init(critical_t *c) {
     (void) c;

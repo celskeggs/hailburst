@@ -17,7 +17,11 @@ enum {
 #define THREAD_CHECK(x) (thread_check((x), #x))
 #define THREAD_CHECK_OK(x, fm) (thread_check_ok((x), #x, (fm)))
 
-typedef pthread_t       thread_t;
+typedef struct {
+    void (*start_routine)(void *);
+    void *start_parameter;
+    pthread_t thread;
+} thread_t;
 typedef pthread_mutex_t mutex_t;
 // although there are semaphores available under POSIX, they are counting semaphores, and not binary semaphores.
 typedef struct {
@@ -68,7 +72,7 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
 }
 
 static inline void thread_cancel_impl(thread_t thread, const char *nt) {
-    int err = pthread_cancel(thread);
+    int err = pthread_cancel(thread.thread);
     if (err != 0 && err != ESRCH) {
         fprintf(stderr, "thread error: %d in thread_cancel(%s)\n", err, nt);
         abort();
@@ -87,10 +91,11 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
 #define critical_exit(c)    mutex_unlock(c)
 
 // name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
-#define thread_create(x, name, priority, entrypoint, param, restartable) THREAD_CHECK(pthread_create((x), NULL, (entrypoint), (param)))
-#define thread_join(x)                                      THREAD_CHECK(pthread_join((x), NULL))
-#define thread_time_now(x)                                  THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
-#define thread_join_timed(x, t)                             THREAD_CHECK_OK(pthread_timedjoin_np((x), NULL, (t)), ETIMEDOUT)
+extern void thread_create_internal(thread_t *out, void (*start_routine)(void*), void *arg);
+#define thread_create(t, name, priority, start, arg, restartable) thread_create_internal((t), (start), (arg))
+#define thread_join(x)          THREAD_CHECK(pthread_join((x).thread, NULL))
+#define thread_time_now(x)      THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
+#define thread_join_timed(x, t) THREAD_CHECK_OK(pthread_timedjoin_np((x).thread, NULL, (t)), ETIMEDOUT)
 
 // semaphores are created empty, such that an initial take will block
 void semaphore_init(semaphore_t *sema);

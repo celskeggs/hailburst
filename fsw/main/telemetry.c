@@ -54,7 +54,7 @@ enum {
     MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
-static void *telemetry_mainloop(void *encoder_opaque);
+static void telemetry_mainloop(void *encoder_opaque);
 
 static void telemetry_mainloop_notify(void *opaque) {
     (void) opaque;
@@ -142,7 +142,7 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
     }
 }
 
-static void *telemetry_mainloop(void *opaque) {
+static void telemetry_mainloop(void *opaque) {
     (void) opaque;
 
     assert(telemetry.comm_encoder != NULL);

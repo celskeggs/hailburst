@@ -32,7 +32,7 @@ static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
 static thread_t    task_restart_task;
 
-static void *restart_task_mainloop(void *opaque) {
+static void restart_task_mainloop(void *opaque) {
     (void) opaque;
 
     for (;;) {
@@ -44,7 +44,6 @@ static void *restart_task_mainloop(void *opaque) {
         }
         semaphore_take(&task_restart_wake);
     }
-    return NULL;
 }
 
 static __attribute__((noreturn)) void restart_current_task(void) {

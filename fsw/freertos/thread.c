@@ -27,17 +27,9 @@ static void thread_entrypoint(void *opaque) {
 
     task_clear_crash();
 
-    // discard return value
-    (void) state->start_routine(state->arg);
+    state->start_routine(state->arg);
 
-    BaseType_t status;
-    status = xSemaphoreGive(state->done);
-    assert(status == pdTRUE);
-
-    // suspend here so that the current task can be deleted
-    while (1) {
-        vTaskSuspend(NULL);
-    }
+    abortf("Task main loop unexpectedly returned.");
 }
 
 static void thread_start_internal(thread_t state) {
@@ -71,16 +63,10 @@ void thread_restart_other_task(thread_t state) {
 #if ( configOVERRIDE_IDLE_TASK == 1 )
 extern void prvIdleTask(void *pvParameters);
 
-static void *idle_task_main(void *opaque) {
-    (void) opaque;
-    prvIdleTask(NULL);
-    return NULL;
-}
-
 void thread_idle_init(void) {
     assert(idle_task_thread == NULL);
 
-    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, idle_task_main, NULL, RESTARTABLE);
+    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
 
     assert(idle_task_thread != NULL);
 }
@@ -97,7 +83,7 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackTyp
 #endif
 
 void thread_create(thread_t *out, const char *name, unsigned int priority,
-                   void *(*start_routine)(void*), void *arg, restartable_t restartable) {
+                   void (*start_routine)(void*), void *arg, restartable_t restartable) {
     assert(out != NULL);
 
     assert(priority < configMAX_PRIORITIES);
@@ -112,8 +98,6 @@ void thread_create(thread_t *out, const char *name, unsigned int priority,
     state->restartable = restartable;
     state->needs_restart = false;
     state->hit_restart = false;
-    state->done = xSemaphoreCreateBinary();
-    assert(state->done != NULL);
     state->handle = NULL;
     state->iter_next_thread = iter_first_thread;
     atomic_store(iter_first_thread, state);
@@ -125,20 +109,6 @@ void thread_create(thread_t *out, const char *name, unsigned int priority,
     thread_start_internal(state);
 
     *out = state;
-}
-
-void thread_join(thread_t thread) {
-    BaseType_t status;
-    assert(thread != NULL && thread->done != NULL && thread->handle != NULL);
-
-    status = xSemaphoreTake(thread->done, portMAX_DELAY);
-    assert(status == pdTRUE);
-
-    vSemaphoreDelete(thread->done);
-    vTaskDelete(thread->handle);
-
-    thread->done = NULL;
-    thread->handle = NULL;
 }
 
 void semaphore_init(semaphore_t *sema) {

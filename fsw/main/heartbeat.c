@@ -5,7 +5,7 @@
 #include <fsw/heartbeat.h>
 #include <fsw/tlm.h>
 
-static void *heartbeat_mainloop(void *opaque) {
+static void heartbeat_mainloop(void *opaque) {
     assert(opaque != NULL);
     heartbeat_t *heart = (heartbeat_t *) opaque;
 
@@ -16,8 +16,6 @@ static void *heartbeat_mainloop(void *opaque) {
 
         usleep(120 * 1000);
     }
-
-    return NULL;
 }
 
 void heartbeat_init(heartbeat_t *heart) {

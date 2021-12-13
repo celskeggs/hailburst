@@ -109,7 +109,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     return false;
 }
 
-static void *magnetometer_mainloop(void *mag_opaque) {
+static void magnetometer_mainloop(void *mag_opaque) {
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL);
 
@@ -125,7 +125,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         // turn on power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_ON, NULL)) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
-            return NULL;
+            break;
         }
         uint64_t powered_at = clock_timestamp_monotonic();
         tlm_mag_pwr_state_changed(&mag->telemetry_async, true);
@@ -147,7 +147,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
             debugf(DEBUG, "Taking magnetometer reading...");
             if (!magnetometer_take_reading(mag, reading)) {
                 debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
-                return NULL;
+                return;
             }
             if (reading == NULL) {
                 debugf(CRITICAL, "Magnetometer: out of space in queue to write readings.");
@@ -163,7 +163,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         // turn off power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF, NULL)) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
-            return NULL;
+            break;
         }
         tlm_mag_pwr_state_changed(&mag->telemetry_async, false);
     }
@@ -176,7 +176,7 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(&mag->readings, index);
 }
 
-static void *magnetometer_telemloop(void *mag_opaque) {
+static void magnetometer_telemloop(void *mag_opaque) {
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL);
 

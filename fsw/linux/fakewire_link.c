@@ -15,7 +15,7 @@
 
 #define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->label, ## __VA_ARGS__))
 
-static void *fakewire_link_rx_loop(void *opaque) {
+static void fakewire_link_rx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
@@ -32,7 +32,7 @@ static void *fakewire_link_rx_loop(void *opaque) {
 
         if (actual <= 0) { // 0 means EOF, <0 means error
             debug_printf(CRITICAL, "Read failed: %zd when maximum was %zu", actual, max);
-            return NULL;
+            break;
         }
 #ifdef DEBUG
         debug_printf(TRACE, "Read %zd bytes from file descriptor.", actual);
@@ -46,7 +46,7 @@ static void *fakewire_link_rx_loop(void *opaque) {
     }
 }
 
-static void *fakewire_link_tx_loop(void *opaque) {
+static void fakewire_link_tx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 

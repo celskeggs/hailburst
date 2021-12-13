@@ -61,8 +61,8 @@ typedef enum {
 } radio_io_mode_t;
 
 static bool radio_initialize(radio_t *radio, radio_io_mode_t mode);
-static void *radio_uplink_loop(void *radio_opaque);
-static void *radio_downlink_loop(void *radio_opaque);
+static void radio_uplink_loop(void *radio_opaque);
+static void radio_downlink_loop(void *radio_opaque);
 
 void radio_init(radio_t *radio,
                 rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
@@ -455,14 +455,14 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     return total_read;
 }
 
-static void *radio_uplink_loop(void *radio_opaque) {
+static void radio_uplink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
             debugf(CRITICAL, "Radio: hit error in uplink loop; halting uplink thread.");
-            return NULL;
+            break;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
             // write all the data we just pulled to the stream before continuing
@@ -547,7 +547,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     return true;
 }
 
-static void *radio_downlink_loop(void *radio_opaque) {
+static void radio_downlink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
     size_t max_len = radio->tx_region.size;
@@ -561,7 +561,7 @@ static void *radio_downlink_loop(void *radio_opaque) {
 
         if (!radio_downlink_service(radio, grabbed)) {
             debugf(CRITICAL, "Radio: hit error in downlink loop; halting downlink thread.");
-            return NULL;
+            break;
         }
 
         watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);

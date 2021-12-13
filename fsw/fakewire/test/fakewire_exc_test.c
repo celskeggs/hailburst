@@ -49,7 +49,7 @@ struct reader_config {
     semaphore_t wake;
 };
 
-static void *exchange_reader(void *opaque) {
+static void exchange_reader(void *opaque) {
     struct reader_config *rc = (struct reader_config *) opaque;
 
     int last_packet_marker = 1;
@@ -82,8 +82,6 @@ static void *exchange_reader(void *opaque) {
 
         chart_reply_send(&rc->read_chart, 1);
     } while (last_packet_marker != 0);
-
-    return NULL;
 }
 
 struct writer_config {
@@ -96,7 +94,7 @@ struct writer_config {
     bool pass;
 };
 
-static void *exchange_writer(void *opaque) {
+static void exchange_writer(void *opaque) {
     struct writer_config *wc = (struct writer_config *) opaque;
 
     assert(wc->pass == false);
@@ -123,7 +121,6 @@ static void *exchange_writer(void *opaque) {
     }
 
     wc->pass = true;
-    return NULL;
 }
 
 struct exchange_config {
@@ -155,7 +152,7 @@ static void exchange_state_notify_writer(void *opaque) {
     (void) semaphore_give(&est->wc.wake);
 }
 
-static void *exchange_controller(void *opaque) {
+static void exchange_controller(void *opaque) {
     struct exchange_config *ec = (struct exchange_config *) opaque;
 
     struct exchange_state *est = malloc(sizeof(struct exchange_state));
@@ -187,12 +184,12 @@ static void *exchange_controller(void *opaque) {
         debugf(CRITICAL, "[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
-        return NULL;
+        return;
     }
     debugf(DEBUG, "Attached!");
 
-    pthread_t reader_thread;
-    pthread_t writer_thread;
+    thread_t reader_thread;
+    thread_t writer_thread;
     thread_create(&reader_thread, "exc_reader", 1, exchange_reader, &est->rc, NOT_RESTARTABLE);
     thread_create(&writer_thread, "exc_writer", 1, exchange_writer, &est->wc, NOT_RESTARTABLE);
 
@@ -219,8 +216,6 @@ static void *exchange_controller(void *opaque) {
     mutex_lock(&est->rc.out_mutex);
     ec->chain_out = reverse_chain(est->rc.chain_out);
     mutex_unlock(&est->rc.out_mutex);
-
-    return NULL;
 }
 
 static struct packet_chain *random_packet_chain(void) {
@@ -316,7 +311,7 @@ int test_main(void) {
         // chain_out and pass to be filled in
     };
 
-    pthread_t left, right;
+    thread_t left, right;
 
     thread_create(&left, "ec_left", 1, exchange_controller, &ec_left, NOT_RESTARTABLE);
     thread_create(&right, "ec_right", 1, exchange_controller, &ec_right, NOT_RESTARTABLE);

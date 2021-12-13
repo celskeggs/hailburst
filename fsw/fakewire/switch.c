@@ -5,7 +5,7 @@
 #include <fsw/io.h>
 #include <fsw/fakewire/switch.h>
 
-static void *switch_mainloop(void *opaque);
+static void switch_mainloop(void *opaque);
 
 void switch_init(switch_t *sw) {
     assert(sw != NULL);
@@ -90,7 +90,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     return true;
 }
 
-static void *switch_mainloop(void *opaque) {
+static void switch_mainloop(void *opaque) {
     assert(opaque != NULL);
     switch_t *sw = (switch_t *) opaque;
 
@@ -119,8 +119,6 @@ static void *switch_mainloop(void *opaque) {
             semaphore_take(&sw->switching_wake);
         }
     }
-
-    return NULL;
 }
 
 static void switch_notify_loop(void *opaque) {

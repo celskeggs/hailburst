@@ -8,7 +8,7 @@
 #include <fsw/debug.h>
 #include <fsw/fakewire/exchange.h>
 
-static void *fakewire_exc_exchange_loop(void *fwe_opaque);
+static void fakewire_exc_exchange_loop(void *fwe_opaque);
 
 //#define DEBUG
 //#define APIDEBUG
@@ -85,7 +85,7 @@ static uint64_t handshake_period(void) {
     return (rand() % (7 * ms)) + 3 * ms;
 }
 
-static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
+static void fakewire_exc_exchange_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
 

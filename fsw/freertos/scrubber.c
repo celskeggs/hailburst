@@ -47,7 +47,7 @@ static uint64_t scrubber_iteration = 0;
 static semaphore_t scrubber_wake;
 static semaphore_t idle_wake;
 
-static void *scrubber_mainloop(void *opaque) {
+static void scrubber_mainloop(void *opaque) {
     uint8_t *kernel_elf_rom = (uint8_t *) opaque;
 
     for (;;) {
@@ -57,12 +57,12 @@ static void *scrubber_mainloop(void *opaque) {
 
         if (!elf_validate_header(kernel_elf_rom)) {
             debugf(CRITICAL, "header validation failed; halting scrubber.");
-            return NULL;
+            break;
         }
 
         if (elf_scan_load_segments(kernel_elf_rom, MEMORY_LOW, scrub_segment) == 0) {
             debugf(CRITICAL, "segment scan failed; halting scrubber.");
-            return NULL;
+            break;
         }
 
         atomic_store_relaxed(scrubber_iteration, scrubber_iteration + 1);

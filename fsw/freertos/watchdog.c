@@ -98,7 +98,7 @@ static bool watchdog_aspects_ok(void) {
     return ok;
 }
 
-static void *watchdog_caretaker_loop(void *opaque) {
+static void watchdog_caretaker_loop(void *opaque) {
     (void) opaque;
 
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
@@ -131,7 +131,7 @@ static void *watchdog_caretaker_loop(void *opaque) {
             // something is wrong! DO NOT FEED WATCHDOG!
             debugf(CRITICAL, "something is wrong");
             watchdog_force_reset();
-            return NULL;
+            break;
         }
 
         // greet watchdog, prepare food, feed watchdog
