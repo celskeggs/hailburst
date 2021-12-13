@@ -141,25 +141,6 @@ void thread_join(thread_t thread) {
     thread->handle = NULL;
 }
 
-void thread_cancel(thread_t thread);
-void thread_time_now(struct timespec *tp);
-bool thread_join_timed(thread_t thread, const struct timespec *abstime); // true on success, false on timeout
-void thread_disable_cancellation(void);
-void thread_enable_cancellation(void);
-void thread_testcancel(void);
-
-void mutex_init(mutex_t *mutex) {
-    assert(mutex != NULL);
-    *mutex = xSemaphoreCreateMutex();
-    assert(*mutex != NULL);
-}
-
-void mutex_destroy(mutex_t *mutex) {
-    assert(mutex != NULL && *mutex != NULL);
-    vSemaphoreDelete(*mutex);
-    *mutex = NULL;
-}
-
 void semaphore_init(semaphore_t *sema) {
     assert(sema != NULL);
     *sema = xSemaphoreCreateBinary();

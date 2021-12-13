@@ -35,7 +35,6 @@ typedef struct thread_st {
     StackType_t         preallocated_stack[STACK_SIZE];
     struct thread_st   *iter_next_thread;
 } *thread_t;
-typedef SemaphoreHandle_t mutex_t;
 typedef SemaphoreHandle_t semaphore_t;
 typedef StreamBufferHandle_t stream_t;
 
@@ -44,35 +43,6 @@ typedef int critical_t; // we use a FreeRTOS critical section
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
                           void *(*start_routine)(void*), void *arg, restartable_t restartable);
 extern void thread_join(thread_t thread);
-extern void thread_cancel(thread_t thread);
-extern void thread_time_now(struct timespec *tp);
-extern bool thread_join_timed(thread_t thread, const struct timespec *abstime); // true on success, false on timeout
-extern void thread_disable_cancellation(void);
-extern void thread_enable_cancellation(void);
-extern void thread_testcancel(void);
-
-extern void mutex_init(mutex_t *mutex);
-extern void mutex_destroy(mutex_t *mutex);
-
-static inline void mutex_lock(mutex_t *mutex) {
-    BaseType_t status;
-    assert(mutex != NULL && *mutex != NULL);
-    status = xSemaphoreTake(*mutex, portMAX_DELAY);
-    assert(status == pdTRUE); // should always be obtained, because we have support for vTaskSuspend
-}
-
-// returns true if taken, false if not available
-static inline bool mutex_lock_try(mutex_t *mutex) {
-    assert(mutex != NULL && *mutex != NULL);
-    return xSemaphoreTake(*mutex, 0) == pdTRUE;
-}
-
-static inline void mutex_unlock(mutex_t *mutex) {
-    BaseType_t status;
-    assert(mutex != NULL && *mutex != NULL);
-    status = xSemaphoreGive(*mutex);
-    assert(status == pdTRUE); // should always be released, because we should have acquired it earlier
-}
 
 static inline void critical_init(critical_t *c) {
     (void) c;
