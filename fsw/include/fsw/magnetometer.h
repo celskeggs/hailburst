@@ -5,10 +5,11 @@
 
 #include <hal/thread.h>
 #include <fsw/fakewire/rmap.h>
+#include <fsw/fakewire/switch.h>
 #include <fsw/tlm.h>
 
 typedef struct {
-    rmap_context_t rctx;
+    rmap_t      endpoint;
     rmap_addr_t address;
 
     // synchronization
@@ -26,7 +27,7 @@ typedef struct {
     thread_t telem_thread;
 } magnetometer_t;
 
-void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address);
+void magnetometer_init(magnetometer_t *mag, rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out);
 void magnetometer_set_powered(magnetometer_t *mag, bool powered);
 
 #endif /* FSW_MAGNETOMETER_H */

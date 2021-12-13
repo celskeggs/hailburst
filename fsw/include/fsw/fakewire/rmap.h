@@ -5,10 +5,12 @@
 #include <stdbool.h>
 
 #include <hal/thread.h>
-#include <fsw/fakewire/exchange.h>
+#include <fsw/fakewire/switch.h>
 
-#define RMAP_MAX_PATH (12)
-#define RMAP_MAX_DATA_LEN (0x00FFFFFF)
+enum {
+    RMAP_MAX_PATH = 12,
+    RMAP_MAX_DATA_LEN = 0x00FFFFFF,
+};
 
 typedef struct {
     uint8_t *path_bytes;
@@ -36,52 +38,48 @@ typedef enum {
     RS_OK                  = 0x000,
     RS_REMOTE_ERR_MIN      = 0x001,
     RS_REMOTE_ERR_MAX      = 0x0FF,
-    RS_DATA_TRUNCATED      = 0x100,
-    RS_TRANSACTION_TIMEOUT = 0x101,
-    RS_TRANSMIT_TIMEOUT    = 0x102,
-    RS_TRANSMIT_BLOCKED    = 0x103,
+    RS_TRANSACTION_TIMEOUT = 0x100,
+    RS_TRANSMIT_TIMEOUT    = 0x101,
+    RS_TRANSMIT_BLOCKED    = 0x102,
+    RS_READ_LENGTH_DIFFERS = 0x103,
+    RS_INVALID_ERR         = 0xFFF, // used as a marker for error variables
 } rmap_status_t;
 
-typedef struct rmap_context_st rmap_context_t;
-
 typedef struct {
-    fw_exchange_t exc;
-    chart_t       exc_read_chart;
-    thread_t      monitor_thread;
-    semaphore_t   monitor_wake;
+    semaphore_t wake_rmap;
+    chart_t     tx_chart;
+    chart_t     rx_chart;
 
-    mutex_t         pending_mutex;
-    rmap_context_t *pending_first;
-    uint16_t        next_txn_id;
-} rmap_monitor_t;
+    uint8_t     *body_pointer;
+    bool         lingering_read;
+    uint8_t      current_txn_flags;
+    uint16_t     current_txn_id;
+    rmap_addr_t *current_routing;
+} rmap_t;
 
-typedef struct rmap_context_st {
-    rmap_monitor_t *monitor;
+// a single-user RMAP handler; only one transaction may be in progress at a time.
+// rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
+void rmap_init(rmap_t *rmap, size_t max_read_length, size_t max_write_length, chart_t **rx_out, chart_t **tx_out);
+// returns a pointer into which up to max_write_length bytes can be written.
+rmap_status_t rmap_write_prepare(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                                 uint8_t ext_addr, uint32_t main_addr, uint8_t **ptr_out);
+// performs a prepared write, with the specified data length.
+rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_timestamp_out);
+// performs a complete write
+rmap_status_t rmap_write_exact(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                               uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *input,
+                               uint64_t *ack_timestamp_out);
+// performs a read of up to a certain size, and outputs the actual size and a pointer to the received data.
+// the pointer will be valid until the next call to any rmap function on this context.
+rmap_status_t rmap_read_fetch(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out);
+// performs a read of up to a certain size, and copies the result into the specified buffer
+rmap_status_t rmap_read_exact(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output);
 
-    hole_t writer;
-
-    bool        is_pending;
-    semaphore_t on_complete;
-    uint8_t     txn_flags;
-    void       *read_output;
-    uint32_t    read_max_length;
-    uint32_t    read_actual_length;
-    bool        has_received;
-    uint8_t     received_status;
-    uint64_t    receive_timestamp;
-    uint16_t    pending_txn_id;
-
-    rmap_addr_t    *pending_routing;
-    rmap_context_t *pending_next;
-} rmap_context_t;
-
-int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length);
-void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_write_length);
-// contract with caller: only one thread attempts to read or write using a single rmap_context_t at a time.
-rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
-                         uint8_t ext_addr, uint32_t main_addr, size_t data_length, void *data);
-rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
-                        uint8_t ext_addr, uint32_t main_addr, size_t *data_length, void *data_out);
-uint64_t rmap_get_ack_timestamp_ns(rmap_context_t *context);
+// helper functions for main code (defined in rmap_helpers.c)
+uint8_t rmap_crc8(uint8_t *bytes, size_t len);
+uint8_t rmap_crc8_extend(uint8_t previous, uint8_t *bytes, size_t len);
+void rmap_encode_source_path(uint8_t **out, rmap_path_t *path);
 
 #endif /* FSW_FAKEWIRE_RMAP_H */

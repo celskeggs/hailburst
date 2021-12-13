@@ -15,7 +15,7 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque);
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
 
-static void fakewire_exc_chart_notify_exchange(void *opaque) {
+static void fakewire_exc_notify(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
@@ -24,8 +24,8 @@ static void fakewire_exc_chart_notify_exchange(void *opaque) {
     (void) semaphore_give(&fwe->exchange_wake);
 }
 
-int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart) {
-    assert(fwe != NULL && read_chart != NULL);
+int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart, chart_t *write_chart) {
+    assert(fwe != NULL && read_chart != NULL && write_chart != NULL);
     memset(fwe, 0, sizeof(fw_exchange_t));
 
     fwe->link_opts = link_opts;
@@ -33,19 +33,19 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
     semaphore_init(&fwe->exchange_wake);
 
     fwe->read_chart = read_chart;
-    chart_attach_client(fwe->read_chart, fakewire_exc_chart_notify_exchange, fwe);
+    chart_attach_client(fwe->read_chart, fakewire_exc_notify, fwe);
+    fwe->write_chart = write_chart;
+    chart_attach_server(fwe->write_chart, fakewire_exc_notify, fwe);
 
     chart_init(&fwe->transmit_chart, 1024, 16);
-    chart_attach_client(&fwe->transmit_chart, fakewire_exc_chart_notify_exchange, fwe);
+    chart_attach_client(&fwe->transmit_chart, fakewire_exc_notify, fwe);
     chart_init(&fwe->receive_chart, 1024, 16);
-    chart_attach_server(&fwe->receive_chart, fakewire_exc_chart_notify_exchange, fwe);
-    wall_init(&fwe->write_wall, fakewire_exc_chart_notify_exchange, fwe);
+    chart_attach_server(&fwe->receive_chart, fakewire_exc_notify, fwe);
 
     fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
 
     if (fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart) < 0) {
-        wall_destroy(&fwe->write_wall);
         chart_destroy(&fwe->receive_chart);
         chart_destroy(&fwe->transmit_chart);
         semaphore_destroy(&fwe->exchange_wake);
@@ -55,11 +55,6 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
     thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, RESTARTABLE);
 
     return 0;
-}
-
-void fakewire_exc_attach_writer(fw_exchange_t *fwe, hole_t *hole, size_t hole_size, void (*notify_client)(void *), void *param) {
-    assert(fwe != NULL);
-    hole_init(hole, hole_size, &fwe->write_wall, notify_client, param);
 }
 
 // custom exchange protocol
@@ -113,10 +108,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
     bool send_primary_handshake = false;
 
     struct io_rx_ent *read_entry = NULL;
-
-    const uint8_t *cur_packet_ptr = NULL;
-    size_t         cur_packet_off = 0;
-    size_t         cur_packet_len = 0;
+    struct io_rx_ent *write_entry = NULL;
+    size_t write_offset = 0;
 
     fw_decoded_ent_t rx_ent = {
         .data_out     = NULL,
@@ -178,7 +171,8 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
         for (;;) {
             bool do_reset = false;
 
-            if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING && read_entry->actual_length < io_rx_size(fwe->read_chart)) {
+            if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING
+                    && read_entry->actual_length < io_rx_size(fwe->read_chart)) {
                 assert(read_entry != NULL);
                 rx_ent.data_out     = read_entry->data + read_entry->actual_length;
                 rx_ent.data_max_len = io_rx_size(fwe->read_chart) - read_entry->actual_length;
@@ -432,51 +426,50 @@ static void *fakewire_exc_exchange_loop(void *fwe_opaque) {
 
         do {
             if (txmit_state == FW_TXMIT_IDLE) {
-                assert(cur_packet_ptr == NULL);
-                cur_packet_len = 0;
-                cur_packet_off = 0;
-                cur_packet_ptr = wall_query(&fwe->write_wall, &cur_packet_len);
-                if (cur_packet_ptr != NULL) {
-                    assert(cur_packet_len > 0);
+                assert(write_entry == NULL);
+                write_entry = chart_reply_start(fwe->write_chart);
+                if (write_entry != NULL) {
+                    assert(write_entry->actual_length > 0);
+                    write_offset = 0;
                     txmit_state = FW_TXMIT_HEADER;
                 } else {
-                    // out of write requests
+                    // no more write requests
                     break;
                 }
             }
 
             if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd
                     && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_START_PACKET, 0)) {
-                assert(cur_packet_ptr != NULL && cur_packet_len > 0 && cur_packet_off == 0);
+                assert(write_entry != NULL && write_offset == 0);
 
                 txmit_state = FW_TXMIT_BODY;
                 pkts_sent++;
             }
 
             if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_BODY) {
-                assert(cur_packet_ptr != NULL && cur_packet_off < cur_packet_len);
+                assert(write_entry != NULL && write_offset < write_entry->actual_length);
 
-                size_t actually_written = fakewire_enc_encode_data(&fwe->encoder, cur_packet_ptr + cur_packet_off, cur_packet_len - cur_packet_off);
-                if (actually_written + cur_packet_off == cur_packet_len) {
+                size_t actually_written = fakewire_enc_encode_data(&fwe->encoder, write_entry->data + write_offset,
+                                                                   write_entry->actual_length - write_offset);
+                if (actually_written + write_offset == write_entry->actual_length) {
                     txmit_state = FW_TXMIT_FOOTER;
                 } else {
-                    assert(actually_written < cur_packet_len - cur_packet_off);
-                    cur_packet_off += actually_written;
+                    assert(actually_written < write_entry->actual_length - write_offset);
+                    write_offset += actually_written;
                 }
             }
 
             if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_FOOTER
                     && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_END_PACKET, 0)) {
-                assert(cur_packet_ptr != NULL);
+                assert(write_entry != NULL);
 
                 // respond to writer
-                wall_reply(&fwe->write_wall, cur_packet_ptr);
+                chart_reply_send(fwe->write_chart, 1);
 
                 // reset our state
                 txmit_state = FW_TXMIT_IDLE;
-                cur_packet_ptr = NULL;
-                cur_packet_off = 0;
-                cur_packet_len = 0;
+                write_entry = NULL;
+                write_offset = 0;
             }
 
             // we want to keep trying to transmit until we either a) run out of pending write requests, or b) run out

@@ -1,201 +1,89 @@
-#include <inttypes.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
+#include <fsw/io.h>
 #include <fsw/fakewire/rmap.h>
 
-// #define DEBUGTXN
-
 enum {
+    PROTOCOL_RMAP = 0x01,
+
+    SCRATCH_MARGIN_WRITE = RMAP_MAX_PATH + 4 + RMAP_MAX_PATH + 12 + 1, // for write requests (larger than read)
+    SCRATCH_MARGIN_READ = 12 + 1,                                      // for read replies (larger than write)
+
     // time out transmits after two milliseconsd
     RMAP_TRANSMIT_TIMEOUT_NS = 2 * 1000 * 1000,
     // time out receives after two milliseconds, which is nearly 4x the average time for a transaction.
     RMAP_RECEIVE_TIMEOUT_NS = 2 * 1000 * 1000,
 };
 
-#define SCRATCH_MARGIN_WRITE (RMAP_MAX_PATH + 4 + RMAP_MAX_PATH + 12 + 1)
-#define SCRATCH_MARGIN_READ (12 + 1)  // for read replies
-#define PROTOCOL_RMAP (0x01)
-
-static void *rmap_monitor_loop(void *mon_opaque);
-
-static void rmap_monitor_notify_read_task(void *opaque) {
-    rmap_monitor_t *mon = (rmap_monitor_t *) opaque;
-    assert(mon != NULL);
-
-    // don't worry about failing to give the semaphore... that just means there's already a pending wake!
-    (void) semaphore_give(&mon->monitor_wake);
+static void rmap_notify_wake(void *opaque) {
+    assert(opaque != NULL);
+    rmap_t *rmap = (rmap_t *) opaque;
+    // ignore result because a double-notification is equivalent to a single-notification
+    (void) semaphore_give(&rmap->wake_rmap);
 }
 
-int rmap_init_monitor(rmap_monitor_t *mon, fw_link_options_t link_options, size_t max_read_length) {
+void rmap_init(rmap_t *rmap, size_t max_read_length, size_t max_write_length, chart_t **rx_out, chart_t **tx_out) {
+    assert(rmap != NULL && rx_out != NULL && tx_out != NULL);
     assert(max_read_length <= RMAP_MAX_DATA_LEN);
-
-    mon->next_txn_id = 1;
-    mon->pending_first = NULL;
-
-    mutex_init(&mon->pending_mutex);
-    semaphore_init(&mon->monitor_wake);
-    chart_init(&mon->exc_read_chart, io_rx_pad_size(max_read_length), 4);
-    chart_attach_server(&mon->exc_read_chart, rmap_monitor_notify_read_task, mon);
-
-    if (fakewire_exc_init(&mon->exc, link_options, &mon->exc_read_chart) < 0) {
-        chart_destroy(&mon->exc_read_chart);
-        semaphore_destroy(&mon->monitor_wake);
-        mutex_destroy(&mon->pending_mutex);
-        return -1;
-    }
-
-    thread_create(&mon->monitor_thread, "rmap_monitor", PRIORITY_SERVERS, rmap_monitor_loop, mon, NOT_RESTARTABLE);
-
-    return 0;
-}
-
-static bool rmap_has_txn_in_progress(rmap_monitor_t *mon, uint16_t txn_id) {
-    // assumes pending_mutex is locked
-    if (txn_id == 0) {
-        return true;
-    }
-    for (rmap_context_t *cur = mon->pending_first; cur != NULL; cur = cur->pending_next) {
-        assert(cur->is_pending);
-        assert(cur->monitor == mon);
-        if (cur->pending_txn_id == txn_id) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// assumes pending_mutex is locked; it must not be unlocked until the generated txn_id is installed in the rmap_context_t!
-static uint16_t rmap_next_txn(rmap_monitor_t *mon) {
-    uint16_t txn_id;
-    int cycles = 0;
-    // search for a txn_id not in use
-    while (rmap_has_txn_in_progress(mon, mon->next_txn_id)) {
-        mon->next_txn_id++;
-        // don't loop forever
-        assert(++cycles <= 65536);
-    }
-    // advance so that our next search is likely to complete instantly
-    txn_id = mon->next_txn_id++;
-    return txn_id;
-}
-
-static void rmap_context_notify_write_finished(void *opaque) {
-    rmap_context_t *context = (rmap_context_t *) opaque;
-    assert(context != NULL);
-
-    semaphore_give(&context->on_complete);
-}
-
-void rmap_init_context(rmap_context_t *context, rmap_monitor_t *mon, size_t max_write_length) {
-    assert(context != NULL && mon != NULL);
-    // note: max_write_length CAN be zero, such as in the case of a device like the clock that only reads
     assert(max_write_length <= RMAP_MAX_DATA_LEN);
-    context->monitor = mon;
 
-    fakewire_exc_attach_writer(&mon->exc, &context->writer, max_write_length + SCRATCH_MARGIN_WRITE,
-                               rmap_context_notify_write_finished, context);
+    memset(rmap, 0, sizeof(rmap_t));
 
-    context->is_pending = false;
-    context->pending_next = NULL;
-    context->receive_timestamp = 0;
-    semaphore_init(&context->on_complete);
+    semaphore_init(&rmap->wake_rmap);
+    // 2 packets: so that the switch will let us force the first aside.
+    chart_init(&rmap->tx_chart, io_rx_pad_size(SCRATCH_MARGIN_WRITE + max_write_length), 2);
+    chart_attach_client(&rmap->tx_chart, rmap_notify_wake, rmap);
+    // 4 packets: so that if multiple packets arrive at once, we won't drop them.
+    chart_init(&rmap->rx_chart, io_rx_pad_size(SCRATCH_MARGIN_READ + max_read_length), 2);
+    chart_attach_server(&rmap->rx_chart, rmap_notify_wake, rmap);
+
+    // output pointers to these charts
+    *rx_out = &rmap->rx_chart;
+    *tx_out = &rmap->tx_chart;
 }
 
-static void rmap_encode_source_path(uint8_t **out, rmap_path_t *path) {
-    // if we start with zeros, and aren't just a single zero, this CANNOT be encoded in the RMAP encoding scheme.
-    assert(!(path->num_path_bytes > 1 && path->path_bytes[0] == 0));
-    // output some zeros as padding
-    size_t nzeros = 3 - ((path->num_path_bytes + 3) % 4);
-    // make sure that we don't have too many bytes to fit
-    assert(nzeros + path->num_path_bytes <= RMAP_MAX_PATH);
-    // and then output the last
-    *out += nzeros;
-    memcpy(*out, path->path_bytes, path->num_path_bytes);
-    *out += path->num_path_bytes;
-}
-
-static uint8_t rmapCrcTable[256] = {
-	0x00, 0x91, 0xe3, 0x72, 0x07, 0x96, 0xe4, 0x75,
-	0x0e, 0x9f, 0xed, 0x7c, 0x09, 0x98, 0xea, 0x7b,
-	0x1c, 0x8d, 0xff, 0x6e, 0x1b, 0x8a, 0xf8, 0x69,
-	0x12, 0x83, 0xf1, 0x60, 0x15, 0x84, 0xf6, 0x67,
-	0x38, 0xa9, 0xdb, 0x4a, 0x3f, 0xae, 0xdc, 0x4d,
-	0x36, 0xa7, 0xd5, 0x44, 0x31, 0xa0, 0xd2, 0x43,
-	0x24, 0xb5, 0xc7, 0x56, 0x23, 0xb2, 0xc0, 0x51,
-	0x2a, 0xbb, 0xc9, 0x58, 0x2d, 0xbc, 0xce, 0x5f,
-	0x70, 0xe1, 0x93, 0x02, 0x77, 0xe6, 0x94, 0x05,
-	0x7e, 0xef, 0x9d, 0x0c, 0x79, 0xe8, 0x9a, 0x0b,
-	0x6c, 0xfd, 0x8f, 0x1e, 0x6b, 0xfa, 0x88, 0x19,
-	0x62, 0xf3, 0x81, 0x10, 0x65, 0xf4, 0x86, 0x17,
-	0x48, 0xd9, 0xab, 0x3a, 0x4f, 0xde, 0xac, 0x3d,
-	0x46, 0xd7, 0xa5, 0x34, 0x41, 0xd0, 0xa2, 0x33,
-	0x54, 0xc5, 0xb7, 0x26, 0x53, 0xc2, 0xb0, 0x21,
-	0x5a, 0xcb, 0xb9, 0x28, 0x5d, 0xcc, 0xbe, 0x2f,
-	0xe0, 0x71, 0x03, 0x92, 0xe7, 0x76, 0x04, 0x95,
-	0xee, 0x7f, 0x0d, 0x9c, 0xe9, 0x78, 0x0a, 0x9b,
-	0xfc, 0x6d, 0x1f, 0x8e, 0xfb, 0x6a, 0x18, 0x89,
-	0xf2, 0x63, 0x11, 0x80, 0xf5, 0x64, 0x16, 0x87,
-	0xd8, 0x49, 0x3b, 0xaa, 0xdf, 0x4e, 0x3c, 0xad,
-	0xd6, 0x47, 0x35, 0xa4, 0xd1, 0x40, 0x32, 0xa3,
-	0xc4, 0x55, 0x27, 0xb6, 0xc3, 0x52, 0x20, 0xb1,
-	0xca, 0x5b, 0x29, 0xb8, 0xcd, 0x5c, 0x2e, 0xbf,
-	0x90, 0x01, 0x73, 0xe2, 0x97, 0x06, 0x74, 0xe5,
-	0x9e, 0x0f, 0x7d, 0xec, 0x99, 0x08, 0x7a, 0xeb,
-	0x8c, 0x1d, 0x6f, 0xfe, 0x8b, 0x1a, 0x68, 0xf9,
-	0x82, 0x13, 0x61, 0xf0, 0x85, 0x14, 0x66, 0xf7,
-	0xa8, 0x39, 0x4b, 0xda, 0xaf, 0x3e, 0x4c, 0xdd,
-	0xa6, 0x37, 0x45, 0xd4, 0xa1, 0x30, 0x42, 0xd3,
-	0xb4, 0x25, 0x57, 0xc6, 0xb3, 0x22, 0x50, 0xc1,
-	0xba, 0x2b, 0x59, 0xc8, 0xbd, 0x2c, 0x5e, 0xcf,
-};
-
-static uint8_t rmap_crc8(uint8_t *bytes, size_t len) {
-    uint8_t crc = 0;
-    for (size_t i = 0; i < len; i++) {
-        crc = rmapCrcTable[crc^bytes[i]];
+static void rmap_cancel_active_work(rmap_t *rmap) {
+    assert(rmap != NULL);
+    if (rmap->current_routing != NULL) {
+        debugf(CRITICAL, "RMAP WRITE ABORT: DEST=%u SRC=%u KEY=%u",
+               rmap->current_routing->destination.logical_address, rmap->current_routing->source.logical_address,
+               rmap->current_routing->dest_key);
+        rmap->current_routing = NULL;
     }
-    return crc;
+    if (rmap->lingering_read) {
+        chart_reply_send(&rmap->rx_chart, 1);
+        rmap->lingering_read = false;
+    }
 }
 
-// Returns status code.
-rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
-                         uint8_t ext_addr, uint32_t main_addr, size_t data_length, void *data) {
+rmap_status_t rmap_write_prepare(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                                 uint8_t ext_addr, uint32_t main_addr, uint8_t **ptr_out) {
     // make sure we didn't get any null pointers
-    assert(context != NULL && routing != NULL && data != NULL);
-    // make sure we have enough space to buffer this much data in scratch memory
-    assert(0 < data_length && data_length <= RMAP_MAX_DATA_LEN
-            && data_length + SCRATCH_MARGIN_WRITE <= hole_max_msg_size(&context->writer));
+    assert(rmap != NULL && routing != NULL);
     // make sure flags are valid
     assert(flags == (flags & (RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT)));
 
-#ifdef DEBUGTXN
-    debugf(TRACE, "RMAP WRITE START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x LEN=%zu",
-           routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
-           flags, ext_addr, main_addr, data_length);
-#endif
+    // clear up anything ongoing
+    rmap_cancel_active_work(rmap);
 
-    // get output buffer for our writable pigeon hole
-    uint8_t *out_buffer;
-    uint64_t prev_transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
-    while ((out_buffer = hole_prepare(&context->writer)) == NULL
-                && clock_timestamp_monotonic() < prev_transmit_timeout) {
-        (void) semaphore_take_timed_abs(&context->on_complete, prev_transmit_timeout);
-    }
-    if (out_buffer == NULL) {
-        // should only happen when a previous rmap_write or rmap_read failed to write a packet.
-#ifdef DEBUGTXN
-        debugf(TRACE, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+    debugf(TRACE, "RMAP WRITE START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x",
+           routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
+           flags, ext_addr, main_addr);
+
+    struct io_rx_ent *entry = chart_request_start(&rmap->tx_chart);
+    if (entry == NULL) {
+        // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
+        // first packet if there's a second packet waiting behind it!
+        debugf(CRITICAL, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
                RS_TRANSMIT_BLOCKED);
-#endif
+        *ptr_out = NULL;
         return RS_TRANSMIT_BLOCKED;
     }
-    uint8_t *out = out_buffer;
-    memset(out, 0, hole_max_msg_size(&context->writer));
+    uint8_t *out = entry->data;
+    memset(out, 0, io_rx_size(&rmap->tx_chart));
     // and then start writing output bytes according to the write command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
@@ -214,87 +102,205 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
     rmap_encode_source_path(&out, &routing->source);
     *out++ = routing->source.logical_address;
 
-    // hold lock to protect pending transaction tracking structures
-    mutex_lock(&context->monitor->pending_mutex);
-    // guaranteed by contract with caller that only one thread attempts to read or write using an rmap_context_t at a
-    // time.
-    assert(context->is_pending == false);
-    context->pending_txn_id = rmap_next_txn(context->monitor);
+    rmap->current_txn_flags = txn_flags;
+    rmap->current_txn_id += 1;
+    rmap->current_routing = routing;
 
-    context->is_pending = true;
-    context->txn_flags = txn_flags;
-    context->read_output = NULL;
-    context->read_max_length = 0;
-    context->has_received = false;
-    context->received_status = -1;
-    context->receive_timestamp = 0;
-    context->pending_routing = routing;
-    context->pending_next = context->monitor->pending_first;
-    context->monitor->pending_first = context;
-    mutex_unlock(&context->monitor->pending_mutex);
-
-    *out++ = (context->pending_txn_id >> 8) & 0xFF;
-    *out++ = (context->pending_txn_id >> 0) & 0xFF;
+    *out++ = (rmap->current_txn_id >> 8) & 0xFF;
+    *out++ = (rmap->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
     *out++ = (main_addr >> 8) & 0xFF;
     *out++ = (main_addr >> 0) & 0xFF;
-    assert(((data_length >> 24) & 0xFF) == 0); // should already be guaranteed by previous checks, but just in case
-    *out++ = (data_length >> 16) & 0xFF;
-    *out++ = (data_length >> 8) & 0xFF;
-    *out++ = (data_length >> 0) & 0xFF;
-    // and then compute the header CRC
-    uint8_t header_crc = rmap_crc8(header_region, out - header_region);
-    *out++ = header_crc;
+    // compute the header CRC for everything EXCEPT the final three data bytes
+    uint8_t header_crc_partial = rmap_crc8(header_region, out - header_region);
+    // skip three bytes for the data length; we'll come back and write this later.
+    out += 3;
+    // and now insert the (partial) header CRC
+    *out++ = header_crc_partial;
 
-    // build data body of packet
-    assert((out - out_buffer) + data_length + 1 <= hole_max_msg_size(&context->writer));
-    memcpy(out, data, data_length);
-    out += data_length;
+    // record our current pointer, so that we can finish generating the rest afterwards
+    rmap->body_pointer = out;
+    // and provide the pointer to the caller, so that it can populate the data for this packet.
+    *ptr_out = out;
+    // the transaction hasn't completed, but everything is fine so far.
+    return RS_OK;
+}
 
-    // and data CRC as trailer
-    *out++ = rmap_crc8(data, data_length);
+static bool rmap_transmit_pending(rmap_t *rmap) {
+    assert(rmap != NULL);
+    // once all packets have been forwarded by the virtual switch, avail will equal count
+    return chart_request_avail(&rmap->tx_chart) < chart_note_count(&rmap->tx_chart);
+}
+
+static void rmap_drop_packets(rmap_t *rmap) {
+    chart_index_t packets;
+    while ((packets = chart_reply_avail(&rmap->rx_chart)) > 0) {
+        debugf(CRITICAL, "Dropping %u packets because no request was in progress.", packets);
+        chart_reply_send(&rmap->rx_chart, packets);
+    }
+}
+
+struct write_reply {
+    bool     received;
+    uint8_t  status_byte;
+    uint64_t receive_timestamp;
+};
+
+// returns true if packet is a valid reply, and false otherwise.
+static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, struct write_reply *out) {
+    assert(rmap != NULL && in != NULL && out != NULL);
+    // validate basic parameters of a valid RMAP packet
+    if (count < 8) {
+        debugf(CRITICAL, "Dropped truncated packet (len=%u).", count);
+        return false;
+    }
+    if (in[1] != PROTOCOL_RMAP) {
+        debugf(CRITICAL, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        return false;
+    }
+    // validate that this is the correct type of RMAP packet
+    uint8_t flags = in[2];
+    if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_WRITE)) != (RF_ACKNOWLEDGE | RF_WRITE)) {
+        debugf(CRITICAL, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending write.", count, flags);
+        return false;
+    }
+    // validate header integrity (length, CRC)
+    if (count != 8) {
+        debugf(CRITICAL, "Dropped packet exceeding RMAP write reply length (len=%u).", count);
+        return false;
+    }
+    uint8_t computed_crc = rmap_crc8(in, 7);
+    if (computed_crc != in[7]) {
+        debugf(CRITICAL, "Dropped RMAP write reply with invalid CRC (found=0x%02x, expected=0x%02x).",
+               computed_crc, in[7]);
+        return false;
+    }
+    // verify transaction ID and flags
+    uint16_t txn_id = (in[5] << 8) | in[6];
+    if (txn_id != rmap->current_txn_id) {
+        debugf(CRITICAL, "Dropped RMAP write reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
+               txn_id, rmap->current_txn_id);
+        return false;
+    }
+    if ((flags | RF_COMMAND) != rmap->current_txn_flags) {
+        debugf(CRITICAL, "Dropped RMAP write reply with wrong flags (found=0x%02x, expected=0x%02x).",
+               flags, rmap->current_txn_flags & ~RF_COMMAND);
+        return false;
+    }
+    // make sure routing addresses match
+    rmap_addr_t *routing = rmap->current_routing;
+    assert(routing != NULL);
+    if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
+        debugf(CRITICAL, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
+               in[0], in[4], routing->source.logical_address, routing->destination.logical_address);
+        return false;
+    }
+    out->status_byte = in[3];
+    return true;
+}
+
+// pull all received packets until a valid packet is found. return true if found, false if not.
+static bool rmap_pull_write_reply(rmap_t *rmap, struct write_reply *out) {
+    assert(rmap != NULL && out != NULL);
+
+    struct io_rx_ent *ent;
+    while (!out->received && (ent = chart_reply_start(&rmap->rx_chart)) != NULL) {
+        assert(ent->actual_length <= io_rx_size(&rmap->rx_chart));
+        assert(ent->receive_timestamp > 0);
+
+        if (rmap_validate_write_reply(rmap, ent->data, ent->actual_length, out)) {
+            // packet is a valid write reply
+            out->receive_timestamp = ent->receive_timestamp;
+            out->received = true;
+        }
+
+        chart_reply_send(&rmap->rx_chart, 1);
+    }
+    return out->received;
+}
+
+// perform write, with the specified data length.
+rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_timestamp_out) {
+    assert(rmap != NULL);
+    rmap_addr_t *routing = rmap->current_routing;
+    assert(routing != NULL);
+    assert(rmap->body_pointer != NULL);
+    assert(!rmap->lingering_read);
+    assert(data_length <= io_rx_size(&rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
+
+    struct io_rx_ent *entry = chart_request_start(&rmap->tx_chart);
+    assert(entry != NULL);
+    // make sure the pointer is coherent
+    assert(rmap->body_pointer >= entry->data + 16 && rmap->body_pointer <= entry->data + 16 + RMAP_MAX_PATH * 2);
+    // backfill length field
+    assert((data_length >> 24) == 0); // should already be guaranteed by previous checks, but just in case
+    rmap->body_pointer[-4] = (data_length >> 16) & 0xFF;
+    rmap->body_pointer[-3] = (data_length >> 8) & 0xFF;
+    rmap->body_pointer[-2] = (data_length >> 0) & 0xFF;
+    // add the remaining three bytes to the header CRC
+    rmap->body_pointer[-1] = rmap_crc8_extend(rmap->body_pointer[-1], &rmap->body_pointer[-4], 3);
+    // now add the data CRC as a trailer
+    rmap->body_pointer[data_length] = rmap_crc8(rmap->body_pointer, data_length);
+
+    // compute final length
+    entry->actual_length = &rmap->body_pointer[data_length + 1] - entry->data;
+    assert(entry->actual_length <= io_rx_size(&rmap->tx_chart));
+    // clear receive timestamp, because it doesn't matter for outbound packets
+    entry->receive_timestamp = 0;
+
+    // before we transmit, make sure to get rid of any packets we already have in our receive queue, because those
+    // are necessarily not the correct reply.
+    rmap_drop_packets(rmap);
 
     // now transmit!
-    hole_send(&context->writer, out - out_buffer);
+    chart_request_send(&rmap->tx_chart, 1);
 
-    // wait for transmission to complete
+    struct write_reply write_reply = { .received = false };
+
+    // wait for packet to be forwarded by the virtual switch and disappear from our buffer
     uint64_t transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
-    while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < transmit_timeout) {
-        semaphore_take_timed_abs(&context->on_complete, transmit_timeout);
-
-        assert(context->is_pending == true);
+    while (rmap_transmit_pending(rmap) && clock_timestamp_monotonic() < transmit_timeout) {
+        // make sure we discard any invalid packets we receive, so that our actual packet doesn't get dropped
+        if (rmap_pull_write_reply(rmap, &write_reply)) {
+            // woah! we already have a reply? that's great! just make sure it's actually possible.
+            if (rmap_transmit_pending(rmap)) {
+                // should not physically be possible for us to have received this packet already; it MUST be invalid.
+                debugf(CRITICAL, "Time travel! Packet reply received before request sent!");
+                write_reply.received = false;
+                continue;
+            }
+            // we did get a response! skip the rest of this timeout.
+            break;
+        }
+        semaphore_take_timed_abs(&rmap->wake_rmap, transmit_timeout);
     }
-    // (check for timeout is after we acquire the lock)
-
-    // re-acquire the lock and make sure our state is untouched
-    mutex_lock(&context->monitor->pending_mutex);
-    assert(context->is_pending == true);
 
     // exactly how we determine the final status depends on whether we expect a reply from the remote device.
     rmap_status_t status_out;
 
-    if (hole_peek(&context->writer) != NULL) {
+    uint64_t ack_timestamp = 0;
+
+    if (rmap_transmit_pending(rmap)) {
         // timed out when transmitting request, so don't bother waiting for a reply
-        assert(clock_timestamp_monotonic() > transmit_timeout);
+        assert(clock_timestamp_monotonic() >= transmit_timeout);
         status_out = RS_TRANSMIT_TIMEOUT;
         // TODO: could we proactively invalidate the message now, so that it doesn't get transmitted later?
-    } else if (flags & RF_ACKNOWLEDGE) {
-        // if we need an acknowledgement, then all we've got to do is wait for a reply!
+    } else if (rmap->current_txn_flags & RF_ACKNOWLEDGE) {
+        // if an acknowledgement was requested, then we need to wait for a reply!
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
-        while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
-            mutex_unlock(&context->monitor->pending_mutex);
-            semaphore_take_timed_abs(&context->on_complete, timeout);
-            mutex_lock(&context->monitor->pending_mutex);
-
-            assert(context->is_pending == true);
+        while (clock_timestamp_monotonic() < timeout && !rmap_pull_write_reply(rmap, &write_reply)) {
+            semaphore_take_timed_abs(&rmap->wake_rmap, timeout);
         }
 
-        if (context->has_received == true) {
+        if (rmap_pull_write_reply(rmap, &write_reply)) {
             // got a reply!
-            status_out = context->received_status;
+            status_out = write_reply.status_byte;
+            ack_timestamp = write_reply.receive_timestamp;
+            // drop any remaining packets
+            rmap_drop_packets(rmap);
         } else {
             // timed out!
             assert(clock_timestamp_monotonic() > timeout);
@@ -305,7 +311,7 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
 
         status_out = RS_OK;
 
-        if (context->has_received) {
+        if (rmap_pull_write_reply(rmap, &write_reply)) {
             // this should not happen, unless a packet got corrupted somehow and confused for a valid reply, so report
             // it as an error.
             debugf(CRITICAL, "Impossible RMAP receive; must have gotten a corrupted packet mixed up with a real one.");
@@ -313,65 +319,175 @@ rmap_status_t rmap_write(rmap_context_t *context, rmap_addr_t *routing, rmap_fla
         }
     }
 
-    // and now we can remove our pending entry from the linked list, so that the transaction ID can be reused by others
-    assert(context->is_pending == true);
-    context->is_pending = false;
-    rmap_context_t **entry = &context->monitor->pending_first;
-    while (*entry != context) {
-        assert(*entry != NULL); // context should always be in the linked list somewhere!
-        entry = &(*entry)->pending_next;
-    }
-    *entry = context->pending_next;
-    context->pending_next = NULL;
-    context->pending_txn_id = 0;
-    context->pending_routing = NULL;
-    mutex_unlock(&context->monitor->pending_mutex);
-
-#ifdef DEBUGTXN
     debugf(TRACE, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key, status_out);
-#endif
+
+    rmap->body_pointer = NULL;
+    rmap->current_txn_flags = 0;
+    // don't reset current_txn_id, because it's used to track the next transaction ID to use
+    rmap->current_routing = NULL;
+
+    if (ack_timestamp_out != NULL) {
+        *ack_timestamp_out = ack_timestamp;
+    }
     return status_out;
 }
 
-// Returns status code.
-rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flags_t flags,
-                        uint8_t ext_addr, uint32_t main_addr, size_t *data_length, void *data_out) {
+rmap_status_t rmap_write_exact(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                               uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *input,
+                               uint64_t *ack_timestamp_out) {
+    rmap_status_t status;
+
+    assert(length <= io_rx_size(&rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
+
+    uint8_t *ptr_write = NULL;
+    status = rmap_write_prepare(rmap, routing, flags, ext_addr, main_addr, &ptr_write);
+    if (status != RS_OK) {
+        if (ack_timestamp_out != NULL) {
+            *ack_timestamp_out = 0;
+        }
+        return status;
+    }
+
+    assert(ptr_write != NULL);
+    memcpy(ptr_write, input, length);
+
+    return rmap_write_commit(rmap, length, ack_timestamp_out);
+}
+
+struct read_reply {
+    bool     received;
+    uint8_t  status_byte;
+    uint32_t data_length;
+    uint8_t *data_ptr;
+};
+
+// returns true if packet is a valid reply, and false otherwise.
+static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count, rmap_addr_t *routing,
+                                     struct read_reply *out) {
+    assert(rmap != NULL && in != NULL && routing != NULL && out != NULL);
+    // validate basic parameters of a valid RMAP packet
+    if (count < 8) {
+        debugf(CRITICAL, "Dropped truncated packet (len=%u).", count);
+        return false;
+    }
+    if (in[1] != PROTOCOL_RMAP) {
+        debugf(CRITICAL, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        return false;
+    }
+    // validate that this is the correct type of RMAP packet
+    uint8_t flags = in[2];
+    if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_VERIFY | RF_WRITE)) != RF_ACKNOWLEDGE) {
+        debugf(CRITICAL, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending read.", count, flags);
+        return false;
+    }
+    // validate header integrity (length, CRC)
+    if (count < 13) {
+        debugf(CRITICAL, "Dropped truncated RMAP read reply packet (len=%u).", count);
+        return false;
+    }
+    uint8_t computed_crc = rmap_crc8(in, 11);
+    if (computed_crc != in[11]) {
+        debugf(CRITICAL, "Dropped RMAP read reply with invalid header CRC (found=0x%02x, expected=0x%02x).",
+               computed_crc, in[11]);
+        return false;
+    }
+    if (in[7] != 0) {
+        debugf(CRITICAL, "Dropped invalid RMAP read reply with nonzero reserved byte (%u).", in[7]);
+        return false;
+    }
+    // second, validate full length and data CRC after parsing data length.
+    uint32_t data_length = (in[8] << 16) | (in[9] << 8) | in[10];
+    if (count != 13 + data_length) {
+        debugf(CRITICAL, "Dropped RMAP read reply with mismatched data length field (found=%u, expected=%u).",
+               data_length, count - 13);
+        return false;
+    }
+    uint8_t data_crc = rmap_crc8(&in[12], data_length);
+    if (data_crc != in[count - 1]) {
+        debugf(CRITICAL, "Dropped RMAP read reply with invalid data CRC (found=0x%02x, expected=0x%02x).",
+               data_crc, in[count - 1]);
+        return false;
+    }
+    // verify transaction ID and flags
+    uint16_t txn_id = (in[5] << 8) | in[6];
+    if (txn_id != rmap->current_txn_id) {
+        debugf(CRITICAL, "Dropped RMAP read reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
+               txn_id, rmap->current_txn_id);
+        return false;
+    }
+    if ((flags | RF_COMMAND) != rmap->current_txn_flags) {
+        debugf(CRITICAL, "Dropped RMAP read reply with wrong flags (found=0x%02x, expected=0x%02x).",
+               flags, rmap->current_txn_flags & ~RF_COMMAND);
+        return false;
+    }
+    // make sure routing addresses match
+    if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
+        debugf(CRITICAL, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
+               in[0], in[4], routing->source.logical_address, routing->destination.logical_address);
+        return false;
+    }
+    out->status_byte = in[3];
+    out->data_length = data_length;
+    out->data_ptr = &in[12];
+    return true;
+}
+
+// pulls all readable packets until valid packet is found. returns true if found, false if not.
+static bool rmap_pull_read_reply(rmap_t *rmap, rmap_addr_t *routing, struct read_reply *out) {
+    assert(rmap != NULL && out != NULL);
+
+    if (out->received) {
+        return true;
+    }
+
+    struct io_rx_ent *ent;
+    while ((ent = chart_reply_start(&rmap->rx_chart)) != NULL) {
+        assert(ent->actual_length <= io_rx_size(&rmap->rx_chart));
+        assert(ent->receive_timestamp > 0);
+
+        if (rmap_validate_read_reply(rmap, ent->data, ent->actual_length, routing, out)) {
+            // packet is a valid read reply
+            out->received = true;
+            return true;
+        }
+
+        chart_reply_send(&rmap->rx_chart, 1);
+    }
+    return false;
+}
+
+rmap_status_t rmap_read_fetch(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out) {
     // make sure we didn't get any null pointers
-    assert(context != NULL && routing != NULL && data_length != NULL && data_out != NULL);
-    // make sure the monitor has enough space to buffer this much data in scratch memory when receiving
-    uint32_t max_data_length = *data_length;
-    assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN
-            && max_data_length + SCRATCH_MARGIN_READ <= io_rx_size(&context->monitor->exc_read_chart));
+    assert(rmap != NULL && routing != NULL && ptr_out != NULL && length != NULL);
     // make sure flags are valid
     assert(flags == (flags & RF_INCREMENT));
+    // make sure that the receive chart has enough space to buffer this much data in scratch memory when receiving
+    uint32_t max_data_length = *length;
+    assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN);
+    assert(max_data_length + SCRATCH_MARGIN_READ <= io_rx_size(&rmap->rx_chart));
 
-#ifdef DEBUGTXN
-    debugf(TRACE, "RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x MAXLEN=%zu",
+    // clear up anything ongoing
+    rmap_cancel_active_work(rmap);
+
+    debugf(TRACE, "RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x REQLEN=%zu",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
-           flags, ext_addr, main_addr, *data_length);
-#endif
+           flags, ext_addr, main_addr, max_data_length);
 
-    // get output buffer for our writable pigeon hole
-    uint8_t *out_buffer = NULL;
-    uint64_t prev_transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
-    while ((out_buffer = hole_prepare(&context->writer)) == NULL
-                && clock_timestamp_monotonic() < prev_transmit_timeout) {
-        (void) semaphore_take_timed_abs(&context->on_complete, prev_transmit_timeout);
-    }
-    if (out_buffer == NULL) {
-        // should only happen when a previous rmap_write or rmap_read failed to write a packet.
-        *data_length = 0;
-#ifdef DEBUGTXN
-        debugf(TRACE, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
+    struct io_rx_ent *entry = chart_request_start(&rmap->tx_chart);
+    if (entry == NULL) {
+        // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
+        // first packet if there's a second packet waiting behind it!
+        debugf(CRITICAL, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
-               *data_length, RS_TRANSMIT_BLOCKED);
-#endif
+               RS_TRANSMIT_BLOCKED);
+        *length = 0;
+        *ptr_out = NULL;
         return RS_TRANSMIT_BLOCKED;
     }
-    uint8_t *out = out_buffer;
-    memset(out, 0, hole_max_msg_size(&context->writer));
-
+    uint8_t *out = entry->data;
+    memset(out, 0, io_rx_size(&rmap->tx_chart));
     // now start writing output bytes according to the read command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
@@ -390,26 +506,11 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     rmap_encode_source_path(&out, &routing->source);
     *out++ = routing->source.logical_address;
 
-    // hold lock to protect pending transaction tracking structures
-    mutex_lock(&context->monitor->pending_mutex);
-    // guaranteed by contract with caller that only one thread attempts to read or write using an rmap_context_t at a
-    // time.
-    assert(context->is_pending == false);
-    context->pending_txn_id = rmap_next_txn(context->monitor);
+    rmap->current_txn_flags = txn_flags;
+    rmap->current_txn_id += 1;
 
-    context->is_pending = true;
-    context->txn_flags = txn_flags;
-    context->read_output = data_out;
-    context->read_max_length = max_data_length;
-    context->read_actual_length = 0xFFFFFFFF; // set invalid value
-    context->has_received = false;
-    context->pending_routing = routing;
-    context->pending_next = context->monitor->pending_first;
-    context->monitor->pending_first = context;
-    mutex_unlock(&context->monitor->pending_mutex);
-
-    *out++ = (context->pending_txn_id >> 8) & 0xFF;
-    *out++ = (context->pending_txn_id >> 0) & 0xFF;
+    *out++ = (rmap->current_txn_id >> 8) & 0xFF;
+    *out++ = (rmap->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
@@ -423,211 +524,95 @@ rmap_status_t rmap_read(rmap_context_t *context, rmap_addr_t *routing, rmap_flag
     uint8_t header_crc = rmap_crc8(header_region, out - header_region);
     *out++ = header_crc;
 
+    // compute final length
+    entry->actual_length = out - entry->data;
+    // clear receive timestamp, because it doesn't matter for outbound packets
+    entry->receive_timestamp = 0;
+
+    // before we transmit, make sure to get rid of any packets we already have in our receive queue, because those
+    // are necessarily not the correct reply.
+    rmap_drop_packets(rmap);
+
     // now transmit!
-    hole_send(&context->writer, out - out_buffer);
+    chart_request_send(&rmap->tx_chart, 1);
 
-    // wait for transmission to complete
+    struct read_reply read_reply = { .received = false };
+
+    // wait for packet to be forwarded by the virtual switch and disappear from our buffer
     uint64_t transmit_timeout = clock_timestamp_monotonic() + RMAP_TRANSMIT_TIMEOUT_NS;
-    while (hole_peek(&context->writer) != NULL && clock_timestamp_monotonic() < transmit_timeout) {
-        semaphore_take_timed_abs(&context->on_complete, transmit_timeout);
-
-        assert(context->is_pending == true);
+    while (rmap_transmit_pending(rmap) && clock_timestamp_monotonic() < transmit_timeout) {
+        // make sure we discard any invalid packets we receive, so that our actual packet doesn't get dropped
+        if (rmap_pull_read_reply(rmap, routing, &read_reply)) {
+            // woah! we already have a reply? that's great! just make sure it's actually possible.
+            if (rmap_transmit_pending(rmap)) {
+                // should not physically be possible for us to have received this packet already; it MUST be invalid.
+                debugf(CRITICAL, "Time travel! Packet reply received before request sent!");
+                read_reply.received = false;
+                continue;
+            }
+            // we did get a response! skip the rest of this timeout.
+            break;
+        }
+        semaphore_take_timed_abs(&rmap->wake_rmap, transmit_timeout);
     }
-    // (check for timeout is after we acquire the lock)
-
-    // re-acquire the lock and make sure our state is untouched
-    mutex_lock(&context->monitor->pending_mutex);
-    assert(context->is_pending == true);
 
     rmap_status_t status_out;
 
-    if (hole_peek(&context->writer) != NULL) {
-        // did not manage to transmit request
+    if (rmap_transmit_pending(rmap)) {
+        // timed out when transmitting request, so don't bother waiting for a reply
         assert(clock_timestamp_monotonic() > transmit_timeout);
         status_out = RS_TRANSMIT_TIMEOUT;
-        *data_length = 0;
+        *length = 0;
+        *ptr_out = NULL;
         // TODO: could we proactively invalidate the message now, so that it doesn't get transmitted later?
     } else {
         // next: wait for a reply!
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
-        while (context->has_received == false && clock_timestamp_monotonic() < timeout) {
-            mutex_unlock(&context->monitor->pending_mutex);
-            semaphore_take_timed_abs(&context->on_complete, timeout);
-            mutex_lock(&context->monitor->pending_mutex);
-
-            assert(context->is_pending == true);
+        while (clock_timestamp_monotonic() < timeout && !rmap_pull_read_reply(rmap, routing, &read_reply)) {
+            semaphore_take_timed_abs(&rmap->wake_rmap, timeout);
         }
 
-        if (context->has_received == true) {
+        if (rmap_pull_read_reply(rmap, routing, &read_reply)) {
             // got a reply!
-            status_out = context->received_status;
-            assert(context->read_actual_length <= RMAP_MAX_DATA_LEN);
-            if (context->read_actual_length > max_data_length) {
-                if (status_out == RS_OK) {
-                    status_out = RS_DATA_TRUNCATED;
-                }
-                *data_length = max_data_length;
-            } else {
-                *data_length = context->read_actual_length;
+            status_out = read_reply.status_byte;
+            // length already validated
+            *length = read_reply.data_length;
+            *ptr_out = read_reply.data_ptr;
+            // if the length doesn't match the expected length, signal an error (but still return the pointer)
+            if (read_reply.data_length != max_data_length && status_out == RS_OK) {
+                status_out = RS_READ_LENGTH_DIFFERS;
             }
+            // delay consuming packet until data is used
+            assert(!rmap->lingering_read);
+            rmap->lingering_read = true;
         } else {
-            // timed out
+            // timed out!
             assert(clock_timestamp_monotonic() > timeout);
             status_out = RS_TRANSACTION_TIMEOUT;
-            *data_length = 0;
+            *length = 0;
+            *ptr_out = NULL;
         }
     }
 
-    // and now we can remove our pending entry from the linked list, so that the transaction ID can be reused by others
-    assert(context->is_pending == true);
-    context->is_pending = false;
-    rmap_context_t **entry = &context->monitor->pending_first;
-    while (*entry != context) {
-        assert(*entry != NULL); // context should always be in the linked list somewhere!
-        entry = &(*entry)->pending_next;
-    }
-    *entry = context->pending_next;
-    context->pending_next = NULL;
-    context->read_output = NULL;
-    context->pending_routing = NULL;
-    context->pending_txn_id = 0;
-    mutex_unlock(&context->monitor->pending_mutex);
-
-#ifdef DEBUGTXN
     debugf(TRACE, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
-           *data_length, status_out);
-#endif
+           *length, status_out);
+
     return status_out;
 }
 
-uint64_t rmap_get_ack_timestamp_ns(rmap_context_t *context) {
-    assert(context->receive_timestamp != 0);
-    return context->receive_timestamp;
-}
-
-static rmap_context_t *rmap_look_up_txn(rmap_monitor_t *mon, uint16_t txn_id) {
-    // assumes that mon->pending_mutex is held
-    assert(mon != NULL);
-    if (txn_id == 0) {
-        return NULL;
+rmap_status_t rmap_read_exact(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t flags,
+                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output) {
+    assert(output != NULL);
+    rmap_status_t status;
+    size_t actual_length = length;
+    uint8_t *read_ptr = NULL;
+    status = rmap_read_fetch(rmap, routing, flags, ext_addr, main_addr, &actual_length, &read_ptr);
+    if (status != RS_OK) {
+        return status;
     }
-    for (rmap_context_t *ctx = mon->pending_first; ctx != NULL; ctx = ctx->pending_next) {
-        assert(ctx->is_pending == true);
-        if (ctx->pending_txn_id == txn_id) {
-            return ctx;
-        }
-    }
-    return NULL;
-}
-
-static bool rmap_recv_handle(rmap_monitor_t *mon, uint8_t *in, size_t count, uint64_t receive_timestamp) {
-    if (count < 8 || in[1] != PROTOCOL_RMAP) {
-        return false;
-    }
-    uint8_t flags = in[2];
-    if (flags & RF_WRITE) {
-        // write reply
- 
-        // first, check length, CRC, and flags
-        if (count != 8 || rmap_crc8(in, 7) != in[7] ||
-                RF_ACKNOWLEDGE != (flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE))) {
-            return false;
-        }
-
-        // now, search for corresponding transaction
-        uint16_t txn_id = (in[5] << 8) | in[6];
-        mutex_lock(&mon->pending_mutex);
-        rmap_context_t *ctx = rmap_look_up_txn(mon, txn_id);
-        // now check that we found a matching context
-        if (ctx == NULL || ctx->txn_flags != (flags | RF_COMMAND) || ctx->has_received) {
-            mutex_unlock(&mon->pending_mutex);
-            return false;
-        }
-        assert(ctx->read_output == NULL);
-        // check that routing addresses match
-        rmap_addr_t *routing = ctx->pending_routing;
-        assert(routing != NULL);
-        if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
-            mutex_unlock(&mon->pending_mutex);
-            return false;
-        }
-        ctx->has_received = true;
-        ctx->received_status = in[3];
-        ctx->receive_timestamp = receive_timestamp;
-        mutex_unlock(&mon->pending_mutex);
-        semaphore_give(&ctx->on_complete);
-        return true;
-    } else {
-        // read reply
-
-        // first, check length, header CRC, flags, and reserved byte
-        if (count < 13 || rmap_crc8(in, 11) != in[11] || in[7] != 0 ||
-                RF_ACKNOWLEDGE != (flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_VERIFY))) {
-            return false;
-        }
-
-        // second, validate full length and data CRC after parsing data length.
-        uint32_t data_length = (in[8] << 16) | (in[9] << 8) | in[10];
-        if (count != 13 + data_length || rmap_crc8(&in[12], data_length) != in[count - 1]) {
-            return false;
-        }
-
-        // now, search for corresponding transaction
-        uint16_t txn_id = (in[5] << 8) | in[6];
-        mutex_lock(&mon->pending_mutex);
-        rmap_context_t *ctx = rmap_look_up_txn(mon, txn_id);
-        // now check that we found a matching context
-        if (ctx == NULL || ctx->txn_flags != (flags | RF_COMMAND) || ctx->has_received) {
-            mutex_unlock(&mon->pending_mutex);
-            return false;
-        }
-        assert(ctx->read_output != NULL);
-        // check that routing addresses match
-        rmap_addr_t *routing = ctx->pending_routing;
-        assert(routing != NULL);
-        if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
-            mutex_unlock(&mon->pending_mutex);
-            return false;
-        }
-        ctx->has_received = true;
-        ctx->received_status = in[3];
-        ctx->receive_timestamp = receive_timestamp;
-        ctx->read_actual_length = data_length;
-        size_t copy_len = data_length;
-        if (copy_len > ctx->read_max_length) {
-            copy_len = ctx->read_max_length;
-        }
-        memcpy(ctx->read_output, &in[12], copy_len);
-        mutex_unlock(&mon->pending_mutex);
-        semaphore_give(&ctx->on_complete);
-        return true;
-    }
-}
-
-static void *rmap_monitor_loop(void *mon_opaque) {
-    rmap_monitor_t *mon = (rmap_monitor_t *) mon_opaque;
-    assert(mon != NULL);
-
-    while (true) {
-        chart_index_t avail = chart_reply_avail(&mon->exc_read_chart);
-        if (avail == 0) {
-            semaphore_take(&mon->monitor_wake);
-            continue;
-        }
-
-        for (chart_index_t i = 0; i < avail; i++) {
-            struct io_rx_ent *ent = chart_reply_peek(&mon->exc_read_chart, i);
-
-            assert(ent != NULL);
-            assert(ent->actual_length <= io_rx_size(&mon->exc_read_chart));
-            assert(ent->receive_timestamp > 0);
-
-            if (!rmap_recv_handle(mon, ent->data, ent->actual_length, ent->receive_timestamp)) {
-                debugf(CRITICAL, "RMAP packet received was corrupted or unexpected.");
-            }
-        }
-
-        chart_reply_send(&mon->exc_read_chart, avail);
-    }
+    assert(actual_length == length);
+    assert(read_ptr != NULL);
+    memcpy(output, read_ptr, actual_length);
+    return RS_OK;
 }

@@ -8,6 +8,7 @@
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/magnetometer.h>
+#include <fsw/retry.h>
 #include <fsw/tlm.h>
 
 enum {
@@ -36,57 +37,18 @@ enum {
     READING_DELAY_NS = 100 * 1000 * 1000,
 };
 
-static bool magnetometer_is_error_recoverable(rmap_status_t status) {
-    assert(status != RS_OK);
-    switch ((uint32_t) status) {
-    // indicates likely packet corruption; worth retrying in case it works again.
-    case RS_DATA_TRUNCATED:
-        return true;
-    case RS_TRANSACTION_TIMEOUT:
-        return true;
-    case MAG_RS_CORRUPT_DATA:
-        return true;
-    // indicates link loss; worth retrying in case it gets re-established.
-    case RS_TRANSMIT_TIMEOUT:
-        return true;
-    case RS_TRANSMIT_BLOCKED:
-        return true;
-    // indicates programming error or program code corruption; not worth retrying. we want these to be surfaced.
-    case MAG_RS_NOT_ALIGNED:
-        return false;
-    case MAG_RS_INVALID_ADDR:
-        return false;
-    case MAG_RS_INVALID_VALUE:
-        return false;
-    // if not known, assume we can't recover.
-    default:
-        return false;
-    }
-}
-
-static bool magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_t value) {
+static bool magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_t value, uint64_t *ack_timestamp_out) {
     rmap_status_t status;
     value = htobe16(value);
-    int retries = TRANSACTION_RETRIES;
 
-retry:
-    status = rmap_write(&mag->rctx, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT, 0x00, reg, 2, &value);
-    if (status != RS_OK) {
-        if (!magnetometer_is_error_recoverable(status)) {
-            debugf(CRITICAL, "Magnetometer: encountered unrecoverable error while setting register %u: 0x%03x",
-                   reg, status);
-            return false;
-        } else if (retries > 0) {
-            debugf(CRITICAL, "Magnetometer: retrying register %u set after recoverable error: 0x%03x", reg, status);
-            retries -= 1;
-            goto retry;
-        } else {
-            debugf(CRITICAL, "Magnetometer: after %d retries, erroring out during register %u set: 0x%03x",
-                   TRANSACTION_RETRIES, reg, status);
-            return false;
+    RETRY(TRANSACTION_RETRIES, "magnetometer register %u=%u set, error=0x%03x", reg, value, status) {
+        status = rmap_write_exact(&mag->endpoint, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
+                                  0x00, reg, 2, (uint8_t *) &value, ack_timestamp_out);
+        if (status == RS_OK) {
+            return true;
         }
     }
-    return true;
+    return false;
 }
 
 static void sleep_until(uint64_t target_time) {
@@ -97,12 +59,13 @@ static void sleep_until(uint64_t target_time) {
 }
 
 static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *reading_out) {
+    uint64_t reading_time = 0;
     // trigger reading
-    if (!magnetometer_set_register(mag, REG_LATCH, LATCH_ON)) {
+    if (!magnetometer_set_register(mag, REG_LATCH, LATCH_ON, &reading_time)) {
         return false;
     }
     if (reading_out != NULL) {
-        reading_out->reading_time = rmap_get_ack_timestamp_ns(&mag->rctx);
+        reading_out->reading_time = reading_time;
     }
 
     usleep(15000);
@@ -114,31 +77,15 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
         static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
 
         uint16_t registers[4];
-        size_t data_length;
-        int retries = TRANSACTION_RETRIES;
-
-retry:
-        data_length = sizeof(registers);
-        status = rmap_read(&mag->rctx, &mag->address, RF_INCREMENT, 0x00, REG_LATCH, &data_length, registers);
-
-        if (status != RS_OK) {
-            if (!magnetometer_is_error_recoverable(status)) {
-                debugf(CRITICAL, "Magnetometer: encountered unrecoverable error while reading registers: 0x%03x",
-                       status);
-                return false;
-            } else if (retries > 0) {
-                debugf(CRITICAL, "Magnetometer: retrying register read after recoverable error: 0x%03x", status);
-                retries -= 1;
-                goto retry;
-            } else {
-                debugf(CRITICAL, "Magnetometer: after %d retries, erroring out during register read: 0x%03x",
-                       TRANSACTION_RETRIES, status);
-                return false;
+        status = RS_INVALID_ERR;
+        RETRY(TRANSACTION_RETRIES, "magnetometer register reading, error=0x%03x", status) {
+            status = rmap_read_exact(&mag->endpoint, &mag->address, RF_INCREMENT,
+                                     0x00, REG_LATCH, sizeof(registers), (uint8_t *) registers);
+            if (status == RS_OK) {
+                break;
             }
         }
-        if (data_length != sizeof(registers)) {
-            debugf(CRITICAL, "Magnetometer: invalid length while reading registers: %zu instead of %zu",
-                   data_length, sizeof(registers));
+        if (status != RS_OK) {
             return false;
         }
 
@@ -176,7 +123,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         debugf(DEBUG, "Turning on magnetometer power...");
 
         // turn on power
-        if (!magnetometer_set_register(mag, REG_POWER, POWER_ON)) {
+        if (!magnetometer_set_register(mag, REG_POWER, POWER_ON, NULL)) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
@@ -214,7 +161,7 @@ static void *magnetometer_mainloop(void *mag_opaque) {
         }
 
         // turn off power
-        if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF)) {
+        if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF, NULL)) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             return NULL;
         }
@@ -255,8 +202,8 @@ static void magnetometer_drop_notification(void *opaque) {
     // we're only using the chart as a datastructure, so no need for notifications.
 }
 
-void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *address) {
-    assert(mag != NULL && mon != NULL && address != NULL);
+void magnetometer_init(magnetometer_t *mag, rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
+    assert(mag != NULL && address != NULL && rx_out != NULL && tx_out != NULL);
     chart_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
     chart_attach_server(&mag->readings, magnetometer_drop_notification, NULL);
     chart_attach_client(&mag->readings, magnetometer_drop_notification, NULL);
@@ -264,7 +211,7 @@ void magnetometer_init(magnetometer_t *mag, rmap_monitor_t *mon, rmap_addr_t *ad
     tlm_sync_init(&mag->telemetry_sync);
     semaphore_init(&mag->flag_change);
     mag->should_be_powered = false;
-    rmap_init_context(&mag->rctx, mon, 4);
+    rmap_init(&mag->endpoint, 8, 4, rx_out, tx_out);
     memcpy(&mag->address, address, sizeof(rmap_addr_t));
     thread_create(&mag->query_thread, "mag_query_loop", PRIORITY_WORKERS, magnetometer_mainloop, mag, RESTARTABLE);
     thread_create(&mag->telem_thread, "mag_telem_loop", PRIORITY_WORKERS, magnetometer_telemloop, mag, RESTARTABLE);

@@ -89,8 +89,8 @@ static void *exchange_reader(void *opaque) {
 struct writer_config {
     const char *name;
 
-    semaphore_t pigeon_wake;
-    hole_t      pigeon_hole;
+    semaphore_t wake;
+    chart_t     write_chart;
 
     struct packet_chain *chain_in;
     bool pass;
@@ -104,17 +104,18 @@ static void *exchange_writer(void *opaque) {
     struct packet_chain *chain = wc->chain_in;
 
     while (chain) {
-        assert(chain->packet_len <= hole_max_msg_size(&wc->pigeon_hole) - 1);
-        uint8_t *buffer = hole_prepare(&wc->pigeon_hole);
-        assert(buffer != NULL);
+        assert(chain->packet_len <= io_rx_size(&wc->write_chart) - 1);
+        struct io_rx_ent *entry = chart_request_start(&wc->write_chart);
+        assert(entry != NULL);
 
-        buffer[0] = (chain->next != NULL); // whether or not this is the last packet
-        memcpy(&buffer[1], chain->packet_data, chain->packet_len);
+        entry->data[0] = (chain->next != NULL); // whether or not this is the last packet
+        memcpy(&entry->data[1], chain->packet_data, chain->packet_len);
 
         debugf(DEBUG, "[%s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
-        hole_send(&wc->pigeon_hole, chain->packet_len + 1);
-        while (hole_peek(&wc->pigeon_hole) != NULL) {
-            semaphore_take(&wc->pigeon_wake);
+        entry->actual_length = chain->packet_len + 1;
+        chart_request_send(&wc->write_chart, 1);
+        while (chart_request_avail(&wc->write_chart) < chart_note_count(&wc->write_chart)) {
+            semaphore_take(&wc->wake);
         }
         debugf(DEBUG, "[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
@@ -151,7 +152,7 @@ static void exchange_state_notify_writer(void *opaque) {
     struct exchange_state *est = (struct exchange_state *) opaque;
     assert(est != NULL);
 
-    (void) semaphore_give(&est->wc.pigeon_wake);
+    (void) semaphore_give(&est->wc.wake);
 }
 
 static void *exchange_controller(void *opaque) {
@@ -168,6 +169,13 @@ static void *exchange_controller(void *opaque) {
     chart_init(&est->rc.read_chart, io_rx_pad_size(4096), 4);
     chart_attach_server(&est->rc.read_chart, exchange_state_notify_reader, est);
 
+    est->wc.name = ec->name;
+    semaphore_init(&est->wc.wake);
+    chart_init(&est->wc.write_chart, io_rx_pad_size(4096), 4);
+    chart_attach_client(&est->wc.write_chart, exchange_state_notify_writer, est);
+    est->wc.chain_in = ec->chain_in;
+    est->wc.pass = false;
+
     fw_link_options_t options = {
         .label = ec->name,
         .path  = ec->path_buf,
@@ -175,19 +183,13 @@ static void *exchange_controller(void *opaque) {
     };
 
     debugf(INFO, "[%s] initializing exchange...", ec->name);
-    if (fakewire_exc_init(&est->exc, options, &est->rc.read_chart) < 0) {
+    if (fakewire_exc_init(&est->exc, options, &est->rc.read_chart, &est->wc.write_chart) < 0) {
         debugf(CRITICAL, "[%s] could not initialize exchange", ec->name);
         ec->pass = false;
         ec->chain_out = NULL;
         return NULL;
     }
     debugf(DEBUG, "Attached!");
-
-    est->wc.name = ec->name;
-    semaphore_init(&est->wc.pigeon_wake);
-    fakewire_exc_attach_writer(&est->exc, &est->wc.pigeon_hole, 4096, exchange_state_notify_writer, est);
-    est->wc.chain_in = ec->chain_in;
-    est->wc.pass = false;
 
     pthread_t reader_thread;
     pthread_t writer_thread;

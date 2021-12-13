@@ -25,10 +25,12 @@ const (
 
 	NumPorts = 4
 
-	AddrFCE    = 40
-	AddrRadio  = 41
-	AddrMagnet = 42
-	AddrClock  = 43
+	AddrFCEMin = 32
+	AddrFCEMax = 39
+
+	AddrRadio  = 45
+	AddrMagnet = 46
+	AddrClock  = 47
 
 	KeyRadio  = 101
 	KeyMagnet = 102
@@ -44,9 +46,10 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), 
 
 		// now, build the onboard FakeWire topology
 		ports := router.Router(sim, NumPorts, false, func(address int) (port int, pop bool, drop bool) {
-			switch address {
-			case AddrFCE:
+			if address >= AddrFCEMin && address <= AddrFCEMax {
 				return PortFCE, false, false
+			}
+			switch address {
 			case AddrRadio:
 				return PortRadio, false, false
 			case AddrMagnet:

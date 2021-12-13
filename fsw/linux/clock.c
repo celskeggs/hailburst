@@ -3,18 +3,22 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
 #include <fsw/debug.h>
+#include <fsw/retry.h>
 #include <fsw/tlm.h>
 
 int64_t clock_offset_adj = 0;
 
 typedef struct {
     bool initialized;
-    rmap_context_t context;
+
+    rmap_t       rmap;
     rmap_addr_t *address;
+
     tlm_async_endpoint_t telemetry;
 } clock_device_t;
 
@@ -36,73 +40,32 @@ enum {
 
 static clock_device_t clock_device;
 
-static bool clock_is_error_recoverable(rmap_status_t status) {
-    assert(status != RS_OK);
-    switch ((uint32_t) status) {
-    // indicates likely packet corruption; worth retrying in case it works again.
-    case RS_DATA_TRUNCATED:
-        return true;
-    case RS_TRANSACTION_TIMEOUT:
-        return true;
-    case CLOCK_RS_CORRUPT_DATA:
-        return true;
-    // indicates link loss; worth retrying in case it gets re-established.
-    case RS_TRANSMIT_TIMEOUT:
-        return true;
-    case RS_TRANSMIT_BLOCKED:
-        return true;
-    // indicates programming error or program code corruption; not worth retrying. we want these to be surfaced.
-    case CLOCK_RS_NOT_ALIGNED:
-        return false;
-    case CLOCK_RS_INVALID_ADDR:
-        return false;
-    case CLOCK_RS_INVALID_VALUE:
-        return false;
-    case CLOCK_RS_INVALID_LENGTH:
-        return false;
-    // if not known, assume we can't recover.
-    default:
-        return false;
-    }
-}
-
 static bool clock_read_register(uint32_t reg, void *output, size_t len) {
     assert(clock_device.initialized == true);
     rmap_status_t status;
-    size_t read_len;
-    int retries = TRANSACTION_RETRIES;
 
-retry:
-    read_len = len;
-    status = rmap_read(&clock_device.context, clock_device.address, RF_INCREMENT, 0x00, reg, &read_len, output);
-    if (status != RS_OK) {
-        if (!clock_is_error_recoverable(status)) {
-            debugf(CRITICAL, "Clock: encountered unrecoverable error while reading register %u: 0x%03x", reg, status);
-            return false;
-        } else if (retries > 0) {
-            debugf(CRITICAL, "Clock: retrying register %u read after recoverable error: 0x%03x", reg, status);
-            retries -= 1;
-            goto retry;
-        } else {
-            debugf(CRITICAL, "Clock: after %d retries, erroring out during register %u read: 0x%03x",
-                   TRANSACTION_RETRIES, reg, status);
-            return false;
+    RETRY(TRANSACTION_RETRIES, "clock register %u read, error=0x%03x", reg, status) {
+        status = rmap_read_exact(&clock_device.rmap, clock_device.address, RF_INCREMENT, 0x00, reg, len, output);
+        if (status == RS_OK) {
+            return true;
         }
     }
-    assert(status == RS_OK);
-    assert(read_len == len);
-    return true;
+    return false;
 }
 
-void clock_init(rmap_monitor_t *mon, rmap_addr_t *address) {
-    assert(mon != NULL && address != NULL);
+void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
+    assert(address != NULL && rx_out != NULL && tx_out != NULL);
     assert(!clock_device.initialized);
     clock_device.initialized = true;
 
     tlm_async_init(&clock_device.telemetry);
 
-    rmap_init_context(&clock_device.context, mon, 0);
+    rmap_init(&clock_device.rmap, sizeof(uint64_t), 0, rx_out, tx_out);
     clock_device.address = address;
+}
+
+void clock_start(void) {
+    assert(clock_device.initialized);
 
     // validate that this is actually a clock
     uint32_t magic_num = 0;
