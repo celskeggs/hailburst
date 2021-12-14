@@ -51,8 +51,6 @@ typedef struct {
     size_t   write_idx;
 } stream_t;
 
-typedef mutex_t critical_t; // no such thing as a FreeRTOS critical section here, so fall back to mutexes
-
 static inline void thread_check(int fail, const char *note) {
     if (fail != 0) {
         fprintf(stderr, "thread error: %d in %s\n", fail, note);
@@ -84,11 +82,6 @@ static inline void thread_cancel_impl(thread_t thread, const char *nt) {
 #define mutex_lock(x)     THREAD_CHECK(pthread_mutex_lock(x))
 #define mutex_lock_try(x) THREAD_CHECK_OK(pthread_mutex_trylock(x), EBUSY)
 #define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
-
-#define critical_init(c)    mutex_init(c)
-#define critical_destroy(c) mutex_destroy(c)
-#define critical_enter(c)   mutex_lock(c)
-#define critical_exit(c)    mutex_unlock(c)
 
 // name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
 extern void thread_create_internal(thread_t *out, void (*start_routine)(void*), void *arg);

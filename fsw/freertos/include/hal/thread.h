@@ -37,28 +37,8 @@ typedef struct thread_st {
 typedef SemaphoreHandle_t semaphore_t;
 typedef StreamBufferHandle_t stream_t;
 
-typedef int critical_t; // we use a FreeRTOS critical section
-
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
                           void (*start_routine)(void*), void *arg, restartable_t restartable);
-
-static inline void critical_init(critical_t *c) {
-    (void) c;
-}
-
-static inline void critical_destroy(critical_t *c) {
-    (void) c;
-}
-
-static inline void critical_enter(critical_t *c) {
-    (void) c;
-    taskENTER_CRITICAL();
-}
-
-static inline void critical_exit(critical_t *c) {
-    (void) c;
-    taskEXIT_CRITICAL();
-}
 
 // semaphores are created empty, such that an initial take will block
 extern void semaphore_init(semaphore_t *sema);
