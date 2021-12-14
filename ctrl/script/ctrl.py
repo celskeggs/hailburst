@@ -165,6 +165,14 @@ class CSVWriter:
         self.flushable.flush()
         print("Writing log of injections to", pathname)
 
+    def write_other(self): # used for register and restart injection
+        if self.writer is None:
+            # not recording
+            return
+        self.injection_num += 1
+        self.writer.writerow([str(self.injection_num), str(now()), "", "", ""])
+        self.flushable.flush()
+
     def write(self, address, old_value, new_value):
         if self.writer is None:
             # not recording
@@ -231,6 +239,7 @@ def inject_register_bitflip(register_name):
     bitmask = (1 << bitcount) - 1
     newval = intval ^ (1 << random.randint(0, bitcount - 1))
     gdb.execute("set $%s%s = %d" % (register_name, "." + lookup if lookup else "", newval))
+    global_writer.write_other()
 
     reread = gdb.selected_frame().read_register(register_name)
     rrval = int(reread[lookup] if lookup else reread)
@@ -373,11 +382,13 @@ class ExecutableLayout:
 def inject_instant_restart():
     # this is a UDF instruction
     gdb.execute("set *(unsigned int*)$pc = 0xE7F000F0")
+    global_writer.write_other()
 
 
 def inject_spatial_restart(layout):
     address = layout.random_instruction()
     gdb.execute("set *(unsigned int*)0x%x = 0xE7F000F0" % (address,))
+    global_writer.write_other()
     print("Injected restart at address 0x%08x" % (address,))
 
 
