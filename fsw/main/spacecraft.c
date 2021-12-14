@@ -1,4 +1,3 @@
-#include <hal/platform.h>
 #include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
@@ -89,7 +88,7 @@ static rmap_addr_t clock_routing = {
 static bool initialized = false;
 static spacecraft_t sc;
 
-static void spacecraft_init(void) {
+void spacecraft_init(void) {
     assert(!initialized);
 
     debugf(INFO, "Initializing virtual switch...");
@@ -142,8 +141,6 @@ static void spacecraft_init(void) {
     switch_add_port(&sc.vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
     switch_add_port(&sc.vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
 
-    radio_start(&sc.radio);
-
     debugf(INFO, "Initializing magnetometer...");
     chart_t *mag_rx = NULL, *mag_tx = NULL;
     magnetometer_init(&sc.mag, &magnetometer_routing, &mag_rx, &mag_tx);
@@ -155,22 +152,8 @@ static void spacecraft_init(void) {
     debugf(INFO, "Initializing watchdog...");
     watchdog_init();
 
+    debugf(INFO, "Initializing command loop...");
+    command_init(&sc);
+
     initialized = true;
-}
-
-int main(int argc, char *argv[]) {
-    (void) argc;
-    (void) argv;
-
-    platform_init();
-
-    debugf(CRITICAL, "Initializing...");
-
-    spacecraft_init();
-
-    debugf(INFO, "Entering command main loop");
-
-    cmd_mainloop(&sc);
-
-    return 0;
 }

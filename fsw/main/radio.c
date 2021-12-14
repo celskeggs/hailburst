@@ -13,6 +13,8 @@
 enum {
     RADIO_MAGIC    = 0x7E1ECA11,
     REG_BASE_ADDR  = 0x0000,
+    MEM_BASE_ADDR  = 0x1000,
+    MEM_SIZE       = 0x4000,
 
     // local buffer within radio.c
     UPLINK_BUF_LOCAL_SIZE   = 0x1000,
@@ -60,7 +62,6 @@ typedef enum {
     IO_DOWNLINK_CONTEXT,
 } radio_io_mode_t;
 
-static bool radio_initialize(radio_t *radio, radio_io_mode_t mode);
 static void radio_uplink_loop(void *radio_opaque);
 static void radio_downlink_loop(void *radio_opaque);
 
@@ -83,26 +84,10 @@ void radio_init(radio_t *radio,
     radio->downlink_buf_local = malloc(DOWNLINK_BUF_LOCAL_SIZE);
     assert(radio->downlink_buf_local != NULL);
     radio->bytes_extracted = 0;
-    radio->started = false;
-}
-
-void radio_start(radio_t *radio) {
-    assert(radio != NULL);
-    // make sure structure was initialized
-    assert(radio->up_stream != NULL && radio->down_stream != NULL);
-    // but that threads weren't started
-    assert(!radio->started);
-
-    // arbitrarily use up_ctx for this initial configuration
-    if (!radio_initialize(radio, IO_UPLINK_CONTEXT)) {
-        abortf("Radio: could not identify device settings.");
-    }
 
     // start threads
     thread_create(&radio->up_thread, "radio_up_loop", PRIORITY_WORKERS, radio_uplink_loop, radio, RESTARTABLE);
     thread_create(&radio->down_thread, "radio_down_loop", PRIORITY_WORKERS, radio_downlink_loop, radio, RESTARTABLE);
-
-    radio->started = true;
 }
 
 static rmap_t *radio_rmap(radio_t *radio, radio_io_mode_t mode) {
@@ -125,7 +110,7 @@ static uint8_t *radio_read_memory_fetch(radio_t *radio, radio_io_mode_t mode, ui
         actual_read = length;
         ptr_out = NULL;
         status = rmap_read_fetch(radio_rmap(radio, mode), radio_routing(radio, mode), RF_INCREMENT, 0x00,
-                                 mem_address + radio->mem_access_base, &actual_read, &ptr_out);
+                                 mem_address + MEM_BASE_ADDR, &actual_read, &ptr_out);
         if (status == RS_OK) {
             assert(actual_read == length && ptr_out != NULL);
             return ptr_out;
@@ -141,7 +126,7 @@ static uint8_t *radio_write_memory_prepare(radio_t *radio, radio_io_mode_t mode,
     rmap_status_t status;
     status = rmap_write_prepare(radio_rmap(radio, mode), radio_routing(radio, mode),
                                 RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
-                                0x00, mem_address + radio->mem_access_base, &ptr_out);
+                                0x00, mem_address + MEM_BASE_ADDR, &ptr_out);
     *status_out = status;
     if (status == RS_OK) {
         assert(ptr_out != NULL);
@@ -218,7 +203,7 @@ static bool radio_write_register(radio_t *radio, radio_io_mode_t mode, radio_reg
     return radio_write_registers(radio, mode, reg, reg, &input);
 }
 
-static bool radio_initialize(radio_t *radio, radio_io_mode_t mode) {
+static bool radio_initialize_common(radio_t *radio, radio_io_mode_t mode) {
     uint32_t magic_num;
     if (!radio_read_register(radio, mode, REG_MAGIC, &magic_num)) {
         return false;
@@ -232,37 +217,54 @@ static bool radio_initialize(radio_t *radio, radio_io_mode_t mode) {
             !radio_read_register(radio, mode, REG_MEM_SIZE, &mem_size)) {
         return false;
     }
-    // alignment check is just here as a spot check... could be eliminated if radio config changed to not be aligned
-    if (mem_base % 0x100 != 0 || mem_size % 0x100 != 0 ||
-            mem_base < 0x100 || mem_size < 0x100 ||
-            mem_base > RMAP_MAX_DATA_LEN || mem_size > RMAP_MAX_DATA_LEN) {
-        debugf(CRITICAL, "Radio: memory range base=0x%x, size=0x%x does not satisfy constraints.", mem_base, mem_size);
+    assert(mem_base == MEM_BASE_ADDR && mem_size == MEM_SIZE);
+    return true;
+}
+
+static bool radio_initialize_downlink(radio_t *radio) {
+    if (!radio_initialize_common(radio, IO_DOWNLINK_CONTEXT)) {
         return false;
     }
-    radio->mem_access_base = mem_base;
+
+    radio->tx_region.base = MEM_SIZE / 2;
+    radio->tx_region.size = MEM_SIZE / 2;
+
+    // disable transmission
+    if (!radio_write_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_STATE, TX_STATE_IDLE)) {
+        return false;
+    }
+
+    // clear remaining registers so that we have a known safe state to start from
+    uint32_t zeroes[] = { 0, 0 };
+    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+    if (!radio_write_registers(radio, IO_DOWNLINK_CONTEXT, REG_TX_PTR, REG_TX_LEN, zeroes)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool radio_initialize_uplink(radio_t *radio) {
+    if (!radio_initialize_common(radio, IO_UPLINK_CONTEXT)) {
+        return false;
+    }
 
     radio->rx_halves[0].base = 0;
-    radio->rx_halves[1].base = mem_size / 4;
-    radio->tx_region.base = mem_size / 2;
-
-    radio->rx_halves[0].size = mem_size / 4;
-    radio->rx_halves[1].size = mem_size / 4;
-    radio->tx_region.size = mem_size / 2;
+    radio->rx_halves[0].size = MEM_SIZE / 4;
+    radio->rx_halves[1].base = MEM_SIZE / 4;
+    radio->rx_halves[1].size = MEM_SIZE / 4;
 
     // disable transmission and reception
-    if (!radio_write_register(radio, mode, REG_TX_STATE, TX_STATE_IDLE) ||
-            !radio_write_register(radio, mode, REG_RX_STATE, RX_STATE_IDLE)) {
+    if (!radio_write_register(radio, IO_UPLINK_CONTEXT, REG_RX_STATE, RX_STATE_IDLE)) {
         return false;
     }
 
     // clear remaining registers so that we have a known safe state to start from
     uint32_t zeroes[4] = { 0, 0, 0, 0 };
-    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
     static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
     static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
     static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
-    if (!radio_write_registers(radio, mode, REG_TX_PTR, REG_TX_LEN, zeroes)
-            || !radio_write_registers(radio, mode, REG_RX_PTR, REG_RX_LEN_ALT, zeroes)) {
+    if (!radio_write_registers(radio, IO_UPLINK_CONTEXT, REG_RX_PTR, REG_RX_LEN_ALT, zeroes)) {
         return false;
     }
 
@@ -458,6 +460,13 @@ static ssize_t radio_uplink_service(radio_t *radio) {
 static void radio_uplink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
+
+    // (re)configure uplink side of radio
+    if (!radio_initialize_uplink(radio)) {
+        debugf(CRITICAL, "Radio: could not identify device settings for uplink.");
+        return;
+    }
+
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
@@ -550,6 +559,13 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
 static void radio_downlink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
+
+    // (re)configure downlink side of radio
+    if (!radio_initialize_downlink(radio)) {
+        debugf(CRITICAL, "Radio: could not identify device settings for downlink.");
+        return;
+    }
+
     size_t max_len = radio->tx_region.size;
     if (max_len > DOWNLINK_BUF_LOCAL_SIZE) {
         max_len = DOWNLINK_BUF_LOCAL_SIZE;

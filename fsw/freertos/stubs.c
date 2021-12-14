@@ -10,12 +10,8 @@
 #include <rtos/gic.h>
 #include <rtos/scrubber.h>
 #include <rtos/timer.h>
-#include <hal/platform.h>
 #include <fsw/debug.h>
-
-__attribute__((noreturn)) void _Exit(int status) {
-    abortf("system exit status %d", status);
-}
+#include <fsw/spacecraft.h>
 
 void usleep(unsigned long usec) {
     vTaskDelay(timer_ns_to_ticks(usec * 1000));
@@ -27,16 +23,6 @@ void *malloc(size_t size) {
 
 void free(void *ptr) {
     vPortFree(ptr);
-}
-
-extern int main(int argc, char **argv, char **envp);
-
-static void main_entrypoint(void *opaque) {
-    (void) opaque;
-
-    char *argv[] = {"kernel", NULL};
-    char *envp[] = {NULL};
-    exit(main(1, argv, envp));
 }
 
 void entrypoint(void *kernel_elf_rom) {
@@ -59,16 +45,14 @@ void entrypoint(void *kernel_elf_rom) {
     thread_idle_init();
 #endif
 
-    BaseType_t status = xTaskCreate(main_entrypoint, "main", 1000, NULL, PRIORITY_INIT, NULL);
-    if (status != pdPASS) {
-        abortf("Error: could not create main task.");
-    }
-    vTaskStartScheduler();
-    abortf("Scheduler halted.");
-}
+    // initialize spacecraft tasks
+    debugf(CRITICAL, "Preparing spacecraft for start...");
+    spacecraft_init();
 
-void platform_init(void) {
-    // nothing additional to do on FreeRTOS
+    debugf(CRITICAL, "Activating scheduler to bring spacecraft online.");
+    vTaskStartScheduler();
+
+    abortf("Scheduler halted.");
 }
 
 void trace_task_switch(const char *task_name, unsigned int priority) {

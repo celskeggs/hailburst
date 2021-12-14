@@ -101,9 +101,13 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
 
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "%s", trap_name);
-    TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
-    const char *name = pcTaskGetName(failed_task);
-    debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
+    if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
+        debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
+    } else {
+        TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
+        const char *name = pcTaskGetName(failed_task);
+        debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
+    }
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x CriticalNesting=%u InterruptNesting=%u",
            state->lr, spsr, ulCriticalNesting, ulPortInterruptNesting);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",

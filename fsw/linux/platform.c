@@ -1,13 +1,5 @@
-#include <stdio.h>
-
-#include <hal/platform.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
-
-void platform_init(void) {
-	freopen("/dev/console", "w", stdout);
-	freopen("/dev/console", "w", stderr);
-}
 
 static void *thread_entry_wrapper(void *param) {
     assert(param != NULL);

@@ -6,12 +6,13 @@ import subprocess
 
 def build_common(env):
     env["CPPPATH"] += ["include/"]
+    fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
     return [
         env.Library("main-app", ["fakewire/rmap.c", "fakewire/rmap_helpers.c", "main/command.c", "main/comm.c",
                                  "main/heartbeat.c", "main/magnetometer.c", "main/multichart.c", "main/radio.c",
                                  "main/spacecraft.c", "fakewire/switch.c", "main/telemetry.c"]),
-        env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
-    ]
+        fakewire,
+    ], fakewire
 
 
 # ============================= Linux =============================
@@ -29,16 +30,16 @@ def configure_linux():
         if inherit in os.environ:
             linux_env[inherit] = os.environ[inherit]
 
-    common_libs = build_common(linux_env)
+    common_libs, just_fakewire = build_common(linux_env)
 
     linux_env["CPPPATH"] += ["linux/include/"]
 
     LINUX_SRC = ["linux/debug.c", "linux/fakewire_link.c", "linux/platform.c", "linux/semaphore.c", "linux/stream.c"]
-    linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c"] + common_libs)
+    linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c", "linux/entrypoint.c"] + common_libs)
     linux_env.Default(linux_app)
 
     linux_test = linux_env.Program("fakewire_exc_test", LINUX_SRC +
-                                   ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c"] + common_libs)
+                                   ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c", just_fakewire])
     linux_env.Default(linux_test)
 
     linux_env.Alias("install",
@@ -119,7 +120,7 @@ def configure_freertos():
     FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS-Kernel")
     FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
 
-    common_libs = build_common(rtos_env)
+    common_libs, _ = build_common(rtos_env)
     elf_lib = rtos_env.Library("elf", ["elf/elf.c", "freertos/debug.c"])
 
     rtos_env["CPPPATH"] += [

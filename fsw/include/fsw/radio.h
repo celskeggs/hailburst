@@ -16,7 +16,7 @@ typedef struct {
     rmap_addr_t    address_up;
     rmap_addr_t    address_down;
 
-    uint32_t       mem_access_base;
+    // TODO: eliminate these regions, because they are now computable at compile time
     memregion_t    rx_halves[2];
     memregion_t    tx_region;
     uint32_t       bytes_extracted;
@@ -26,8 +26,6 @@ typedef struct {
     thread_t       down_thread;
     uint8_t       *uplink_buf_local;
     uint8_t       *downlink_buf_local;
-
-    bool           started;
 } radio_t;
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground

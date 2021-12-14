@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "spacecraft.h"
+#include <fsw/spacecraft.h>
 
-void cmd_mainloop(spacecraft_t *sc);
+void command_init(spacecraft_t *sc);
 
 #endif /* FSW_CMD_H */

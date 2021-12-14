@@ -29,4 +29,6 @@ typedef struct {
     comm_enc_t     comm_encoder;
 } spacecraft_t;
 
+void spacecraft_init(void);
+
 #endif /* APP_SPACECRAFT_H */
