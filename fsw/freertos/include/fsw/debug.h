@@ -43,7 +43,18 @@ struct debugf_metadata {
     abort(); \
 } while (0)
 
-#define static_assert _Static_assert
+// restart the current task
+extern void restart_current_task(void) __attribute__((noreturn));
 
+#define restartf(fmt,...) do { \
+    debugf(CRITICAL, "RESTART: " fmt, ## __VA_ARGS__); \
+    restart_current_task(); \
+} while (0)
+#define restart() do { \
+    debugf(CRITICAL, "RESTART"); \
+    restart_current_task(); \
+} while (0)
+
+#define static_assert _Static_assert
 
 #endif /* FSW_FREERTOS_FSW_DEBUG_H */

@@ -29,7 +29,7 @@ static void thread_entrypoint(void *opaque) {
 
     state->start_routine(state->arg);
 
-    abortf("Task main loop unexpectedly returned.");
+    restartf("Task main loop unexpectedly returned.");
 }
 
 static void thread_start_internal(thread_t state) {

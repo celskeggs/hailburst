@@ -46,7 +46,7 @@ static void restart_task_mainloop(void *opaque) {
     }
 }
 
-static __attribute__((noreturn)) void restart_current_task(void) {
+__attribute__((noreturn)) void restart_current_task(void) {
     thread_t current_thread = (void *) xTaskGetApplicationTaskTag(NULL);
 
     if (current_thread != NULL && current_thread->restartable == RESTARTABLE) {
