@@ -134,11 +134,14 @@ static void magnetometer_mainloop(void *mag_opaque) {
         uint64_t reading_time = powered_at + READING_DELAY_NS;
         while (atomic_load_relaxed(mag->should_be_powered)) {
             // wait 100ms and check to confirm we weren't cancelled during that time
+            debugf(TRACE, "Waiting 100ms for next reading (monitoring flag).");
             if (semaphore_take_timed_abs(&mag->flag_change, reading_time)) {
                 // need to recheck state... wake might be spurious.
+                debugf(TRACE, "Woken up; rechecking flag!");
                 continue;
             }
             if (!atomic_load_relaxed(mag->should_be_powered)) {
+                debugf(TRACE, "Woke up normally, but flag still modified!");
                 break;
             }
 
@@ -161,6 +164,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
         }
 
         // turn off power
+        debugf(DEBUG, "Turning off magnetometer power...");
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF, NULL)) {
             debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
             break;
@@ -220,6 +224,7 @@ void magnetometer_init(magnetometer_t *mag, rmap_addr_t *address, chart_t **rx_o
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     assert(mag != NULL);
     if (powered != mag->should_be_powered) {
+        debugf(DEBUG, "Notifying mag_query_loop about new requested power state: %u.", powered);
         atomic_store_relaxed(mag->should_be_powered, powered);
         semaphore_give(&mag->flag_change);
     }
