@@ -7,7 +7,6 @@
 #include <hal/thread.h>
 #include <fsw/comm.h>
 #include <fsw/multichart.h>
-#include <fsw/wall.h>
 
 typedef struct {
     uint64_t reading_time;
@@ -17,8 +16,8 @@ typedef struct {
 } tlm_mag_reading_t;
 
 typedef struct {
-    semaphore_t sync_wake;
-    hole_t      sync_hole;
+    semaphore_t         sync_wake;
+    multichart_client_t sync_client;
 } tlm_sync_endpoint_t;
 
 typedef struct {
