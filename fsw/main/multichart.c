@@ -23,6 +23,7 @@ void multichart_init_server(multichart_server_t *server, size_t note_size,
 void multichart_init_client(multichart_client_t *client, multichart_server_t *server, chart_index_t note_count,
                             void (*notify_client)(void *), void *param) {
     assert(client != NULL && server != NULL && note_count > 0);
+    client->server = server;
     chart_init(&client->chart, server->note_size + sizeof(struct note_header), note_count);
     chart_attach_client(&client->chart, notify_client, param);
     // TODO: is this the best function to attach?
