@@ -6,7 +6,7 @@
 #include <hal/thread.h>
 #include <fsw/fakewire/rmap.h>
 #include <fsw/fakewire/switch.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 typedef struct {
     rmap_t      endpoint;

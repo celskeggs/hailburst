@@ -6,7 +6,7 @@
 #include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 enum {
     TLM_MAX_ASYNC_CLIENT_BUFFERS = 128,

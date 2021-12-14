@@ -9,7 +9,7 @@
 #include <fsw/debug.h>
 #include <fsw/magnetometer.h>
 #include <fsw/retry.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 enum {
     REG_ERRORS = 0,

@@ -2,10 +2,10 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
-#include <fsw/cmd.h>
+#include <fsw/command.h>
 #include <fsw/debug.h>
 #include <fsw/spacecraft.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 enum {
 	PING_CID              = 0x01000001,

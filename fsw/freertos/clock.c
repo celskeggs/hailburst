@@ -1,6 +1,6 @@
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 static tlm_async_endpoint_t telemetry;
 

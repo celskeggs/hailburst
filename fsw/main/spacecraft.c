@@ -2,10 +2,10 @@
 #include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
-#include <fsw/cmd.h>
+#include <fsw/command.h>
 #include <fsw/debug.h>
 #include <fsw/spacecraft.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 enum {
     UPLINK_STREAM_CAPACITY = 0x4000,

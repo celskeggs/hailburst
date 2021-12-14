@@ -9,7 +9,7 @@
 #include <fsw/clock_init.h>
 #include <fsw/debug.h>
 #include <fsw/retry.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 int64_t clock_offset_adj = 0;
 

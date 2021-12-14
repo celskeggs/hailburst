@@ -3,7 +3,7 @@
 #include <hal/watchdog.h>
 #include <fsw/debug.h>
 #include <fsw/heartbeat.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 static void heartbeat_mainloop(void *opaque) {
     assert(opaque != NULL);

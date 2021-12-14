@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #include <hal/thread.h>
-#include <fsw/tlm.h>
+#include <fsw/telemetry.h>
 
 typedef struct {
     tlm_async_endpoint_t telemetry;
