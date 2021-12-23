@@ -394,7 +394,7 @@ def inject_spatial_restart(layout):
 
 @BuildCmd
 def task_restart(args):
-    """Inject a UDF insttaruction to force a task restart."""
+    """Inject a UDF instruction to force a task restart."""
     if args.strip():
         print("usage: task_restart")
         return

@@ -136,9 +136,9 @@ def configure_freertos():
     )
 
     RTOS_SRC = ["freertos/clock.c", "freertos/crash.c", "freertos/entrypoint.s", "freertos/fakewire_link.c",
-                "freertos/gic.c", "freertos/scrubber.c", "freertos/stubs.c", "freertos/timer.c", "freertos/rtos_port.c",
-                "freertos/rtos_tasks.c", "freertos/thread.c", "freertos/virtio.c", "freertos/virtio_console.c",
-                "freertos/watchdog.c"]
+                "freertos/gic.c", "freertos/scrubber_api.c", "freertos/stubs.c", "freertos/timer.c",
+                "freertos/rtos_port.c", "freertos/rtos_tasks.c", "freertos/thread.c", "freertos/virtio.c",
+                "freertos/virtio_console.c", "freertos/watchdog.c"]
     EXTERNAL_SRC = [
         COMPILER_LIBRARY_PATH,
         os.path.join(ZLIB_ROOT, "crc32.c"),
@@ -148,7 +148,17 @@ def configure_freertos():
     EXTERNAL_SRC += [os.path.join(FREERTOS_ROOT, x) for x in
                      ["queue.c", "list.c", "stream_buffer.c", "portable/MemMang/heap_4.c"]]
 
-    rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC, LINKSCRIPT="freertos/link.ld")
+    prog_scrubber = rtos_env.Program("scrubber", ["freertos/scrubber_task.c", elf_lib, COMPILER_LIBRARY_PATH],
+                                     LINKFLAGS=rtos_env["LINKFLAGS"] + ["--relocatable"], LINKSCRIPT="freertos/prog.ld")
+    rtos_env.Depends(prog_scrubber, "freertos/prog.ld")
+
+    scrubber_localized = rtos_env.Command(
+        target='scrubber-localized',
+        source=prog_scrubber,
+        action='$OBJCOPY --wildcard --localize-symbol=* $SOURCE $TARGET',
+    )
+
+    rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC + [scrubber_localized], LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "freertos/link.ld")
     rtos_env.Default(rtos_kernel)
 

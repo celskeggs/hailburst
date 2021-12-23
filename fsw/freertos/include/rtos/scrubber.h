@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-void scrubber_init(void *kernel_elf_rom);
+void scrubber_set_kernel(void *kernel_elf_rom);
 // wait until the next (unstarted) scrubber cycle completes.
 // set is_idle to true iff called from the IDLE task
 void scrubber_cycle_wait(bool is_idle);

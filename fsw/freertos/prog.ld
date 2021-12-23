@@ -1,5 +1,3 @@
-ENTRY (_start)
-
 PHDRS
 {
     text PT_LOAD; /* read-and-execute */
@@ -8,15 +6,11 @@ PHDRS
 
 SECTIONS
 {
-    . = 0x40000000;
+    /* use invalid start location, because this will be relocated later */
+    . = 0x20000000;
     .text : { *(.text*) *(.rodata*) } :text
-    .initpoints : {
-        initpoints_start = .;
-        *(.initpoints);
-        initpoints_end = .;
-    } :text
+    .initpoints : { *(.initpoints) } :text
     .data : { *(.data*) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
-    . = 0xF8000000;
     .debugf_messages (INFO) : { *(.debugf_messages) }
 }

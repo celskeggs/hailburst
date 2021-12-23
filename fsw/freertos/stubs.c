@@ -11,6 +11,7 @@
 #include <rtos/scrubber.h>
 #include <rtos/timer.h>
 #include <fsw/debug.h>
+#include <fsw/init.h>
 #include <fsw/spacecraft.h>
 
 void usleep(unsigned long usec) {
@@ -23,6 +24,18 @@ void *malloc(size_t size) {
 
 void free(void *ptr) {
     vPortFree(ptr);
+}
+
+extern program_init initpoints_start[];
+extern program_init initpoints_end[];
+
+static void call_initpoints(void) {
+    unsigned int num_initpoints = initpoints_end - initpoints_start;
+    debugf(DEBUG, "Calling %u initpoints.", num_initpoints);
+    for (unsigned int i = 0; i < num_initpoints; i++) {
+        initpoints_start[i]();
+    }
+    debugf(DEBUG, "Completed all initpoints calls.");
 }
 
 void entrypoint(void *kernel_elf_rom) {
@@ -38,7 +51,9 @@ void entrypoint(void *kernel_elf_rom) {
     task_restart_init();
 
     // enable scrubber
-    scrubber_init(kernel_elf_rom);
+    scrubber_set_kernel(kernel_elf_rom);
+
+    call_initpoints();
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
     // enable idle task
