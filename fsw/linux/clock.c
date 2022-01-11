@@ -15,6 +15,9 @@ int64_t clock_offset_adj = 0;
 
 typedef struct {
     bool initialized;
+    bool calibrated;
+
+    semaphore_t wake_calibrated;
 
     rmap_t       rmap;
     rmap_addr_t *address;
@@ -56,12 +59,25 @@ static bool clock_read_register(uint32_t reg, void *output, size_t len) {
 void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
     assert(address != NULL && rx_out != NULL && tx_out != NULL);
     assert(!clock_device.initialized);
+
+    semaphore_init(&clock_device.wake_calibrated);
+
     clock_device.initialized = true;
 
     tlm_async_init(&clock_device.telemetry);
 
     rmap_init(&clock_device.rmap, sizeof(uint64_t), 0, rx_out, tx_out);
     clock_device.address = address;
+}
+
+void clock_wait_for_calibration(void) {
+    assert(clock_device.initialized);
+    while (!clock_device.calibrated) {
+        debugf(DEBUG, "Stuck waiting for clock calibration before telemetry can be timestamped.");
+        semaphore_take(&clock_device.wake_calibrated);
+        // wake up anyone else waiting
+        (void) semaphore_give(&clock_device.wake_calibrated);
+    }
 }
 
 static void clock_start_main(void *opaque) {
@@ -89,6 +105,10 @@ static void clock_start_main(void *opaque) {
 
     // now compute the appropriate offset
     clock_offset_adj = ref_time_sampled - local_time_postsampled;
+
+    // notify anyone waiting
+    clock_device.calibrated = true;
+    semaphore_give(&clock_device.wake_calibrated);
 
     // and log our success, which will include a time using our new adjustment
     tlm_clock_calibrated(&clock_device.telemetry, clock_offset_adj);

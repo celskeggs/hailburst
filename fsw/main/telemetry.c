@@ -119,6 +119,8 @@ static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
 static void telemetry_async_send(tlm_async_endpoint_t *tep, tlm_async_t *async) {
     assert(tep != NULL && async != NULL);
 
+    clock_wait_for_calibration();
+
     multichart_request_send(&tep->client, async);
 }
 

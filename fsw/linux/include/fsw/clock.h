@@ -18,4 +18,6 @@ static inline uint64_t clock_timestamp(void) {
     return clock_timestamp_monotonic() + clock_offset_adj;
 }
 
+void clock_wait_for_calibration(void);
+
 #endif /* FSW_LINUX_FSW_CLOCK_H */
