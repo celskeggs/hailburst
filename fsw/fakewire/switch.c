@@ -21,12 +21,12 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
                           chart_t **outbound_out) {
     // make sure we have a destination
     if (entry->actual_length == 0) {
-        debugf(CRITICAL, "Switch port %u: dropping empty packet.", port);
+        debugf(WARNING, "Switch port %u: dropping empty packet.", port);
         return true;
     }
     uint8_t destination = entry->data[0];
     if (destination < SWITCH_PORT_BASE) {
-        debugf(CRITICAL, "Switch port %u: dropping packet (len=%u) to invalid address %u.",
+        debugf(WARNING, "Switch port %u: dropping packet (len=%u) to invalid address %u.",
                port, entry->actual_length, destination);
         return true;
     }
@@ -36,7 +36,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
         assert(destination - SWITCH_ROUTE_BASE < SWITCH_ROUTES);
         uint8_t route = sw->routing_table[destination - SWITCH_ROUTE_BASE];
         if (!(route & SWITCH_ROUTE_FLAG_ENABLED)) {
-            debugf(CRITICAL, "Switch port %u: dropping packet (len=%u) to nonexistent route %u.",
+            debugf(WARNING, "Switch port %u: dropping packet (len=%u) to nonexistent route %u.",
                    port, entry->actual_length, destination);
             return true;
         }
@@ -49,7 +49,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     assert(SWITCH_PORT_BASE <= outport && outport < SWITCH_PORT_BASE + SWITCH_PORTS);
     chart_t *outbound = atomic_load(sw->ports_outbound[outport - SWITCH_PORT_BASE]);
     if (!outbound) {
-        debugf(CRITICAL,
+        debugf(WARNING,
                "Switch port %u: dropping packet (len=%u) to nonexistent port %u (address=%u).",
                port, entry->actual_length, outport, destination);
         return true;
@@ -61,7 +61,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
         // if we have more packets blocked behind this one, we don't want to make them wait for this one to be
         // sendable. so if we can't forward it, and we have more backed up, then drop it.
         if (avail_count > 1) {
-            debugf(CRITICAL, "Switch port %u: dropping packet (len=%u) due to backlogged port %u (address=%u).",
+            debugf(WARNING, "Switch port %u: dropping packet (len=%u) to backlogged port %u (address=%u).",
                    port, entry->actual_length, outport, destination);
             return true;
         }
@@ -80,7 +80,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     }
     if (entry_out->actual_length > io_rx_size(outbound)) {
         // don't passively accept this; it's likely to cause trouble down the line if left like this. so report it.
-        debugf(CRITICAL, "Switch port %u: dropping packet (len=%u) due to truncation (maxlen=%u) by "
+        debugf(WARNING, "Switch port %u: dropping packet (len=%u) due to truncation (maxlen=%u) by "
                "target port %u (address=%u).", port, entry->actual_length, io_rx_size(outbound), outport, destination);
         return true;
     }

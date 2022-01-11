@@ -470,7 +470,7 @@ static void radio_uplink_loop(void *radio_opaque) {
     for (;;) {
         ssize_t grabbed = radio_uplink_service(radio);
         if (grabbed < 0) {
-            debugf(CRITICAL, "Radio: hit error in uplink loop; halting uplink thread.");
+            debugf(WARNING, "Radio: hit error in uplink loop; halting uplink thread.");
             break;
         } else if (grabbed > 0) {
             assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
@@ -576,7 +576,7 @@ static void radio_downlink_loop(void *radio_opaque) {
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {
-            debugf(CRITICAL, "Radio: hit error in downlink loop; halting downlink thread.");
+            debugf(WARNING, "Radio: hit error in downlink loop; halting downlink thread.");
             break;
         }
 

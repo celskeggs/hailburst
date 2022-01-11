@@ -47,7 +47,7 @@ void rmap_init(rmap_t *rmap, size_t max_read_length, size_t max_write_length, ch
 static void rmap_cancel_active_work(rmap_t *rmap) {
     assert(rmap != NULL);
     if (rmap->current_routing != NULL) {
-        debugf(CRITICAL, "RMAP WRITE ABORT: DEST=%u SRC=%u KEY=%u",
+        debugf(WARNING, "RMAP WRITE ABORT: DEST=%u SRC=%u KEY=%u",
                rmap->current_routing->destination.logical_address, rmap->current_routing->source.logical_address,
                rmap->current_routing->dest_key);
         rmap->current_routing = NULL;
@@ -76,7 +76,7 @@ rmap_status_t rmap_write_prepare(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_
     if (entry == NULL) {
         // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
         // first packet if there's a second packet waiting behind it!
-        debugf(CRITICAL, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+        debugf(WARNING, "RMAP WRITE  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
                RS_TRANSMIT_BLOCKED);
         *ptr_out = NULL;
@@ -137,7 +137,7 @@ static bool rmap_transmit_pending(rmap_t *rmap) {
 static void rmap_drop_packets(rmap_t *rmap) {
     chart_index_t packets;
     while ((packets = chart_reply_avail(&rmap->rx_chart)) > 0) {
-        debugf(CRITICAL, "Dropping %u packets because no request was in progress.", packets);
+        debugf(WARNING, "Dropping %u packets because no request was in progress.", packets);
         chart_reply_send(&rmap->rx_chart, packets);
     }
 }
@@ -153,39 +153,39 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, s
     assert(rmap != NULL && in != NULL && out != NULL);
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
-        debugf(CRITICAL, "Dropped truncated packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated packet (len=%u).", count);
         return false;
     }
     if (in[1] != PROTOCOL_RMAP) {
-        debugf(CRITICAL, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        debugf(WARNING, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
         return false;
     }
     // validate that this is the correct type of RMAP packet
     uint8_t flags = in[2];
     if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_WRITE)) != (RF_ACKNOWLEDGE | RF_WRITE)) {
-        debugf(CRITICAL, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending write.", count, flags);
+        debugf(WARNING, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending write.", count, flags);
         return false;
     }
     // validate header integrity (length, CRC)
     if (count != 8) {
-        debugf(CRITICAL, "Dropped packet exceeding RMAP write reply length (len=%u).", count);
+        debugf(WARNING, "Dropped packet exceeding RMAP write reply length (len=%u).", count);
         return false;
     }
     uint8_t computed_crc = rmap_crc8(in, 7);
     if (computed_crc != in[7]) {
-        debugf(CRITICAL, "Dropped RMAP write reply with invalid CRC (found=0x%02x, expected=0x%02x).",
+        debugf(WARNING, "Dropped RMAP write reply with invalid CRC (found=0x%02x, expected=0x%02x).",
                computed_crc, in[7]);
         return false;
     }
     // verify transaction ID and flags
     uint16_t txn_id = (in[5] << 8) | in[6];
     if (txn_id != rmap->current_txn_id) {
-        debugf(CRITICAL, "Dropped RMAP write reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
+        debugf(WARNING, "Dropped RMAP write reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
                txn_id, rmap->current_txn_id);
         return false;
     }
     if ((flags | RF_COMMAND) != rmap->current_txn_flags) {
-        debugf(CRITICAL, "Dropped RMAP write reply with wrong flags (found=0x%02x, expected=0x%02x).",
+        debugf(WARNING, "Dropped RMAP write reply with wrong flags (found=0x%02x, expected=0x%02x).",
                flags, rmap->current_txn_flags & ~RF_COMMAND);
         return false;
     }
@@ -193,7 +193,7 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, s
     rmap_addr_t *routing = rmap->current_routing;
     assert(routing != NULL);
     if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
-        debugf(CRITICAL, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
+        debugf(WARNING, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
                in[0], in[4], routing->source.logical_address, routing->destination.logical_address);
         return false;
     }
@@ -368,62 +368,62 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count, rm
     assert(rmap != NULL && in != NULL && routing != NULL && out != NULL);
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
-        debugf(CRITICAL, "Dropped truncated packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated packet (len=%u).", count);
         return false;
     }
     if (in[1] != PROTOCOL_RMAP) {
-        debugf(CRITICAL, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        debugf(WARNING, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
         return false;
     }
     // validate that this is the correct type of RMAP packet
     uint8_t flags = in[2];
     if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_VERIFY | RF_WRITE)) != RF_ACKNOWLEDGE) {
-        debugf(CRITICAL, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending read.", count, flags);
+        debugf(WARNING, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending read.", count, flags);
         return false;
     }
     // validate header integrity (length, CRC)
     if (count < 13) {
-        debugf(CRITICAL, "Dropped truncated RMAP read reply packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated RMAP read reply packet (len=%u).", count);
         return false;
     }
     uint8_t computed_crc = rmap_crc8(in, 11);
     if (computed_crc != in[11]) {
-        debugf(CRITICAL, "Dropped RMAP read reply with invalid header CRC (found=0x%02x, expected=0x%02x).",
+        debugf(WARNING, "Dropped RMAP read reply with invalid header CRC (found=0x%02x, expected=0x%02x).",
                computed_crc, in[11]);
         return false;
     }
     if (in[7] != 0) {
-        debugf(CRITICAL, "Dropped invalid RMAP read reply with nonzero reserved byte (%u).", in[7]);
+        debugf(WARNING, "Dropped invalid RMAP read reply with nonzero reserved byte (%u).", in[7]);
         return false;
     }
     // second, validate full length and data CRC after parsing data length.
     uint32_t data_length = (in[8] << 16) | (in[9] << 8) | in[10];
     if (count != 13 + data_length) {
-        debugf(CRITICAL, "Dropped RMAP read reply with mismatched data length field (found=%u, expected=%u).",
+        debugf(WARNING, "Dropped RMAP read reply with mismatched data length field (found=%u, expected=%u).",
                data_length, count - 13);
         return false;
     }
     uint8_t data_crc = rmap_crc8(&in[12], data_length);
     if (data_crc != in[count - 1]) {
-        debugf(CRITICAL, "Dropped RMAP read reply with invalid data CRC (found=0x%02x, expected=0x%02x).",
+        debugf(WARNING, "Dropped RMAP read reply with invalid data CRC (found=0x%02x, expected=0x%02x).",
                data_crc, in[count - 1]);
         return false;
     }
     // verify transaction ID and flags
     uint16_t txn_id = (in[5] << 8) | in[6];
     if (txn_id != rmap->current_txn_id) {
-        debugf(CRITICAL, "Dropped RMAP read reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
+        debugf(WARNING, "Dropped RMAP read reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
                txn_id, rmap->current_txn_id);
         return false;
     }
     if ((flags | RF_COMMAND) != rmap->current_txn_flags) {
-        debugf(CRITICAL, "Dropped RMAP read reply with wrong flags (found=0x%02x, expected=0x%02x).",
+        debugf(WARNING, "Dropped RMAP read reply with wrong flags (found=0x%02x, expected=0x%02x).",
                flags, rmap->current_txn_flags & ~RF_COMMAND);
         return false;
     }
     // make sure routing addresses match
     if (in[0] != routing->source.logical_address || in[4] != routing->destination.logical_address) {
-        debugf(CRITICAL, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
+        debugf(WARNING, "Dropped RMAP write reply with invalid addressing (%u <- %u but expected %u <- %u).",
                in[0], in[4], routing->source.logical_address, routing->destination.logical_address);
         return false;
     }
@@ -479,7 +479,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, rmap_addr_t *routing, rmap_flags_t f
     if (entry == NULL) {
         // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
         // first packet if there's a second packet waiting behind it!
-        debugf(CRITICAL, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
+        debugf(WARNING, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u STATUS=%u",
                routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
                RS_TRANSMIT_BLOCKED);
         *length = 0;

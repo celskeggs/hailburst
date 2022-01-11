@@ -20,7 +20,7 @@ void abort(void) {
 
 static __attribute__((noreturn)) void suspend_current_task(void) {
     for (;;) {
-        debugf(CRITICAL, "SUSPENDING TASK.");
+        debugf(WARNING, "SUSPENDING TASK.");
         // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
         // to return all the way back to the interrupted task.
         vTaskSuspend(NULL);
@@ -138,11 +138,11 @@ void task_clear_crash(void) {
 
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
-    debugf(CRITICAL, "TASK %s", trap_name);
+    debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     assert(failed_task != NULL);
     const char *name = pcTaskGetName(failed_task);
-    debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
+    debugf(WARNING, "%s occurred in task '%s'", trap_name, name);
 
 #if ( configOVERRIDE_IDLE_TASK == 0 )
     if (failed_task == xTaskGetIdleTaskHandle()) {

@@ -20,6 +20,8 @@ func LogColorRGB(level LogLevel) color.RGBA {
 	switch level {
 	case LogCritical:
 		return color.RGBA{205, 0, 0, 255}
+	case LogWarning:
+		return color.RGBA{205, 205, 0, 255}
 	case LogInfo:
 		return color.RGBA{205, 0, 205, 255}
 	case LogDebug:
@@ -35,6 +37,8 @@ func LogColor(level LogLevel, msg string) string {
 	switch level {
 	case LogCritical:
 		return "\033[1;31m" + msg + "\033[0m"
+	case LogWarning:
+		return "\033[1;33m" + msg + "\033[0m"
 	case LogInfo:
 		return "\033[1;35m" + msg + "\033[0m"
 	case LogDebug:

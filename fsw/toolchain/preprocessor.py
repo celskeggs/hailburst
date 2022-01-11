@@ -132,7 +132,7 @@ def debugf_core(args, filename, line_num):
     if len(args) < 3:
         raise MacroError("debugf requires at least two arguments")
     loglevel, stable_id_raw, format_raw, args = args[0], args[1], args[2], args[3:]
-    if loglevel.strip() not in ("CRITICAL", "INFO", "DEBUG", "TRACE"):
+    if loglevel.strip() not in ("CRITICAL", "WARNING", "INFO", "DEBUG", "TRACE"):
         raise MacroError("debugf requires a valid log level, not %r" % loglevel)
     stable_id = decode_string(stable_id_raw)
     if not stable_id:

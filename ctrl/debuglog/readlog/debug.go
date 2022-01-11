@@ -20,17 +20,18 @@ type LogLevel int
 const (
 	LogInvalid  LogLevel = 0
 	LogCritical LogLevel = 1
-	LogInfo     LogLevel = 2
-	LogDebug    LogLevel = 3
-	LogTrace    LogLevel = 4
+	LogWarning  LogLevel = 2
+	LogInfo     LogLevel = 3
+	LogDebug    LogLevel = 4
+	LogTrace    LogLevel = 5
 )
 
 func LogLevels() []LogLevel {
-	return []LogLevel{LogCritical, LogInfo, LogDebug, LogTrace}
+	return []LogLevel{LogCritical, LogWarning, LogInfo, LogDebug, LogTrace}
 }
 
 func ParseLogLevel(raw uint32) (LogLevel, error) {
-	if raw >= 1 && raw <= 4 {
+	if raw >= 1 && raw <= 5 {
 		return LogLevel(raw), nil
 	} else {
 		return LogInvalid, fmt.Errorf("invalid log level: %d", raw)
@@ -50,6 +51,8 @@ func (ll LogLevel) String() string {
 	switch ll {
 	case LogCritical:
 		return "CRIT"
+	case LogWarning:
+		return "WARN"
 	case LogInfo:
 		return "INFO"
 	case LogDebug:

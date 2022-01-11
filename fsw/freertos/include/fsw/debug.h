@@ -47,11 +47,11 @@ struct debugf_metadata {
 extern void restart_current_task(void) __attribute__((noreturn));
 
 #define restartf(fmt,...) do { \
-    debugf(CRITICAL, "RESTART: " fmt, ## __VA_ARGS__); \
+    debugf(WARNING, "RESTART: " fmt, ## __VA_ARGS__); \
     restart_current_task(); \
 } while (0)
 #define restart() do { \
-    debugf(CRITICAL, "RESTART"); \
+    debugf(WARNING, "RESTART"); \
     restart_current_task(); \
 } while (0)
 

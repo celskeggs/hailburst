@@ -36,7 +36,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
         for (size_t i = 0; i < filesz; i++) {
             if (scrub_active[i] != scrub_baseline[i]) {
                 if (corrections == 0) {
-                    debugf(CRITICAL, "detected mismatch; beginning corrections");
+                    debugf(WARNING, "detected mismatch; beginning corrections");
                 }
                 scrub_active[i] = scrub_baseline[i];
                 corrections++;
@@ -44,7 +44,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
         }
 
         if (corrections > 0) {
-            debugf(CRITICAL, "summary for current segment: %u bytes corrected", corrections);
+            debugf(WARNING, "summary for current segment: %u bytes corrected", corrections);
         }
     }
 }

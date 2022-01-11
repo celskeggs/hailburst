@@ -105,7 +105,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
 
         usleep(200);
     }
-    debugf(CRITICAL, "Magnetometer: ran out of loop retries while trying to take a reading.");
+    debugf(WARNING, "Magnetometer: ran out of loop retries while trying to take a reading.");
     return false;
 }
 
@@ -124,7 +124,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
 
         // turn on power
         if (!magnetometer_set_register(mag, REG_POWER, POWER_ON, NULL)) {
-            debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
+            debugf(WARNING, "Magnetometer: quitting read loop due to RMAP error.");
             break;
         }
         uint64_t powered_at = clock_timestamp_monotonic();
@@ -149,11 +149,11 @@ static void magnetometer_mainloop(void *mag_opaque) {
             tlm_mag_reading_t *reading = chart_request_start(&mag->readings);
             debugf(DEBUG, "Taking magnetometer reading...");
             if (!magnetometer_take_reading(mag, reading)) {
-                debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
+                debugf(WARNING, "Magnetometer: quitting read loop due to RMAP error.");
                 return;
             }
             if (reading == NULL) {
-                debugf(CRITICAL, "Magnetometer: out of space in queue to write readings.");
+                debugf(WARNING, "Magnetometer: out of space in queue to write readings.");
             } else {
                 chart_request_send(&mag->readings, 1);
             }
@@ -166,7 +166,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
         // turn off power
         debugf(DEBUG, "Turning off magnetometer power...");
         if (!magnetometer_set_register(mag, REG_POWER, POWER_OFF, NULL)) {
-            debugf(CRITICAL, "Magnetometer: quitting read loop due to RMAP error.");
+            debugf(WARNING, "Magnetometer: quitting read loop due to RMAP error.");
             break;
         }
         tlm_mag_pwr_state_changed(&mag->telemetry_async, false);

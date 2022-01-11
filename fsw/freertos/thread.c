@@ -17,7 +17,7 @@ static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
 
     if (state->hit_restart) {
-        debugf(CRITICAL, "Pending restart on next scrubber cycle.");
+        debugf(WARNING, "Pending restart on next scrubber cycle.");
 #if ( configOVERRIDE_IDLE_TASK == 1 )
         scrubber_cycle_wait(state == idle_task_thread);
 #else
@@ -47,7 +47,7 @@ void thread_restart_other_task(thread_t state) {
     assert(state->restartable == RESTARTABLE);
     assert(state->handle != xTaskGetCurrentTaskHandle());
 
-    debugf(CRITICAL, "Restarting task '%s'", state->name);
+    debugf(WARNING, "Restarting task '%s'", state->name);
 
     // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
     // the TaskHandle could refer to undefined memory.
@@ -57,7 +57,7 @@ void thread_restart_other_task(thread_t state) {
     thread_start_internal(state);
     taskEXIT_CRITICAL();
 
-    debugf(CRITICAL, "Completed restart for task '%s'", state->name);
+    debugf(WARNING, "Completed restart for task '%s'", state->name);
 }
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )

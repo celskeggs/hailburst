@@ -61,10 +61,10 @@ void entrypoint(void *kernel_elf_rom) {
 #endif
 
     // initialize spacecraft tasks
-    debugf(CRITICAL, "Preparing spacecraft for start...");
+    debugf(INFO, "Preparing spacecraft for start...");
     spacecraft_init();
 
-    debugf(CRITICAL, "Activating scheduler to bring spacecraft online.");
+    debugf(WARNING, "Activating scheduler to bring spacecraft online.");
     vTaskStartScheduler();
 
     abortf("Scheduler halted.");
