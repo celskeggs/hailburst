@@ -59,7 +59,8 @@ void *chart_request_start(chart_t *chart) {
 // confirm and send one or more requests, which will be in the first notes available.
 void chart_request_send(chart_t *chart, chart_index_t count) {
     assert(chart != NULL);
-    assert(1 <= count && count <= chart_request_avail(chart));
+    chart_index_t avail = chart_request_avail(chart);
+    assertf(1 <= count && count <= avail, "count=%u, avail=%u", count, avail);
     // TODO: can this be relaxed, since it's limited to a single processor?
     atomic_store(chart->request_ptr, chart->request_ptr + count);
 
@@ -73,7 +74,7 @@ chart_index_t chart_request_avail(chart_t *chart) {
     // request leads, reply lags
     uint32_t ahead = (chart->request_ptr - atomic_load(chart->reply_ptr) + 2 * chart->note_count)
                         % (2 * chart->note_count);
-    assert(ahead <= chart->note_count);
+    assertf(ahead <= chart->note_count, "ahead=%u, note_count=%u", ahead, chart->note_count);
     return chart->note_count - ahead;
 }
 
@@ -81,7 +82,8 @@ chart_index_t chart_request_avail(chart_t *chart) {
 // asserts if index is invalid.
 void *chart_request_peek(chart_t *chart, chart_index_t offset) {
     assert(chart != NULL);
-    assert(offset < chart_request_avail(chart));
+    chart_index_t avail = chart_request_avail(chart);
+    assertf(offset < avail, "offset=%u, avail=%u", offset, avail);
     return chart_get_note(chart, (chart->request_ptr + offset) % chart->note_count);
 }
 
@@ -99,7 +101,8 @@ void *chart_reply_start(chart_t *chart) {
 // confirm and send one or more replies, which will be in the first notes available.
 void chart_reply_send(chart_t *chart, chart_index_t count) {
     assert(chart != NULL);
-    assert(1 <= count && count <= chart_reply_avail(chart));
+    chart_index_t avail = chart_reply_avail(chart);
+    assertf(1 <= count && count <= avail, "count=%u, avail=%u", count, avail);
     // TODO: can this be relaxed, since it's limited to a single processor?
     atomic_store(chart->reply_ptr, chart->reply_ptr + count);
 
@@ -113,7 +116,7 @@ chart_index_t chart_reply_avail(chart_t *chart) {
     // request leads, reply lags
     uint32_t ahead = (atomic_load(chart->request_ptr) - chart->reply_ptr + 2 * chart->note_count)
                         % (2 * chart->note_count);
-    assert(ahead <= chart->note_count);
+    assertf(ahead <= chart->note_count, "ahead=%u, note_count=%u", ahead, chart->note_count);
     return ahead;
 }
 
@@ -121,6 +124,7 @@ chart_index_t chart_reply_avail(chart_t *chart) {
 // asserts if index is invalid.
 void *chart_reply_peek(chart_t *chart, chart_index_t offset) {
     assert(chart != NULL);
-    assert(offset < chart_reply_avail(chart));
+    chart_index_t avail = chart_reply_avail(chart);
+    assertf(offset < avail, "offset=%u, avail=%u", offset, avail);
     return chart_get_note(chart, (chart->reply_ptr + offset) % chart->note_count);
 }
