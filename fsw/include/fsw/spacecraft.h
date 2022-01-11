@@ -4,7 +4,6 @@
 #include <fsw/fakewire/exchange.h>
 #include <fsw/fakewire/rmap.h>
 #include <fsw/comm.h>
-#include <fsw/heartbeat.h>
 #include <fsw/magnetometer.h>
 #include <fsw/radio.h>
 
@@ -17,9 +16,6 @@ typedef struct {
     // devices
     radio_t        radio;
     magnetometer_t mag;
-
-    // services
-    heartbeat_t    heart;
 
     // telecomm infrastructure
     stream_t       uplink_stream;

@@ -145,9 +145,6 @@ void spacecraft_init(void) {
     magnetometer_init(&sc.mag, &magnetometer_routing, &mag_rx, &mag_tx);
     switch_add_port(&fce_vswitch, VPORT_MAG, mag_tx, mag_rx);
 
-    debugf(INFO, "Initializing heartbeats...");
-    heartbeat_init(&sc.heart);
-
     debugf(INFO, "Initializing command loop...");
     command_init(&sc);
 
