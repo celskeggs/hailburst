@@ -29,7 +29,7 @@ typedef struct {
 } switch_t;
 
 void switch_mainloop_internal(void *opaque);
-void switch_init_internal(void *opaque);
+void switch_init_internal(switch_t *opaque);
 
 #define SWITCH_REGISTER(v_ident)                       \
     switch_t v_ident = {                               \

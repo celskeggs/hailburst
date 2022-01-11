@@ -37,6 +37,7 @@ typedef struct thread_st {
 typedef SemaphoreHandle_t semaphore_t;
 typedef StreamBufferHandle_t stream_t;
 
+// TODO: make the entrypoint parameter strongly typed like PROGRAM_INIT_PARAM
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
     static_assert(t_priority < configMAX_PRIORITIES, "invalid priority"); \
     __attribute__((section(".tasktable"))) struct thread_st t_ident = {   \

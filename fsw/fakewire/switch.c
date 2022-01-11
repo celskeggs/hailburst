@@ -5,9 +5,8 @@
 #include <fsw/io.h>
 #include <fsw/fakewire/switch.h>
 
-void switch_init_internal(void *opaque) {
-    assert(opaque != NULL);
-    switch_t *sw = (switch_t *) opaque;
+void switch_init_internal(switch_t *sw) {
+    assert(sw != NULL);
 
     semaphore_init(&sw->switching_wake);
 }

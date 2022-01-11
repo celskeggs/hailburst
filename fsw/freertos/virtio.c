@@ -352,8 +352,7 @@ void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t que
 }
 
 // this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
-void virtio_device_init_internal(void *opaque_device) {
-    struct virtio_device *device = (struct virtio_device *) opaque_device;
+void virtio_device_init_internal(struct virtio_device *device) {
     assert(device != NULL && device->initialized == false && device->num_queues == 0 && device->queues == NULL);
     struct virtio_mmio_registers *mmio = device->mmio;
 
@@ -438,8 +437,7 @@ void virtio_device_init_internal(void *opaque_device) {
     device->initialized = true;
 }
 
-void virtio_device_start_internal(void *opaque_device) {
-    struct virtio_device *device = (struct virtio_device *) opaque_device;
+void virtio_device_start_internal(struct virtio_device *device) {
     assert(device != NULL && device->initialized == true && device->monitor_task != NULL);
     // it's okay to run this here, even before the task is necessarily created, because interrupts will not be enabled
     // until the scheduler starts running

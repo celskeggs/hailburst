@@ -77,8 +77,8 @@ struct virtio_console {
     bool confirmed_port_present;
 };
 
-void virtio_device_init_internal(void *opaque_device);
-void virtio_device_start_internal(void *opaque_device);
+void virtio_device_init_internal(struct virtio_device *device);
+void virtio_device_start_internal(struct virtio_device *opaque_device);
 void virtio_monitor_loop(void *opaque_device);
 
 #define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select) \
