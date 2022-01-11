@@ -240,7 +240,7 @@ static void virtio_device_chart_wakeup(void *opaque) {
     assert(result == pdPASS);
 }
 
-bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction,
+void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction,
                                chart_t *chart) {
     assert(device != NULL && chart != NULL);
     assert(direction == QUEUE_INPUT || direction == QUEUE_OUTPUT);
@@ -253,8 +253,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
 
     device->mmio->queue_sel = queue_index;
     if (device->mmio->queue_ready != 0) {
-        debugf(CRITICAL, "VIRTIO device apparently already had virtqueue %d initialized; failing.", queue_index);
-        return false;
+        abortf("VIRTIO device apparently already had virtqueue %d initialized; failing.", queue_index);
     }
     // inconsistency if we hit this: we already checked this condition during discovery!
     assert(device->mmio->queue_num_max != 0);
@@ -264,9 +263,8 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     assert(queue->queue_num > 0);
 
     if (queue->queue_num > device->mmio->queue_num_max) {
-        debugf(CRITICAL, "VIRTIO device supports up to %u entries in a queue buffer, but sticky-chart contained %u.",
+        abortf("VIRTIO device supports up to %u entries in a queue buffer, but sticky-chart contained %u.",
                device->mmio->queue_num_max, queue->queue_num);
-        return false;
     }
 
     device->mmio->queue_num = queue->queue_num;
@@ -296,7 +294,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     } else if (direction == QUEUE_OUTPUT) {
         chart_attach_server(chart, virtio_device_chart_wakeup, device);
     } else {
-        assert(false);
+        abortf("Invalid queue direction: %u", direction);
     }
 
     // configure descriptors to refer to chart memory directly
@@ -311,7 +309,7 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
             data_ptr = &entry->data[0];
             assert(chart_note_size(chart) > sizeof(*entry));
         } else {
-            assert(false);
+            abortf("Invalid queue direction: %u", direction);
         }
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
@@ -336,8 +334,6 @@ bool virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     queue->chart = chart;
 
     debugf(DEBUG, "VIRTIO queue %d now configured", queue_index);
-
-    return true;
 }
 
 void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t queue_index) {
@@ -352,27 +348,8 @@ void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t que
     atomic_store_relaxed(device->mmio->queue_notify, queue_index);
 }
 
-static void virtio_device_teardown_queue(struct virtio_device *device, uint32_t queue_index) {
-    assert(device != NULL);
-    assert(device->initialized == true && device->monitor_task == NULL);
-    assert(device->queues != NULL);
-    assert(queue_index < device->num_queues);
-
-    struct virtio_device_queue *queue = &device->queues[queue_index];
-    if (queue->chart != NULL) {
-        queue->chart = NULL;
-        assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
-        free(queue->desc);
-        free(queue->avail);
-        free(queue->used);
-    } else {
-        assert(queue->desc == NULL && queue->avail == NULL && queue->used == NULL);
-    }
-    memset(queue, 0, sizeof(*queue));
-}
-
 // true on success, false on failure
-bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32_t irq, uint32_t device_id,
+void virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32_t irq, uint32_t device_id,
                         virtio_feature_select_cb feature_select) {
     assert(device != NULL && device->initialized == false);
     struct virtio_mmio_registers *mmio = (struct virtio_mmio_registers *) mem_addr;
@@ -384,25 +361,21 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", mem_addr, irq);
 
     if (le32toh(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
-        debugf(CRITICAL, "VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; failing.",
+        abortf("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; failing.",
                le32toh(mmio->magic_value), VIRTIO_MAGIC_VALUE);
-        return false;
     }
 
     if (le32toh(mmio->version) == VIRTIO_LEGACY_VERSION) {
-        debugf(CRITICAL, "VIRTIO device configured as legacy-only; cannot initialize; failing. "
+        abortf("VIRTIO device configured as legacy-only; cannot initialize; failing. "
                "Set -global virtio-mmio.force-legacy=false to fix this.");
-        return false;
     } else if (le32toh(mmio->version) != VIRTIO_VERSION) {
-        debugf(CRITICAL, "VIRTIO device version not recognized: found %u instead of %u; failing.",
+        abortf("VIRTIO device version not recognized: found %u instead of %u; failing.",
                le32toh(mmio->version), VIRTIO_VERSION);
-        return false;
     }
 
     // make sure this is a serial port
     if (le32toh(mmio->device_id) != device_id) {
-        debugf(CRITICAL, "VIRTIO device ID=%u instead of ID=%u; failing.", le32toh(mmio->device_id), device_id);
-        return false;
+        abortf("VIRTIO device ID=%u instead of ID=%u; failing.", le32toh(mmio->device_id), device_id);
     }
 
     // reset the device
@@ -419,10 +392,7 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     features |= ((uint64_t) htole32(mmio->device_features)) << 32;
 
     // select feature bits
-    if (!feature_select(&features)) {
-        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return false;
-    }
+    feature_select(&features);
 
     // write selected bits back
     mmio->driver_features_sel = htole32(0);
@@ -433,18 +403,14 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     // validate features
     mmio->status |= htole32(VIRTIO_DEVSTAT_FEATURES_OK);
     if (!(le32toh(mmio->status) & VIRTIO_DEVSTAT_FEATURES_OK)) {
-        debugf(CRITICAL, "VIRTIO device did not set FEATURES_OK: read back status=%08x; failing.", mmio->status);
-        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        abortf("VIRTIO device did not set FEATURES_OK: read back status=%08x; failing.", mmio->status);
     }
 
     // discover number of queues
     for (uint32_t queue_i = 0; ; queue_i++) {
         device->mmio->queue_sel = queue_i;
         if (device->mmio->queue_ready != 0) {
-            debugf(CRITICAL, "VIRTIO device already had virtqueue %d initialized; failing.", queue_i);
-            mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-            return false;
+            abortf("VIRTIO device already had virtqueue %d initialized; failing.", queue_i);
         }
         if (device->mmio->queue_num_max == 0) {
             device->num_queues = queue_i;
@@ -453,9 +419,7 @@ bool virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     }
 
     if (device->num_queues == 0) {
-        debugf(CRITICAL, "VIRTIO device discovered to have 0 queues; failing.");
-        mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-        return false;
+        abortf("VIRTIO device discovered to have 0 queues; failing.");
     }
 
     debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->num_queues);
@@ -489,20 +453,4 @@ void virtio_device_start(struct virtio_device *device) {
 void *virtio_device_config_space(struct virtio_device *device) {
     assert(device != NULL && device->initialized && device->config_space != NULL);
     return device->config_space;
-}
-
-void virtio_device_fail(struct virtio_device *device) {
-    // currently, this can only be called before virtio_device_start is called
-    assert(device != NULL && device->initialized);
-    assert(device->monitor_task == NULL);
-    device->mmio->status |= htole32(VIRTIO_DEVSTAT_FAILED);
-    // wait until after we indicate that we've failed before we free any memory, just in case some of it was referenced
-    // by buffers provided to the device.
-    assert(device->queues != NULL);
-    for (uint32_t i = 0; i < device->num_queues; i++) {
-        virtio_device_teardown_queue(device, i);
-    }
-    free(device->queues);
-    // clear everything
-    memset(device, 0, sizeof(*device));
 }

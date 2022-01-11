@@ -75,22 +75,19 @@ struct virtio_console_control {
 };
 static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
 
-static bool virtio_console_feature_select(uint64_t *features) {
+static void virtio_console_feature_select(uint64_t *features) {
     // check feature bits
     if (!(*features & VIRTIO_F_VERSION_1)) {
-        debugf(CRITICAL, "VIRTIO device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016llx). "
+        abortf("VIRTIO console device featureset (0x%016x) does not include VIRTIO_F_VERSION_1 (0x%016llx). "
                "Legacy devices are not supported.", *features, VIRTIO_F_VERSION_1);
-        return false;
     }
     if (!(*features & VIRTIO_CONSOLE_F_MULTIPORT)) {
-        debugf(CRITICAL, "VIRTIO device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016llx). "
+        abortf("VIRTIO console device featureset (0x%016x) does not include VIRTIO_CONSOLE_F_MULTIPORT (0x%016llx). "
                "This configuration is not yet supported.", *features, VIRTIO_CONSOLE_F_MULTIPORT);
-        return false;
     }
 
     // select just those two features
     *features = VIRTIO_F_VERSION_1 | VIRTIO_CONSOLE_F_MULTIPORT;
-    return true;
 }
 
 static bool virtio_fakewire_attached = false;
@@ -188,7 +185,7 @@ static void virtio_console_control_loop(void *opaque) {
     }
 }
 
-bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx) {
+void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx) {
     assert(!virtio_fakewire_attached);
     virtio_fakewire_attached = true;
 
@@ -196,10 +193,10 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
 
     console->confirmed_port_present = false;
 
-    if (!virtio_device_init(&console->device, VIRTIO_MMIO_FAKEWIRE_ADDRESS, VIRTIO_MMIO_FAKEWIRE_IRQ,
-                            VIRTIO_CONSOLE_ID, virtio_console_feature_select)) {
-        return false;
-    }
+    debugf(DEBUG, "Initializing VIRTIO device needed by console.");
+
+    virtio_device_init(&console->device, VIRTIO_MMIO_FAKEWIRE_ADDRESS, VIRTIO_MMIO_FAKEWIRE_IRQ,
+                       VIRTIO_CONSOLE_ID, virtio_console_feature_select);
 
     struct virtio_console_config *config =
             (struct virtio_console_config *) virtio_device_config_space(&console->device);
@@ -209,45 +206,32 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     // TODO: should I really be treating 'num_queues' as public?
     assert(console->device.num_queues == (config->max_nr_ports + 1) * 2);
 
+    debugf(DEBUG, "Initialize control_rx queue.");
+
     size_t rx_size = sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)
                    + VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
     chart_init(&console->control_rx, rx_size, 4);
     chart_attach_server(&console->control_rx, virtio_console_wake_control, console);
 
-    if (!virtio_device_setup_queue(&console->device,
-                VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, &console->control_rx)) {
-        virtio_device_fail(&console->device);
-        chart_destroy(&console->control_rx);
-        return false;
-    }
+    virtio_device_setup_queue(&console->device, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE,
+                              QUEUE_INPUT, &console->control_rx);
+
+    debugf(DEBUG, "Initialize control_tx queue.");
 
     size_t tx_size = sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent);
     chart_init(&console->control_tx, tx_size, 4);
     chart_attach_client(&console->control_tx, virtio_console_wake_control, console);
 
-    if (!virtio_device_setup_queue(&console->device,
-                VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, &console->control_tx)) {
-        virtio_device_fail(&console->device);
-        chart_destroy(&console->control_rx);
-        chart_destroy(&console->control_tx);
-        return false;
-    }
+    virtio_device_setup_queue(&console->device, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT,
+                              QUEUE_OUTPUT, &console->control_tx);
+
+    debugf(DEBUG, "Initialize data queues.");
 
     size_t base_queue = virtio_console_port_to_queue_index(VIRTIO_FAKEWIRE_PORT_INDEX);
+    virtio_device_setup_queue(&console->device, base_queue + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, data_rx);
+    virtio_device_setup_queue(&console->device, base_queue + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, data_tx);
 
-    if (!virtio_device_setup_queue(&console->device, base_queue + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, data_rx)) {
-        virtio_device_fail(&console->device);
-        chart_destroy(&console->control_rx);
-        chart_destroy(&console->control_tx);
-        return false;
-    }
-
-    if (!virtio_device_setup_queue(&console->device, base_queue + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, data_tx)) {
-        virtio_device_fail(&console->device);
-        chart_destroy(&console->control_rx);
-        chart_destroy(&console->control_tx);
-        return false;
-    }
+    debugf(DEBUG, "Start VIRTIO device.");
 
     semaphore_init(&console->control_wake);
 
@@ -257,6 +241,4 @@ bool virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     // start the task that talks on the control queues
     thread_create(&console->control_task, "serial-ctrl", PRIORITY_INIT, virtio_console_control_loop, console,
                   NOT_RESTARTABLE);
-
-    return true;
 }
