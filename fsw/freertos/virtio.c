@@ -191,9 +191,11 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
     }
 }
 
-static void virtio_monitor_loop(void *opaque_device) {
+void virtio_monitor_loop(void *opaque_device) {
     assert(opaque_device != NULL);
     struct virtio_device *device = (struct virtio_device *) opaque_device;
+
+    device->monitor_started = true;
 
 #ifdef DEBUG_VIRTQ
     debugf(TRACE, "VIRTIO[Q=*]: Entering monitor loop.");
@@ -217,9 +219,9 @@ static void virtio_monitor_loop(void *opaque_device) {
 }
 
 static void virtio_device_irq_callback(void *opaque_device) {
-    assert(opaque_device != NULL);
     struct virtio_device *device = (struct virtio_device *) opaque_device;
-    assert(device->initialized == true && device->monitor_task != NULL && device->monitor_task->handle != NULL);
+    assert(device != NULL && device->initialized == true && device->monitor_task != NULL
+             && device->monitor_task->handle != NULL && device->monitor_started == true);
 
     BaseType_t was_woken = pdFALSE;
     uint32_t status = device->mmio->interrupt_status;
@@ -233,7 +235,8 @@ static void virtio_device_irq_callback(void *opaque_device) {
 
 static void virtio_device_chart_wakeup(void *opaque) {
     struct virtio_device *device = (struct virtio_device *) opaque;
-    assert(device != NULL && device->monitor_task != NULL && device->monitor_task->handle != NULL);
+    assert(device != NULL && device->initialized == true && device->monitor_task != NULL
+             && device->monitor_task->handle != NULL && device->monitor_started == true);
 
     // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
     BaseType_t result = xTaskNotifyGive(device->monitor_task->handle);
@@ -244,7 +247,7 @@ void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
                                chart_t *chart) {
     assert(device != NULL && chart != NULL);
     assert(direction == QUEUE_INPUT || direction == QUEUE_OUTPUT);
-    assert(device->initialized == true && device->monitor_task == NULL);
+    assert(device->initialized == true && device->monitor_started == false);
     assert(device->queues != NULL);
     assert(queue_index < device->num_queues);
 
@@ -348,17 +351,13 @@ void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t que
     atomic_store_relaxed(device->mmio->queue_notify, queue_index);
 }
 
-// true on success, false on failure
-void virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32_t irq, uint32_t device_id,
-                        virtio_feature_select_cb feature_select) {
-    assert(device != NULL && device->initialized == false);
-    struct virtio_mmio_registers *mmio = (struct virtio_mmio_registers *) mem_addr;
+// this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
+void virtio_device_init_internal(void *opaque_device) {
+    struct virtio_device *device = (struct virtio_device *) opaque_device;
+    assert(device != NULL && device->initialized == false && device->num_queues == 0 && device->queues == NULL);
+    struct virtio_mmio_registers *mmio = device->mmio;
 
-    device->mmio = mmio;
-    device->config_space = mmio + 1;
-    device->irq = irq;
-
-    debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", mem_addr, irq);
+    debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", (uintptr_t) device->mmio, device->irq);
 
     if (le32toh(mmio->magic_value) != VIRTIO_MAGIC_VALUE) {
         abortf("VIRTIO device had the wrong magic number: 0x%08x instead of 0x%08x; failing.",
@@ -374,8 +373,8 @@ void virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     }
 
     // make sure this is a serial port
-    if (le32toh(mmio->device_id) != device_id) {
-        abortf("VIRTIO device ID=%u instead of ID=%u; failing.", le32toh(mmio->device_id), device_id);
+    if (le32toh(mmio->device_id) != device->expected_device_id) {
+        abortf("VIRTIO device ID=%u instead of ID=%u; failing.", le32toh(mmio->device_id), device->expected_device_id);
     }
 
     // reset the device
@@ -392,7 +391,7 @@ void virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
     features |= ((uint64_t) htole32(mmio->device_features)) << 32;
 
     // select feature bits
-    feature_select(&features);
+    device->feature_select_cb(&features);
 
     // write selected bits back
     mmio->driver_features_sel = htole32(0);
@@ -437,20 +436,17 @@ void virtio_device_init(struct virtio_device *device, uintptr_t mem_addr, uint32
 
     assert(device->initialized == false);
     device->initialized = true;
-
-    return true;
 }
 
-void virtio_device_start(struct virtio_device *device) {
-    assert(device != NULL && device->initialized);
-    assert(device->monitor_task == NULL);
-    thread_create(&device->monitor_task, "virtio-monitor", PRIORITY_DRIVERS, virtio_monitor_loop, device,
-                  RESTARTABLE);
-    assert(device->monitor_task != NULL);
+void virtio_device_start_internal(void *opaque_device) {
+    struct virtio_device *device = (struct virtio_device *) opaque_device;
+    assert(device != NULL && device->initialized == true && device->monitor_task != NULL);
+    // it's okay to run this here, even before the task is necessarily created, because interrupts will not be enabled
+    // until the scheduler starts running
     enable_irq(device->irq, virtio_device_irq_callback, device);
 }
 
 void *virtio_device_config_space(struct virtio_device *device) {
-    assert(device != NULL && device->initialized && device->config_space != NULL);
-    return device->config_space;
+    assert(device != NULL && device->initialized && device->mmio != NULL);
+    return device->mmio + 1;
 }

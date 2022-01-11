@@ -39,7 +39,7 @@ static void call_initpoints(enum init_stage stage) {
     debugf(DEBUG, "Calling %u initpoints in stage %u.", count, stage);
     for (program_init *init = initpoints_start; init < initpoints_end; init++) {
         if (init->init_stage == stage) {
-            init->init_fn();
+            init->init_fn_1(init->init_param);
             count--;
         }
     }
