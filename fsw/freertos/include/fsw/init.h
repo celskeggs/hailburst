@@ -3,6 +3,6 @@
 
 typedef void (*program_init)(void);
 
-#define PROGRAM_INIT(name) __attribute__((section(".initpoints"))) program_init _initpoint_ ## name = name
+#define PROGRAM_INIT(name) const __attribute__((section(".initpoints"))) program_init _initpoint_ ## name = name
 
 #endif /* FSW_FREERTOS_FSW_INIT_H */
