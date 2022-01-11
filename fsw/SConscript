@@ -152,13 +152,16 @@ def configure_freertos():
                                      LINKFLAGS=rtos_env["LINKFLAGS"] + ["--relocatable"], LINKSCRIPT="freertos/prog.ld")
     rtos_env.Depends(prog_scrubber, "freertos/prog.ld")
 
-    scrubber_localized = rtos_env.Command(
-        target='scrubber-localized',
-        source=prog_scrubber,
-        action='$OBJCOPY --wildcard --localize-symbol=* $SOURCE $TARGET',
-    )
+    scrubber_replicas = [
+        rtos_env.Command(
+            target='scrubber-copy-%d' % replica,
+            source=prog_scrubber,
+            action='$OBJCOPY --keep-global-symbol=scrubber_data_%d '
+                   '--redefine-sym scrubber_data_local=scrubber_data_%d $SOURCE $TARGET' % (replica, replica),
+        ) for replica in [1, 2]
+    ]
 
-    rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC + [scrubber_localized], LINKSCRIPT="freertos/link.ld")
+    rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC + scrubber_replicas, LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "freertos/link.ld")
     rtos_env.Default(rtos_kernel)
 
