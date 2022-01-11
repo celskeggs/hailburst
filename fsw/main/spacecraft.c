@@ -88,20 +88,21 @@ static rmap_addr_t clock_routing = {
 static bool initialized = false;
 static spacecraft_t sc;
 
+SWITCH_REGISTER(fce_vswitch);
+
 void spacecraft_init(void) {
     assert(!initialized);
 
-    debugf(INFO, "Initializing virtual switch...");
-    switch_init(&sc.vswitch);
+    debugf(INFO, "Configuring virtual switch routes...");
     // add physical routes
-    switch_add_route(&sc.vswitch, PADDR_RADIO, VPORT_LINK, false);
-    switch_add_route(&sc.vswitch, PADDR_MAG, VPORT_LINK, false);
-    switch_add_route(&sc.vswitch, PADDR_CLOCK, VPORT_LINK, false);
+    switch_add_route(&fce_vswitch, PADDR_RADIO, VPORT_LINK, false);
+    switch_add_route(&fce_vswitch, PADDR_MAG, VPORT_LINK, false);
+    switch_add_route(&fce_vswitch, PADDR_CLOCK, VPORT_LINK, false);
     // add virtual routes
-    switch_add_route(&sc.vswitch, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
-    switch_add_route(&sc.vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
-    switch_add_route(&sc.vswitch, VADDR_MAG, VPORT_MAG, false);
-    switch_add_route(&sc.vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
+    switch_add_route(&fce_vswitch, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
+    switch_add_route(&fce_vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
+    switch_add_route(&fce_vswitch, VADDR_MAG, VPORT_MAG, false);
+    switch_add_route(&fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
 
     debugf(INFO, "Initializing link to spacecraft bus...");
     fw_link_options_t options = {
@@ -113,7 +114,7 @@ void spacecraft_init(void) {
     chart_init(&sc.erx_chart, 0x1100, 2);
     int err = fakewire_exc_init(&sc.exchange, options, &sc.erx_chart, &sc.etx_chart);
     assert(err == 0);
-    switch_add_port(&sc.vswitch, VPORT_LINK, &sc.erx_chart, &sc.etx_chart);
+    switch_add_port(&fce_vswitch, VPORT_LINK, &sc.erx_chart, &sc.etx_chart);
 
     debugf(INFO, "Initializing telecomm infrastructure...");
     stream_init(&sc.uplink_stream, UPLINK_STREAM_CAPACITY);
@@ -127,10 +128,8 @@ void spacecraft_init(void) {
     clock_init(&clock_routing, &clock_rx, &clock_tx);
     // we need to check, because the clock driver is only necessary on Linux right now, not on FreeRTOS.
     if (clock_rx != NULL || clock_tx != NULL) {
-        switch_add_port(&sc.vswitch, VPORT_CLOCK, clock_tx, clock_rx);
+        switch_add_port(&fce_vswitch, VPORT_CLOCK, clock_tx, clock_rx);
     }
-
-    clock_start();
 
     debugf(INFO, "Initializing radio...");
     chart_t *radio_up_rx = NULL, *radio_up_tx = NULL, *radio_down_rx = NULL, *radio_down_tx = NULL;
@@ -138,13 +137,13 @@ void spacecraft_init(void) {
                &radio_up_routing, &radio_up_rx, &radio_up_tx, UPLINK_STREAM_CAPACITY,
                &radio_down_routing, &radio_down_rx, &radio_down_tx, DOWNLINK_STREAM_CAPACITY,
                &sc.uplink_stream, &sc.downlink_stream);
-    switch_add_port(&sc.vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
-    switch_add_port(&sc.vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
+    switch_add_port(&fce_vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
+    switch_add_port(&fce_vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
 
     debugf(INFO, "Initializing magnetometer...");
     chart_t *mag_rx = NULL, *mag_tx = NULL;
     magnetometer_init(&sc.mag, &magnetometer_routing, &mag_rx, &mag_tx);
-    switch_add_port(&sc.vswitch, VPORT_MAG, mag_tx, mag_rx);
+    switch_add_port(&fce_vswitch, VPORT_MAG, mag_tx, mag_rx);
 
     debugf(INFO, "Initializing heartbeats...");
     heartbeat_init(&sc.heart);

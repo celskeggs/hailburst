@@ -26,27 +26,6 @@ void free(void *ptr) {
     vPortFree(ptr);
 }
 
-extern program_init initpoints_start[];
-extern program_init initpoints_end[];
-
-static void call_initpoints(enum init_stage stage) {
-    unsigned int count = 0;
-    for (program_init *init = initpoints_start; init < initpoints_end; init++) {
-        if (init->init_stage == stage) {
-            count++;
-        }
-    }
-    debugf(DEBUG, "Calling %u initpoints in stage %u.", count, stage);
-    for (program_init *init = initpoints_start; init < initpoints_end; init++) {
-        if (init->init_stage == stage) {
-            init->init_fn_1(init->init_param);
-            count--;
-        }
-    }
-    assertf(count == 0, "count=%u", count);
-    debugf(DEBUG, "Completed all initpoints calls in stage %u.", stage);
-}
-
 static void configure_floating_point(void) {
     // enable coprocessors for VFP
     arm_set_cpacr(arm_get_cpacr() | ARM_CPACR_CP10_FULL_ACCESS | ARM_CPACR_CP11_FULL_ACCESS);
@@ -60,13 +39,8 @@ void entrypoint(void *kernel_elf_rom) {
     // enable scrubber
     scrubber_set_kernel(kernel_elf_rom);
 
-    call_initpoints(STAGE_RAW);
-
-    call_initpoints(STAGE_READY);
-
-    // initialize spacecraft tasks
-    debugf(INFO, "Preparing spacecraft for start...");
-    spacecraft_init();
+    // call all initpoints and spacecraft_init()
+    initialize_systems();
 
     debugf(WARNING, "Activating scheduler to bring spacecraft online.");
     vTaskStartScheduler();

@@ -10,7 +10,6 @@
 
 typedef struct {
     // fakewire infrastructure
-    switch_t      vswitch;
     chart_t       etx_chart;
     chart_t       erx_chart;
     fw_exchange_t exchange;

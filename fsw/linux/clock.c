@@ -64,7 +64,8 @@ void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
     clock_device.address = address;
 }
 
-void clock_start(void) {
+static void clock_start_main(void *opaque) {
+    (void) opaque;
     assert(clock_device.initialized);
 
     // validate that this is actually a clock
@@ -92,3 +93,4 @@ void clock_start(void) {
     // and log our success, which will include a time using our new adjustment
     tlm_clock_calibrated(&clock_device.telemetry, clock_offset_adj);
 }
+TASK_REGISTER(clock_start_task, "clock-start", PRIORITY_INIT, clock_start_main, NULL, NOT_RESTARTABLE);

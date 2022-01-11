@@ -6,6 +6,7 @@
 
 #include <hal/thread.h>
 #include <fsw/chart.h>
+#include <fsw/init.h>
 
 enum {
     SWITCH_PORT_BASE  = 1,
@@ -25,10 +26,22 @@ typedef struct {
     uint8_t routing_table[SWITCH_ROUTES];
 
     semaphore_t switching_wake;
-    thread_t    switching_loop;
 } switch_t;
 
-void switch_init(switch_t *sw);
+void switch_mainloop_internal(void *opaque);
+void switch_init_internal(void *opaque);
+
+#define SWITCH_REGISTER(v_ident)                       \
+    switch_t v_ident = {                               \
+        .ports_inbound = { NULL },                     \
+        .ports_outbound = { NULL },                    \
+        .routing_table = { 0 },                        \
+        /* switching_wake will be initialized later */ \
+    };                                                 \
+    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_SERVERS, switch_mainloop_internal, \
+                  &v_ident, RESTARTABLE);                                                      \
+    PROGRAM_INIT_PARAM(STAGE_READY, switch_init_internal, &v_ident)
+
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.
 // these charts must pass io_rx_ent entries REGARDLESS OF DIRECTION!

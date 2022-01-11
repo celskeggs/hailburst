@@ -5,15 +5,11 @@
 #include <fsw/io.h>
 #include <fsw/fakewire/switch.h>
 
-static void switch_mainloop(void *opaque);
-
-void switch_init(switch_t *sw) {
-    assert(sw != NULL);
-    // default states: all zeroes
-    memset(sw, 0, sizeof(switch_t));
+void switch_init_internal(void *opaque) {
+    assert(opaque != NULL);
+    switch_t *sw = (switch_t *) opaque;
 
     semaphore_init(&sw->switching_wake);
-    thread_create(&sw->switching_loop, "switch_loop", PRIORITY_SERVERS, switch_mainloop, sw, RESTARTABLE);
 }
 
 // returns TRUE if packet is consumed.
@@ -90,7 +86,7 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     return true;
 }
 
-static void switch_mainloop(void *opaque) {
+void switch_mainloop_internal(void *opaque) {
     assert(opaque != NULL);
     switch_t *sw = (switch_t *) opaque;
 
