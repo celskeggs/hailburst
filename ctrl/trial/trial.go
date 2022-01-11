@@ -160,6 +160,9 @@ func (opt Options) GdbCmds() []string {
 		"set pagination off",
 		"source " + path.Join(opt.HailburstDir, "ctrl/script/ctrl.py"),
 		"log_inject " + path.Join(opt.TrialDir, "./injections.csv"),
+		"set history filename " + path.Join(opt.HailburstDir, ".gdbhistory"),
+		"set history save on",
+		"set history remove-duplicates 1",
 	}
 	if opt.Run {
 		cmds = append(cmds, "stepvt 20s")
