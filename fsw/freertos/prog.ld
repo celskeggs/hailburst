@@ -11,6 +11,7 @@ SECTIONS
     .text : { *(.text*) *(.rodata*) } :text
     .initpoints : { *(.initpoints) } :text
     .data : { *(.data*) } :data
+    .tasktable : { *(.tasktable) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
     .debugf_messages (INFO) : { *(.debugf_messages) }
 }

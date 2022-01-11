@@ -85,6 +85,21 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackTyp
 }
 #endif
 
+extern struct thread_st tasktable_start[];
+extern struct thread_st tasktable_end[];
+
+static void thread_registered_init(void) {
+    debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);
+    for (thread_t task = tasktable_start; task < tasktable_end; task++) {
+        task->iter_next_thread = iter_first_thread;
+        atomic_store(iter_first_thread, task);
+        thread_start_internal(task);
+    }
+    debugf(DEBUG, "Pre-registered threads started!");
+}
+
+PROGRAM_INIT(STAGE_READY, thread_registered_init);
+
 void thread_create(thread_t *out, const char *name, unsigned int priority,
                    void (*start_routine)(void*), void *arg, restartable_t restartable) {
     assert(out != NULL);

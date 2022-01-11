@@ -37,6 +37,21 @@ typedef struct thread_st {
 typedef SemaphoreHandle_t semaphore_t;
 typedef StreamBufferHandle_t stream_t;
 
+#define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
+    static_assert(t_priority < configMAX_PRIORITIES, "invalid priority"); \
+    __attribute__((section(".tasktable"))) struct thread_st t_ident = {   \
+        .name          = t_name,        \
+        .priority      = t_priority,    \
+        .handle        = NULL,          \
+        .start_routine = t_start,       \
+        .arg           = t_arg,         \
+        .restartable   = t_restartable, \
+        .needs_restart = false,         \
+        .hit_restart   = false,         \
+        /* no need for anything for preallocated_ fields */   \
+        .iter_next_thread = NULL, /* to be filled in later */ \
+    }
+
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
                           void (*start_routine)(void*), void *arg, restartable_t restartable);
 

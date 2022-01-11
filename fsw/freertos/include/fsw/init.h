@@ -11,6 +11,6 @@ typedef struct {
 
 #define PROGRAM_INIT(stage, name) \
     const __attribute__((section(".initpoints"))) program_init _initpoint_ ## name = \
-        { .init_fn = name, .init_stage = stage };
+        { .init_fn = name, .init_stage = stage }
 
 #endif /* FSW_FREERTOS_FSW_INIT_H */

@@ -13,8 +13,6 @@ struct scrubber_task_data scrubber_data_local = {
 
 extern semaphore_t scrubber_idle_wake;
 
-static thread_t scrubber_thread;
-
 enum {
     MEMORY_LOW = 0x40000000,
 };
@@ -80,13 +78,13 @@ static void scrubber_mainloop(void *opaque) {
     }
 }
 
+TASK_REGISTER(scrubber_task, "scrubber", PRIORITY_IDLE, scrubber_mainloop, NULL, RESTARTABLE);
+
 void scrubber_init(void) {
     assert(scrubber_data_local.kernel_elf_rom != NULL);
     assert(!scrubber_data_local.initialized);
 
     semaphore_init(&scrubber_data_local.wake);
-    thread_create(&scrubber_thread, "scrubber", PRIORITY_IDLE, scrubber_mainloop, NULL, RESTARTABLE);
-
     atomic_store(scrubber_data_local.initialized, true);
 }
 
