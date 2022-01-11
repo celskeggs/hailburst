@@ -90,4 +90,4 @@ void scrubber_init(void) {
     atomic_store(scrubber_data_local.initialized, true);
 }
 
-PROGRAM_INIT(scrubber_init);
+PROGRAM_INIT(STAGE_READY, scrubber_init);

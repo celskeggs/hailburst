@@ -6,6 +6,7 @@
 #include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
+#include <fsw/init.h>
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
 static thread_t idle_task_thread = NULL;
@@ -63,13 +64,15 @@ void thread_restart_other_task(thread_t state) {
 #if ( configOVERRIDE_IDLE_TASK == 1 )
 extern void prvIdleTask(void *pvParameters);
 
-void thread_idle_init(void) {
+static void thread_idle_init(void) {
     assert(idle_task_thread == NULL);
 
     thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
 
     assert(idle_task_thread != NULL);
 }
+
+PROGRAM_INIT(STAGE_READY, thread_idle_init);
 #else
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
                                    uint32_t *pulIdleTaskStackSize) {

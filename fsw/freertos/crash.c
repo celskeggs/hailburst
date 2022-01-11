@@ -9,6 +9,7 @@
 #include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
+#include <fsw/init.h>
 
 void abort(void) {
     asm volatile("CPSID i");
@@ -63,11 +64,13 @@ __attribute__((noreturn)) void restart_current_task(void) {
     suspend_current_task();
 }
 
-void task_restart_init(void) {
+static void task_restart_init(void) {
     semaphore_init(&task_restart_wake);
     atomic_store(task_restart_wake_initialized, true);
     thread_create(&task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
 }
+
+PROGRAM_INIT(STAGE_READY, task_restart_init);
 
 struct reg_state {
     uint32_t r0;

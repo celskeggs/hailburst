@@ -29,36 +29,40 @@ void free(void *ptr) {
 extern program_init initpoints_start[];
 extern program_init initpoints_end[];
 
-static void call_initpoints(void) {
-    unsigned int num_initpoints = initpoints_end - initpoints_start;
-    debugf(DEBUG, "Calling %u initpoints.", num_initpoints);
-    for (unsigned int i = 0; i < num_initpoints; i++) {
-        initpoints_start[i]();
+static void call_initpoints(enum init_stage stage) {
+    unsigned int count = 0;
+    for (program_init *init = initpoints_start; init < initpoints_end; init++) {
+        if (init->init_stage == stage) {
+            count++;
+        }
     }
-    debugf(DEBUG, "Completed all initpoints calls.");
+    debugf(DEBUG, "Calling %u initpoints in stage %u.", count, stage);
+    for (program_init *init = initpoints_start; init < initpoints_end; init++) {
+        if (init->init_stage == stage) {
+            init->init_fn();
+            count--;
+        }
+    }
+    assertf(count == 0, "count=%u", count);
+    debugf(DEBUG, "Completed all initpoints calls in stage %u.", stage);
 }
 
-void entrypoint(void *kernel_elf_rom) {
-    configure_gic();
-
+static void configure_floating_point(void) {
     // enable coprocessors for VFP
     arm_set_cpacr(arm_get_cpacr() | ARM_CPACR_CP10_FULL_ACCESS | ARM_CPACR_CP11_FULL_ACCESS);
 
     // enable VFP operations
     arm_set_fpexc(arm_get_fpexc() | ARM_FPEXC_EN);
+}
+PROGRAM_INIT(STAGE_RAW, configure_floating_point);
 
-    // enable task restarting
-    task_restart_init();
-
+void entrypoint(void *kernel_elf_rom) {
     // enable scrubber
     scrubber_set_kernel(kernel_elf_rom);
 
-    call_initpoints();
+    call_initpoints(STAGE_RAW);
 
-#if ( configOVERRIDE_IDLE_TASK == 1 )
-    // enable idle task
-    thread_idle_init();
-#endif
+    call_initpoints(STAGE_READY);
 
     // initialize spacecraft tasks
     debugf(INFO, "Preparing spacecraft for start...");

@@ -2,6 +2,7 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <fsw/init.h>
 
 enum {
     GIC_DIST_ADDR = 0x08000000,
@@ -92,7 +93,7 @@ void shutdown_gic(void) {
     cpu->gicc_ctlr = 0;
 }
 
-void configure_gic(void) {
+static void configure_gic(void) {
     num_interrupts = ((dist->gicd_typer & 0x1F) + 1) * 32;
 
     // disable forwarding of pending interrupts
@@ -128,6 +129,9 @@ void configure_gic(void) {
     dist->gicd_ctlr = 1;
     cpu->gicc_ctlr = 1;
 }
+// we don't need to worry about exactly when this happens, because interrupts will be disabled by the bootrom, and not
+// re-enabled until the initialization is complete.
+PROGRAM_INIT(STAGE_RAW, configure_gic);
 
 // entrypoint via FreeRTOS
 void vApplicationIRQHandler(uint32_t irq) {
