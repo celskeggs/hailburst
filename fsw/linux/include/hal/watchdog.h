@@ -14,10 +14,6 @@ typedef enum {
 
 // TODO: implement watchdog support on Linux
 
-static inline void watchdog_init(void) {
-    // do nothing
-}
-
 static inline void watchdog_ok(watchdog_aspect_t aspect) {
     (void) aspect;
     // do nothing

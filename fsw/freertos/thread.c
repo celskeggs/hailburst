@@ -9,7 +9,19 @@
 #include <fsw/init.h>
 
 #if ( configOVERRIDE_IDLE_TASK == 1 )
-static thread_t idle_task_thread = NULL;
+extern void prvIdleTask(void *pvParameters);
+
+TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
+#else
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
+                                   uint32_t *pulIdleTaskStackSize) {
+
+    *ppxIdleTaskTCBBuffer = malloc(sizeof(StaticTask_t));
+    assert(*ppxIdleTaskTCBBuffer != NULL);
+    *ppxIdleTaskStackBuffer = malloc(sizeof(StackType_t) * configMINIMAL_STACK_SIZE);
+    assert(*ppxIdleTaskStackBuffer != NULL);
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+}
 #endif
 
 thread_t iter_first_thread = NULL;
@@ -20,7 +32,7 @@ static void thread_entrypoint(void *opaque) {
     if (state->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
 #if ( configOVERRIDE_IDLE_TASK == 1 )
-        scrubber_cycle_wait(state == idle_task_thread);
+        scrubber_cycle_wait(state == &idle_task);
 #else
         scrubber_cycle_wait(false);
 #endif
@@ -60,30 +72,6 @@ void thread_restart_other_task(thread_t state) {
 
     debugf(WARNING, "Completed restart for task '%s'", state->name);
 }
-
-#if ( configOVERRIDE_IDLE_TASK == 1 )
-extern void prvIdleTask(void *pvParameters);
-
-static void thread_idle_init(void) {
-    assert(idle_task_thread == NULL);
-
-    thread_create(&idle_task_thread, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
-
-    assert(idle_task_thread != NULL);
-}
-
-PROGRAM_INIT(STAGE_READY, thread_idle_init);
-#else
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
-                                   uint32_t *pulIdleTaskStackSize) {
-
-    *ppxIdleTaskTCBBuffer = malloc(sizeof(StaticTask_t));
-    assert(*ppxIdleTaskTCBBuffer != NULL);
-    *ppxIdleTaskStackBuffer = malloc(sizeof(StackType_t) * configMINIMAL_STACK_SIZE);
-    assert(*ppxIdleTaskStackBuffer != NULL);
-    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-}
-#endif
 
 extern struct thread_st tasktable_start[];
 extern struct thread_st tasktable_end[];

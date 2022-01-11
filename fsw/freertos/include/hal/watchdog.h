@@ -10,7 +10,6 @@ typedef enum {
     WATCHDOG_ASPECT_NUM,
 } watchdog_aspect_t;
 
-void watchdog_init(void);
 void watchdog_ok(watchdog_aspect_t aspect);
 void watchdog_force_reset(void) __attribute__((noreturn));
 

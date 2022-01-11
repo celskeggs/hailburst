@@ -5,6 +5,7 @@
 #include <hal/watchdog.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
+#include <fsw/init.h>
 
 enum {
     WATCHDOG_BASE_ADDRESS = 0x090c0000,
@@ -21,7 +22,6 @@ struct watchdog_mmio_region {
     uint32_t r_early_offset;      // read-only
 };
 
-static thread_t watchdog_thread;
 static bool watchdog_initialized = false;
 static uint64_t watchdog_init_window_end;
 static volatile uint64_t watchdog_aspect_timestamps[WATCHDOG_ASPECT_NUM] = { 0 };
@@ -145,14 +145,16 @@ static void watchdog_caretaker_loop(void *opaque) {
     }
 }
 
-void watchdog_init(void) {
+static void watchdog_init(void) {
     assert(!watchdog_initialized);
     watchdog_initialized = true;
 
     watchdog_init_window_end = timer_now_ns() + WATCHDOG_ASPECT_MAX_AGE;
-
-    thread_create(&watchdog_thread, "watchdog", PRIORITY_DRIVERS, watchdog_caretaker_loop, NULL, RESTARTABLE);
 }
+
+PROGRAM_INIT(STAGE_RAW, watchdog_init);
+
+TASK_REGISTER(watchdog_task, "watchdog", PRIORITY_DRIVERS, watchdog_caretaker_loop, NULL, RESTARTABLE);
 
 void watchdog_force_reset(void) {
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;

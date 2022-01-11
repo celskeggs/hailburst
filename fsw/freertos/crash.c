@@ -31,7 +31,6 @@ static __attribute__((noreturn)) void suspend_current_task(void) {
 
 static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
-static thread_t    task_restart_task;
 
 static void restart_task_mainloop(void *opaque) {
     (void) opaque;
@@ -64,10 +63,11 @@ __attribute__((noreturn)) void restart_current_task(void) {
     suspend_current_task();
 }
 
+TASK_REGISTER(task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
+
 static void task_restart_init(void) {
     semaphore_init(&task_restart_wake);
     atomic_store(task_restart_wake_initialized, true);
-    thread_create(&task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
 }
 
 PROGRAM_INIT(STAGE_READY, task_restart_init);

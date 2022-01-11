@@ -149,9 +149,6 @@ void spacecraft_init(void) {
     debugf(INFO, "Initializing heartbeats...");
     heartbeat_init(&sc.heart);
 
-    debugf(INFO, "Initializing watchdog...");
-    watchdog_init();
-
     debugf(INFO, "Initializing command loop...");
     command_init(&sc);
 
