@@ -14,7 +14,7 @@ static bool fakewire_link_attached = false;
 
 VIRTIO_CONSOLE_REGISTER(virtio_fakewire_link, FAKEWIRE_REGION);
 
-int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
+void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
     assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
@@ -33,6 +33,4 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
     // initialize serial port
     virtio_console_init(&virtio_fakewire_link, data_rx, data_tx);
-
-    return 0;
 }

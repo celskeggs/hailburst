@@ -112,8 +112,7 @@ void spacecraft_init(void) {
     };
     chart_init(&sc.etx_chart, 0x1100, 2);
     chart_init(&sc.erx_chart, 0x1100, 2);
-    int err = fakewire_exc_init(&sc.exchange, options, &sc.erx_chart, &sc.etx_chart);
-    assert(err == 0);
+    fakewire_exc_init(&sc.exchange, options, &sc.erx_chart, &sc.etx_chart);
     switch_add_port(&fce_vswitch, VPORT_LINK, &sc.erx_chart, &sc.etx_chart);
 
     debugf(INFO, "Initializing telecomm infrastructure...");

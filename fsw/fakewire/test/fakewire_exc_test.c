@@ -180,13 +180,8 @@ static void exchange_controller(void *opaque) {
     };
 
     debugf(INFO, "[%s] initializing exchange...", ec->name);
-    if (fakewire_exc_init(&est->exc, options, &est->rc.read_chart, &est->wc.write_chart) < 0) {
-        debugf(CRITICAL, "[%s] could not initialize exchange", ec->name);
-        ec->pass = false;
-        ec->chain_out = NULL;
-        return;
-    }
-    debugf(DEBUG, "Attached!");
+    fakewire_exc_init(&est->exc, options, &est->rc.read_chart, &est->wc.write_chart);
+    debugf(DEBUG, "Initialized!");
 
     thread_t reader_thread;
     thread_t writer_thread;

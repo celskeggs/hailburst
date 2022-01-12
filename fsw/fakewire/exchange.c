@@ -24,7 +24,7 @@ static void fakewire_exc_notify(void *opaque) {
     (void) semaphore_give(&fwe->exchange_wake);
 }
 
-int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart, chart_t *write_chart) {
+void fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart, chart_t *write_chart) {
     assert(fwe != NULL && read_chart != NULL && write_chart != NULL);
     memset(fwe, 0, sizeof(fw_exchange_t));
 
@@ -44,17 +44,9 @@ int fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *
 
     fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
-
-    if (fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart) < 0) {
-        chart_destroy(&fwe->receive_chart);
-        chart_destroy(&fwe->transmit_chart);
-        semaphore_destroy(&fwe->exchange_wake);
-        return -1;
-    }
+    fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart);
 
     thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, RESTARTABLE);
-
-    return 0;
 }
 
 // custom exchange protocol

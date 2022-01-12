@@ -92,7 +92,7 @@ static void fakewire_link_notify_tx_chart(void *opaque) {
     (void) semaphore_give(&fwl->transmit_wake);
 }
 
-int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
+void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
     assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
     memset(fwl, 0, sizeof(fw_link_t));
 
@@ -106,7 +106,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
         if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
             perror("signal(SIGPIPE, SIG_IGN)");
-            return -1;
+            abortf("Failed to ignore SIGPIPE signals, which is needed for pipe-based fakewire links.");
         }
 
         char path_buf[strlen(opts.path) + 10];
@@ -117,7 +117,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
         if (fd_c2p < 0 || fd_p2c < 0) {
             perror("open");
-            return -1;
+            abortf("Failed to open pipes under '%s' for fakewire link.", opts.path);
         }
         fwl->fd_in = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
         fwl->fd_out = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
@@ -125,14 +125,14 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
         fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY);
         if (fwl->fd_in < 0) {
             perror("open");
-            return -1;
+            abortf("Failed to open VIRTIO serial port '%s' for fakewire link.", opts.path);
         }
     } else {
         assert(opts.flags == FW_FLAG_SERIAL);
         fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY | O_NDELAY);
         if (fwl->fd_in < 0) {
             perror("open");
-            return -1;
+            abortf("Failed to open serial port '%s' for fakewire link.", opts.path);
         }
         fcntl(fwl->fd_in, F_SETFL, 0);
 
@@ -140,7 +140,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
         if (tcgetattr(fwl->fd_in, &options) < 0) {
             perror("tcgetattr");
-            return -1;
+            abortf("Failed to retrieve serial port attributes from '%s' for fakewire link.", opts.path);
         }
 
         cfsetispeed(&options, B9600);
@@ -162,7 +162,7 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
 
         if (tcsetattr(fwl->fd_in, TCSANOW, &options) < 0) {
             perror("tcsetattr");
-            return -1;
+            abortf("Failed to set serial port attributes from '%s' for fakewire link.", opts.path);
         }
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
@@ -179,6 +179,4 @@ int fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx,
     // and now let's set up the input thread
     thread_create(&fwl->receive_thread,  "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);
     thread_create(&fwl->transmit_thread, "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, fwl, NOT_RESTARTABLE);
-
-    return 0;
 }
