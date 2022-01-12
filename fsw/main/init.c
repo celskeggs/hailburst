@@ -13,13 +13,15 @@ static void call_initpoints(enum init_stage stage) {
         }
     }
     debugf(DEBUG, "Calling %u initpoints in stage %u.", count, stage);
+    unsigned int count2 = 0;
     for (program_init *init = initpoints_start; init < initpoints_end; init++) {
         if (init->init_stage == stage) {
+            debugf(DEBUG, "Calling initpoint %u at %p.", count2, init->init_fn);
             init->init_fn(init->init_param);
-            count--;
+            count2++;
         }
     }
-    assertf(count == 0, "count=%u", count);
+    assertf(count == count2, "count=%u, count2=%u", count, count2);
     debugf(DEBUG, "Completed all initpoints calls in stage %u.", stage);
 }
 

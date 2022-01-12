@@ -10,7 +10,7 @@ typedef struct {
     } init_stage;
     void (*init_fn)(void *param);
     void *init_param;
-} program_init;
+} __attribute__((__aligned__(16))) program_init; // alignment must be specified for x86_64 compatibility
 
 #define _PP_CHECK_TYPE(expr, type) \
     __builtin_choose_expr( \
@@ -25,21 +25,21 @@ typedef struct {
 // PROGRAM_INIT_PARAM is used, then it indicates that the pointer passed and the pointed provided as a parameter are
 // not the same type!
 
-#define PROGRAM_INIT(stage, name) \
-    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## name = \
+#define PROGRAM_INIT(stage, callback) \
+    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## callback = \
         { \
             /* make sure that the function is the correct form before casting it */ \
             /* note that casting it will be fine, because it will just ignore the unexpected argument in r0 */ \
-            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&name, void (*)(void)), \
+            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&callback, void (*)(void)), \
             .init_stage = stage, \
             .init_param = NULL, \
         }
 
-#define PROGRAM_INIT_PARAM(stage, name, param) \
-    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## name = \
+#define PROGRAM_INIT_PARAM(stage, callback, ident, param) \
+    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## callback ## _ ## ident = \
         { \
             /* make sure that param pointer type matches the function argument, since we'll be throwing them away! */ \
-            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&name, void (*)(typeof(*param)*)), \
+            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&callback, void (*)(typeof(*param)*)), \
             .init_stage = stage, \
             .init_param = param, \
         }

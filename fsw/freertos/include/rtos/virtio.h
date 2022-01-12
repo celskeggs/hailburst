@@ -96,8 +96,8 @@ void virtio_monitor_loop(void *opaque_device);
         .num_queues = 0, /* to be populated */                 \
         .queues = NULL, /* to be populated */                  \
     };                                                         \
-    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, &v_ident);                                            \
-    PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, &v_ident)
+    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);                                   \
+    PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
 void virtio_console_feature_select(uint64_t *features);
 void virtio_console_control_loop(void *opaque);

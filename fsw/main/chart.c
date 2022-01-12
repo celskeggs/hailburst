@@ -37,14 +37,6 @@ void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *pa
     chart->notify_client_param = param;
 }
 
-void chart_destroy(chart_t *chart) {
-    assert(chart != NULL);
-    assert(chart->note_storage != NULL);
-    free(chart->note_storage);
-    // wipe entire structure
-    memset(chart, 0, sizeof(chart_t));
-}
-
 // if a request can be sent on any note, return a pointer to the note's memory, otherwise NULL.
 // if called multiple times, will return the same note.
 void *chart_request_start(chart_t *chart) {

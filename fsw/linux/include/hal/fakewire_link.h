@@ -13,6 +13,11 @@ typedef struct {
     chart_t *rx_chart;
     chart_t *tx_chart;
 
+    fw_link_options_t options;
+
+    thread_t    configure_thread;
+    semaphore_t fds_ready;
+
     const char *label;
     semaphore_t receive_wake;
     thread_t    receive_thread;

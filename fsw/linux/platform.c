@@ -22,3 +22,14 @@ void thread_create_internal(thread_t *out, void (*start_routine)(void*), void *a
     thread_start_internal(state);
     *out = state;
 }
+
+extern struct thread_st tasktable_start[];
+extern struct thread_st tasktable_end[];
+
+void start_predef_threads(void) {
+    debugf(DEBUG, "Starting %u predefined threads...", (uint32_t) (tasktable_end - tasktable_start));
+    for (thread_t task = tasktable_start; task < tasktable_end; task++) {
+        thread_start_internal(task);
+    }
+    debugf(DEBUG, "Pre-registered threads started!");
+}

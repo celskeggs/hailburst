@@ -43,12 +43,45 @@ typedef struct {
     chart_index_t reply_ptr;   // writable only by server, wraps at 2 * note_count
 } chart_t;
 
-// initializes a chart. notify_server and notify_client should be fast and non-blocking procedures that let the
-// appropriate party to the chart know to check it again.
+// static alternative to chart_init
+#define CHART_REGISTER(c_ident, c_note_size, c_note_count)                                                  \
+    static_assert(c_note_size > 0 && c_note_size == (size_t) c_note_size, "positive note size");            \
+    static_assert(c_note_count > 0 && c_note_count == (chart_index_t) c_note_count, "positive note count"); \
+    static uint8_t c_ident ## _backing_array[c_note_size * c_note_count];                                   \
+    chart_t c_ident = {                            \
+        /* notifications populated later */        \
+        .notify_server = NULL,                     \
+        .notify_server_param = NULL,               \
+        .notify_client = NULL,                     \
+        .notify_client_param = NULL,               \
+        /* static data */                          \
+        .note_size = (c_note_size),                \
+        .note_count = (c_note_count),              \
+        .note_storage = c_ident ## _backing_array, \
+        /* initial state */                        \
+        .request_ptr = 0,                          \
+        .reply_ptr = 0,                            \
+    }
+
+// TODO: find a way for these to not require PROGRAM_INIT
+#define CHART_SERVER_NOTIFY(c_ident, notify_server_cb, param)   \
+    static void c_ident ## _register_server(void) {             \
+        chart_attach_server(&c_ident, notify_server_cb, param); \
+    }                                                           \
+    PROGRAM_INIT(STAGE_RAW, c_ident ## _register_server);
+
+#define CHART_CLIENT_NOTIFY(c_ident, notify_client_cb, param)   \
+    static void c_ident ## _register_client(void) {             \
+        chart_attach_client(&c_ident, notify_client_cb, param); \
+    }                                                           \
+    PROGRAM_INIT(STAGE_RAW, c_ident ## _register_client);
+
+// initializes a chart.
 void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count);
+// notify_server and notify_client should be fast and non-blocking procedures that let the appropriate party to the
+// chart know to check the chart again.
 void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param);
 void chart_attach_client(chart_t *chart, void (*notify_client)(void *), void *param);
-void chart_destroy(chart_t *chart);
 
 static inline size_t chart_note_size(chart_t *chart) {
     assert(chart != NULL);

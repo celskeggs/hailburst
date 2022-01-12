@@ -40,7 +40,7 @@ void switch_init_internal(switch_t *opaque);
     };                                                 \
     TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_SERVERS, switch_mainloop_internal, \
                   &v_ident, RESTARTABLE);                                                      \
-    PROGRAM_INIT_PARAM(STAGE_READY, switch_init_internal, &v_ident)
+    PROGRAM_INIT_PARAM(STAGE_READY, switch_init_internal, v_ident, &v_ident)
 
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.

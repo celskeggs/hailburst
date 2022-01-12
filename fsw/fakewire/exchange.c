@@ -8,14 +8,12 @@
 #include <fsw/debug.h>
 #include <fsw/fakewire/exchange.h>
 
-static void fakewire_exc_exchange_loop(void *fwe_opaque);
-
 //#define DEBUG
 //#define APIDEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
 
-static void fakewire_exc_notify(void *opaque) {
+void fakewire_exc_notify(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
     assert(fwe != NULL);
 
@@ -24,29 +22,14 @@ static void fakewire_exc_notify(void *opaque) {
     (void) semaphore_give(&fwe->exchange_wake);
 }
 
-void fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart, chart_t *write_chart) {
-    assert(fwe != NULL && read_chart != NULL && write_chart != NULL);
-    memset(fwe, 0, sizeof(fw_exchange_t));
-
-    fwe->link_opts = link_opts;
+void fakewire_exc_init_internal(fw_exchange_t *fwe) {
+    assert(fwe != NULL);
 
     semaphore_init(&fwe->exchange_wake);
 
-    fwe->read_chart = read_chart;
-    chart_attach_client(fwe->read_chart, fakewire_exc_notify, fwe);
-    fwe->write_chart = write_chart;
-    chart_attach_server(fwe->write_chart, fakewire_exc_notify, fwe);
-
-    chart_init(&fwe->transmit_chart, 1024, 16);
-    chart_attach_client(&fwe->transmit_chart, fakewire_exc_notify, fwe);
-    chart_init(&fwe->receive_chart, 1024, 16);
-    chart_attach_server(&fwe->receive_chart, fakewire_exc_notify, fwe);
-
-    fakewire_enc_init(&fwe->encoder, &fwe->transmit_chart);
-    fakewire_dec_init(&fwe->decoder, &fwe->receive_chart);
-    fakewire_link_init(&fwe->io_port, link_opts, &fwe->receive_chart, &fwe->transmit_chart);
-
-    thread_create(&fwe->exchange_thread, "fw_exc_thread", PRIORITY_SERVERS, fakewire_exc_exchange_loop, fwe, RESTARTABLE);
+    fakewire_enc_init(&fwe->encoder, fwe->transmit_chart);
+    fakewire_dec_init(&fwe->decoder, fwe->receive_chart);
+    fakewire_link_init(&fwe->io_port, fwe->link_opts, fwe->receive_chart, fwe->transmit_chart);
 }
 
 // custom exchange protocol
@@ -77,7 +60,7 @@ static uint64_t handshake_period(void) {
     return (rand() % (7 * ms)) + 3 * ms;
 }
 
-static void fakewire_exc_exchange_loop(void *fwe_opaque) {
+void fakewire_exc_exchange_loop(void *fwe_opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) fwe_opaque;
     assert(fwe != NULL);
 

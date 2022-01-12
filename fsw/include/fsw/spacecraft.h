@@ -8,11 +8,6 @@
 #include <fsw/radio.h>
 
 typedef struct {
-    // fakewire infrastructure
-    chart_t       etx_chart;
-    chart_t       erx_chart;
-    fw_exchange_t exchange;
-
     // devices
     radio_t        radio;
     magnetometer_t mag;

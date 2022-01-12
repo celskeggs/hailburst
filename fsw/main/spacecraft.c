@@ -89,6 +89,14 @@ static bool initialized = false;
 static spacecraft_t sc;
 
 SWITCH_REGISTER(fce_vswitch);
+CHART_REGISTER(fce_tx_chart, 0x1100, 2);
+CHART_REGISTER(fce_rx_chart, 0x1100, 2);
+static const fw_link_options_t exchange_options = {
+    .label = "bus",
+    .path  = "/dev/vport0p1",
+    .flags = FW_FLAG_VIRTIO,
+};
+FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_tx_chart);
 
 void spacecraft_init(void) {
     assert(!initialized);
@@ -105,15 +113,7 @@ void spacecraft_init(void) {
     switch_add_route(&fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
 
     debugf(INFO, "Initializing link to spacecraft bus...");
-    fw_link_options_t options = {
-        .label = "bus",
-        .path  = "/dev/vport0p1",
-        .flags = FW_FLAG_VIRTIO,
-    };
-    chart_init(&sc.etx_chart, 0x1100, 2);
-    chart_init(&sc.erx_chart, 0x1100, 2);
-    fakewire_exc_init(&sc.exchange, options, &sc.erx_chart, &sc.etx_chart);
-    switch_add_port(&fce_vswitch, VPORT_LINK, &sc.erx_chart, &sc.etx_chart);
+    switch_add_port(&fce_vswitch, VPORT_LINK, &fce_rx_chart, &fce_tx_chart);
 
     debugf(INFO, "Initializing telecomm infrastructure...");
     stream_init(&sc.uplink_stream, UPLINK_STREAM_CAPACITY);

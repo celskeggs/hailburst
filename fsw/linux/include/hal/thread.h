@@ -21,7 +21,7 @@ typedef struct thread_st {
     void (*start_routine)(void *);
     void *start_parameter;
     pthread_t thread;
-} *thread_t;
+} __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 typedef pthread_mutex_t mutex_t;
 // although there are semaphores available under POSIX, they are counting semaphores, and not binary semaphores.
 typedef struct {
@@ -76,6 +76,7 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
 #define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
 
 extern void thread_start_internal(thread_t thread);
+extern void start_predef_threads(void);
 
 // name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \

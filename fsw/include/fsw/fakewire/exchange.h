@@ -12,16 +12,36 @@ typedef struct fw_exchange_st {
     fw_encoder_t encoder;
     fw_decoder_t decoder;
 
-    thread_t    exchange_thread;
     semaphore_t exchange_wake;
 
-    chart_t transmit_chart;  // client: exchange_thread, server: link driver, struct io_tx_ent
-    chart_t receive_chart;   // client: link driver, server: exchange_thread, struct io_rx_ent
+    chart_t *transmit_chart; // client: exchange_thread, server: link driver, struct io_tx_ent
+    chart_t *receive_chart;  // client: link driver, server: exchange_thread, struct io_rx_ent
     chart_t *read_chart;     // client: exchange_thread, server: switch task, struct io_rx_ent
     chart_t *write_chart;    // client: switch task, server: exchange_thread, struct io_rx_ent (yes, actually!)
 } fw_exchange_t;
 
-// returns 0 if successfully initialized, -1 if an I/O error prevented initialization
-void fakewire_exc_init(fw_exchange_t *fwe, fw_link_options_t link_opts, chart_t *read_chart, chart_t *write_chart);
+void fakewire_exc_notify(void *opaque);
+void fakewire_exc_init_internal(fw_exchange_t *fwe);
+void fakewire_exc_exchange_loop(void *fwe_opaque);
+
+#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart) \
+    extern fw_exchange_t e_ident;                                                        \
+    CHART_CLIENT_NOTIFY(e_read_chart, fakewire_exc_notify, &e_ident);                    \
+    CHART_SERVER_NOTIFY(e_write_chart, fakewire_exc_notify, &e_ident);                   \
+    CHART_REGISTER(e_ident ## _transmit_chart, 1024, 16);                                \
+    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, fakewire_exc_notify, &e_ident);      \
+    CHART_REGISTER(e_ident ## _receive_chart, 1024, 16);                                 \
+    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, fakewire_exc_notify, &e_ident);       \
+    fw_exchange_t e_ident = {                                                            \
+        .link_opts = (e_link_options),                                                   \
+        /* io_port, encoder, decoder, exchange_wake not initialized here */              \
+        .transmit_chart = &e_ident ## _transmit_chart,                                   \
+        .receive_chart = &e_ident ## _receive_chart,                                     \
+        .read_chart = &e_read_chart,                                                     \
+        .write_chart = &e_write_chart,                                                   \
+    };                                                                                   \
+    PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident);      \
+    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_SERVERS,                   \
+                  fakewire_exc_exchange_loop, &e_ident, RESTARTABLE)
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */

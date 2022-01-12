@@ -7,7 +7,9 @@
 #include <unistd.h>
 
 #include <hal/thread.h>
+#include <fsw/clock.h>
 #include <fsw/debug.h>
+#include <fsw/init.h>
 #include <fsw/fakewire/exchange.h>
 
 #include "test_common.h"
@@ -42,11 +44,13 @@ static struct packet_chain *reverse_chain(struct packet_chain *chain) {
 
 struct reader_config {
     const char *name;
+
+    chart_t    *read_chart;
+    semaphore_t wake;
+
     mutex_t out_mutex;
     struct packet_chain *chain_out;
-
-    chart_t     read_chart;
-    semaphore_t wake;
+    semaphore_t complete;
 };
 
 static void exchange_reader(void *opaque) {
@@ -54,14 +58,14 @@ static void exchange_reader(void *opaque) {
 
     int last_packet_marker = 1;
     do {
-        struct io_rx_ent *ent = chart_reply_start(&rc->read_chart);
+        struct io_rx_ent *ent = chart_reply_start(rc->read_chart);
         if (ent == NULL) {
             semaphore_take(&rc->wake);
             continue;
         }
 
-        assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(&rc->read_chart));
-        debugf(DEBUG, "[%s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
+        assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(rc->read_chart));
+        debugf(DEBUG, "[%8s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
 
         last_packet_marker = ent->data[0];
         assert(last_packet_marker == 0 || last_packet_marker == 1);
@@ -80,18 +84,22 @@ static void exchange_reader(void *opaque) {
         rc->chain_out = new_link;
         mutex_unlock(&rc->out_mutex);
 
-        chart_reply_send(&rc->read_chart, 1);
+        chart_reply_send(rc->read_chart, 1);
     } while (last_packet_marker != 0);
+
+    semaphore_give(&rc->complete);
 }
 
 struct writer_config {
     const char *name;
 
     semaphore_t wake;
-    chart_t     write_chart;
+    chart_t    *write_chart;
 
     struct packet_chain *chain_in;
+
     bool pass;
+    semaphore_t complete;
 };
 
 static void exchange_writer(void *opaque) {
@@ -102,40 +110,31 @@ static void exchange_writer(void *opaque) {
     struct packet_chain *chain = wc->chain_in;
 
     while (chain) {
-        assert(chain->packet_len <= io_rx_size(&wc->write_chart) - 1);
-        struct io_rx_ent *entry = chart_request_start(&wc->write_chart);
+        assert(chain->packet_len <= io_rx_size(wc->write_chart) - 1);
+        struct io_rx_ent *entry = chart_request_start(wc->write_chart);
         assert(entry != NULL);
 
         entry->data[0] = (chain->next != NULL); // whether or not this is the last packet
         memcpy(&entry->data[1], chain->packet_data, chain->packet_len);
 
-        debugf(DEBUG, "[%s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
+        debugf(DEBUG, "[%8s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
         entry->actual_length = chain->packet_len + 1;
-        chart_request_send(&wc->write_chart, 1);
-        while (chart_request_avail(&wc->write_chart) < chart_note_count(&wc->write_chart)) {
+        chart_request_send(wc->write_chart, 1);
+        while (chart_request_avail(wc->write_chart) < chart_note_count(wc->write_chart)) {
             semaphore_take(&wc->wake);
         }
-        debugf(DEBUG, "[%s] Completed write of packet with length %lu", wc->name, chain->packet_len);
+        debugf(DEBUG, "[%8s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
         chain = chain->next;
     }
 
     wc->pass = true;
+    semaphore_give(&wc->complete);
 }
-
-struct exchange_config {
-    const char *name;
-    char *path_buf;
-    int flags;
-    struct packet_chain *chain_in;
-    struct packet_chain *chain_out;
-    bool pass;
-};
 
 struct exchange_state {
     struct reader_config rc;
     struct writer_config wc;
-    fw_exchange_t exc;
 };
 
 static void exchange_state_notify_reader(void *opaque) {
@@ -150,67 +149,6 @@ static void exchange_state_notify_writer(void *opaque) {
     assert(est != NULL);
 
     (void) semaphore_give(&est->wc.wake);
-}
-
-static void exchange_controller(void *opaque) {
-    struct exchange_config *ec = (struct exchange_config *) opaque;
-
-    struct exchange_state *est = malloc(sizeof(struct exchange_state));
-    assert(est != NULL);
-
-    est->rc.name = ec->name;
-    mutex_init(&est->rc.out_mutex);
-    est->rc.chain_out = NULL;
-    semaphore_init(&est->rc.wake);
-
-    chart_init(&est->rc.read_chart, io_rx_pad_size(4096), 4);
-    chart_attach_server(&est->rc.read_chart, exchange_state_notify_reader, est);
-
-    est->wc.name = ec->name;
-    semaphore_init(&est->wc.wake);
-    chart_init(&est->wc.write_chart, io_rx_pad_size(4096), 4);
-    chart_attach_client(&est->wc.write_chart, exchange_state_notify_writer, est);
-    est->wc.chain_in = ec->chain_in;
-    est->wc.pass = false;
-
-    fw_link_options_t options = {
-        .label = ec->name,
-        .path  = ec->path_buf,
-        .flags = ec->flags,
-    };
-
-    debugf(INFO, "[%s] initializing exchange...", ec->name);
-    fakewire_exc_init(&est->exc, options, &est->rc.read_chart, &est->wc.write_chart);
-    debugf(DEBUG, "Initialized!");
-
-    thread_t reader_thread;
-    thread_t writer_thread;
-    thread_create(&reader_thread, "exc_reader", 1, exchange_reader, &est->rc, NOT_RESTARTABLE);
-    thread_create(&writer_thread, "exc_writer", 1, exchange_writer, &est->wc, NOT_RESTARTABLE);
-
-    struct timespec ts;
-    thread_time_now(&ts);
-    // wait up to five seconds
-    ts.tv_sec += 5;
-
-    bool pass = true;
-
-    if (!thread_join_timed(reader_thread, &ts)) {
-        debugf(CRITICAL, "[%s] exchange controller: could not join reader thread by 5 second deadline", ec->name);
-        pass = false;
-    }
-    if (!thread_join_timed(writer_thread, &ts)) {
-        debugf(CRITICAL, "[%s] exchange controller: could not join writer thread by 5 second deadline", ec->name);
-        pass = false;
-    } else if (!est->wc.pass) {
-        debugf(CRITICAL, "[%s] exchange controller: failed due to writer failure", ec->name);
-        pass = false;
-    }
-
-    ec->pass = pass;
-    mutex_lock(&est->rc.out_mutex);
-    ec->chain_out = reverse_chain(est->rc.chain_out);
-    mutex_unlock(&est->rc.out_mutex);
 }
 
 static struct packet_chain *random_packet_chain(void) {
@@ -233,6 +171,15 @@ static struct packet_chain *random_packet_chain(void) {
     debugf(INFO, "Generated packet chain of length %d", packet_count);
 
     return out;
+}
+
+static unsigned int packet_chain_len(struct packet_chain *chain) {
+    unsigned int count = 0;
+    while (chain != NULL) {
+        count++;
+        chain = chain->next;
+    }
+    return count;
 }
 
 static bool compare_packets(uint8_t *baseline, size_t baseline_len, uint8_t *actual, size_t actual_len) {
@@ -283,59 +230,113 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
     return ok;
 }
 
-int test_main(void) {
+static void prepare_test_fifos(void) {
     test_common_make_fifos("fwfifo");
+}
+PROGRAM_INIT(STAGE_RAW, prepare_test_fifos);
 
-    char path_buf[256];
-    test_common_get_fifo("fwfifo", path_buf, sizeof(path_buf));
+static void exchange_controller_init(struct exchange_state *es) {
+    mutex_init(&es->rc.out_mutex);
+    semaphore_init(&es->rc.wake);
+    semaphore_init(&es->rc.complete);
+    semaphore_init(&es->wc.wake);
+    semaphore_init(&es->wc.complete);
+    es->wc.chain_in = random_packet_chain();
+}
 
+#define EXCHANGE_CONTROLLER(e_ident, e_flags)                                                                   \
+    CHART_REGISTER(e_ident ## _read, io_rx_pad_size(4096), 4);                                                  \
+    CHART_REGISTER(e_ident ## _write, io_rx_pad_size(4096), 4);                                                 \
+    struct exchange_state e_ident = {                                                                           \
+        .rc = {                                                                                                 \
+            .name = #e_ident,                                                                                   \
+            .chain_out = NULL,                                                                                  \
+            .read_chart = &e_ident ## _read,                                                                    \
+        },                                                                                                      \
+        .wc = {                                                                                                 \
+            .name = #e_ident,                                                                                   \
+            .write_chart = &e_ident ## _write,                                                                  \
+            .pass = false,                                                                                      \
+        },                                                                                                      \
+    };                                                                                                          \
+    CHART_SERVER_NOTIFY(e_ident ## _read, exchange_state_notify_reader, &e_ident);                              \
+    CHART_CLIENT_NOTIFY(e_ident ## _write, exchange_state_notify_writer, &e_ident);                             \
+    PROGRAM_INIT_PARAM(STAGE_READY, exchange_controller_init, e_ident, &e_ident);                               \
+    const fw_link_options_t e_ident ## _options = {                                                             \
+        .label = #e_ident,                                                                                      \
+        .path = "./fwfifo",                                                                                     \
+        .flags = e_flags,                                                                                       \
+    };                                                                                                          \
+    FAKEWIRE_EXCHANGE_REGISTER(e_ident ## _exchange, e_ident ## _options, e_ident ## _read, e_ident ## _write); \
+    TASK_REGISTER(e_ident ## _reader_task, #e_ident "_reader", PRIORITY_INIT,                                   \
+                  exchange_reader, &e_ident.rc, NOT_RESTARTABLE);                                              \
+    TASK_REGISTER(e_ident ## _writer_task, #e_ident "_writer", PRIORITY_INIT,                                   \
+                  exchange_writer, &e_ident.wc, NOT_RESTARTABLE)
+
+// return true/false for pass/fail
+static bool collect_status(struct exchange_state *est, struct packet_chain **chain_out, uint64_t deadline) {
+    assert(est != NULL && chain_out != NULL);
+
+    bool pass = true;
+
+    // wait up to five seconds
+    if (!semaphore_take_timed_abs(&est->rc.complete, deadline)) {
+        debugf(CRITICAL, "[%8s] exchange controller: reader not complete by 5 second deadline", est->rc.name);
+        pass = false;
+    }
+    if (!semaphore_take_timed_abs(&est->wc.complete, deadline)) {
+        debugf(CRITICAL, "[%8s] exchange controller: writer not complete by 5 second deadline", est->wc.name);
+        pass = false;
+    } else if (!est->wc.pass) {
+        debugf(CRITICAL, "[%8s] exchange controller: failed due to writer failure", est->wc.name);
+        pass = false;
+    }
+
+    mutex_lock(&est->rc.out_mutex);
+    *chain_out = reverse_chain(est->rc.chain_out);
+    mutex_unlock(&est->rc.out_mutex);
+
+    return pass;
+}
+
+static void init_random(void) {
     srand(31415);
+}
+PROGRAM_INIT(STAGE_RAW, init_random);
 
-    struct exchange_config ec_left = {
-        .name     = " left",
-        .path_buf = path_buf,
-        .flags    = FW_FLAG_FIFO_PROD,
-        .chain_in = random_packet_chain(),
-        // chain_out and pass to be filled in
-    };
-    struct exchange_config ec_right = {
-        .name     = "right",
-        .path_buf = path_buf,
-        .flags    = FW_FLAG_FIFO_CONS,
-        .chain_in = random_packet_chain(),
-        // chain_out and pass to be filled in
-    };
+EXCHANGE_CONTROLLER(ec_left, FW_FLAG_FIFO_PROD);
+EXCHANGE_CONTROLLER(ec_right, FW_FLAG_FIFO_CONS);
 
-    thread_t left, right;
-
-    thread_create(&left, "ec_left", 1, exchange_controller, &ec_left, NOT_RESTARTABLE);
-    thread_create(&right, "ec_right", 1, exchange_controller, &ec_right, NOT_RESTARTABLE);
-
-    debugf(INFO, "Waiting for test to complete...");
-    thread_join(left);
-    thread_join(right);
-    debugf(INFO, "Controller threads finished!");
+int test_main(void) {
+    uint64_t deadline = clock_timestamp_monotonic() + 5000000000;
 
     int code = 0;
-    if (!ec_left.pass) {
+    struct packet_chain *left_out = NULL;
+    struct packet_chain *right_out = NULL;
+    debugf(INFO, "Waiting for test to complete...");
+    if (!collect_status(&ec_left, &left_out, deadline)) {
         debugf(CRITICAL, "Left controller failed");
         code = -1;
     }
-    if (!ec_right.pass) {
+    if (!collect_status(&ec_right, &right_out, deadline)) {
         debugf(CRITICAL, "Right controller failed");
         code = -1;
     }
-    if (!compare_packet_chains("[left->right]", ec_left.chain_in, ec_right.chain_out)) {
+    debugf(INFO, "Controller threads finished!");
+
+    if (!compare_packet_chains("[left->right]", ec_left.wc.chain_in, right_out)) {
         debugf(CRITICAL, "Invalid packet chain transmitted from left to right");
         code = -1;
     } else {
-        debugf(INFO, "Valid packet chain transmitted from left to right.");
+        debugf(INFO, "Valid packet chain of length %u transmitted from left to right.",
+               packet_chain_len(ec_left.wc.chain_in));
     }
-    if (!compare_packet_chains("[right->left]", ec_right.chain_in, ec_left.chain_out)) {
+    if (!compare_packet_chains("[right->left]", ec_right.wc.chain_in, left_out)) {
         debugf(CRITICAL, "Invalid packet chain transmitted from right to left");
         code = -1;
     } else {
-        debugf(INFO, "Valid packet chain transmitted from right to left.");
+        debugf(INFO, "Valid packet chain of length %u transmitted from right to left.",
+               packet_chain_len(ec_left.wc.chain_in));
     }
 
     return code;

@@ -6,13 +6,13 @@ import subprocess
 
 def build_common(env):
     env["CPPPATH"] += ["include/"]
-    concurrency = env.Library("concurrency", ["main/chart.c", "main/multichart.c"])
+    concurrency = env.Library("concurrency", ["main/chart.c", "main/init.c", "main/multichart.c"])
     fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "fakewire/rmap.c",
                                         "fakewire/rmap_helpers.c", "fakewire/switch.c"])
     # note: we have to return the common source files here, rather than packaging them in a library, so that any
     # modules that have no references to them (like heartbeat) will still actually be linked.
     return [
-        "main/command.c", "main/comm.c", "main/heartbeat.c", "main/init.c", "main/magnetometer.c", "main/radio.c",
+        "main/command.c", "main/comm.c", "main/heartbeat.c", "main/magnetometer.c", "main/radio.c",
         "main/spacecraft.c", "main/telemetry.c", fakewire, concurrency,
     ], [fakewire, concurrency]
 

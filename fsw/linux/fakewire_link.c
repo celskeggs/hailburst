@@ -19,6 +19,11 @@ static void fakewire_link_rx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
+    // make sure we wait for fds to actually be populated
+    semaphore_take(&fwl->fds_ready);
+    // then wake up again in case the other task is still waiting
+    (void) semaphore_give(&fwl->fds_ready);
+
     while (true) {
         struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
@@ -27,6 +32,7 @@ static void fakewire_link_rx_loop(void *opaque) {
             continue;
         }
         // read as many bytes as possible from the input port at once
+        assert(fwl->fd_in != -1);
         size_t max = io_rx_size(fwl->rx_chart);
         ssize_t actual = read(fwl->fd_in, entry->data, max);
 
@@ -50,6 +56,11 @@ static void fakewire_link_tx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
+    // make sure we wait for fds to actually be populated
+    semaphore_take(&fwl->fds_ready);
+    // then wake up again in case the other task is still waiting
+    (void) semaphore_give(&fwl->fds_ready);
+
     while (true) {
         struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
         if (entry == NULL) {
@@ -60,6 +71,7 @@ static void fakewire_link_tx_loop(void *opaque) {
         // read as many bytes as possible from the input port at once
         assert(entry->actual_length > 0 && entry->actual_length <= io_tx_size(fwl->tx_chart));
 
+        assert(fwl->fd_out != -1);
         ssize_t actual = write(fwl->fd_out, entry->data, entry->actual_length);
 
         if (actual == (ssize_t) entry->actual_length) {
@@ -92,15 +104,13 @@ static void fakewire_link_notify_tx_chart(void *opaque) {
     (void) semaphore_give(&fwl->transmit_wake);
 }
 
-void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
-    assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
-    memset(fwl, 0, sizeof(fw_link_t));
+static void fakewire_link_configure(void *opaque) {
+    assert(opaque != NULL);
+    fw_link_t *fwl = (fw_link_t*) opaque;
+    fw_link_options_t opts = fwl->options;
 
-    // set up debug info real quick
-    fwl->label = opts.label;
-
-    // first, let's open the file descriptors for our I/O backend of choice
-
+    // let's open the file descriptors for our I/O backend of choice
+    // we have to do this in a separate thread, because it can block in the case of pipe connections
     if (opts.flags == FW_FLAG_FIFO_CONS || opts.flags == FW_FLAG_FIFO_PROD) {
         // alternate mode for host testing via pipe
 
@@ -167,7 +177,19 @@ void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
 
+    (void) semaphore_give(&fwl->fds_ready);
+}
+
+void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
+    assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
+    memset(fwl, 0, sizeof(fw_link_t));
+
+    // set up debug info real quick
+    fwl->label = opts.label;
+    fwl->options = opts;
+
     // prepare for input thread
+    semaphore_init(&fwl->fds_ready);
     semaphore_init(&fwl->receive_wake);
     semaphore_init(&fwl->transmit_wake);
     fwl->rx_chart = data_rx;
@@ -176,7 +198,8 @@ void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx
     chart_attach_client(data_rx, fakewire_link_notify_rx_chart, fwl);
     chart_attach_server(data_tx, fakewire_link_notify_tx_chart, fwl);
 
-    // and now let's set up the input thread
-    thread_create(&fwl->receive_thread,  "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);
-    thread_create(&fwl->transmit_thread, "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, fwl, NOT_RESTARTABLE);
+    // and now let's set up the transmit and receive threads
+    thread_create(&fwl->configure_thread, "fw_config",  PRIORITY_INIT,  fakewire_link_configure, fwl, NOT_RESTARTABLE);
+    thread_create(&fwl->receive_thread,   "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);
+    thread_create(&fwl->transmit_thread,  "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, fwl, NOT_RESTARTABLE);
 }
