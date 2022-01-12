@@ -28,26 +28,24 @@ static void thread_entrypoint(void *opaque) {
 }
 
 static void thread_start_internal(thread_t state) {
-    state->handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
-                                      state->preallocated_stack, &state->preallocated_task_memory);
-    assert(state->handle != NULL);
-    // just a check for implementation assumptions regarding task creation
-    assert((void*) state->handle == (void*) &state->preallocated_task_memory);
+    TaskHandle_t handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
+                                      state->preallocated_stack, &state->tcb);
+    assert(handle != NULL && handle == &state->tcb);
 
-    vTaskSetApplicationTaskTag(state->handle, (void *) state);
+    vTaskSetApplicationTaskTag(&state->tcb, (void *) state);
 }
 
 void thread_restart_other_task(thread_t state) {
-    assert(state != NULL && state->handle != NULL);
+    assert(state != NULL);
     assert(state->restartable == RESTARTABLE);
-    assert(state->handle != xTaskGetCurrentTaskHandle());
+    assert(&state->tcb != xTaskGetCurrentTaskHandle());
 
     debugf(WARNING, "Restarting task '%s'", state->name);
 
     // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
     // the TaskHandle could refer to undefined memory.
     taskENTER_CRITICAL();
-    vTaskDelete(state->handle);
+    vTaskDelete(&state->tcb);
     state->hit_restart = true;
     thread_start_internal(state);
     taskEXIT_CRITICAL();

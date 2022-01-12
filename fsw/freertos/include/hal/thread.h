@@ -23,13 +23,12 @@ typedef enum {
 typedef struct thread_st {
     const char         *name;
     int                 priority;
-    TaskHandle_t        handle;
     void              (*start_routine)(void*);
     void               *arg;
     restartable_t       restartable;
     bool                needs_restart;
     bool                hit_restart;
-    TCB_t               preallocated_task_memory;
+    TCB_t               tcb;
     StackType_t         preallocated_stack[STACK_SIZE];
 } *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
@@ -40,7 +39,6 @@ typedef SemaphoreHandle_t semaphore_t;
     __attribute__((section(".tasktable"))) struct thread_st t_ident = {   \
         .name          = t_name,        \
         .priority      = t_priority,    \
-        .handle        = NULL,          \
         .start_routine = t_start,       \
         .arg           = t_arg,         \
         .restartable   = t_restartable, \

@@ -66,16 +66,6 @@
 /* Definitions specific to the port being used. */
 #include "portable.h"
 
-/* Must be defaulted before configUSE_NEWLIB_REENTRANT is used below. */
-#ifndef configUSE_NEWLIB_REENTRANT
-    #define configUSE_NEWLIB_REENTRANT    0
-#endif
-
-/* Required if struct _reent is used. */
-#if ( configUSE_NEWLIB_REENTRANT == 1 )
-    #include <reent.h>
-#endif
-
 /*
  * Check all the required application specific macros have been defined.
  * These macros are application specific and (as downloaded) are defined
@@ -164,10 +154,6 @@
     #define INCLUDE_xTaskGetIdleTaskHandle    0
 #endif
 
-#ifndef INCLUDE_xTaskAbortDelay
-    #define INCLUDE_xTaskAbortDelay    0
-#endif
-
 #ifndef INCLUDE_xQueueGetMutexHolder
     #define INCLUDE_xQueueGetMutexHolder    0
 #endif
@@ -244,10 +230,6 @@
 
 #ifndef configUSE_ALTERNATIVE_API
     #define configUSE_ALTERNATIVE_API    0
-#endif
-
-#ifndef portCRITICAL_NESTING_IN_TCB
-    #define portCRITICAL_NESTING_IN_TCB    0
 #endif
 
 #ifndef configMAX_TASK_NAME_LEN
@@ -878,10 +860,6 @@
 
 #if configTASK_NOTIFICATION_ARRAY_ENTRIES < 1
     #error configTASK_NOTIFICATION_ARRAY_ENTRIES must be at least 1
-#endif
-
-#ifndef configUSE_POSIX_ERRNO
-    #define configUSE_POSIX_ERRNO    0
 #endif
 
 #ifndef portTICK_TYPE_IS_ATOMIC

@@ -221,13 +221,13 @@ void virtio_monitor_loop(void *opaque_device) {
 static void virtio_device_irq_callback(void *opaque_device) {
     struct virtio_device *device = (struct virtio_device *) opaque_device;
     assert(device != NULL && device->initialized == true && device->monitor_task != NULL
-             && device->monitor_task->handle != NULL && device->monitor_started == true);
+             && device->monitor_started == true);
 
     BaseType_t was_woken = pdFALSE;
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
         // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-        vTaskNotifyGiveFromISR(device->monitor_task->handle, &was_woken);
+        vTaskNotifyGiveFromISR(&device->monitor_task->tcb, &was_woken);
     }
     device->mmio->interrupt_ack = status;
     portYIELD_FROM_ISR(was_woken);
@@ -236,10 +236,10 @@ static void virtio_device_irq_callback(void *opaque_device) {
 static void virtio_device_chart_wakeup(void *opaque) {
     struct virtio_device *device = (struct virtio_device *) opaque;
     assert(device != NULL && device->initialized == true && device->monitor_task != NULL
-             && device->monitor_task->handle != NULL && device->monitor_started == true);
+             && device->monitor_started == true);
 
     // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-    BaseType_t result = xTaskNotifyGive(device->monitor_task->handle);
+    BaseType_t result = xTaskNotifyGive(&device->monitor_task->tcb);
     assert(result == pdPASS);
 }
 

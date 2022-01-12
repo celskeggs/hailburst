@@ -90,12 +90,8 @@ typedef struct
     StackType_t * pxStack;                      /*< Points to the start of the stack. */
     char pcTaskName[ configMAX_TASK_NAME_LEN ]; /*< Descriptive name given to the task when created.  Facilitates debugging only. */ /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
 
-    #if ( ( portSTACK_GROWTH > 0 ) || ( configRECORD_STACK_HIGH_ADDRESS == 1 ) )
+    #if ( ( configRECORD_STACK_HIGH_ADDRESS == 1 ) )
         StackType_t * pxEndOfStack; /*< Points to the highest valid address for the stack. */
-    #endif
-
-    #if ( portCRITICAL_NESTING_IN_TCB == 1 )
-        UBaseType_t uxCriticalNesting; /*< Holds the critical section nesting depth for ports that do not maintain their own count in the port layer. */
     #endif
 
     #if ( configUSE_TRACE_FACILITY == 1 )
@@ -120,32 +116,9 @@ typedef struct
         configRUN_TIME_COUNTER_TYPE ulRunTimeCounter; /*< Stores the amount of time the task has spent in the Running state. */
     #endif
 
-    #if ( configUSE_NEWLIB_REENTRANT == 1 )
-
-        /* Allocate a Newlib reent structure that is specific to this task.
-         * Note Newlib support has been included by popular demand, but is not
-         * used by the FreeRTOS maintainers themselves.  FreeRTOS is not
-         * responsible for resulting newlib operation.  User must be familiar with
-         * newlib and must provide system-wide implementations of the necessary
-         * stubs. Be warned that (at the time of writing) the current newlib design
-         * implements a system-wide malloc() that must be provided with locks.
-         *
-         * See the third party link http://www.nadler.com/embedded/newlibAndFreeRTOS.html
-         * for additional information. */
-        struct  _reent xNewLib_reent;
-    #endif
-
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
         volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-    #endif
-
-    #if ( INCLUDE_xTaskAbortDelay == 1 )
-        uint8_t ucDelayAborted;
-    #endif
-
-    #if ( configUSE_POSIX_ERRNO == 1 )
-        int iTaskErrno;
     #endif
 } TCB_t;
 
@@ -582,39 +555,6 @@ BaseType_t xTaskDelayUntil( TickType_t * const pxPreviousWakeTime,
     {                                                                   \
         ( void ) xTaskDelayUntil( pxPreviousWakeTime, xTimeIncrement ); \
     }
-
-
-/**
- * task. h
- * @code{c}
- * BaseType_t xTaskAbortDelay( TaskHandle_t xTask );
- * @endcode
- *
- * INCLUDE_xTaskAbortDelay must be defined as 1 in FreeRTOSConfig.h for this
- * function to be available.
- *
- * A task will enter the Blocked state when it is waiting for an event.  The
- * event it is waiting for can be a temporal event (waiting for a time), such
- * as when vTaskDelay() is called, or an event on an object, such as when
- * xQueueReceive() or ulTaskNotifyTake() is called.  If the handle of a task
- * that is in the Blocked state is used in a call to xTaskAbortDelay() then the
- * task will leave the Blocked state, and return from whichever function call
- * placed the task into the Blocked state.
- *
- * There is no 'FromISR' version of this function as an interrupt would need to
- * know which object a task was blocked on in order to know which actions to
- * take.  For example, if the task was blocked on a queue the interrupt handler
- * would then need to know if the queue was locked.
- *
- * @param xTask The handle of the task to remove from the Blocked state.
- *
- * @return If the task referenced by xTask was not in the Blocked state then
- * pdFAIL is returned.  Otherwise pdPASS is returned.
- *
- * \defgroup xTaskAbortDelay xTaskAbortDelay
- * \ingroup TaskCtrl
- */
-BaseType_t xTaskAbortDelay( TaskHandle_t xTask );
 
 /**
  * task. h
