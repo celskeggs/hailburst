@@ -7,7 +7,6 @@ Under the same parent directory, clone the following repositories:
  - https://github.com/celskeggs/qemu
  - https://sourceware.org/git/binutils-gdb.git
  - https://github.com/embeddedartistry/libc (as ealibc/; remember to use --recursive)
- - https://github.com/FreeRTOS/FreeRTOS-Kernel.git @ commit 68ddb32b55be1bbe74977f79aedb8470a97b7542
 
 Then, download and extract https://buildroot.org/downloads/buildroot-2021.02.tar.bz2 somewhere on
 your system, such as to ~/Binary/buildroot-2021.02/. Make sure to use THIS EXACT VERSION!

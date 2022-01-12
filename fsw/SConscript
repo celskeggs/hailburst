@@ -120,15 +120,11 @@ def configure_freertos():
 
     ZLIB_ROOT = os.path.join(ROOT_DIR, "zlib-1.2.11")
 
-    FREERTOS_ROOT = os.path.join(ROOT_DIR, "FreeRTOS-Kernel")
-    FREERTOS_INC = os.path.join(FREERTOS_ROOT, "include")
-
     common_libs, _ = build_common(rtos_env)
     elf_lib = rtos_env.Library("elf", ["elf/elf.c", "freertos/debug.c"])
 
     rtos_env["CPPPATH"] += [
         "freertos/include/", "bootrom/include/",
-        FREERTOS_INC,
         EALIBC_INC, EALIBC_ROOT + "/arch/arm/include", ZLIB_ROOT
     ]
 
