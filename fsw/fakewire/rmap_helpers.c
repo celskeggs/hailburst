@@ -50,7 +50,7 @@ uint8_t rmap_crc8(uint8_t *bytes, size_t len) {
     return rmap_crc8_extend(0, bytes, len);
 }
 
-void rmap_encode_source_path(uint8_t **out, rmap_path_t *path) {
+void rmap_encode_source_path(uint8_t **out, const rmap_path_t *path) {
     // if we start with zeros, and aren't just a single zero, this CANNOT be encoded in the RMAP encoding scheme.
     assert(!(path->num_path_bytes > 1 && path->path_bytes[0] == 0));
     // output some zeros as padding

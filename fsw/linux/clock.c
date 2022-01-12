@@ -19,8 +19,8 @@ typedef struct {
 
     semaphore_t wake_calibrated;
 
-    rmap_t       rmap;
-    rmap_addr_t *address;
+    rmap_t             rmap;
+    const rmap_addr_t *address;
 
     tlm_async_endpoint_t telemetry;
 } clock_device_t;
@@ -56,7 +56,7 @@ static bool clock_read_register(uint32_t reg, void *output, size_t len) {
     return false;
 }
 
-void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
+void clock_init(const rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
     assert(address != NULL && rx_out != NULL && tx_out != NULL);
     assert(!clock_device.initialized);
 

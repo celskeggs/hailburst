@@ -29,7 +29,7 @@ enum {
     VADDR_CLOCK      = 35,
 };
 
-static rmap_addr_t radio_up_routing = {
+static const rmap_addr_t radio_up_routing = {
     .destination = {
         .path_bytes = NULL,
         .num_path_bytes = 0,
@@ -43,7 +43,7 @@ static rmap_addr_t radio_up_routing = {
     .dest_key = 101,
 };
 
-static rmap_addr_t radio_down_routing = {
+static const rmap_addr_t radio_down_routing = {
     .destination = {
         .path_bytes = NULL,
         .num_path_bytes = 0,
@@ -57,7 +57,7 @@ static rmap_addr_t radio_down_routing = {
     .dest_key = 101,
 };
 
-static rmap_addr_t magnetometer_routing = {
+static const rmap_addr_t magnetometer_routing = {
     .destination = {
         .path_bytes = NULL,
         .num_path_bytes = 0,
@@ -71,7 +71,7 @@ static rmap_addr_t magnetometer_routing = {
     .dest_key = 102,
 };
 
-static rmap_addr_t clock_routing = {
+static const rmap_addr_t clock_routing = {
     .destination = {
         .path_bytes = NULL,
         .num_path_bytes = 0,
@@ -97,6 +97,8 @@ static const fw_link_options_t exchange_options = {
     .flags = FW_FLAG_VIRTIO,
 };
 FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_tx_chart);
+
+MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
 void spacecraft_init(void) {
     assert(!initialized);
@@ -139,10 +141,8 @@ void spacecraft_init(void) {
     switch_add_port(&fce_vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
     switch_add_port(&fce_vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
 
-    debugf(INFO, "Initializing magnetometer...");
-    chart_t *mag_rx = NULL, *mag_tx = NULL;
-    magnetometer_init(&sc.mag, &magnetometer_routing, &mag_rx, &mag_tx);
-    switch_add_port(&fce_vswitch, VPORT_MAG, mag_tx, mag_rx);
+    debugf(INFO, "Attaching magnetometer...");
+    switch_add_port(&fce_vswitch, VPORT_MAG, &sc_mag_tx, &sc_mag_rx);
 
     debugf(INFO, "Initializing command loop...");
     command_init(&sc);

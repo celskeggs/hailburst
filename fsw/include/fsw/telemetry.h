@@ -32,6 +32,10 @@ void telemetry_init(comm_enc_t *encoder);
     tlm_async_endpoint_t t_ident; \
     PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_async_init, t_ident, &t_ident)
 
+#define TELEMETRY_SYNC_REGISTER(t_ident) \
+    tlm_sync_endpoint_t t_ident; \
+    PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_sync_init, t_ident, &t_ident)
+
 // actual telemetry calls
 void tlm_async_init(tlm_async_endpoint_t *tep);
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id);

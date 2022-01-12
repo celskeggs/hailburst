@@ -91,6 +91,10 @@ extern void thread_create_internal(thread_t *out, void (*start_routine)(void*), 
 #define thread_time_now(x)      THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
 #define thread_join_timed(x, t) THREAD_CHECK_OK(pthread_timedjoin_np((x)->thread, NULL, (t)), ETIMEDOUT)
 
+#define SEMAPHORE_REGISTER(s_ident) \
+    semaphore_t s_ident; \
+    PROGRAM_INIT_PARAM(STAGE_RAW, semaphore_init, s_ident, &s_ident);
+
 // semaphores are created empty, such that an initial take will block
 void semaphore_init(semaphore_t *sema);
 void semaphore_destroy(semaphore_t *sema);

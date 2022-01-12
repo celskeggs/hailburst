@@ -10,7 +10,6 @@
 typedef struct {
     // devices
     radio_t        radio;
-    magnetometer_t mag;
 
     // telecomm infrastructure
     stream_t       uplink_stream;
@@ -18,6 +17,8 @@ typedef struct {
     comm_dec_t     comm_decoder;
     comm_enc_t     comm_encoder;
 } spacecraft_t;
+
+extern magnetometer_t sc_mag;
 
 void spacecraft_init(void);
 

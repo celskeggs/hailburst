@@ -66,8 +66,8 @@ static void radio_uplink_loop(void *radio_opaque);
 static void radio_downlink_loop(void *radio_opaque);
 
 void radio_init(radio_t *radio,
-                rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
-                rmap_addr_t *down_addr, chart_t **down_rx_out, chart_t **down_tx_out, size_t downlink_capacity,
+                const rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
+                const rmap_addr_t *down_addr, chart_t **down_rx_out, chart_t **down_tx_out, size_t downlink_capacity,
                 stream_t *uplink, stream_t *downlink) {
     assert(radio != NULL && up_addr != NULL && up_rx_out != NULL && up_tx_out != NULL && down_addr != NULL &&
            down_rx_out != NULL && down_tx_out != NULL && uplink != NULL && downlink != NULL);

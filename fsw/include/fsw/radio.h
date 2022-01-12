@@ -30,8 +30,8 @@ typedef struct {
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
 void radio_init(radio_t *radio,
-                rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
-                rmap_addr_t *down_addr, chart_t **down_rx_out, chart_t **down_tx_out, size_t downlink_capacity,
+                const rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
+                const rmap_addr_t *down_addr, chart_t **down_rx_out, chart_t **down_tx_out, size_t downlink_capacity,
                 stream_t *uplink, stream_t *downlink);
 
 void radio_start(radio_t *radio);

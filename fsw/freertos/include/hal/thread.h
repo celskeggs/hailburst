@@ -58,6 +58,11 @@ extern void thread_create(thread_t *out, const char *name, unsigned int priority
 
 void task_suspend(void) __attribute__((noreturn));
 
+// TODO: more efficient semaphore preallocation approach
+#define SEMAPHORE_REGISTER(s_ident) \
+    semaphore_t s_ident; \
+    PROGRAM_INIT_PARAM(STAGE_READY, semaphore_init, s_ident, &s_ident);
+
 // semaphores are created empty, such that an initial take will block
 extern void semaphore_init(semaphore_t *sema);
 extern void semaphore_destroy(semaphore_t *sema);

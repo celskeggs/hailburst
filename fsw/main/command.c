@@ -86,6 +86,7 @@ static cmd_status_t cmd_ping(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, 
 }
 
 static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
+    (void) sc;
     (void) telemetry;
     // parse
     bool pwr_state = cmd_parse_bool(p);
@@ -93,7 +94,7 @@ static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, tlm_async_endpoint_t
         return CMD_STATUS_UNRECOGNIZED;
     }
     // execute
-    magnetometer_set_powered(&sc->mag, pwr_state);
+    magnetometer_set_powered(&sc_mag, pwr_state);
     return CMD_STATUS_OK;
 }
 

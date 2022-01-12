@@ -5,7 +5,7 @@
 
 static tlm_async_endpoint_t telemetry;
 
-void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
+void clock_init(const rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
     (void) address;
     *rx_out = NULL;
     *tx_out = NULL;

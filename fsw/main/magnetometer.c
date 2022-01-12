@@ -32,8 +32,6 @@ enum {
     MAG_RS_INVALID_VALUE = 3,
     MAG_RS_CORRUPT_DATA  = 4,
 
-    MAGNETOMETER_MAX_READINGS = 100,
-
     READING_DELAY_NS = 100 * 1000 * 1000,
 };
 
@@ -42,7 +40,7 @@ static bool magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_
     value = htobe16(value);
 
     RETRY(TRANSACTION_RETRIES, "magnetometer register %u=%u set, error=0x%03x", reg, value, status) {
-        status = rmap_write_exact(&mag->endpoint, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
+        status = rmap_write_exact(mag->endpoint, &mag->address, RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
                                   0x00, reg, 2, (uint8_t *) &value, ack_timestamp_out);
         if (status == RS_OK) {
             return true;
@@ -79,7 +77,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
         uint16_t registers[4];
         status = RS_INVALID_ERR;
         RETRY(TRANSACTION_RETRIES, "magnetometer register reading, error=0x%03x", status) {
-            status = rmap_read_exact(&mag->endpoint, &mag->address, RF_INCREMENT,
+            status = rmap_read_exact(mag->endpoint, &mag->address, RF_INCREMENT,
                                      0x00, REG_LATCH, sizeof(registers), (uint8_t *) registers);
             if (status == RS_OK) {
                 break;
@@ -109,7 +107,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     return false;
 }
 
-static void magnetometer_mainloop(void *mag_opaque) {
+void magnetometer_mainloop(void *mag_opaque) {
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL);
 
@@ -118,7 +116,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
         // wait for magnetometer power command
         while (!atomic_load_relaxed(mag->should_be_powered)) {
             debugf(DEBUG, "Waiting for magnetometer power command...");
-            semaphore_take(&mag->flag_change);
+            semaphore_take(mag->flag_change);
         }
         debugf(DEBUG, "Turning on magnetometer power...");
 
@@ -128,14 +126,14 @@ static void magnetometer_mainloop(void *mag_opaque) {
             break;
         }
         uint64_t powered_at = clock_timestamp_monotonic();
-        tlm_mag_pwr_state_changed(&mag->telemetry_async, true);
+        tlm_mag_pwr_state_changed(mag->telemetry_async, true);
 
         // take readings every 100ms until told to stop
         uint64_t reading_time = powered_at + READING_DELAY_NS;
         while (atomic_load_relaxed(mag->should_be_powered)) {
             // wait 100ms and check to confirm we weren't cancelled during that time
             debugf(TRACE, "Waiting 100ms for next reading (monitoring flag).");
-            if (semaphore_take_timed_abs(&mag->flag_change, reading_time)) {
+            if (semaphore_take_timed_abs(mag->flag_change, reading_time)) {
                 // need to recheck state... wake might be spurious.
                 debugf(TRACE, "Woken up; rechecking flag!");
                 continue;
@@ -146,7 +144,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
             }
 
             // take and report reading
-            tlm_mag_reading_t *reading = chart_request_start(&mag->readings);
+            tlm_mag_reading_t *reading = chart_request_start(mag->readings);
             debugf(DEBUG, "Taking magnetometer reading...");
             if (!magnetometer_take_reading(mag, reading)) {
                 debugf(WARNING, "Magnetometer: quitting read loop due to RMAP error.");
@@ -155,7 +153,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
             if (reading == NULL) {
                 debugf(WARNING, "Magnetometer: out of space in queue to write readings.");
             } else {
-                chart_request_send(&mag->readings, 1);
+                chart_request_send(mag->readings, 1);
             }
 
             debugf(DEBUG, "Took magnetometer reading!");
@@ -169,7 +167,7 @@ static void magnetometer_mainloop(void *mag_opaque) {
             debugf(WARNING, "Magnetometer: quitting read loop due to RMAP error.");
             break;
         }
-        tlm_mag_pwr_state_changed(&mag->telemetry_async, false);
+        tlm_mag_pwr_state_changed(mag->telemetry_async, false);
     }
 }
 
@@ -177,10 +175,10 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL && reading_out != NULL);
 
-    *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(&mag->readings, index);
+    *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(mag->readings, index);
 }
 
-static void magnetometer_telemloop(void *mag_opaque) {
+void magnetometer_telemloop(void *mag_opaque) {
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL);
 
@@ -189,36 +187,21 @@ static void magnetometer_telemloop(void *mag_opaque) {
         uint64_t last_telem_time = clock_timestamp_monotonic();
 
         // see if we have readings to downlink
-        size_t downlink_count = chart_reply_avail(&mag->readings);
+        size_t downlink_count = chart_reply_avail(mag->readings);
         if (downlink_count > 0) {
             size_t write_count = downlink_count;
-            tlm_sync_mag_readings_map(&mag->telemetry_sync, &write_count, magnetometer_telem_iterator_fetch, mag);
+            tlm_sync_mag_readings_map(mag->telemetry_sync, &write_count, magnetometer_telem_iterator_fetch, mag);
             assert(write_count >= 1 && write_count <= downlink_count);
-            chart_reply_send(&mag->readings, write_count);
+            chart_reply_send(mag->readings, write_count);
         }
 
         sleep_until(last_telem_time + (uint64_t) 5500000000);
     }
 }
 
-static void magnetometer_drop_notification(void *opaque) {
+void magnetometer_drop_notification(void *opaque) {
     (void) opaque;
     // we're only using the chart as a datastructure, so no need for notifications.
-}
-
-void magnetometer_init(magnetometer_t *mag, rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
-    assert(mag != NULL && address != NULL && rx_out != NULL && tx_out != NULL);
-    chart_init(&mag->readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
-    chart_attach_server(&mag->readings, magnetometer_drop_notification, NULL);
-    chart_attach_client(&mag->readings, magnetometer_drop_notification, NULL);
-    tlm_async_init(&mag->telemetry_async);
-    tlm_sync_init(&mag->telemetry_sync);
-    semaphore_init(&mag->flag_change);
-    mag->should_be_powered = false;
-    rmap_init(&mag->endpoint, 8, 4, rx_out, tx_out);
-    memcpy(&mag->address, address, sizeof(rmap_addr_t));
-    thread_create(&mag->query_thread, "mag_query_loop", PRIORITY_WORKERS, magnetometer_mainloop, mag, RESTARTABLE);
-    thread_create(&mag->telem_thread, "mag_telem_loop", PRIORITY_WORKERS, magnetometer_telemloop, mag, RESTARTABLE);
 }
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
@@ -226,6 +209,6 @@ void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     if (powered != mag->should_be_powered) {
         debugf(DEBUG, "Notifying mag_query_loop about new requested power state: %u.", powered);
         atomic_store_relaxed(mag->should_be_powered, powered);
-        semaphore_give(&mag->flag_change);
+        semaphore_give(mag->flag_change);
     }
 }
