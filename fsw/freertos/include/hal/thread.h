@@ -29,7 +29,7 @@ typedef struct thread_st {
     restartable_t       restartable;
     bool                needs_restart;
     bool                hit_restart;
-    StaticTask_t        preallocated_task_memory;
+    TCB_t               preallocated_task_memory;
     StackType_t         preallocated_stack[STACK_SIZE];
 } *thread_t;
 typedef SemaphoreHandle_t semaphore_t;

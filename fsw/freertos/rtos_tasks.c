@@ -237,84 +237,6 @@
     #define taskEVENT_LIST_ITEM_VALUE_IN_USE    0x80000000UL
 #endif
 
-/*
- * Task control block.  A task control block (TCB) is allocated for each task,
- * and stores task state information, including a pointer to the task's context
- * (the task's run time environment, including register values)
- */
-typedef struct tskTaskControlBlock       /* The old naming convention is used to prevent breaking kernel aware debuggers. */
-{
-    volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
-
-    ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
-    ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
-    UBaseType_t uxPriority;                     /*< The priority of the task.  0 is the lowest priority. */
-    StackType_t * pxStack;                      /*< Points to the start of the stack. */
-    char pcTaskName[ configMAX_TASK_NAME_LEN ]; /*< Descriptive name given to the task when created.  Facilitates debugging only. */ /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-
-    #if ( ( portSTACK_GROWTH > 0 ) || ( configRECORD_STACK_HIGH_ADDRESS == 1 ) )
-        StackType_t * pxEndOfStack; /*< Points to the highest valid address for the stack. */
-    #endif
-
-    #if ( portCRITICAL_NESTING_IN_TCB == 1 )
-        UBaseType_t uxCriticalNesting; /*< Holds the critical section nesting depth for ports that do not maintain their own count in the port layer. */
-    #endif
-
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxTCBNumber;  /*< Stores a number that increments each time a TCB is created.  It allows debuggers to determine when a task has been deleted and then recreated. */
-        UBaseType_t uxTaskNumber; /*< Stores a number specifically for use by third party trace code. */
-    #endif
-
-    #if ( configUSE_MUTEXES == 1 )
-        UBaseType_t uxBasePriority; /*< The priority last assigned to the task - used by the priority inheritance mechanism. */
-        UBaseType_t uxMutexesHeld;
-    #endif
-
-    #if ( configUSE_APPLICATION_TASK_TAG == 1 )
-        TaskHookFunction_t pxTaskTag;
-    #endif
-
-    #if ( configNUM_THREAD_LOCAL_STORAGE_POINTERS > 0 )
-        void * pvThreadLocalStoragePointers[ configNUM_THREAD_LOCAL_STORAGE_POINTERS ];
-    #endif
-
-    #if ( configGENERATE_RUN_TIME_STATS == 1 )
-        configRUN_TIME_COUNTER_TYPE ulRunTimeCounter; /*< Stores the amount of time the task has spent in the Running state. */
-    #endif
-
-    #if ( configUSE_NEWLIB_REENTRANT == 1 )
-
-        /* Allocate a Newlib reent structure that is specific to this task.
-         * Note Newlib support has been included by popular demand, but is not
-         * used by the FreeRTOS maintainers themselves.  FreeRTOS is not
-         * responsible for resulting newlib operation.  User must be familiar with
-         * newlib and must provide system-wide implementations of the necessary
-         * stubs. Be warned that (at the time of writing) the current newlib design
-         * implements a system-wide malloc() that must be provided with locks.
-         *
-         * See the third party link http://www.nadler.com/embedded/newlibAndFreeRTOS.html
-         * for additional information. */
-        struct  _reent xNewLib_reent;
-    #endif
-
-    #if ( configUSE_TASK_NOTIFICATIONS == 1 )
-        volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-        volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-    #endif
-
-    #if ( INCLUDE_xTaskAbortDelay == 1 )
-        uint8_t ucDelayAborted;
-    #endif
-
-    #if ( configUSE_POSIX_ERRNO == 1 )
-        int iTaskErrno;
-    #endif
-} tskTCB;
-
-/* The old tskTCB name is maintained above then typedefed to the new TCB_t name
- * below to enable the use of older kernel aware debuggers. */
-typedef tskTCB TCB_t;
-
 /*lint -save -e956 A manual analysis and inspection has been used to determine
  * which static variables must be declared volatile. */
 TCB_t * volatile pxCurrentTCB = NULL;
@@ -516,15 +438,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB );
 
 /*-----------------------------------------------------------*/
 
-static_assert(sizeof(StaticTask_t) == sizeof(TCB_t), "StaticTask region must be the same size as TCB_t");
-
 TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
                                 const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
                                 const uint32_t ulStackDepth,
                                 void * const pvParameters,
                                 UBaseType_t uxPriority,
                                 StackType_t * const puxStackBuffer,
-                                StaticTask_t * const pxTaskBuffer )
+                                TCB_t * const pxTaskBuffer )
 {
     TCB_t * pxNewTCB;
     TaskHandle_t xReturn;
@@ -536,7 +456,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
     {
         /* The memory used for the task's TCB and stack are passed into this
          * function - use them. */
-        pxNewTCB = ( TCB_t * ) pxTaskBuffer; /*lint !e740 !e9087 Unusual cast is ok as the structures are designed to have the same alignment, and the size is checked by an assert. */
+        pxNewTCB = pxTaskBuffer;
         pxNewTCB->pxStack = ( StackType_t * ) puxStackBuffer;
 
         prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB );
