@@ -53,9 +53,6 @@ typedef StreamBufferHandle_t stream_t;
         .iter_next_thread = NULL, /* to be filled in later */ \
     }
 
-extern void thread_create(thread_t *out, const char *name, unsigned int priority,
-                          void (*start_routine)(void*), void *arg, restartable_t restartable);
-
 void task_suspend(void) __attribute__((noreturn));
 
 // TODO: more efficient semaphore preallocation approach

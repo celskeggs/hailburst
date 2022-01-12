@@ -75,7 +75,6 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
 #define mutex_lock_try(x) THREAD_CHECK_OK(pthread_mutex_trylock(x), EBUSY)
 #define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
 
-extern void thread_start_internal(thread_t thread);
 extern void start_predef_threads(void);
 
 // name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
@@ -84,12 +83,6 @@ extern void start_predef_threads(void);
         .start_routine = (t_start), \
         .start_parameter = (t_arg), \
     }
-
-extern void thread_create_internal(thread_t *out, void (*start_routine)(void*), void *arg);
-#define thread_create(t, name, priority, start, arg, restartable) thread_create_internal((t), (start), (arg))
-#define thread_join(x)          THREAD_CHECK(pthread_join((x)->thread, NULL))
-#define thread_time_now(x)      THREAD_CHECK(clock_gettime(CLOCK_REALTIME, (x)))
-#define thread_join_timed(x, t) THREAD_CHECK_OK(pthread_timedjoin_np((x)->thread, NULL, (t)), ETIMEDOUT)
 
 #define SEMAPHORE_REGISTER(s_ident) \
     semaphore_t s_ident; \

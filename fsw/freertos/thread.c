@@ -88,35 +88,6 @@ static void thread_registered_init(void) {
 
 PROGRAM_INIT(STAGE_READY, thread_registered_init);
 
-void thread_create(thread_t *out, const char *name, unsigned int priority,
-                   void (*start_routine)(void*), void *arg, restartable_t restartable) {
-    assert(out != NULL);
-
-    assert(priority < configMAX_PRIORITIES);
-
-    thread_t state = malloc(sizeof(*state));
-    assert(state != NULL);
-
-    state->name = name;
-    state->priority = priority;
-    state->start_routine = start_routine;
-    state->arg = arg;
-    state->restartable = restartable;
-    state->needs_restart = false;
-    state->hit_restart = false;
-    state->handle = NULL;
-    state->iter_next_thread = iter_first_thread;
-    atomic_store(iter_first_thread, state);
-
-    if (name == NULL) {
-        name = "anonymous_thread";
-    }
-
-    thread_start_internal(state);
-
-    *out = state;
-}
-
 void semaphore_init(semaphore_t *sema) {
     assert(sema != NULL);
     *sema = xSemaphoreCreateBinary();
