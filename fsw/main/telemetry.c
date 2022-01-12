@@ -54,8 +54,6 @@ enum {
     MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
-static void telemetry_mainloop(void *encoder_opaque);
-
 static void telemetry_mainloop_notify(void *opaque) {
     (void) opaque;
 
@@ -74,8 +72,6 @@ void telemetry_init(comm_enc_t *encoder) {
     telemetry.comm_encoder = encoder;
 
     telemetry.initialized = true;
-
-    thread_create(&telemetry.thread, "tlm_mainloop", PRIORITY_WORKERS, telemetry_mainloop, NULL, RESTARTABLE);
 }
 
 static void tlm_async_notify(void *opaque) {
@@ -151,6 +147,7 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
 static void telemetry_mainloop(void *opaque) {
     (void) opaque;
 
+    assert(telemetry.initialized == true);
     assert(telemetry.comm_encoder != NULL);
 
     for (;;) {
@@ -220,6 +217,8 @@ static void telemetry_mainloop(void *opaque) {
         }
     }
 }
+
+TASK_REGISTER(telemetry_task, "tlm_mainloop", PRIORITY_WORKERS, telemetry_mainloop, NULL, RESTARTABLE);
 
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id) {
     debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
