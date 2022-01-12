@@ -11,7 +11,7 @@
 //#define DEBUG
 //#define APIDEBUG
 
-#define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->link_opts.label, ## __VA_ARGS__)
+#define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->label, ## __VA_ARGS__)
 
 void fakewire_exc_notify(void *opaque) {
     fw_exchange_t *fwe = (fw_exchange_t *) opaque;
@@ -29,7 +29,6 @@ void fakewire_exc_init_internal(fw_exchange_t *fwe) {
 
     fakewire_enc_init(&fwe->encoder, fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, fwe->receive_chart);
-    fakewire_link_init(&fwe->io_port, fwe->link_opts, fwe->receive_chart, fwe->transmit_chart);
 }
 
 // custom exchange protocol

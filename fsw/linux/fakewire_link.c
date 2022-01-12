@@ -13,22 +13,22 @@
 
 //#define DEBUG
 
-#define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->label, ## __VA_ARGS__))
+#define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->options.label, ## __VA_ARGS__))
 
-static void fakewire_link_rx_loop(void *opaque) {
+void fakewire_link_rx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
     // make sure we wait for fds to actually be populated
-    semaphore_take(&fwl->fds_ready);
+    semaphore_take(fwl->fds_ready);
     // then wake up again in case the other task is still waiting
-    (void) semaphore_give(&fwl->fds_ready);
+    (void) semaphore_give(fwl->fds_ready);
 
     while (true) {
         struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
-            semaphore_take(&fwl->receive_wake);
+            semaphore_take(fwl->receive_wake);
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -52,20 +52,20 @@ static void fakewire_link_rx_loop(void *opaque) {
     }
 }
 
-static void fakewire_link_tx_loop(void *opaque) {
+void fakewire_link_tx_loop(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
 
     // make sure we wait for fds to actually be populated
-    semaphore_take(&fwl->fds_ready);
+    semaphore_take(fwl->fds_ready);
     // then wake up again in case the other task is still waiting
-    (void) semaphore_give(&fwl->fds_ready);
+    (void) semaphore_give(fwl->fds_ready);
 
     while (true) {
         struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
-            semaphore_take(&fwl->transmit_wake);
+            semaphore_take(fwl->transmit_wake);
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -86,25 +86,25 @@ static void fakewire_link_tx_loop(void *opaque) {
     }
 }
 
-static void fakewire_link_notify_rx_chart(void *opaque) {
+void fakewire_link_notify_rx_chart(void *opaque) {
     fw_link_t *fwl = (fw_link_t *) opaque;
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
     // that just means a previous wakeup is still pending, which is just as good!
-    (void) semaphore_give(&fwl->receive_wake);
+    (void) semaphore_give(fwl->receive_wake);
 }
 
-static void fakewire_link_notify_tx_chart(void *opaque) {
+void fakewire_link_notify_tx_chart(void *opaque) {
     fw_link_t *fwl = (fw_link_t *) opaque;
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
     // that just means a previous wakeup is still pending, which is just as good!
-    (void) semaphore_give(&fwl->transmit_wake);
+    (void) semaphore_give(fwl->transmit_wake);
 }
 
-static void fakewire_link_configure(void *opaque) {
+void fakewire_link_configure(void *opaque) {
     assert(opaque != NULL);
     fw_link_t *fwl = (fw_link_t*) opaque;
     fw_link_options_t opts = fwl->options;
@@ -177,29 +177,5 @@ static void fakewire_link_configure(void *opaque) {
     }
     assert(fwl->fd_in != 0 && fwl->fd_out != 0);
 
-    (void) semaphore_give(&fwl->fds_ready);
-}
-
-void fakewire_link_init(fw_link_t *fwl, fw_link_options_t opts, chart_t *data_rx, chart_t *data_tx) {
-    assert(fwl != NULL && data_rx != NULL && opts.label != NULL && opts.path != NULL);
-    memset(fwl, 0, sizeof(fw_link_t));
-
-    // set up debug info real quick
-    fwl->label = opts.label;
-    fwl->options = opts;
-
-    // prepare for input thread
-    semaphore_init(&fwl->fds_ready);
-    semaphore_init(&fwl->receive_wake);
-    semaphore_init(&fwl->transmit_wake);
-    fwl->rx_chart = data_rx;
-    fwl->tx_chart = data_tx;
-
-    chart_attach_client(data_rx, fakewire_link_notify_rx_chart, fwl);
-    chart_attach_server(data_tx, fakewire_link_notify_tx_chart, fwl);
-
-    // and now let's set up the transmit and receive threads
-    thread_create(&fwl->configure_thread, "fw_config",  PRIORITY_INIT,  fakewire_link_configure, fwl, NOT_RESTARTABLE);
-    thread_create(&fwl->receive_thread,   "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, fwl, NOT_RESTARTABLE);
-    thread_create(&fwl->transmit_thread,  "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, fwl, NOT_RESTARTABLE);
+    (void) semaphore_give(fwl->fds_ready);
 }

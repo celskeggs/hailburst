@@ -6,9 +6,8 @@
 #include <fsw/fakewire/link.h>
 
 typedef struct fw_exchange_st {
-    fw_link_options_t link_opts;
+    const char *label;
 
-    fw_link_t    io_port;
     fw_encoder_t encoder;
     fw_decoder_t decoder;
 
@@ -32,8 +31,10 @@ void fakewire_exc_exchange_loop(void *fwe_opaque);
     CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, fakewire_exc_notify, &e_ident);      \
     CHART_REGISTER(e_ident ## _receive_chart, 1024, 16);                                 \
     CHART_SERVER_NOTIFY(e_ident ## _receive_chart, fakewire_exc_notify, &e_ident);       \
+    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                          \
+                           e_ident ## _receive_chart, e_ident ## _transmit_chart);       \
     fw_exchange_t e_ident = {                                                            \
-        .link_opts = (e_link_options),                                                   \
+        .label = (e_link_options).label,                                                 \
         /* io_port, encoder, decoder, exchange_wake not initialized here */              \
         .transmit_chart = &e_ident ## _transmit_chart,                                   \
         .receive_chart = &e_ident ## _receive_chart,                                     \
