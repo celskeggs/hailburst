@@ -94,10 +94,6 @@
 #endif
 /* *INDENT-ON* */
 
-/* make sure these are dropped */
-#define PRIVILEGED_FUNCTION
-#define PRIVILEGED_DATA
-
 /*
  * Setup the stack of a new task so it is ready to be placed under the
  * scheduler control.  The registers have to be placed on the stack in
@@ -108,11 +104,11 @@
     StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                          StackType_t * pxEndOfStack,
                                          TaskFunction_t pxCode,
-                                         void * pvParameters ) PRIVILEGED_FUNCTION;
+                                         void * pvParameters );
 #else
     StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                          TaskFunction_t pxCode,
-                                         void * pvParameters ) PRIVILEGED_FUNCTION;
+                                         void * pvParameters );
 #endif
 
 /* Used by heap_5.c to define the start address and size of each memory region
@@ -146,7 +142,7 @@ typedef struct xHeapStats
  * terminated by a HeapRegions_t structure that has a size of 0.  The region
  * with the lowest start address must appear first in the array.
  */
-void vPortDefineHeapRegions( const HeapRegion_t * const pxHeapRegions ) PRIVILEGED_FUNCTION;
+void vPortDefineHeapRegions( const HeapRegion_t * const pxHeapRegions );
 
 /*
  * Returns a HeapStats_t structure filled with information about the current
@@ -157,15 +153,15 @@ void vPortGetHeapStats( HeapStats_t * pxHeapStats );
 /*
  * Map to the memory management routines required for the port.
  */
-void * pvPortMalloc( size_t xSize ) PRIVILEGED_FUNCTION;
-void vPortFree( void * pv ) PRIVILEGED_FUNCTION;
-void vPortInitialiseBlocks( void ) PRIVILEGED_FUNCTION;
-size_t xPortGetFreeHeapSize( void ) PRIVILEGED_FUNCTION;
-size_t xPortGetMinimumEverFreeHeapSize( void ) PRIVILEGED_FUNCTION;
+void * pvPortMalloc( size_t xSize );
+void vPortFree( void * pv );
+void vPortInitialiseBlocks( void );
+size_t xPortGetFreeHeapSize( void );
+size_t xPortGetMinimumEverFreeHeapSize( void );
 
 #if ( configSTACK_ALLOCATION_FROM_SEPARATE_HEAP == 1 )
-    void * pvPortMallocStack( size_t xSize ) PRIVILEGED_FUNCTION;
-    void vPortFreeStack( void * pv ) PRIVILEGED_FUNCTION;
+    void * pvPortMallocStack( size_t xSize );
+    void vPortFreeStack( void * pv );
 #else
     #define pvPortMallocStack    pvPortMalloc
     #define vPortFreeStack       vPortFree
@@ -175,7 +171,7 @@ size_t xPortGetMinimumEverFreeHeapSize( void ) PRIVILEGED_FUNCTION;
  * Setup the hardware ready for the scheduler to take control.  This generally
  * sets up a tick interrupt and sets timers for the correct tick frequency.
  */
-BaseType_t xPortStartScheduler( void ) PRIVILEGED_FUNCTION;
+BaseType_t xPortStartScheduler( void );
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus

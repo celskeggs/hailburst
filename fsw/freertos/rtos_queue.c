@@ -152,7 +152,7 @@ typedef xQUEUE Queue_t;
 /* The queue registry is simply an array of QueueRegistryItem_t structures.
  * The pcQueueName member of a structure being NULL is indicative of the
  * array position being vacant. */
-    PRIVILEGED_DATA QueueRegistryItem_t xQueueRegistry[ configQUEUE_REGISTRY_SIZE ];
+    QueueRegistryItem_t xQueueRegistry[ configQUEUE_REGISTRY_SIZE ];
 
 #endif /* configQUEUE_REGISTRY_SIZE */
 
@@ -164,21 +164,21 @@ typedef xQUEUE Queue_t;
  * to indicate that a task may require unblocking.  When the queue in unlocked
  * these lock counts are inspected, and the appropriate action taken.
  */
-static void prvUnlockQueue( Queue_t * const pxQueue ) PRIVILEGED_FUNCTION;
+static void prvUnlockQueue( Queue_t * const pxQueue );
 
 /*
  * Uses a critical section to determine if there is any data in a queue.
  *
  * @return pdTRUE if the queue contains no items, otherwise pdFALSE.
  */
-static BaseType_t prvIsQueueEmpty( const Queue_t * pxQueue ) PRIVILEGED_FUNCTION;
+static BaseType_t prvIsQueueEmpty( const Queue_t * pxQueue );
 
 /*
  * Uses a critical section to determine if there is any space in a queue.
  *
  * @return pdTRUE if there is no space, otherwise pdFALSE;
  */
-static BaseType_t prvIsQueueFull( const Queue_t * pxQueue ) PRIVILEGED_FUNCTION;
+static BaseType_t prvIsQueueFull( const Queue_t * pxQueue );
 
 /*
  * Copies an item into the queue, either at the front of the queue or the
@@ -186,13 +186,13 @@ static BaseType_t prvIsQueueFull( const Queue_t * pxQueue ) PRIVILEGED_FUNCTION;
  */
 static BaseType_t prvCopyDataToQueue( Queue_t * const pxQueue,
                                       const void * pvItemToQueue,
-                                      const BaseType_t xPosition ) PRIVILEGED_FUNCTION;
+                                      const BaseType_t xPosition );
 
 /*
  * Copies an item out of a queue.
  */
 static void prvCopyDataFromQueue( Queue_t * const pxQueue,
-                                  void * const pvBuffer ) PRIVILEGED_FUNCTION;
+                                  void * const pvBuffer );
 
 #if ( configUSE_QUEUE_SETS == 1 )
 
@@ -200,7 +200,7 @@ static void prvCopyDataFromQueue( Queue_t * const pxQueue,
  * Checks to see if a queue is a member of a queue set, and if so, notifies
  * the queue set that the queue contains data.
  */
-    static BaseType_t prvNotifyQueueSetContainer( const Queue_t * const pxQueue ) PRIVILEGED_FUNCTION;
+    static BaseType_t prvNotifyQueueSetContainer( const Queue_t * const pxQueue );
 #endif
 
 /*
@@ -211,7 +211,7 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
                                    const UBaseType_t uxItemSize,
                                    uint8_t * pucQueueStorage,
                                    const uint8_t ucQueueType,
-                                   Queue_t * pxNewQueue ) PRIVILEGED_FUNCTION;
+                                   Queue_t * pxNewQueue );
 
 /*
  * Mutexes are a special type of queue.  When a mutex is created, first the
@@ -219,7 +219,7 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
  * as a mutex.
  */
 #if ( configUSE_MUTEXES == 1 )
-    static void prvInitialiseMutex( Queue_t * pxNewQueue ) PRIVILEGED_FUNCTION;
+    static void prvInitialiseMutex( Queue_t * pxNewQueue );
 #endif
 
 #if ( configUSE_MUTEXES == 1 )
@@ -231,7 +231,7 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
  * other tasks that are waiting for the same mutex.  This function returns
  * that priority.
  */
-    static UBaseType_t prvGetDisinheritPriorityAfterTimeout( const Queue_t * const pxQueue ) PRIVILEGED_FUNCTION;
+    static UBaseType_t prvGetDisinheritPriorityAfterTimeout( const Queue_t * const pxQueue );
 #endif
 /*-----------------------------------------------------------*/
 

@@ -318,28 +318,28 @@ typedef tskTCB TCB_t;
 
 /*lint -save -e956 A manual analysis and inspection has been used to determine
  * which static variables must be declared volatile. */
-PRIVILEGED_DATA TCB_t * volatile pxCurrentTCB = NULL;
+TCB_t * volatile pxCurrentTCB = NULL;
 
 /* Lists for ready and blocked tasks. --------------------
  * xDelayedTaskList1 and xDelayedTaskList2 could be moved to function scope but
  * doing so breaks some kernel aware debuggers and debuggers that rely on removing
  * the static qualifier. */
-PRIVILEGED_DATA static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /*< Prioritised ready tasks. */
-PRIVILEGED_DATA static List_t xDelayedTaskList1;                         /*< Delayed tasks. */
-PRIVILEGED_DATA static List_t xDelayedTaskList2;                         /*< Delayed tasks (two lists are used - one for delays that have overflowed the current tick count. */
-PRIVILEGED_DATA static List_t * volatile pxDelayedTaskList;              /*< Points to the delayed task list currently being used. */
-PRIVILEGED_DATA static List_t * volatile pxOverflowDelayedTaskList;      /*< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
-PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
+static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /*< Prioritised ready tasks. */
+static List_t xDelayedTaskList1;                         /*< Delayed tasks. */
+static List_t xDelayedTaskList2;                         /*< Delayed tasks (two lists are used - one for delays that have overflowed the current tick count. */
+static List_t * volatile pxDelayedTaskList;              /*< Points to the delayed task list currently being used. */
+static List_t * volatile pxOverflowDelayedTaskList;      /*< Points to the delayed task list currently being used to hold tasks that have overflowed the current tick count. */
+static List_t xPendingReadyList;                         /*< Tasks that have been readied while the scheduler was suspended.  They will be moved to the ready list when the scheduler is resumed. */
 
 #if ( INCLUDE_vTaskDelete == 1 )
 
-    PRIVILEGED_DATA static List_t xTasksWaitingTermination; /*< Tasks that have been deleted - but their memory not yet freed. */
+    static List_t xTasksWaitingTermination; /*< Tasks that have been deleted - but their memory not yet freed. */
 
 #endif
 
 #if ( INCLUDE_vTaskSuspend == 1 )
 
-    PRIVILEGED_DATA static List_t xSuspendedTaskList; /*< Tasks that are currently suspended. */
+    static List_t xSuspendedTaskList; /*< Tasks that are currently suspended. */
 
 #endif
 
@@ -350,15 +350,15 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tas
 #endif
 
 /* Other file private variables. --------------------------------*/
-PRIVILEGED_DATA static volatile UBaseType_t uxCurrentNumberOfTasks = ( UBaseType_t ) 0U;
-PRIVILEGED_DATA static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
-PRIVILEGED_DATA static volatile UBaseType_t uxTopReadyPriority = tskIDLE_PRIORITY;
-PRIVILEGED_DATA static volatile BaseType_t xSchedulerRunning = pdFALSE;
-PRIVILEGED_DATA static volatile TickType_t xPendedTicks = ( TickType_t ) 0U;
-PRIVILEGED_DATA static volatile BaseType_t xYieldPending = pdFALSE;
-PRIVILEGED_DATA static volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
-PRIVILEGED_DATA static UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
-PRIVILEGED_DATA static volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
+static volatile UBaseType_t uxCurrentNumberOfTasks = ( UBaseType_t ) 0U;
+static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
+static volatile UBaseType_t uxTopReadyPriority = tskIDLE_PRIORITY;
+static volatile BaseType_t xSchedulerRunning = pdFALSE;
+static volatile TickType_t xPendedTicks = ( TickType_t ) 0U;
+static volatile BaseType_t xYieldPending = pdFALSE;
+static volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
+static UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
+static volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
 
 /* Improve support for OpenOCD. The kernel tracks Ready tasks via priority lists.
  * For tracking the state of remote threads, OpenOCD uses uxTopUsedPriority
@@ -373,14 +373,14 @@ const volatile UBaseType_t uxTopUsedPriority = configMAX_PRIORITIES - 1U;
  * kernel to move the task from the pending ready list into the real ready list
  * when the scheduler is unsuspended.  The pending ready list itself can only be
  * accessed from a critical section. */
-PRIVILEGED_DATA static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t ) pdFALSE;
+static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t ) pdFALSE;
 
 #if ( configGENERATE_RUN_TIME_STATS == 1 )
 
 /* Do not move these variables to function scope as doing so prevents the
  * code working with debuggers that need to remove the static qualifier. */
-    PRIVILEGED_DATA static configRUN_TIME_COUNTER_TYPE ulTaskSwitchedInTime = 0UL;    /*< Holds the value of a timer/counter the last time a task was switched in. */
-    PRIVILEGED_DATA static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime = 0UL; /*< Holds the total amount of execution time as defined by the run time counter clock. */
+    static configRUN_TIME_COUNTER_TYPE ulTaskSwitchedInTime = 0UL;    /*< Holds the value of a timer/counter the last time a task was switched in. */
+    static volatile configRUN_TIME_COUNTER_TYPE ulTotalRunTime = 0UL; /*< Holds the total amount of execution time as defined by the run time counter clock. */
 
 #endif
 
@@ -397,7 +397,7 @@ PRIVILEGED_DATA static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t
  */
 #if ( INCLUDE_vTaskSuspend == 1 )
 
-    static BaseType_t prvTaskIsTaskSuspended( const TaskHandle_t xTask ) PRIVILEGED_FUNCTION;
+    static BaseType_t prvTaskIsTaskSuspended( const TaskHandle_t xTask );
 
 #endif /* INCLUDE_vTaskSuspend */
 
@@ -405,7 +405,7 @@ PRIVILEGED_DATA static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t
  * Utility to ready all the lists used by the scheduler.  This is called
  * automatically upon the creation of the first task.
  */
-static void prvInitialiseTaskLists( void ) PRIVILEGED_FUNCTION;
+static void prvInitialiseTaskLists( void );
 
 /*
  * The idle task, which as all tasks is implemented as a never ending loop.
@@ -418,14 +418,14 @@ static void prvInitialiseTaskLists( void ) PRIVILEGED_FUNCTION;
  * void prvIdleTask( void *pvParameters );
  *
  */
-portTASK_FUNCTION_PROTO( prvIdleTask, pvParameters ) PRIVILEGED_FUNCTION;
+portTASK_FUNCTION_PROTO( prvIdleTask, pvParameters );
 
 /*
  * The currently executing task is entering the Blocked state.  Add the task to
  * either the current or the overflow delayed task list.
  */
 static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
-                                            const BaseType_t xCanBlockIndefinitely ) PRIVILEGED_FUNCTION;
+                                            const BaseType_t xCanBlockIndefinitely );
 
 /*
  * Fills an TaskStatus_t structure with information on each task that is
@@ -439,7 +439,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 
     static UBaseType_t prvListTasksWithinSingleList( TaskStatus_t * pxTaskStatusArray,
                                                      List_t * pxList,
-                                                     eTaskState eState ) PRIVILEGED_FUNCTION;
+                                                     eTaskState eState );
 
 #endif
 
@@ -450,7 +450,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 #if ( INCLUDE_xTaskGetHandle == 1 )
 
     static TCB_t * prvSearchForNameWithinSingleList( List_t * pxList,
-                                                     const char pcNameToQuery[] ) PRIVILEGED_FUNCTION;
+                                                     const char pcNameToQuery[] );
 
 #endif
 
@@ -461,7 +461,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
  */
 #if ( ( configUSE_TRACE_FACILITY == 1 ) || ( INCLUDE_uxTaskGetStackHighWaterMark == 1 ) || ( INCLUDE_uxTaskGetStackHighWaterMark2 == 1 ) )
 
-    static configSTACK_DEPTH_TYPE prvTaskCheckFreeStackSpace( const uint8_t * pucStackByte ) PRIVILEGED_FUNCTION;
+    static configSTACK_DEPTH_TYPE prvTaskCheckFreeStackSpace( const uint8_t * pucStackByte );
 
 #endif
 
@@ -476,7 +476,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
  */
 #if ( configUSE_TICKLESS_IDLE != 0 )
 
-    static TickType_t prvGetExpectedIdleTime( void ) PRIVILEGED_FUNCTION;
+    static TickType_t prvGetExpectedIdleTime( void );
 
 #endif
 
@@ -484,7 +484,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
  * Set xNextTaskUnblockTime to the time at which the next Blocked state task
  * will exit the Blocked state.
  */
-static void prvResetNextTaskUnblockTime( void ) PRIVILEGED_FUNCTION;
+static void prvResetNextTaskUnblockTime( void );
 
 #if ( ( configUSE_TRACE_FACILITY == 1 ) && ( configUSE_STATS_FORMATTING_FUNCTIONS > 0 ) )
 
@@ -493,7 +493,7 @@ static void prvResetNextTaskUnblockTime( void ) PRIVILEGED_FUNCTION;
  * human readable tables of task information.
  */
     static char * prvWriteNameToBuffer( char * pcBuffer,
-                                        const char * pcTaskName ) PRIVILEGED_FUNCTION;
+                                        const char * pcTaskName );
 
 #endif
 
@@ -507,13 +507,13 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   void * const pvParameters,
                                   UBaseType_t uxPriority,
                                   TaskHandle_t * const pxCreatedTask,
-                                  TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
+                                  TCB_t * pxNewTCB );
 
 /*
  * Called after a new task has been created and initialised to place the task
  * under the control of the scheduler.
  */
-static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
+static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB );
 
 /*-----------------------------------------------------------*/
 

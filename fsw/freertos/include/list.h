@@ -428,7 +428,7 @@ typedef struct xLIST
  * \page vListInitialise vListInitialise
  * \ingroup LinkedList
  */
-void vListInitialise( List_t * const pxList ) PRIVILEGED_FUNCTION;
+void vListInitialise( List_t * const pxList );
 
 /*
  * Must be called before a list item is used.  This sets the list container to
@@ -439,7 +439,7 @@ void vListInitialise( List_t * const pxList ) PRIVILEGED_FUNCTION;
  * \page vListInitialiseItem vListInitialiseItem
  * \ingroup LinkedList
  */
-void vListInitialiseItem( ListItem_t * const pxItem ) PRIVILEGED_FUNCTION;
+void vListInitialiseItem( ListItem_t * const pxItem );
 
 /*
  * Insert a list item into a list.  The item will be inserted into the list in
@@ -453,7 +453,7 @@ void vListInitialiseItem( ListItem_t * const pxItem ) PRIVILEGED_FUNCTION;
  * \ingroup LinkedList
  */
 void vListInsert( List_t * const pxList,
-                  ListItem_t * const pxNewListItem ) PRIVILEGED_FUNCTION;
+                  ListItem_t * const pxNewListItem );
 
 /*
  * Insert a list item into a list.  The item will be inserted in a position
@@ -475,7 +475,7 @@ void vListInsert( List_t * const pxList,
  * \ingroup LinkedList
  */
 void vListInsertEnd( List_t * const pxList,
-                     ListItem_t * const pxNewListItem ) PRIVILEGED_FUNCTION;
+                     ListItem_t * const pxNewListItem );
 
 /*
  * Remove an item from a list.  The list item has a pointer to the list that
@@ -490,7 +490,7 @@ void vListInsertEnd( List_t * const pxList,
  * \page uxListRemove uxListRemove
  * \ingroup LinkedList
  */
-UBaseType_t uxListRemove( ListItem_t * const pxItemToRemove ) PRIVILEGED_FUNCTION;
+UBaseType_t uxListRemove( ListItem_t * const pxItemToRemove );
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus
