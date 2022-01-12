@@ -318,12 +318,6 @@ typedef struct tskTaskControlBlock       /* The old naming convention is used to
         volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
     #endif
 
-    /* See the comments in FreeRTOS.h with the definition of
-     * tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE. */
-    #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 ) /*lint !e731 !e9029 Macro has been consolidated for readability reasons. */
-        uint8_t ucStaticallyAllocated;                     /*< Set to pdTRUE if the task is a statically allocated to ensure no attempt is made to free the memory. */
-    #endif
-
     #if ( INCLUDE_xTaskAbortDelay == 1 )
         uint8_t ucDelayAborted;
     #endif
@@ -355,7 +349,6 @@ PRIVILEGED_DATA static List_t xPendingReadyList;                         /*< Tas
 #if ( INCLUDE_vTaskDelete == 1 )
 
     PRIVILEGED_DATA static List_t xTasksWaitingTermination; /*< Tasks that have been deleted - but their memory not yet freed. */
-    PRIVILEGED_DATA static volatile UBaseType_t uxDeletedTasksWaitingCleanUp = ( UBaseType_t ) 0U;
 
 #endif
 
@@ -441,26 +434,6 @@ static void prvInitialiseTaskLists( void ) PRIVILEGED_FUNCTION;
  *
  */
 portTASK_FUNCTION_PROTO( prvIdleTask, pvParameters ) PRIVILEGED_FUNCTION;
-
-/*
- * Utility to free all memory allocated by the scheduler to hold a TCB,
- * including the stack pointed to by the TCB.
- *
- * This does not free memory allocated by the task itself (i.e. memory
- * allocated by calls to pvPortMalloc from within the tasks application code).
- */
-#if ( INCLUDE_vTaskDelete == 1 )
-
-    static void prvDeleteTCB( TCB_t * pxTCB ) PRIVILEGED_FUNCTION;
-
-#endif
-
-/*
- * Used only by the idle task.  This checks to see if anything has been placed
- * in the list of tasks waiting to be deleted.  If so the task is cleaned up
- * and its TCB deleted.
- */
-static void prvCheckTasksWaitingTermination( void ) PRIVILEGED_FUNCTION;
 
 /*
  * The currently executing task is entering the Blocked state.  Add the task to
@@ -560,250 +533,40 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
 /*-----------------------------------------------------------*/
 
-#if ( configSUPPORT_STATIC_ALLOCATION == 1 )
+static_assert(sizeof(StaticTask_t) == sizeof(TCB_t), "StaticTask region must be the same size as TCB_t");
 
-    TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
-                                    const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                                    const uint32_t ulStackDepth,
-                                    void * const pvParameters,
-                                    UBaseType_t uxPriority,
-                                    StackType_t * const puxStackBuffer,
-                                    StaticTask_t * const pxTaskBuffer )
+TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
+                                const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
+                                const uint32_t ulStackDepth,
+                                void * const pvParameters,
+                                UBaseType_t uxPriority,
+                                StackType_t * const puxStackBuffer,
+                                StaticTask_t * const pxTaskBuffer )
+{
+    TCB_t * pxNewTCB;
+    TaskHandle_t xReturn;
+
+    configASSERT( puxStackBuffer != NULL );
+    configASSERT( pxTaskBuffer != NULL );
+
+    if( ( pxTaskBuffer != NULL ) && ( puxStackBuffer != NULL ) )
     {
-        TCB_t * pxNewTCB;
-        TaskHandle_t xReturn;
+        /* The memory used for the task's TCB and stack are passed into this
+         * function - use them. */
+        pxNewTCB = ( TCB_t * ) pxTaskBuffer; /*lint !e740 !e9087 Unusual cast is ok as the structures are designed to have the same alignment, and the size is checked by an assert. */
+        pxNewTCB->pxStack = ( StackType_t * ) puxStackBuffer;
 
-        configASSERT( puxStackBuffer != NULL );
-        configASSERT( pxTaskBuffer != NULL );
-
-        #if ( configASSERT_DEFINED == 1 )
-            {
-                /* Sanity check that the size of the structure used to declare a
-                 * variable of type StaticTask_t equals the size of the real task
-                 * structure. */
-                volatile size_t xSize = sizeof( StaticTask_t );
-                configASSERT( xSize == sizeof( TCB_t ) );
-                ( void ) xSize; /* Prevent lint warning when configASSERT() is not used. */
-            }
-        #endif /* configASSERT_DEFINED */
-
-        if( ( pxTaskBuffer != NULL ) && ( puxStackBuffer != NULL ) )
-        {
-            /* The memory used for the task's TCB and stack are passed into this
-             * function - use them. */
-            pxNewTCB = ( TCB_t * ) pxTaskBuffer; /*lint !e740 !e9087 Unusual cast is ok as the structures are designed to have the same alignment, and the size is checked by an assert. */
-            pxNewTCB->pxStack = ( StackType_t * ) puxStackBuffer;
-
-            #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 ) /*lint !e731 !e9029 Macro has been consolidated for readability reasons. */
-                {
-                    /* Tasks can be created statically or dynamically, so note this
-                     * task was created statically in case the task is later deleted. */
-                    pxNewTCB->ucStaticallyAllocated = tskSTATICALLY_ALLOCATED_STACK_AND_TCB;
-                }
-            #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
-
-            prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB, NULL );
-            prvAddNewTaskToReadyList( pxNewTCB );
-        }
-        else
-        {
-            xReturn = NULL;
-        }
-
-        return xReturn;
+        prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB, NULL );
+        prvAddNewTaskToReadyList( pxNewTCB );
+    }
+    else
+    {
+        xReturn = NULL;
     }
 
-#endif /* SUPPORT_STATIC_ALLOCATION */
-/*-----------------------------------------------------------*/
+    return xReturn;
+}
 
-#if ( ( portUSING_MPU_WRAPPERS == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) )
-
-    BaseType_t xTaskCreateRestrictedStatic( const TaskParameters_t * const pxTaskDefinition,
-                                            TaskHandle_t * pxCreatedTask )
-    {
-        TCB_t * pxNewTCB;
-        BaseType_t xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-
-        configASSERT( pxTaskDefinition->puxStackBuffer != NULL );
-        configASSERT( pxTaskDefinition->pxTaskBuffer != NULL );
-
-        if( ( pxTaskDefinition->puxStackBuffer != NULL ) && ( pxTaskDefinition->pxTaskBuffer != NULL ) )
-        {
-            /* Allocate space for the TCB.  Where the memory comes from depends
-             * on the implementation of the port malloc function and whether or
-             * not static allocation is being used. */
-            pxNewTCB = ( TCB_t * ) pxTaskDefinition->pxTaskBuffer;
-
-            /* Store the stack location in the TCB. */
-            pxNewTCB->pxStack = pxTaskDefinition->puxStackBuffer;
-
-            #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 )
-                {
-                    /* Tasks can be created statically or dynamically, so note this
-                     * task was created statically in case the task is later deleted. */
-                    pxNewTCB->ucStaticallyAllocated = tskSTATICALLY_ALLOCATED_STACK_AND_TCB;
-                }
-            #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
-
-            prvInitialiseNewTask( pxTaskDefinition->pvTaskCode,
-                                  pxTaskDefinition->pcName,
-                                  ( uint32_t ) pxTaskDefinition->usStackDepth,
-                                  pxTaskDefinition->pvParameters,
-                                  pxTaskDefinition->uxPriority,
-                                  pxCreatedTask, pxNewTCB,
-                                  pxTaskDefinition->xRegions );
-
-            prvAddNewTaskToReadyList( pxNewTCB );
-            xReturn = pdPASS;
-        }
-
-        return xReturn;
-    }
-
-#endif /* ( portUSING_MPU_WRAPPERS == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) */
-/*-----------------------------------------------------------*/
-
-#if ( ( portUSING_MPU_WRAPPERS == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-
-    BaseType_t xTaskCreateRestricted( const TaskParameters_t * const pxTaskDefinition,
-                                      TaskHandle_t * pxCreatedTask )
-    {
-        TCB_t * pxNewTCB;
-        BaseType_t xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-
-        configASSERT( pxTaskDefinition->puxStackBuffer );
-
-        if( pxTaskDefinition->puxStackBuffer != NULL )
-        {
-            /* Allocate space for the TCB.  Where the memory comes from depends
-             * on the implementation of the port malloc function and whether or
-             * not static allocation is being used. */
-            pxNewTCB = ( TCB_t * ) pvPortMalloc( sizeof( TCB_t ) );
-
-            if( pxNewTCB != NULL )
-            {
-                /* Store the stack location in the TCB. */
-                pxNewTCB->pxStack = pxTaskDefinition->puxStackBuffer;
-
-                #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 )
-                    {
-                        /* Tasks can be created statically or dynamically, so note
-                         * this task had a statically allocated stack in case it is
-                         * later deleted.  The TCB was allocated dynamically. */
-                        pxNewTCB->ucStaticallyAllocated = tskSTATICALLY_ALLOCATED_STACK_ONLY;
-                    }
-                #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
-
-                prvInitialiseNewTask( pxTaskDefinition->pvTaskCode,
-                                      pxTaskDefinition->pcName,
-                                      ( uint32_t ) pxTaskDefinition->usStackDepth,
-                                      pxTaskDefinition->pvParameters,
-                                      pxTaskDefinition->uxPriority,
-                                      pxCreatedTask, pxNewTCB,
-                                      pxTaskDefinition->xRegions );
-
-                prvAddNewTaskToReadyList( pxNewTCB );
-                xReturn = pdPASS;
-            }
-        }
-
-        return xReturn;
-    }
-
-#endif /* portUSING_MPU_WRAPPERS */
-/*-----------------------------------------------------------*/
-
-#if ( configSUPPORT_DYNAMIC_ALLOCATION == 1 )
-
-    BaseType_t xTaskCreate( TaskFunction_t pxTaskCode,
-                            const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                            const configSTACK_DEPTH_TYPE usStackDepth,
-                            void * const pvParameters,
-                            UBaseType_t uxPriority,
-                            TaskHandle_t * const pxCreatedTask )
-    {
-        TCB_t * pxNewTCB;
-        BaseType_t xReturn;
-
-        /* If the stack grows down then allocate the stack then the TCB so the stack
-         * does not grow into the TCB.  Likewise if the stack grows up then allocate
-         * the TCB then the stack. */
-        #if ( portSTACK_GROWTH > 0 )
-            {
-                /* Allocate space for the TCB.  Where the memory comes from depends on
-                 * the implementation of the port malloc function and whether or not static
-                 * allocation is being used. */
-                pxNewTCB = ( TCB_t * ) pvPortMalloc( sizeof( TCB_t ) );
-
-                if( pxNewTCB != NULL )
-                {
-                    /* Allocate space for the stack used by the task being created.
-                     * The base of the stack memory stored in the TCB so the task can
-                     * be deleted later if required. */
-                    pxNewTCB->pxStack = ( StackType_t * ) pvPortMallocStack( ( ( ( size_t ) usStackDepth ) * sizeof( StackType_t ) ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
-
-                    if( pxNewTCB->pxStack == NULL )
-                    {
-                        /* Could not allocate the stack.  Delete the allocated TCB. */
-                        vPortFree( pxNewTCB );
-                        pxNewTCB = NULL;
-                    }
-                }
-            }
-        #else /* portSTACK_GROWTH */
-            {
-                StackType_t * pxStack;
-
-                /* Allocate space for the stack used by the task being created. */
-                pxStack = pvPortMallocStack( ( ( ( size_t ) usStackDepth ) * sizeof( StackType_t ) ) ); /*lint !e9079 All values returned by pvPortMalloc() have at least the alignment required by the MCU's stack and this allocation is the stack. */
-
-                if( pxStack != NULL )
-                {
-                    /* Allocate space for the TCB. */
-                    pxNewTCB = ( TCB_t * ) pvPortMalloc( sizeof( TCB_t ) ); /*lint !e9087 !e9079 All values returned by pvPortMalloc() have at least the alignment required by the MCU's stack, and the first member of TCB_t is always a pointer to the task's stack. */
-
-                    if( pxNewTCB != NULL )
-                    {
-                        /* Store the stack location in the TCB. */
-                        pxNewTCB->pxStack = pxStack;
-                    }
-                    else
-                    {
-                        /* The stack cannot be used as the TCB was not created.  Free
-                         * it again. */
-                        vPortFreeStack( pxStack );
-                    }
-                }
-                else
-                {
-                    pxNewTCB = NULL;
-                }
-            }
-        #endif /* portSTACK_GROWTH */
-
-        if( pxNewTCB != NULL )
-        {
-            #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 ) /*lint !e9029 !e731 Macro has been consolidated for readability reasons. */
-                {
-                    /* Tasks can be created statically or dynamically, so note this
-                     * task was created dynamically in case it is later deleted. */
-                    pxNewTCB->ucStaticallyAllocated = tskDYNAMICALLY_ALLOCATED_STACK_AND_TCB;
-                }
-            #endif /* tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE */
-
-            prvInitialiseNewTask( pxTaskCode, pcName, ( uint32_t ) usStackDepth, pvParameters, uxPriority, pxCreatedTask, pxNewTCB, NULL );
-            prvAddNewTaskToReadyList( pxNewTCB );
-            xReturn = pdPASS;
-        }
-        else
-        {
-            xReturn = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
-        }
-
-        return xReturn;
-    }
-
-#endif /* configSUPPORT_DYNAMIC_ALLOCATION */
 /*-----------------------------------------------------------*/
 
 static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
@@ -1180,50 +943,19 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
              * not return. */
             uxTaskNumber++;
 
-            if( pxTCB == pxCurrentTCB )
-            {
-                /* A task is deleting itself.  This cannot complete within the
-                 * task itself, as a context switch to another task is required.
-                 * Place the task in the termination list.  The idle task will
-                 * check the termination list and free up any memory allocated by
-                 * the scheduler for the TCB and stack of the deleted task. */
-                vListInsertEnd( &xTasksWaitingTermination, &( pxTCB->xStateListItem ) );
+            static_assert(configSUPPORT_STATIC_ALLOCATION == 1, "static allocation assumed by this refactoring");
 
-                /* Increment the ucTasksDeleted variable so the idle task knows
-                 * there is a task that has been deleted and that it should therefore
-                 * check the xTasksWaitingTermination list. */
-                ++uxDeletedTasksWaitingCleanUp;
+            --uxCurrentNumberOfTasks;
 
-                /* Call the delete hook before portPRE_TASK_DELETE_HOOK() as
-                 * portPRE_TASK_DELETE_HOOK() does not return in the Win32 port. */
-                traceTASK_DELETE( pxTCB );
+            traceTASK_DELETE( pxTCB );
 
-                /* The pre-delete hook is primarily for the Windows simulator,
-                 * in which Windows specific clean up operations are performed,
-                 * after which it is not possible to yield away from this task -
-                 * hence xYieldPending is used to latch that a context switch is
-                 * required. */
-                portPRE_TASK_DELETE_HOOK( pxTCB, &xYieldPending );
-            }
-            else
-            {
-                --uxCurrentNumberOfTasks;
-                traceTASK_DELETE( pxTCB );
-
-                /* Reset the next expected unblock time in case it referred to
-                 * the task that has just been deleted. */
-                prvResetNextTaskUnblockTime();
-            }
+            /* Reset the next expected unblock time in case it referred to
+             * the task that has just been deleted. */
+            prvResetNextTaskUnblockTime();
         }
         taskEXIT_CRITICAL();
 
-        /* If the task is not deleting itself, call prvDeleteTCB from outside of
-         * critical section. If a task deletes itself, prvDeleteTCB is called
-         * from prvCheckTasksWaitingTermination which is called from Idle task. */
-        if( pxTCB != pxCurrentTCB )
-        {
-            prvDeleteTCB( pxTCB );
-        }
+        static_assert(configSUPPORT_STATIC_ALLOCATION == 1, "static allocation assumed by this refactoring");
 
         /* Force a reschedule if it is the currently running task that has just
          * been deleted. */
@@ -3326,10 +3058,6 @@ portTASK_FUNCTION( prvIdleTask, pvParameters )
 
     for( ; ; )
     {
-        /* See if any tasks have deleted themselves - if so then the idle task
-         * is responsible for freeing the deleted task's TCB and stack. */
-        prvCheckTasksWaitingTermination();
-
         #if ( configUSE_PREEMPTION == 0 )
             {
                 /* If we are not using preemption we keep forcing a task switch to
@@ -3568,34 +3296,6 @@ static void prvInitialiseTaskLists( void )
 }
 /*-----------------------------------------------------------*/
 
-static void prvCheckTasksWaitingTermination( void )
-{
-    /** THIS FUNCTION IS CALLED FROM THE RTOS IDLE TASK **/
-
-    #if ( INCLUDE_vTaskDelete == 1 )
-        {
-            TCB_t * pxTCB;
-
-            /* uxDeletedTasksWaitingCleanUp is used to prevent taskENTER_CRITICAL()
-             * being called too often in the idle task. */
-            while( uxDeletedTasksWaitingCleanUp > ( UBaseType_t ) 0U )
-            {
-                taskENTER_CRITICAL();
-                {
-                    pxTCB = listGET_OWNER_OF_HEAD_ENTRY( ( &xTasksWaitingTermination ) ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-                    ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
-                    --uxCurrentNumberOfTasks;
-                    --uxDeletedTasksWaitingCleanUp;
-
-                    prvDeleteTCB( pxTCB );
-                }
-                taskEXIT_CRITICAL();
-            }
-        }
-    #endif /* INCLUDE_vTaskDelete */
-}
-/*-----------------------------------------------------------*/
-
 #if ( configUSE_TRACE_FACILITY == 1 )
 
     void vTaskGetInfo( TaskHandle_t xTask,
@@ -3816,64 +3516,6 @@ static void prvCheckTasksWaitingTermination( void )
     }
 
 #endif /* INCLUDE_uxTaskGetStackHighWaterMark */
-/*-----------------------------------------------------------*/
-
-#if ( INCLUDE_vTaskDelete == 1 )
-
-    static void prvDeleteTCB( TCB_t * pxTCB )
-    {
-        /* This call is required specifically for the TriCore port.  It must be
-         * above the vPortFree() calls.  The call is also used by ports/demos that
-         * want to allocate and clean RAM statically. */
-        portCLEAN_UP_TCB( pxTCB );
-
-        /* Free up the memory allocated by the scheduler for the task.  It is up
-         * to the task to free any memory allocated at the application level.
-         * See the third party link http://www.nadler.com/embedded/newlibAndFreeRTOS.html
-         * for additional information. */
-        #if ( configUSE_NEWLIB_REENTRANT == 1 )
-            {
-                _reclaim_reent( &( pxTCB->xNewLib_reent ) );
-            }
-        #endif /* configUSE_NEWLIB_REENTRANT */
-
-        #if ( ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 0 ) && ( portUSING_MPU_WRAPPERS == 0 ) )
-            {
-                /* The task can only have been allocated dynamically - free both
-                 * the stack and TCB. */
-                vPortFreeStack( pxTCB->pxStack );
-                vPortFree( pxTCB );
-            }
-        #elif ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 ) /*lint !e731 !e9029 Macro has been consolidated for readability reasons. */
-            {
-                /* The task could have been allocated statically or dynamically, so
-                 * check what was statically allocated before trying to free the
-                 * memory. */
-                if( pxTCB->ucStaticallyAllocated == tskDYNAMICALLY_ALLOCATED_STACK_AND_TCB )
-                {
-                    /* Both the stack and TCB were allocated dynamically, so both
-                     * must be freed. */
-                    vPortFreeStack( pxTCB->pxStack );
-                    vPortFree( pxTCB );
-                }
-                else if( pxTCB->ucStaticallyAllocated == tskSTATICALLY_ALLOCATED_STACK_ONLY )
-                {
-                    /* Only the stack was statically allocated, so the TCB is the
-                     * only memory that must be freed. */
-                    vPortFree( pxTCB );
-                }
-                else
-                {
-                    /* Neither the stack nor the TCB were allocated dynamically, so
-                     * nothing needs to be freed. */
-                    configASSERT( pxTCB->ucStaticallyAllocated == tskSTATICALLY_ALLOCATED_STACK_AND_TCB );
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-        #endif /* configSUPPORT_DYNAMIC_ALLOCATION */
-    }
-
-#endif /* INCLUDE_vTaskDelete */
 /*-----------------------------------------------------------*/
 
 static void prvResetNextTaskUnblockTime( void )
