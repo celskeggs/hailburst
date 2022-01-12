@@ -558,17 +558,6 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
  */
 static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
-/*
- * freertos_tasks_c_additions_init() should only be called if the user definable
- * macro FREERTOS_TASKS_C_ADDITIONS_INIT() is defined, as that is the only macro
- * called by the function.
- */
-#ifdef FREERTOS_TASKS_C_ADDITIONS_INIT
-
-    static void freertos_tasks_c_additions_init( void ) PRIVILEGED_FUNCTION;
-
-#endif
-
 /*-----------------------------------------------------------*/
 
 #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
@@ -1997,96 +1986,25 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
 void vTaskStartScheduler( void )
 {
-    BaseType_t xReturn;
+    /* Interrupts are turned off here, to ensure a tick does not occur
+     * before or during the call to xPortStartScheduler().  The stacks of
+     * the created tasks contain a status word with interrupts switched on
+     * so interrupts will automatically get re-enabled when the first task
+     * starts to run. */
+    portDISABLE_INTERRUPTS();
 
-    #if ( configUSE_TIMERS == 1 )
-        {
-            xReturn = xTimerCreateTimerTask();
-        }
-    #else
-        {
-            xReturn = pdPASS;
-        }
-    #endif /* configUSE_TIMERS */
+    xNextTaskUnblockTime = portMAX_DELAY;
+    xSchedulerRunning = pdTRUE;
+    xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
 
-    if( xReturn == pdPASS )
-    {
-        /* freertos_tasks_c_additions_init() should only be called if the user
-         * definable macro FREERTOS_TASKS_C_ADDITIONS_INIT() is defined, as that is
-         * the only macro called by the function. */
-        #ifdef FREERTOS_TASKS_C_ADDITIONS_INIT
-            {
-                freertos_tasks_c_additions_init();
-            }
-        #endif
+    traceTASK_SWITCHED_IN();
 
-        /* Interrupts are turned off here, to ensure a tick does not occur
-         * before or during the call to xPortStartScheduler().  The stacks of
-         * the created tasks contain a status word with interrupts switched on
-         * so interrupts will automatically get re-enabled when the first task
-         * starts to run. */
-        portDISABLE_INTERRUPTS();
-
-        #if ( configUSE_NEWLIB_REENTRANT == 1 )
-            {
-                /* Switch Newlib's _impure_ptr variable to point to the _reent
-                 * structure specific to the task that will run first.
-                 * See the third party link http://www.nadler.com/embedded/newlibAndFreeRTOS.html
-                 * for additional information. */
-                _impure_ptr = &( pxCurrentTCB->xNewLib_reent );
-            }
-        #endif /* configUSE_NEWLIB_REENTRANT */
-
-        xNextTaskUnblockTime = portMAX_DELAY;
-        xSchedulerRunning = pdTRUE;
-        xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
-
-        /* If configGENERATE_RUN_TIME_STATS is defined then the following
-         * macro must be defined to configure the timer/counter used to generate
-         * the run time counter time base.   NOTE:  If configGENERATE_RUN_TIME_STATS
-         * is set to 0 and the following line fails to build then ensure you do not
-         * have portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() defined in your
-         * FreeRTOSConfig.h file. */
-        portCONFIGURE_TIMER_FOR_RUN_TIME_STATS();
-
-        traceTASK_SWITCHED_IN();
-
-        /* Setting up the timer tick is hardware specific and thus in the
-         * portable interface. */
-        if( xPortStartScheduler() != pdFALSE )
-        {
-            /* Should not reach here as if the scheduler is running the
-             * function will not return. */
-        }
-        else
-        {
-            /* Should only reach here if a task calls xTaskEndScheduler(). */
-        }
-    }
-    else
-    {
-        /* This line will only be reached if the kernel could not be started,
-         * because there was not enough FreeRTOS heap to create the idle task
-         * or the timer task. */
-        configASSERT( xReturn != errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY );
-    }
-
-    /* OpenOCD makes use of uxTopUsedPriority for thread debugging. Prevent uxTopUsedPriority
-     * from getting optimized out as it is no longer used by the kernel. */
-    ( void ) uxTopUsedPriority;
+    /* Setting up the timer tick is hardware specific and thus in the
+     * portable interface. */
+    xPortStartScheduler();
+    abortf("should never return from PortStartScheduler");
 }
 /*-----------------------------------------------------------*/
-
-void vTaskEndScheduler( void )
-{
-    /* Stop the scheduler interrupts and call the portable scheduler end
-     * routine so the original ISRs can be restored if necessary.  The port
-     * layer must ensure interrupts enable  bit is left in the correct state. */
-    portDISABLE_INTERRUPTS();
-    xSchedulerRunning = pdFALSE;
-    vPortEndScheduler();
-}
-/*----------------------------------------------------------*/
 
 void vTaskSuspendAll( void )
 {
@@ -5381,17 +5299,3 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 #ifdef FREERTOS_MODULE_TEST
     #include "tasks_test_access_functions.h"
 #endif
-
-
-#if ( configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1 )
-
-    #include "freertos_tasks_c_additions.h"
-
-    #ifdef FREERTOS_TASKS_C_ADDITIONS_INIT
-        static void freertos_tasks_c_additions_init( void )
-        {
-            FREERTOS_TASKS_C_ADDITIONS_INIT();
-        }
-    #endif
-
-#endif /* if ( configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H == 1 ) */

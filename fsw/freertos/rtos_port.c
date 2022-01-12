@@ -371,21 +371,7 @@ uint32_t ulAPSR;
         }
     }
 
-    /* Will only get here if vTaskStartScheduler() was called with the CPU in
-    a non-privileged mode or the binary point register was not set to its lowest
-    possible value.  prvTaskExitError() is referenced to prevent a compiler
-    warning about it being defined but not referenced in the case that the user
-    defines their own exit address. */
-    ( void ) prvTaskExitError;
-    return 0;
-}
-/*-----------------------------------------------------------*/
-
-void vPortEndScheduler( void )
-{
-    /* Not implemented in ports where there is nothing to return to.
-    Artificially force an assert. */
-    configASSERT( ulCriticalNesting == 1000UL );
+    abortf("FreeRTOS scheduler failed");
 }
 /*-----------------------------------------------------------*/
 
