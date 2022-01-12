@@ -100,6 +100,8 @@ FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_
 
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
+COMMAND_REGISTER(sc_cmd, sc);
+
 void spacecraft_init(void) {
     assert(!initialized);
 
@@ -143,9 +145,6 @@ void spacecraft_init(void) {
 
     debugf(INFO, "Attaching magnetometer...");
     switch_add_port(&fce_vswitch, VPORT_MAG, &sc_mag_tx, &sc_mag_rx);
-
-    debugf(INFO, "Initializing command loop...");
-    command_init(&sc);
 
     initialized = true;
 }

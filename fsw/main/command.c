@@ -12,11 +12,6 @@ enum {
 	MAG_SET_PWR_STATE_CID = 0x02000001,
 };
 
-struct {
-    tlm_async_endpoint_t telemetry;
-    thread_t             thread;
-} command_state;
-
 typedef enum {
     CMD_STATUS_OK = 0,            // command succeeded
     CMD_STATUS_FAIL = 1,          // command failed
@@ -118,7 +113,9 @@ static cmd_status_t cmd_execute(spacecraft_t *sc, tlm_async_endpoint_t *telemetr
     return CMD_STATUS_UNRECOGNIZED;
 }
 
-static void cmd_mainloop(void *opaque) {
+TELEMETRY_ASYNC_REGISTER(cmd_telemetry);
+
+void cmd_mainloop(void *opaque) {
     assert(opaque != NULL);
     spacecraft_t *sc = (spacecraft_t *) opaque;
     comm_packet_t packet;
@@ -130,22 +127,15 @@ static void cmd_mainloop(void *opaque) {
         // wait for and decode next command
         comm_dec_decode(&sc->comm_decoder, &packet);
         // report reception
-        tlm_cmd_received(&command_state.telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
+        tlm_cmd_received(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
         // execute command
-        status = cmd_execute(sc, &command_state.telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
+        status = cmd_execute(sc, &cmd_telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
         // report completion
         if (status == CMD_STATUS_UNRECOGNIZED) {
-            tlm_cmd_not_recognized(&command_state.telemetry, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
+            tlm_cmd_not_recognized(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
         } else {
             assert(status == CMD_STATUS_OK || status == CMD_STATUS_FAIL);
-            tlm_cmd_completed(&command_state.telemetry, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
+            tlm_cmd_completed(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
         }
     }
-}
-
-void command_init(spacecraft_t *sc) {
-    assert(sc != NULL);
-
-    tlm_async_init(&command_state.telemetry);
-    thread_create(&command_state.thread, "cmd_loop", PRIORITY_WORKERS, cmd_mainloop, sc, RESTARTABLE);
 }
