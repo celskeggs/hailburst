@@ -8,8 +8,8 @@ int main(int argc, char *argv[]) {
     (void) argc;
     (void) argv;
 
-	freopen("/dev/console", "w", stdout);
-	freopen("/dev/console", "w", stderr);
+    freopen("/dev/console", "w", stdout);
+    freopen("/dev/console", "w", stderr);
 
     debugf(CRITICAL, "Initializing...");
 

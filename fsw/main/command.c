@@ -8,8 +8,8 @@
 #include <fsw/telemetry.h>
 
 enum {
-	PING_CID              = 0x01000001,
-	MAG_SET_PWR_STATE_CID = 0x02000001,
+    PING_CID              = 0x01000001,
+    MAG_SET_PWR_STATE_CID = 0x02000001,
 };
 
 typedef enum {

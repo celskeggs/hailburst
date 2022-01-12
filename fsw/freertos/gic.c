@@ -124,8 +124,7 @@ static void configure_gic(void) {
     cpu->gicc_abpr = 0; // enable group 1 interrupt preemption
 
     // enable forwarding of pending interrupts
-    asm volatile (	"dsb		\n"
-                    "isb		\n" ::: "memory" );    // TODO: is this really needed?
+    asm volatile("dsb\nisb\n" ::: "memory");  // TODO: is this really needed?
     dist->gicd_ctlr = 1;
     cpu->gicc_ctlr = 1;
 }

@@ -26,7 +26,7 @@ typedef struct {
 } clock_device_t;
 
 enum {
-	CLOCK_MAGIC_NUM = 0x71CC70CC, /* tick-tock */
+    CLOCK_MAGIC_NUM = 0x71CC70CC, /* tick-tock */
 
     REG_MAGIC  = 0x00,
     REG_CLOCK  = 0x04,
@@ -34,11 +34,11 @@ enum {
 
     TRANSACTION_RETRIES = 100,
 
-	CLOCK_RS_NOT_ALIGNED    = 1,
-	CLOCK_RS_INVALID_ADDR   = 2,
-	CLOCK_RS_INVALID_VALUE  = 3,
-	CLOCK_RS_INVALID_LENGTH = 4,
-	CLOCK_RS_CORRUPT_DATA   = 5,
+    CLOCK_RS_NOT_ALIGNED    = 1,
+    CLOCK_RS_INVALID_ADDR   = 2,
+    CLOCK_RS_INVALID_VALUE  = 3,
+    CLOCK_RS_INVALID_LENGTH = 4,
+    CLOCK_RS_CORRUPT_DATA   = 5,
 };
 
 static clock_device_t clock_device;
