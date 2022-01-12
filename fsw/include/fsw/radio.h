@@ -4,11 +4,6 @@
 #include <fsw/fakewire/rmap.h>
 
 typedef struct {
-    uint32_t base;
-    uint32_t size;
-} memregion_t;
-
-typedef struct {
     // separate RMAP handlers so that the tasks can operate independently
     rmap_t         rmap_up;
     rmap_t         rmap_down;
@@ -16,9 +11,6 @@ typedef struct {
     rmap_addr_t    address_up;
     rmap_addr_t    address_down;
 
-    // TODO: eliminate these regions, because they are now computable at compile time
-    memregion_t    rx_halves[2];
-    memregion_t    tx_region;
     uint32_t       bytes_extracted;
     stream_t      *up_stream;
     stream_t      *down_stream;

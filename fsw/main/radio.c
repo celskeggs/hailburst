@@ -30,6 +30,17 @@ enum {
     TRANSACTION_RETRIES = 5,
 };
 
+typedef struct {
+    uint32_t base;
+    uint32_t size;
+} memregion_t;
+
+const memregion_t rx_halves[] = {
+    [0] = { .base = 0,            .size = MEM_SIZE / 4 },
+    [1] = { .base = MEM_SIZE / 4, .size = MEM_SIZE / 4 },
+};
+const memregion_t tx_region = { .base = MEM_SIZE / 2, .size = MEM_SIZE / 2 };
+
 enum {
     RADIO_RS_PACKET_CORRUPTED   = 0x01,
     RADIO_RS_REGISTER_READ_ONLY = 0x02,
@@ -226,9 +237,6 @@ static bool radio_initialize_downlink(radio_t *radio) {
         return false;
     }
 
-    radio->tx_region.base = MEM_SIZE / 2;
-    radio->tx_region.size = MEM_SIZE / 2;
-
     // disable transmission
     if (!radio_write_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_STATE, TX_STATE_IDLE)) {
         return false;
@@ -248,11 +256,6 @@ static bool radio_initialize_uplink(radio_t *radio) {
     if (!radio_initialize_common(radio, IO_UPLINK_CONTEXT)) {
         return false;
     }
-
-    radio->rx_halves[0].base = 0;
-    radio->rx_halves[0].size = MEM_SIZE / 4;
-    radio->rx_halves[1].base = MEM_SIZE / 4;
-    radio->rx_halves[1].size = MEM_SIZE / 4;
 
     // disable transmission and reception
     if (!radio_write_register(radio, IO_UPLINK_CONTEXT, REG_RX_STATE, RX_STATE_IDLE)) {
@@ -295,10 +298,10 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         debugf(INFO, "Radio: initializing uplink out of IDLE mode");
 
         radio->bytes_extracted = 0;
-        reg[REG_RX_PTR] = radio->rx_halves[0].base;
-        reg[REG_RX_LEN] = radio->rx_halves[0].size;
-        reg[REG_RX_PTR_ALT] = radio->rx_halves[1].base;
-        reg[REG_RX_LEN_ALT] = radio->rx_halves[1].size;
+        reg[REG_RX_PTR] = rx_halves[0].base;
+        reg[REG_RX_LEN] = rx_halves[0].size;
+        reg[REG_RX_PTR_ALT] = rx_halves[1].base;
+        reg[REG_RX_LEN_ALT] = rx_halves[1].size;
         reg[REG_RX_STATE] = RX_STATE_LISTENING;
 
 #ifdef DEBUGIDX
@@ -315,8 +318,8 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     // otherwise, we've already been initialized, and can go look to read back previous results.
 
     // start by identifying what the current positions mean.
-    uint32_t end_index_h0 = radio->rx_halves[0].base + radio->rx_halves[0].size;
-    uint32_t end_index_h1 = radio->rx_halves[1].base + radio->rx_halves[1].size;
+    uint32_t end_index_h0 = rx_halves[0].base + rx_halves[0].size;
+    uint32_t end_index_h1 = rx_halves[1].base + rx_halves[1].size;
 
     uint32_t end_index_prime = reg[REG_RX_PTR] + reg[REG_RX_LEN];
     uint32_t end_index_alt = reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT];
@@ -335,9 +338,9 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     // identify where the next read location should be...
-    uint32_t read_cycle_offset = radio->bytes_extracted % (radio->rx_halves[0].size + radio->rx_halves[1].size);
-    int read_half = (read_cycle_offset >= radio->rx_halves[0].size) ? 1 : 0;
-    uint32_t read_half_offset = read_cycle_offset - (read_half ? radio->rx_halves[0].size : 0);
+    uint32_t read_cycle_offset = radio->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
+    int read_half = (read_cycle_offset >= rx_halves[0].size) ? 1 : 0;
+    uint32_t read_half_offset = read_cycle_offset - (read_half ? rx_halves[0].size : 0);
 
     uint32_t read_length; // bytes to read from current read half
     uint32_t read_length_flip; // bytes to read from opposite read half
@@ -349,8 +352,8 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         } else /* end_index_prime == end_index_h1 */ {
             assert(read_half == 0);
         }
-        read_length = radio->rx_halves[read_half].size - read_half_offset;
-        read_length_flip = reg[REG_RX_PTR] - radio->rx_halves[read_half ? 0 : 1].base;
+        read_length = rx_halves[read_half].size - read_half_offset;
+        read_length_flip = reg[REG_RX_PTR] - rx_halves[read_half ? 0 : 1].base;
     } else {
         // then we ARE in the prime half, and the read index must be here
         if (end_index_prime == end_index_h0) {
@@ -358,11 +361,11 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         } else /* end_index_prime == end_index_h1 */ {
             assert(read_half == 1);
         }
-        read_length = (reg[REG_RX_PTR] - radio->rx_halves[read_half].base) - read_half_offset;
+        read_length = (reg[REG_RX_PTR] - rx_halves[read_half].base) - read_half_offset;
         read_length_flip = 0;
     }
-    assert(read_half_offset + read_length <= radio->rx_halves[read_half].size);
-    assert(read_length_flip <= radio->rx_halves[read_half ? 0 : 1].size);
+    assert(read_half_offset + read_length <= rx_halves[read_half].size);
+    assert(read_length_flip <= rx_halves[read_half ? 0 : 1].size);
 
     // constrain the read to the actual size of the temporary buffer
     if (read_length > UPLINK_BUF_LOCAL_SIZE) {
@@ -376,7 +379,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     assert(read_length <= UPLINK_BUF_LOCAL_SIZE);
     if (read_length > 0) {
         uint8_t *src = radio_read_memory_fetch(radio, IO_UPLINK_CONTEXT,
-                                               radio->rx_halves[read_half].base + read_half_offset, read_length);
+                                               rx_halves[read_half].base + read_half_offset, read_length);
         if (src == NULL) {
             return -1;
         }
@@ -386,7 +389,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     assert(read_length_flip <= UPLINK_BUF_LOCAL_SIZE - read_length);
     if (read_length_flip > 0) {
         uint8_t *src = radio_read_memory_fetch(radio, IO_UPLINK_CONTEXT,
-                                               radio->rx_halves[read_half ? 0 : 1].base, read_length_flip);
+                                               rx_halves[read_half ? 0 : 1].base, read_length_flip);
         if (src == NULL) {
             return -1;
         }
@@ -404,8 +407,8 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     }
 
     // new question: is there any unread data in the alternate half?
-    uint32_t reread_cycle_offset = radio->bytes_extracted % (radio->rx_halves[0].size + radio->rx_halves[1].size);
-    int reread_half = (reread_cycle_offset >= radio->rx_halves[0].size) ? 1 : 0;
+    uint32_t reread_cycle_offset = radio->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
+    int reread_half = (reread_cycle_offset >= rx_halves[0].size) ? 1 : 0;
 
     bool any_unread_data_in_alternate = (reread_half == 0 && end_index_prime == end_index_h1)
                                      || (reread_half == 1 && end_index_prime == end_index_h0);
@@ -420,7 +423,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         assert(end_index_alt == 0);
     } else {
         // then we CAN safely refill the alternate pointer and length.
-        memregion_t new_region = (end_index_prime == end_index_h1) ? radio->rx_halves[0] : radio->rx_halves[1];
+        memregion_t new_region = (end_index_prime == end_index_h1) ? rx_halves[0] : rx_halves[1];
         if (reg[REG_RX_STATE] == RX_STATE_OVERFLOW) {
             // simulate effect of flip
             reg[REG_RX_PTR] = new_region.base;
@@ -504,8 +507,8 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     // write the new transmission into radio memory
     rmap_status_t status = RS_INVALID_ERR;
     RETRY(TRANSACTION_RETRIES, "radio memory write at 0x%x of length 0x%zx, error=0x%03x",
-                               radio->tx_region.base, append_len, status) {
-        uint8_t *write_target = radio_write_memory_prepare(radio, IO_DOWNLINK_CONTEXT, radio->tx_region.base, &status);
+                               tx_region.base, append_len, status) {
+        uint8_t *write_target = radio_write_memory_prepare(radio, IO_DOWNLINK_CONTEXT, tx_region.base, &status);
         if (write_target == NULL) {
             continue;
         }
@@ -522,9 +525,9 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     // start the write
     static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
     static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
-    assert(append_len <= radio->tx_region.size);
+    assert(append_len <= tx_region.size);
     uint32_t reg[] = {
-        /* REG_TX_PTR */   radio->tx_region.base,
+        /* REG_TX_PTR */   tx_region.base,
         /* REG_TX_LEN */   append_len,
         /* REG_TX_STATE */ TX_STATE_ACTIVE,
     };
@@ -566,14 +569,14 @@ static void radio_downlink_loop(void *radio_opaque) {
         return;
     }
 
-    size_t max_len = radio->tx_region.size;
+    size_t max_len = tx_region.size;
     if (max_len > DOWNLINK_BUF_LOCAL_SIZE) {
         max_len = DOWNLINK_BUF_LOCAL_SIZE;
     }
     assert(max_len > 0);
     for (;;) {
         size_t grabbed = stream_read(radio->down_stream, radio->downlink_buf_local, max_len);
-        assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= radio->tx_region.size);
+        assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= tx_region.size);
 
         if (!radio_downlink_service(radio, grabbed)) {
             debugf(WARNING, "Radio: hit error in downlink loop; halting downlink thread.");
