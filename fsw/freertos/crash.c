@@ -32,11 +32,15 @@ __attribute__((noreturn)) void task_suspend(void) {
 static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
 
+// also used in thread.c
+extern struct thread_st tasktable_start[];
+extern struct thread_st tasktable_end[];
+
 static void restart_task_mainloop(void *opaque) {
     (void) opaque;
 
     for (;;) {
-        for (thread_t thread = atomic_load(iter_first_thread); thread != NULL; thread = thread->iter_next_thread) {
+        for (thread_t thread = tasktable_start; thread < tasktable_end; thread++) {
             if (thread->needs_restart == true) {
                 thread->needs_restart = false;
                 thread_restart_other_task(thread);

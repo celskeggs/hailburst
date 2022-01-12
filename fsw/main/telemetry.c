@@ -34,7 +34,6 @@ struct {
     multichart_server_t async_chart;
     uint32_t            async_dropped; // atomic
     multichart_server_t sync_chart;
-    thread_t            thread;
 
     comm_enc_t *comm_encoder;
 } telemetry = {

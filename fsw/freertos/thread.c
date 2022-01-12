@@ -24,8 +24,6 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackTyp
 }
 #endif
 
-thread_t iter_first_thread = NULL;
-
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
 
@@ -73,14 +71,13 @@ void thread_restart_other_task(thread_t state) {
     debugf(WARNING, "Completed restart for task '%s'", state->name);
 }
 
+// also used in restart_task_mainloop
 extern struct thread_st tasktable_start[];
 extern struct thread_st tasktable_end[];
 
 static void thread_registered_init(void) {
     debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);
     for (thread_t task = tasktable_start; task < tasktable_end; task++) {
-        task->iter_next_thread = iter_first_thread;
-        atomic_store(iter_first_thread, task);
         thread_start_internal(task);
     }
     debugf(DEBUG, "Pre-registered threads started!");

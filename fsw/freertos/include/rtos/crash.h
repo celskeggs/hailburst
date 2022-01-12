@@ -6,8 +6,6 @@
 
 #include <hal/thread.h>
 
-extern thread_t iter_first_thread;
-
 void restart_task(TaskHandle_t task);
 void task_clear_crash(void);
 

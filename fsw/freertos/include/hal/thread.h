@@ -32,7 +32,6 @@ typedef struct thread_st {
     bool                hit_restart;
     StaticTask_t        preallocated_task_memory;
     StackType_t         preallocated_stack[STACK_SIZE];
-    struct thread_st   *iter_next_thread;
 } *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
 typedef StreamBufferHandle_t stream_t;
@@ -50,7 +49,6 @@ typedef StreamBufferHandle_t stream_t;
         .needs_restart = false,         \
         .hit_restart   = false,         \
         /* no need for anything for preallocated_ fields */   \
-        .iter_next_thread = NULL, /* to be filled in later */ \
     }
 
 void task_suspend(void) __attribute__((noreturn));
