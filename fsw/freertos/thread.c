@@ -8,32 +8,16 @@
 #include <fsw/debug.h>
 #include <fsw/init.h>
 
-#if ( configOVERRIDE_IDLE_TASK == 1 )
 extern void prvIdleTask(void *pvParameters);
 
 TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
-#else
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer,
-                                   uint32_t *pulIdleTaskStackSize) {
-
-    *ppxIdleTaskTCBBuffer = malloc(sizeof(StaticTask_t));
-    assert(*ppxIdleTaskTCBBuffer != NULL);
-    *ppxIdleTaskStackBuffer = malloc(sizeof(StackType_t) * configMINIMAL_STACK_SIZE);
-    assert(*ppxIdleTaskStackBuffer != NULL);
-    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-}
-#endif
 
 static void thread_entrypoint(void *opaque) {
     thread_t state = (thread_t) opaque;
 
     if (state->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
-#if ( configOVERRIDE_IDLE_TASK == 1 )
         scrubber_cycle_wait(state == &idle_task);
-#else
-        scrubber_cycle_wait(false);
-#endif
     }
 
     task_clear_crash();

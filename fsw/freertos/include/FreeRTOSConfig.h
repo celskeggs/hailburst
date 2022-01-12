@@ -32,8 +32,6 @@
 #define configUSE_TASK_FPU_SUPPORT              2
 #define configUSE_APPLICATION_TASK_TAG          1
 
-#define configOVERRIDE_IDLE_TASK                1
-
 enum {
     PRIORITY_REPAIR  = 5, // only used for critical repair tasks!
     PRIORITY_DRIVERS = 4,

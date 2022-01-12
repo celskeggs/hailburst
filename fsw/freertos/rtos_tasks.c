@@ -381,9 +381,6 @@ PRIVILEGED_DATA static volatile BaseType_t xYieldPending = pdFALSE;
 PRIVILEGED_DATA static volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
 PRIVILEGED_DATA static UBaseType_t uxTaskNumber = ( UBaseType_t ) 0U;
 PRIVILEGED_DATA static volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
-#if ( configOVERRIDE_IDLE_TASK == 0 )
-PRIVILEGED_DATA static TaskHandle_t xIdleTaskHandle = NULL;                          /*< Holds the handle of the idle task.  The idle task is created automatically when the scheduler is started. */
-#endif
 
 /* Improve support for OpenOCD. The kernel tracks Ready tasks via priority lists.
  * For tracking the state of remote threads, OpenOCD uses uxTopUsedPriority
@@ -2002,59 +1999,13 @@ void vTaskStartScheduler( void )
 {
     BaseType_t xReturn;
 
-    /* Add the idle task at the lowest priority. */
-    #if ( configOVERRIDE_IDLE_TASK == 0 )
-    #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
-        {
-            StaticTask_t * pxIdleTaskTCBBuffer = NULL;
-            StackType_t * pxIdleTaskStackBuffer = NULL;
-            uint32_t ulIdleTaskStackSize;
-
-            /* The Idle task is created using user provided RAM - obtain the
-             * address of the RAM then create the idle task. */
-            vApplicationGetIdleTaskMemory( &pxIdleTaskTCBBuffer, &pxIdleTaskStackBuffer, &ulIdleTaskStackSize );
-            xIdleTaskHandle = xTaskCreateStatic( prvIdleTask,
-                                                 configIDLE_TASK_NAME,
-                                                 ulIdleTaskStackSize,
-                                                 ( void * ) NULL,       /*lint !e961.  The cast is not redundant for all compilers. */
-                                                 portPRIVILEGE_BIT,     /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
-                                                 pxIdleTaskStackBuffer,
-                                                 pxIdleTaskTCBBuffer ); /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
-
-            if( xIdleTaskHandle != NULL )
-            {
-                xReturn = pdPASS;
-            }
-            else
-            {
-                xReturn = pdFAIL;
-            }
-        }
-    #else /* if ( configSUPPORT_STATIC_ALLOCATION == 1 ) */
-        {
-            /* The Idle task is being created using dynamically allocated RAM. */
-            xReturn = xTaskCreate( prvIdleTask,
-                                   configIDLE_TASK_NAME,
-                                   configMINIMAL_STACK_SIZE,
-                                   ( void * ) NULL,
-                                   portPRIVILEGE_BIT,  /* In effect ( tskIDLE_PRIORITY | portPRIVILEGE_BIT ), but tskIDLE_PRIORITY is zero. */
-                                   &xIdleTaskHandle ); /*lint !e961 MISRA exception, justified as it is not a redundant explicit cast to all supported compilers. */
-        }
-    #endif /* configSUPPORT_STATIC_ALLOCATION */
-    #else
-    xReturn = pdPASS;
-    #endif /* configOVERRIDE_IDLE_TASK */
-
     #if ( configUSE_TIMERS == 1 )
         {
-            if( xReturn == pdPASS )
-            {
-                xReturn = xTimerCreateTimerTask();
-            }
-            else
-            {
-                mtCOVERAGE_TEST_MARKER();
-            }
+            xReturn = xTimerCreateTimerTask();
+        }
+    #else
+        {
+            xReturn = pdPASS;
         }
     #endif /* configUSE_TIMERS */
 
@@ -2119,12 +2070,6 @@ void vTaskStartScheduler( void )
          * or the timer task. */
         configASSERT( xReturn != errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY );
     }
-
-    /* Prevent compiler warnings if INCLUDE_xTaskGetIdleTaskHandle is set to 0,
-     * meaning xIdleTaskHandle is not used anywhere else. */
-#if ( configOVERRIDE_IDLE_TASK == 0 )
-    ( void ) xIdleTaskHandle;
-#endif
 
     /* OpenOCD makes use of uxTopUsedPriority for thread debugging. Prevent uxTopUsedPriority
      * from getting optimized out as it is no longer used by the kernel. */

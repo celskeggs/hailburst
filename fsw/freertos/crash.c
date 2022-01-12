@@ -152,13 +152,6 @@ void task_abort_handler(unsigned int trap_mode) {
     const char *name = pcTaskGetName(failed_task);
     debugf(WARNING, "%s occurred in task '%s'", trap_name, name);
 
-#if ( configOVERRIDE_IDLE_TASK == 0 )
-    if (failed_task == xTaskGetIdleTaskHandle()) {
-        // cannot suspend the IDLE task safely, because FreeRTOS requires that there always be an IDLE task
-        abortf("EXCEPTION OCCURRED IN IDLE TASK; HALTING RTOS.");
-    }
-#endif
-
     if (last_failed_task == failed_task) {
         // should be different, because we shouldn't hit any aborts past this point
         abortf("RECURSIVE ABORT; HALTING RTOS.");
