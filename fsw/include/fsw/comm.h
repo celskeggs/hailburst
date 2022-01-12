@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <hal/thread.h>
+#include <fsw/stream.h>
 
 typedef struct {
     uint32_t       cmd_tlm_id;

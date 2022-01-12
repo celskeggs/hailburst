@@ -7,7 +7,6 @@
 
 #include <FreeRTOS.h>
 #include <semphr.h>
-#include <stream_buffer.h>
 
 #include <rtos/timer.h>
 #include <fsw/debug.h>
@@ -34,7 +33,6 @@ typedef struct thread_st {
     StackType_t         preallocated_stack[STACK_SIZE];
 } *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
-typedef StreamBufferHandle_t stream_t;
 
 // TODO: make the entrypoint parameter strongly typed like PROGRAM_INIT_PARAM
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
@@ -90,34 +88,6 @@ static inline bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline
 static inline bool semaphore_give(semaphore_t *sema) {
     assert(sema != NULL && *sema != NULL);
     return xSemaphoreGive(*sema) == pdTRUE;
-}
-
-static inline void stream_init(stream_t *stream, size_t capacity) {
-    assert(stream != NULL);
-    assert(capacity > 0);
-    *stream = xStreamBufferCreate(capacity, 1);
-    assert(*stream != NULL);
-}
-
-static inline void stream_destroy(stream_t *stream) {
-    assert(stream != NULL && *stream != NULL);
-    vStreamBufferDelete(*stream);
-    *stream = NULL;
-}
-
-// may only be used by a single thread at a time
-static inline void stream_write(stream_t *stream, uint8_t *data, size_t length) {
-    assert(stream != NULL && *stream != NULL);
-    size_t written = xStreamBufferSend(*stream, data, length, portMAX_DELAY);
-    assert(written == length);
-}
-
-// may only be used by a single thread at a time
-static inline size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len) {
-    assert(stream != NULL && *stream != NULL);
-    size_t read = xStreamBufferReceive(*stream, data, max_len, portMAX_DELAY);
-    assert(read > 0);
-    return read;
 }
 
 #endif /* FSW_FREERTOS_HAL_THREAD_H */

@@ -1,6 +1,7 @@
 #ifndef FSW_RADIO_H
 #define FSW_RADIO_H
 
+#include <fsw/stream.h>
 #include <fsw/fakewire/rmap.h>
 
 typedef enum {

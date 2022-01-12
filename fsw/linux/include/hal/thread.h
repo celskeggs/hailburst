@@ -30,27 +30,6 @@ typedef struct {
     bool           is_available;
 } semaphore_t;
 
-// stream implementations based on the "good option" from here:
-// https://www.snellman.net/blog/archive/2016-12-13-ring-buffers/
-
-typedef struct {
-    mutex_t mutex;
-
-    // semaphores to notify when data is ready to be read or written
-    semaphore_t unblock_write;
-    semaphore_t unblock_read;
-    // advisory flags to catch simultaneous blocking writes or simultaneous blocking reads...
-    // (also used for optimization purposes)
-    bool blocked_write;
-    bool blocked_read;
-
-    uint8_t *memory;
-    size_t   capacity;
-    // TODO: make sure I test integer overflow or read_idx and write_idx... SHOULD be fine, but needs to be tested
-    size_t   read_idx;
-    size_t   write_idx;
-} stream_t;
-
 static inline void thread_check(int fail, const char *note) {
     if (fail != 0) {
         fprintf(stderr, "thread error: %d in %s\n", fail, note);
@@ -100,12 +79,5 @@ bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
 // returns true if taken, false if timed out
 bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
 bool semaphore_give(semaphore_t *sema);
-
-extern void stream_init(stream_t *stream, size_t capacity);
-extern void stream_destroy(stream_t *stream);
-// may only be used by a single thread at a time
-extern void stream_write(stream_t *stream, uint8_t *data, size_t length);
-// may only be used by a single thread at a time
-extern size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len);
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

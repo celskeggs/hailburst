@@ -6,7 +6,7 @@ import subprocess
 
 def build_common(env):
     env["CPPPATH"] += ["include/"]
-    concurrency = env.Library("concurrency", ["main/chart.c", "main/init.c", "main/multichart.c"])
+    concurrency = env.Library("concurrency", ["main/chart.c", "main/init.c", "main/multichart.c", "main/stream.c"])
     fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "fakewire/rmap.c",
                                         "fakewire/rmap_helpers.c", "fakewire/switch.c"])
     # note: we have to return the common source files here, rather than packaging them in a library, so that any
@@ -36,8 +36,7 @@ def configure_linux():
 
     linux_env["CPPPATH"] += ["linux/include/"]
 
-    LINUX_SRC = ["linux/data.ld", "linux/debug.c", "linux/fakewire_link.c", "linux/platform.c", "linux/semaphore.c",
-                 "linux/stream.c"]
+    LINUX_SRC = ["linux/data.ld", "linux/debug.c", "linux/fakewire_link.c", "linux/platform.c", "linux/semaphore.c"]
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c", "linux/entrypoint.c"] + common_libs)
     linux_env.Default(linux_app)
 
@@ -150,7 +149,7 @@ def configure_freertos():
         elf_lib,
     ]
     EXTERNAL_SRC += [os.path.join(FREERTOS_ROOT, x) for x in
-                     ["queue.c", "list.c", "stream_buffer.c", "portable/MemMang/heap_4.c"]]
+                     ["queue.c", "list.c", "portable/MemMang/heap_4.c"]]
 
     prog_scrubber = rtos_env.Program("scrubber", ["freertos/scrubber_task.c", elf_lib, COMPILER_LIBRARY_PATH],
                                      LINKFLAGS=rtos_env["LINKFLAGS"] + ["--relocatable"], LINKSCRIPT="freertos/prog.ld")
