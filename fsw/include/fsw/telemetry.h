@@ -30,7 +30,7 @@ void telemetry_init(comm_enc_t *encoder);
 
 #define TELEMETRY_ASYNC_REGISTER(t_ident) \
     tlm_async_endpoint_t t_ident; \
-    PROGRAM_INIT_PARAM(STAGE_READY, tlm_async_init, &t_ident)
+    PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_async_init, &t_ident)
 
 // actual telemetry calls
 void tlm_async_init(tlm_async_endpoint_t *tep);

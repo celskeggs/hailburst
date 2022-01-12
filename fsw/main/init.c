@@ -31,4 +31,6 @@ void initialize_systems(void) {
     // initialize spacecraft tasks
     debugf(INFO, "Preparing spacecraft for start...");
     spacecraft_init();
+
+    call_initpoints(STAGE_CRAFT);
 }

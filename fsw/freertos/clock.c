@@ -1,3 +1,4 @@
+#include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
 #include <fsw/telemetry.h>
@@ -12,7 +13,13 @@ void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
     tlm_async_init(&telemetry);
 }
 
-void clock_start(void) {
+static void clock_start_main(void *opaque) {
+    (void) opaque;
+
     // no adjustment needed on FreeRTOS.
     tlm_clock_calibrated(&telemetry, 0);
+
+    // nothing left to do.
+    task_suspend();
 }
+TASK_REGISTER(clock_start_task, "clock-start", PRIORITY_INIT, clock_start_main, NULL, NOT_RESTARTABLE);

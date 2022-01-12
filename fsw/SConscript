@@ -6,13 +6,15 @@ import subprocess
 
 def build_common(env):
     env["CPPPATH"] += ["include/"]
-    fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "main/chart.c"])
+    concurrency = env.Library("concurrency", ["main/chart.c", "main/multichart.c"])
+    fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "fakewire/rmap.c",
+                                        "fakewire/rmap_helpers.c", "fakewire/switch.c"])
+    # note: we have to return the common source files here, rather than packaging them in a library, so that any
+    # modules that have no references to them (like heartbeat) will still actually be linked.
     return [
-        env.Library("main-app", ["fakewire/rmap.c", "fakewire/rmap_helpers.c", "main/command.c", "main/comm.c",
-                                 "main/heartbeat.c", "main/init.c", "main/magnetometer.c", "main/multichart.c",
-                                 "main/radio.c", "main/spacecraft.c", "fakewire/switch.c", "main/telemetry.c"]),
-        fakewire,
-    ], fakewire
+        "main/command.c", "main/comm.c", "main/heartbeat.c", "main/init.c", "main/magnetometer.c", "main/radio.c",
+        "main/spacecraft.c", "main/telemetry.c", fakewire, concurrency,
+    ], [fakewire, concurrency]
 
 
 # ============================= Linux =============================
@@ -39,8 +41,9 @@ def configure_linux():
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c", "linux/entrypoint.c"] + common_libs)
     linux_env.Default(linux_app)
 
-    linux_test = linux_env.Program("fakewire_exc_test", LINUX_SRC +
-                                   ["fakewire/test/fakewire_exc_test.c", "fakewire/test/test_common.c", just_fakewire])
+    linux_test = linux_env.Program("fakewire_exc_test",
+                                   LINUX_SRC + ["fakewire/test/fakewire_exc_test.c",
+                                                "fakewire/test/test_common.c"] + just_fakewire)
     linux_env.Default(linux_test)
 
     linux_env.Alias("install",

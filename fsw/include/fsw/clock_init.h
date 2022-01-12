@@ -5,6 +5,5 @@
 #include <fsw/fakewire/switch.h>
 
 void clock_init(rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out);
-void clock_start(void);
 
 #endif /* FSW_CLOCK_INIT_H */

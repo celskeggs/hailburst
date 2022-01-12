@@ -6,6 +6,7 @@ typedef struct {
     enum init_stage {
         STAGE_RAW = 0, // no kernel yet; do not attempt to register anything; do not use floating-point operations.
         STAGE_READY,   // kernel initialized; registration functions allowable.
+        STAGE_CRAFT,   // spacecraft initialization has completed.
     } init_stage;
     void (*init_fn)(void *param);
     void *init_param;

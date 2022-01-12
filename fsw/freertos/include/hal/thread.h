@@ -56,6 +56,8 @@ typedef StreamBufferHandle_t stream_t;
 extern void thread_create(thread_t *out, const char *name, unsigned int priority,
                           void (*start_routine)(void*), void *arg, restartable_t restartable);
 
+void task_suspend(void) __attribute__((noreturn));
+
 // semaphores are created empty, such that an initial take will block
 extern void semaphore_init(semaphore_t *sema);
 extern void semaphore_destroy(semaphore_t *sema);

@@ -19,9 +19,9 @@ void abort(void) {
     }
 }
 
-static __attribute__((noreturn)) void suspend_current_task(void) {
+__attribute__((noreturn)) void task_suspend(void) {
     for (;;) {
-        debugf(WARNING, "SUSPENDING TASK.");
+        debugf(DEBUG, "Suspending task.");
         // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
         // to return all the way back to the interrupted task.
         vTaskSuspend(NULL);
@@ -56,11 +56,12 @@ __attribute__((noreturn)) void restart_current_task(void) {
         if (atomic_load(task_restart_wake_initialized)) {
             (void) semaphore_give(&task_restart_wake);
         }
+        debugf(WARNING, "Suspending task to wait for restart.");
     } else {
         debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
     }
     // wait forever for the restart task to run
-    suspend_current_task();
+    task_suspend();
 }
 
 TASK_REGISTER(task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
