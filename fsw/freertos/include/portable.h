@@ -35,18 +35,6 @@
 #ifndef PORTABLE_H
 #define PORTABLE_H
 
-/* Each FreeRTOS port has a unique portmacro.h header file.  Originally a
- * pre-processor definition was used to ensure the pre-processor found the correct
- * portmacro.h file for the port being used.  That scheme was deprecated in favour
- * of setting the compiler's include path such that it found the correct
- * portmacro.h file - removing the need for the constant and allowing the
- * portmacro.h file to be located anywhere in relation to the port being used.
- * Purely for reasons of backward compatibility the old method is still valid, but
- * to make it clear that new projects should not use it, support for the port
- * specific constants has been moved into the deprecated_definitions.h header
- * file. */
-#include "deprecated_definitions.h"
-
 /* If portENTER_CRITICAL is not defined then including deprecated_definitions.h
  * did not result in a portmacro.h header file being included - and it should be
  * included here.  In this case the path to the correct portmacro.h header file
