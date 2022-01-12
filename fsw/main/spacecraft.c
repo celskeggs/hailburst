@@ -98,6 +98,10 @@ static const fw_link_options_t exchange_options = {
 };
 FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_tx_chart);
 
+RADIO_REGISTER(sc_radio, radio_up_routing,   radio_up_rx,   radio_up_tx,   UPLINK_STREAM_CAPACITY,
+                         radio_down_routing, radio_down_rx, radio_down_tx, DOWNLINK_STREAM_CAPACITY,
+                         sc.uplink_stream,   sc.downlink_stream);
+
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
 COMMAND_REGISTER(sc_cmd, sc);
@@ -134,14 +138,9 @@ void spacecraft_init(void) {
         switch_add_port(&fce_vswitch, VPORT_CLOCK, clock_tx, clock_rx);
     }
 
-    debugf(INFO, "Initializing radio...");
-    chart_t *radio_up_rx = NULL, *radio_up_tx = NULL, *radio_down_rx = NULL, *radio_down_tx = NULL;
-    radio_init(&sc.radio,
-               &radio_up_routing, &radio_up_rx, &radio_up_tx, UPLINK_STREAM_CAPACITY,
-               &radio_down_routing, &radio_down_rx, &radio_down_tx, DOWNLINK_STREAM_CAPACITY,
-               &sc.uplink_stream, &sc.downlink_stream);
-    switch_add_port(&fce_vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
-    switch_add_port(&fce_vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
+    debugf(INFO, "Attaching radio...");
+    switch_add_port(&fce_vswitch, VPORT_RADIO_UP, &radio_up_tx, &radio_up_rx);
+    switch_add_port(&fce_vswitch, VPORT_RADIO_DOWN, &radio_down_tx, &radio_down_rx);
 
     debugf(INFO, "Attaching magnetometer...");
     switch_add_port(&fce_vswitch, VPORT_MAG, &sc_mag_tx, &sc_mag_rx);

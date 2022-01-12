@@ -16,10 +16,6 @@ enum {
     MEM_BASE_ADDR  = 0x1000,
     MEM_SIZE       = 0x4000,
 
-    // local buffer within radio.c
-    UPLINK_BUF_LOCAL_SIZE   = 0x1000,
-    DOWNLINK_BUF_LOCAL_SIZE = 0x1000,
-
     RX_STATE_IDLE      = 0x00,
     RX_STATE_LISTENING = 0x01,
     RX_STATE_OVERFLOW  = 0x02,
@@ -49,61 +45,20 @@ enum {
 };
 
 typedef enum {
-    REG_MAGIC      = 0,
-    REG_TX_PTR     = 1,
-    REG_TX_LEN     = 2,
-    REG_TX_STATE   = 3,
-    REG_RX_PTR     = 4,
-    REG_RX_LEN     = 5,
-    REG_RX_PTR_ALT = 6,
-    REG_RX_LEN_ALT = 7,
-    REG_RX_STATE   = 8,
-    REG_ERR_COUNT  = 9,
-    REG_MEM_BASE   = 10,
-    REG_MEM_SIZE   = 11,
-    NUM_REGISTERS  = 12,
-} radio_register_t;
-
-enum {
-    REG_IO_BUFFER_SIZE = sizeof(uint32_t) * NUM_REGISTERS,
-};
-
-typedef enum {
     IO_UPLINK_CONTEXT,
     IO_DOWNLINK_CONTEXT,
 } radio_io_mode_t;
 
-static void radio_uplink_loop(void *radio_opaque);
-static void radio_downlink_loop(void *radio_opaque);
-
-void radio_init(radio_t *radio,
-                const rmap_addr_t *up_addr, chart_t **up_rx_out, chart_t **up_tx_out, size_t uplink_capacity,
-                const rmap_addr_t *down_addr, chart_t **down_rx_out, chart_t **down_tx_out, size_t downlink_capacity,
-                stream_t *uplink, stream_t *downlink) {
-    assert(radio != NULL && up_addr != NULL && up_rx_out != NULL && up_tx_out != NULL && down_addr != NULL &&
-           down_rx_out != NULL && down_tx_out != NULL && uplink != NULL && downlink != NULL);
-    assert(REG_IO_BUFFER_SIZE <= uplink_capacity && uplink_capacity <= RMAP_MAX_DATA_LEN);
-    assert(REG_IO_BUFFER_SIZE <= uplink_capacity && downlink_capacity <= RMAP_MAX_DATA_LEN);
-    rmap_init(&radio->rmap_up, uplink_capacity, REG_IO_BUFFER_SIZE, up_rx_out, up_tx_out);
-    rmap_init(&radio->rmap_down, REG_IO_BUFFER_SIZE, downlink_capacity, down_rx_out, down_tx_out);
-    memcpy(&radio->address_up, up_addr, sizeof(rmap_addr_t));
-    memcpy(&radio->address_down, down_addr, sizeof(rmap_addr_t));
-    radio->up_stream = uplink;
-    radio->down_stream = downlink;
-    radio->uplink_buf_local = malloc(UPLINK_BUF_LOCAL_SIZE);
-    assert(radio->uplink_buf_local != NULL);
-    radio->downlink_buf_local = malloc(DOWNLINK_BUF_LOCAL_SIZE);
-    assert(radio->downlink_buf_local != NULL);
-    radio->bytes_extracted = 0;
-
-    // start threads
-    thread_create(&radio->up_thread, "radio_up_loop", PRIORITY_WORKERS, radio_uplink_loop, radio, RESTARTABLE);
-    thread_create(&radio->down_thread, "radio_down_loop", PRIORITY_WORKERS, radio_downlink_loop, radio, RESTARTABLE);
-}
-
 static rmap_t *radio_rmap(radio_t *radio, radio_io_mode_t mode) {
-    assert(mode == IO_DOWNLINK_CONTEXT || mode == IO_UPLINK_CONTEXT);
-    return mode == IO_DOWNLINK_CONTEXT ? &radio->rmap_down : &radio->rmap_up;
+    if (mode == IO_DOWNLINK_CONTEXT) {
+        assert(radio->rmap_down != NULL);
+        return radio->rmap_down;
+    } else if (mode == IO_UPLINK_CONTEXT) {
+        assert(radio->rmap_up != NULL);
+        return radio->rmap_up;
+    } else {
+        abortf("invalid mode %u", mode);
+    }
 }
 
 static rmap_addr_t *radio_routing(radio_t *radio, radio_io_mode_t mode) {
@@ -460,7 +415,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     return total_read;
 }
 
-static void radio_uplink_loop(void *radio_opaque) {
+void radio_uplink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
 
@@ -559,7 +514,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     return true;
 }
 
-static void radio_downlink_loop(void *radio_opaque) {
+void radio_downlink_loop(void *radio_opaque) {
     radio_t *radio = (radio_t *) radio_opaque;
     assert(radio != NULL);
 
