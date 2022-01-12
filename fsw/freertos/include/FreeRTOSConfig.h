@@ -83,13 +83,6 @@ enum {
 //#define configASSERT( ( x ) ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )
 #define configASSERT(x) assert(x)
 
-/* FreeRTOS MPU specific definitions. */
-#define configINCLUDE_APPLICATION_DEFINED_PRIVILEGED_FUNCTIONS 0
-// #define configTOTAL_MPU_REGIONS                                8 /* Default value. */
-// #define configTEX_S_C_B_FLASH                                  0x07UL /* Default value. */
-// #define configTEX_S_C_B_SRAM                                   0x07UL /* Default value. */
-#define configENFORCE_SYSTEM_CALLS_FROM_KERNEL_ONLY            1
-
 /* Tick interrupts */
 extern void vConfigureTickInterrupt(void);
 #define configSETUP_TICK_INTERRUPT() vConfigureTickInterrupt()

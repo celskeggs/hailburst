@@ -32,22 +32,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
- * all the API functions to use the MPU wrappers.  That should only be done when
- * task.h is included from an application file. */
-#define MPU_WRAPPERS_INCLUDED_FROM_API_FILE
-
 /* FreeRTOS includes. */
 #include "FreeRTOS.h"
 #include "task.h"
 #include "timers.h"
 #include "stack_macros.h"
-
-/* Lint e9021, e961 and e750 are suppressed as a MISRA exception justified
- * because the MPU ports require MPU_WRAPPERS_INCLUDED_FROM_API_FILE to be defined
- * for the header files above, but not in this file, in order to generate the
- * correct privileged Vs unprivileged linkage and placement. */
-#undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE /*lint !e961 !e750 !e9021. */
 
 /* Set configUSE_STATS_FORMATTING_FUNCTIONS to 2 to include the stats formatting
  * functions but without including stdio.h here. */
@@ -257,10 +246,6 @@
 typedef struct tskTaskControlBlock       /* The old naming convention is used to prevent breaking kernel aware debuggers. */
 {
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
-
-    #if ( portUSING_MPU_WRAPPERS == 1 )
-        xMPU_SETTINGS xMPUSettings; /*< The MPU settings are defined as part of the port layer.  THIS MUST BE THE SECOND MEMBER OF THE TCB STRUCT. */
-    #endif
 
     ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
     ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
@@ -522,8 +507,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   void * const pvParameters,
                                   UBaseType_t uxPriority,
                                   TaskHandle_t * const pxCreatedTask,
-                                  TCB_t * pxNewTCB,
-                                  const MemoryRegion_t * const xRegions ) PRIVILEGED_FUNCTION;
+                                  TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
 
 /*
  * Called after a new task has been created and initialised to place the task
@@ -556,7 +540,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
         pxNewTCB = ( TCB_t * ) pxTaskBuffer; /*lint !e740 !e9087 Unusual cast is ok as the structures are designed to have the same alignment, and the size is checked by an assert. */
         pxNewTCB->pxStack = ( StackType_t * ) puxStackBuffer;
 
-        prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB, NULL );
+        prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB );
         prvAddNewTaskToReadyList( pxNewTCB );
     }
     else
@@ -575,26 +559,10 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
                                   void * const pvParameters,
                                   UBaseType_t uxPriority,
                                   TaskHandle_t * const pxCreatedTask,
-                                  TCB_t * pxNewTCB,
-                                  const MemoryRegion_t * const xRegions )
+                                  TCB_t * pxNewTCB )
 {
     StackType_t * pxTopOfStack;
     UBaseType_t x;
-
-    #if ( portUSING_MPU_WRAPPERS == 1 )
-        /* Should the task be created in privileged mode? */
-        BaseType_t xRunPrivileged;
-
-        if( ( uxPriority & portPRIVILEGE_BIT ) != 0U )
-        {
-            xRunPrivileged = pdTRUE;
-        }
-        else
-        {
-            xRunPrivileged = pdFALSE;
-        }
-        uxPriority &= ~portPRIVILEGE_BIT;
-    #endif /* portUSING_MPU_WRAPPERS == 1 */
 
     /* Avoid dependency on memset() if it is not required. */
     #if ( tskSET_NEW_STACKS_TO_KNOWN_VALUE == 1 )
@@ -717,17 +685,6 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
         }
     #endif /* configGENERATE_RUN_TIME_STATS */
 
-    #if ( portUSING_MPU_WRAPPERS == 1 )
-        {
-            vPortStoreTaskMPUSettings( &( pxNewTCB->xMPUSettings ), xRegions, pxNewTCB->pxStack, ulStackDepth );
-        }
-    #else
-        {
-            /* Avoid compiler warning about unreferenced parameter. */
-            ( void ) xRegions;
-        }
-    #endif
-
     #if ( configNUM_THREAD_LOCAL_STORAGE_POINTERS != 0 )
         {
             memset( ( void * ) &( pxNewTCB->pvThreadLocalStoragePointers[ 0 ] ), 0x00, sizeof( pxNewTCB->pvThreadLocalStoragePointers ) );
@@ -760,53 +717,26 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
      * but had been interrupted by the scheduler.  The return address is set
      * to the start of the task function. Once the stack has been initialised
      * the top of stack variable is updated. */
-    #if ( portUSING_MPU_WRAPPERS == 1 )
+    /* If the port has capability to detect stack overflow,
+     * pass the stack end address to the stack initialization
+     * function as well. */
+    #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
         {
-            /* If the port has capability to detect stack overflow,
-             * pass the stack end address to the stack initialization
-             * function as well. */
-            #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
+            #if ( portSTACK_GROWTH < 0 )
                 {
-                    #if ( portSTACK_GROWTH < 0 )
-                        {
-                            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxStack, pxTaskCode, pvParameters, xRunPrivileged );
-                        }
-                    #else /* portSTACK_GROWTH */
-                        {
-                            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxEndOfStack, pxTaskCode, pvParameters, xRunPrivileged );
-                        }
-                    #endif /* portSTACK_GROWTH */
+                    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxStack, pxTaskCode, pvParameters );
                 }
-            #else /* portHAS_STACK_OVERFLOW_CHECKING */
+            #else /* portSTACK_GROWTH */
                 {
-                    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxTaskCode, pvParameters, xRunPrivileged );
+                    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxEndOfStack, pxTaskCode, pvParameters );
                 }
-            #endif /* portHAS_STACK_OVERFLOW_CHECKING */
+            #endif /* portSTACK_GROWTH */
         }
-    #else /* portUSING_MPU_WRAPPERS */
+    #else /* portHAS_STACK_OVERFLOW_CHECKING */
         {
-            /* If the port has capability to detect stack overflow,
-             * pass the stack end address to the stack initialization
-             * function as well. */
-            #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
-                {
-                    #if ( portSTACK_GROWTH < 0 )
-                        {
-                            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxStack, pxTaskCode, pvParameters );
-                        }
-                    #else /* portSTACK_GROWTH */
-                        {
-                            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxEndOfStack, pxTaskCode, pvParameters );
-                        }
-                    #endif /* portSTACK_GROWTH */
-                }
-            #else /* portHAS_STACK_OVERFLOW_CHECKING */
-                {
-                    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxTaskCode, pvParameters );
-                }
-            #endif /* portHAS_STACK_OVERFLOW_CHECKING */
+            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxTaskCode, pvParameters );
         }
-    #endif /* portUSING_MPU_WRAPPERS */
+    #endif /* portHAS_STACK_OVERFLOW_CHECKING */
 
     if( pxCreatedTask != NULL )
     {
@@ -3245,23 +3175,6 @@ portTASK_FUNCTION( prvIdleTask, pvParameters )
     }
 
 #endif /* configNUM_THREAD_LOCAL_STORAGE_POINTERS */
-/*-----------------------------------------------------------*/
-
-#if ( portUSING_MPU_WRAPPERS == 1 )
-
-    void vTaskAllocateMPURegions( TaskHandle_t xTaskToModify,
-                                  const MemoryRegion_t * const xRegions )
-    {
-        TCB_t * pxTCB;
-
-        /* If null is passed in here then we are modifying the MPU settings of
-         * the calling task. */
-        pxTCB = prvGetTCBFromHandle( xTaskToModify );
-
-        vPortStoreTaskMPUSettings( &( pxTCB->xMPUSettings ), xRegions, NULL, 0 );
-    }
-
-#endif /* portUSING_MPU_WRAPPERS */
 /*-----------------------------------------------------------*/
 
 static void prvInitialiseTaskLists( void )

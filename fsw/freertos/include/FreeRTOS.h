@@ -1044,12 +1044,6 @@
     #define configUSE_TASK_FPU_SUPPORT    1
 #endif
 
-/* Set configENABLE_MPU to 1 to enable MPU support and 0 to disable it. This is
- * currently used in ARMv8M ports. */
-#ifndef configENABLE_MPU
-    #define configENABLE_MPU    0
-#endif
-
 /* Set configENABLE_FPU to 1 to enable FPU support and 0 to disable it. This is
  * currently used in ARMv8M ports. */
 #ifndef configENABLE_FPU
@@ -1072,52 +1066,6 @@
     #define configRUN_ADDITIONAL_TESTS    0
 #endif
 
-
-/* Sometimes the FreeRTOSConfig.h settings only allow a task to be created using
- * dynamically allocated RAM, in which case when any task is deleted it is known
- * that both the task's stack and TCB need to be freed.  Sometimes the
- * FreeRTOSConfig.h settings only allow a task to be created using statically
- * allocated RAM, in which case when any task is deleted it is known that neither
- * the task's stack or TCB should be freed.  Sometimes the FreeRTOSConfig.h
- * settings allow a task to be created using either statically or dynamically
- * allocated RAM, in which case a member of the TCB is used to record whether the
- * stack and/or TCB were allocated statically or dynamically, so when a task is
- * deleted the RAM that was allocated dynamically is freed again and no attempt is
- * made to free the RAM that was allocated statically.
- * tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE is only true if it is possible for a
- * task to be created using either statically or dynamically allocated RAM.  Note
- * that if portUSING_MPU_WRAPPERS is 1 then a protected task can be created with
- * a statically allocated stack and a dynamically allocated TCB.
- *
- * The following table lists various combinations of portUSING_MPU_WRAPPERS,
- * configSUPPORT_DYNAMIC_ALLOCATION and configSUPPORT_STATIC_ALLOCATION and
- * when it is possible to have both static and dynamic allocation:
- *  +-----+---------+--------+-----------------------------+-----------------------------------+------------------+-----------+
- * | MPU | Dynamic | Static |     Available Functions     |       Possible Allocations        | Both Dynamic and | Need Free |
- * |     |         |        |                             |                                   | Static Possible  |           |
- * +-----+---------+--------+-----------------------------+-----------------------------------+------------------+-----------+
- * | 0   | 0       | 1      | xTaskCreateStatic           | TCB - Static, Stack - Static      | No               | No        |
- * +-----|---------|--------|-----------------------------|-----------------------------------|------------------|-----------|
- * | 0   | 1       | 0      | xTaskCreate                 | TCB - Dynamic, Stack - Dynamic    | No               | Yes       |
- * +-----|---------|--------|-----------------------------|-----------------------------------|------------------|-----------|
- * | 0   | 1       | 1      | xTaskCreate,                | 1. TCB - Dynamic, Stack - Dynamic | Yes              | Yes       |
- * |     |         |        | xTaskCreateStatic           | 2. TCB - Static, Stack - Static   |                  |           |
- * +-----|---------|--------|-----------------------------|-----------------------------------|------------------|-----------|
- * | 1   | 0       | 1      | xTaskCreateStatic,          | TCB - Static, Stack - Static      | No               | No        |
- * |     |         |        | xTaskCreateRestrictedStatic |                                   |                  |           |
- * +-----|---------|--------|-----------------------------|-----------------------------------|------------------|-----------|
- * | 1   | 1       | 0      | xTaskCreate,                | 1. TCB - Dynamic, Stack - Dynamic | Yes              | Yes       |
- * |     |         |        | xTaskCreateRestricted       | 2. TCB - Dynamic, Stack - Static  |                  |           |
- * +-----|---------|--------|-----------------------------|-----------------------------------|------------------|-----------|
- * | 1   | 1       | 1      | xTaskCreate,                | 1. TCB - Dynamic, Stack - Dynamic | Yes              | Yes       |
- * |     |         |        | xTaskCreateStatic,          | 2. TCB - Dynamic, Stack - Static  |                  |           |
- * |     |         |        | xTaskCreateRestricted,      | 3. TCB - Static, Stack - Static   |                  |           |
- * |     |         |        | xTaskCreateRestrictedStatic |                                   |                  |           |
- * +-----+---------+--------+-----------------------------+-----------------------------------+------------------+-----------+
- */
-#define tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE                                                                                     \
-    ( ( ( portUSING_MPU_WRAPPERS == 0 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) ) || \
-      ( ( portUSING_MPU_WRAPPERS == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) ) )
 
 /*
  * In line with software engineering best practice, FreeRTOS implements a strict
@@ -1183,9 +1131,6 @@ typedef struct xSTATIC_LIST
 typedef struct xSTATIC_TCB
 {
     void * pxDummy1;
-    #if ( portUSING_MPU_WRAPPERS == 1 )
-        xMPU_SETTINGS xDummy2;
-    #endif
     StaticListItem_t xDummy3[ 2 ];
     UBaseType_t uxDummy5;
     void * pxDummy6;
@@ -1217,9 +1162,6 @@ typedef struct xSTATIC_TCB
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         uint32_t ulDummy18[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
         uint8_t ucDummy19[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-    #endif
-    #if ( tskSTATIC_AND_DYNAMIC_ALLOCATION_POSSIBLE != 0 )
-        uint8_t uxDummy20;
     #endif
 
     #if ( INCLUDE_xTaskAbortDelay == 1 )

@@ -71,10 +71,6 @@
     #error "Invalid portBYTE_ALIGNMENT definition"
 #endif /* if portBYTE_ALIGNMENT == 32 */
 
-#ifndef portUSING_MPU_WRAPPERS
-    #define portUSING_MPU_WRAPPERS    0
-#endif
-
 #ifndef portNUM_CONFIGURABLE_REGIONS
     #define portNUM_CONFIGURABLE_REGIONS    1
 #endif
@@ -98,7 +94,9 @@
 #endif
 /* *INDENT-ON* */
 
-#include "mpu_wrappers.h"
+/* make sure these are dropped */
+#define PRIVILEGED_FUNCTION
+#define PRIVILEGED_DATA
 
 /*
  * Setup the stack of a new task so it is ready to be placed under the
@@ -106,31 +104,16 @@
  * the order that the port expects to find them.
  *
  */
-#if ( portUSING_MPU_WRAPPERS == 1 )
-    #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
-        StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                             StackType_t * pxEndOfStack,
-                                             TaskFunction_t pxCode,
-                                             void * pvParameters,
-                                             BaseType_t xRunPrivileged ) PRIVILEGED_FUNCTION;
-    #else
-        StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                             TaskFunction_t pxCode,
-                                             void * pvParameters,
-                                             BaseType_t xRunPrivileged ) PRIVILEGED_FUNCTION;
-    #endif
-#else /* if ( portUSING_MPU_WRAPPERS == 1 ) */
-    #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
-        StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                             StackType_t * pxEndOfStack,
-                                             TaskFunction_t pxCode,
-                                             void * pvParameters ) PRIVILEGED_FUNCTION;
-    #else
-        StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                             TaskFunction_t pxCode,
-                                             void * pvParameters ) PRIVILEGED_FUNCTION;
-    #endif
-#endif /* if ( portUSING_MPU_WRAPPERS == 1 ) */
+#if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
+    StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
+                                         StackType_t * pxEndOfStack,
+                                         TaskFunction_t pxCode,
+                                         void * pvParameters ) PRIVILEGED_FUNCTION;
+#else
+    StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
+                                         TaskFunction_t pxCode,
+                                         void * pvParameters ) PRIVILEGED_FUNCTION;
+#endif
 
 /* Used by heap_5.c to define the start address and size of each memory region
  * that together comprise the total FreeRTOS heap space. */
@@ -193,28 +176,6 @@ size_t xPortGetMinimumEverFreeHeapSize( void ) PRIVILEGED_FUNCTION;
  * sets up a tick interrupt and sets timers for the correct tick frequency.
  */
 BaseType_t xPortStartScheduler( void ) PRIVILEGED_FUNCTION;
-
-/*
- * Undo any hardware/ISR setup that was performed by xPortStartScheduler() so
- * the hardware is left in its original condition after the scheduler stops
- * executing.
- */
-void vPortEndScheduler( void ) PRIVILEGED_FUNCTION;
-
-/*
- * The structures and methods of manipulating the MPU are contained within the
- * port layer.
- *
- * Fills the xMPUSettings structure with the memory region information
- * contained in xRegions.
- */
-#if ( portUSING_MPU_WRAPPERS == 1 )
-    struct xMEMORY_REGION;
-    void vPortStoreTaskMPUSettings( xMPU_SETTINGS * xMPUSettings,
-                                    const struct xMEMORY_REGION * const xRegions,
-                                    StackType_t * pxBottomOfStack,
-                                    uint32_t ulStackDepth ) PRIVILEGED_FUNCTION;
-#endif
 
 /* *INDENT-OFF* */
 #ifdef __cplusplus
