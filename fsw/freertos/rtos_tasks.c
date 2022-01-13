@@ -208,10 +208,10 @@
  * Place the task represented by pxTCB into the appropriate ready list for
  * the task.  It is inserted at the end of the list.
  */
-#define prvAddTaskToReadyList( pxTCB )                                                                 \
-    traceMOVED_TASK_TO_READY_STATE( pxTCB );                                                           \
-    taskRECORD_READY_PRIORITY( ( pxTCB )->uxPriority );                                                \
-    listINSERT_END( &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->xStateListItem ) ); \
+#define prvAddTaskToReadyList( pxTCB )                                                                      \
+    traceMOVED_TASK_TO_READY_STATE( pxTCB );                                                                \
+    taskRECORD_READY_PRIORITY( ( pxTCB )->uxPriority );                                                     \
+    listINSERT_END( &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->mut->xStateListItem ) ); \
     tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB )
 /*-----------------------------------------------------------*/
 
@@ -398,21 +398,21 @@ void thread_start_internal( TCB_t * pxNewTCB )
     /* This is used as an array index so must ensure it's not too large. */
     configASSERT( pxNewTCB->uxPriority < configMAX_PRIORITIES );
 
-    vListInitialiseItem( &( pxNewTCB->xStateListItem ) );
-    vListInitialiseItem( &( pxNewTCB->xEventListItem ) );
+    vListInitialiseItem( &( pxNewTCB->mut->xStateListItem ) );
+    vListInitialiseItem( &( pxNewTCB->mut->xEventListItem ) );
 
     /* Set the pxNewTCB as a link back from the ListItem_t.  This is so we can get
      * back to  the containing TCB from a generic item in a list. */
-    listSET_LIST_ITEM_OWNER( &( pxNewTCB->xStateListItem ), pxNewTCB );
+    listSET_LIST_ITEM_OWNER( &( pxNewTCB->mut->xStateListItem ), pxNewTCB );
 
     /* Event lists are always in priority order. */
-    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxNewTCB->uxPriority ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
-    listSET_LIST_ITEM_OWNER( &( pxNewTCB->xEventListItem ), pxNewTCB );
+    listSET_LIST_ITEM_VALUE( &( pxNewTCB->mut->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxNewTCB->uxPriority ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
+    listSET_LIST_ITEM_OWNER( &( pxNewTCB->mut->xEventListItem ), pxNewTCB );
 
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         {
-            memset( ( void * ) &( pxNewTCB->ulNotifiedValue[ 0 ] ), 0x00, sizeof( pxNewTCB->ulNotifiedValue ) );
-            memset( ( void * ) &( pxNewTCB->ucNotifyState[ 0 ] ), 0x00, sizeof( pxNewTCB->ucNotifyState ) );
+            memset( ( void * ) &( pxNewTCB->mut->ulNotifiedValue[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ulNotifiedValue ) );
+            memset( ( void * ) &( pxNewTCB->mut->ucNotifyState[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ucNotifyState ) );
         }
     #endif
 
@@ -420,7 +420,7 @@ void thread_start_internal( TCB_t * pxNewTCB )
      * but had been interrupted by the scheduler.  The return address is set
      * to the start of the task function. Once the stack has been initialised
      * the top of stack variable is updated. */
-    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
+    pxNewTCB->mut->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
 
     prvAddNewTaskToReadyList(pxNewTCB);
 }
@@ -517,7 +517,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             pxTCB = prvGetTCBFromHandle( xTaskToDelete );
 
             /* Remove task from the ready/delayed list. */
-            if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+            if( uxListRemove( &( pxTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
             {
                 taskRESET_READY_PRIORITY( pxTCB->uxPriority );
             }
@@ -527,9 +527,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             }
 
             /* Is the task waiting on an event also? */
-            if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+            if( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) != NULL )
             {
-                ( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+                ( void ) uxListRemove( &( pxTCB->mut->xEventListItem ) );
             }
             else
             {
@@ -726,7 +726,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         {
             taskENTER_CRITICAL();
             {
-                pxStateList = listLIST_ITEM_CONTAINER( &( pxTCB->xStateListItem ) );
+                pxStateList = listLIST_ITEM_CONTAINER( &( pxTCB->mut->xStateListItem ) );
                 pxDelayedList = pxDelayedTaskList;
                 pxOverflowedDelayedList = pxOverflowDelayedTaskList;
             }
@@ -745,7 +745,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     /* The task being queried is referenced from the suspended
                      * list.  Is it genuinely suspended or is it blocked
                      * indefinitely? */
-                    if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) == NULL )
+                    if( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) == NULL )
                     {
                         #if ( configUSE_TASK_NOTIFICATIONS == 1 )
                             {
@@ -760,7 +760,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
                                 for( x = 0; x < configTASK_NOTIFICATION_ARRAY_ENTRIES; x++ )
                                 {
-                                    if( pxTCB->ucNotifyState[ x ] == taskWAITING_NOTIFICATION )
+                                    if( pxTCB->mut->ucNotifyState[ x ] == taskWAITING_NOTIFICATION )
                                     {
                                         eReturn = eBlocked;
                                         break;
@@ -947,9 +947,9 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
                 /* Only reset the event list item value if the value is not
                  * being used for anything else. */
-                if( ( listGET_LIST_ITEM_VALUE( &( pxTCB->xEventListItem ) ) & taskEVENT_LIST_ITEM_VALUE_IN_USE ) == 0UL )
+                if( ( listGET_LIST_ITEM_VALUE( &( pxTCB->mut->xEventListItem ) ) & taskEVENT_LIST_ITEM_VALUE_IN_USE ) == 0UL )
                 {
-                    listSET_LIST_ITEM_VALUE( &( pxTCB->xEventListItem ), ( ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) uxNewPriority ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
+                    listSET_LIST_ITEM_VALUE( &( pxTCB->mut->xEventListItem ), ( ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) uxNewPriority ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
                 }
                 else
                 {
@@ -960,12 +960,12 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                  * nothing more than change its priority variable. However, if
                  * the task is in a ready list it needs to be removed and placed
                  * in the list appropriate to its new priority. */
-                if( listIS_CONTAINED_WITHIN( &( pxReadyTasksLists[ uxPriorityUsedOnEntry ] ), &( pxTCB->xStateListItem ) ) != pdFALSE )
+                if( listIS_CONTAINED_WITHIN( &( pxReadyTasksLists[ uxPriorityUsedOnEntry ] ), &( pxTCB->mut->xStateListItem ) ) != pdFALSE )
                 {
                     /* The task is currently in its ready list - remove before
                      * adding it to its new ready list.  As we are in a critical
                      * section we can do this even if the scheduler is suspended. */
-                    if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+                    if( uxListRemove( &( pxTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
                     {
                         /* It is known that the task is in its ready list so
                          * there is no need to check again and the port level
@@ -1020,7 +1020,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
             /* Remove task from the ready/delayed list and place in the
              * suspended list. */
-            if( uxListRemove( &( pxTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+            if( uxListRemove( &( pxTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
             {
                 taskRESET_READY_PRIORITY( pxTCB->uxPriority );
             }
@@ -1030,16 +1030,16 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             }
 
             /* Is the task waiting on an event also? */
-            if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+            if( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) != NULL )
             {
-                ( void ) uxListRemove( &( pxTCB->xEventListItem ) );
+                ( void ) uxListRemove( &( pxTCB->mut->xEventListItem ) );
             }
             else
             {
                 mtCOVERAGE_TEST_MARKER();
             }
 
-            vListInsertEnd( &xSuspendedTaskList, &( pxTCB->xStateListItem ) );
+            vListInsertEnd( &xSuspendedTaskList, &( pxTCB->mut->xStateListItem ) );
 
             #if ( configUSE_TASK_NOTIFICATIONS == 1 )
                 {
@@ -1047,11 +1047,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
                     for( x = 0; x < configTASK_NOTIFICATION_ARRAY_ENTRIES; x++ )
                     {
-                        if( pxTCB->ucNotifyState[ x ] == taskWAITING_NOTIFICATION )
+                        if( pxTCB->mut->ucNotifyState[ x ] == taskWAITING_NOTIFICATION )
                         {
                             /* The task was blocked to wait for a notification, but is
                              * now suspended, so no notification was received. */
-                            pxTCB->ucNotifyState[ x ] = taskNOT_WAITING_NOTIFICATION;
+                            pxTCB->mut->ucNotifyState[ x ] = taskNOT_WAITING_NOTIFICATION;
                         }
                     }
                 }
@@ -1124,14 +1124,14 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         configASSERT( xTask );
 
         /* Is the task being resumed actually in the suspended list? */
-        if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->xStateListItem ) ) != pdFALSE )
+        if( listIS_CONTAINED_WITHIN( &xSuspendedTaskList, &( pxTCB->mut->xStateListItem ) ) != pdFALSE )
         {
             /* Has the task already been resumed from within an ISR? */
-            if( listIS_CONTAINED_WITHIN( &xPendingReadyList, &( pxTCB->xEventListItem ) ) == pdFALSE )
+            if( listIS_CONTAINED_WITHIN( &xPendingReadyList, &( pxTCB->mut->xEventListItem ) ) == pdFALSE )
             {
                 /* Is it in the suspended list because it is in the Suspended
                  * state, or because is is blocked with no timeout? */
-                if( listIS_CONTAINED_WITHIN( NULL, &( pxTCB->xEventListItem ) ) != pdFALSE ) /*lint !e961.  The cast is only redundant when NULL is used. */
+                if( listIS_CONTAINED_WITHIN( NULL, &( pxTCB->mut->xEventListItem ) ) != pdFALSE ) /*lint !e961.  The cast is only redundant when NULL is used. */
                 {
                     xReturn = pdTRUE;
                 }
@@ -1177,7 +1177,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
                     /* The ready list can be accessed even if the scheduler is
                      * suspended because this is inside a critical section. */
-                    ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+                    ( void ) uxListRemove( &( pxTCB->mut->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
 
                     /* A higher priority task may have just been resumed. */
@@ -1263,7 +1263,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                         mtCOVERAGE_TEST_MARKER();
                     }
 
-                    ( void ) uxListRemove( &( pxTCB->xStateListItem ) );
+                    ( void ) uxListRemove( &( pxTCB->mut->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
                 }
                 else
@@ -1271,7 +1271,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                     /* The delayed or ready lists cannot be accessed so the task
                      * is held in the pending ready list until the scheduler is
                      * unsuspended. */
-                    vListInsertEnd( &( xPendingReadyList ), &( pxTCB->xEventListItem ) );
+                    vListInsertEnd( &( xPendingReadyList ), &( pxTCB->mut->xEventListItem ) );
                 }
             }
             else
@@ -1420,9 +1420,9 @@ BaseType_t xTaskResumeAll( void )
                 while( listLIST_IS_EMPTY( &xPendingReadyList ) == pdFALSE )
                 {
                     pxTCB = listGET_OWNER_OF_HEAD_ENTRY( ( &xPendingReadyList ) ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-                    listREMOVE_ITEM( &( pxTCB->xEventListItem ) );
+                    listREMOVE_ITEM( &( pxTCB->mut->xEventListItem ) );
                     portMEMORY_BARRIER();
-                    listREMOVE_ITEM( &( pxTCB->xStateListItem ) );
+                    listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
 
                     /* If the moved task has a priority higher than or equal to
@@ -1663,7 +1663,7 @@ BaseType_t xTaskIncrementTick( void )
                      * at which the task at the head of the delayed list must
                      * be removed from the Blocked state. */
                     pxTCB = listGET_OWNER_OF_HEAD_ENTRY( pxDelayedTaskList ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-                    xItemValue = listGET_LIST_ITEM_VALUE( &( pxTCB->xStateListItem ) );
+                    xItemValue = listGET_LIST_ITEM_VALUE( &( pxTCB->mut->xStateListItem ) );
 
                     if( xConstTickCount < xItemValue )
                     {
@@ -1681,13 +1681,13 @@ BaseType_t xTaskIncrementTick( void )
                     }
 
                     /* It is time to remove the item from the Blocked state. */
-                    listREMOVE_ITEM( &( pxTCB->xStateListItem ) );
+                    listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
 
                     /* Is the task waiting on an event also?  If so remove
                      * it from the event list. */
-                    if( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) != NULL )
+                    if( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) != NULL )
                     {
-                        listREMOVE_ITEM( &( pxTCB->xEventListItem ) );
+                        listREMOVE_ITEM( &( pxTCB->mut->xEventListItem ) );
                     }
                     else
                     {
@@ -1824,7 +1824,7 @@ void vTaskPlaceOnEventList( List_t * const pxEventList,
      *
      * The queue that contains the event list is locked, preventing
      * simultaneous access from interrupts. */
-    vListInsert( pxEventList, &( pxCurrentTCB->xEventListItem ) );
+    vListInsert( pxEventList, &( pxCurrentTCB->mut->xEventListItem ) );
 
     prvAddCurrentTaskToDelayedList( xTicksToWait, pdTRUE );
 }
@@ -1843,14 +1843,14 @@ void vTaskPlaceOnUnorderedEventList( List_t * pxEventList,
     /* Store the item value in the event list item.  It is safe to access the
      * event list item here as interrupts won't access the event list item of a
      * task that is not in the Blocked state. */
-    listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->xEventListItem ), xItemValue | taskEVENT_LIST_ITEM_VALUE_IN_USE );
+    listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xEventListItem ), xItemValue | taskEVENT_LIST_ITEM_VALUE_IN_USE );
 
     /* Place the event list item of the TCB at the end of the appropriate event
      * list.  It is safe to access the event list here because it is part of an
      * event group implementation - and interrupts don't access event groups
      * directly (instead they access them indirectly by pending function calls to
      * the task level). */
-    listINSERT_END( pxEventList, &( pxCurrentTCB->xEventListItem ) );
+    listINSERT_END( pxEventList, &( pxCurrentTCB->mut->xEventListItem ) );
 
     prvAddCurrentTaskToDelayedList( xTicksToWait, pdTRUE );
 }
@@ -1874,7 +1874,7 @@ void vTaskPlaceOnUnorderedEventList( List_t * pxEventList,
          * In this case it is assume that this is the only task that is going to
          * be waiting on this event list, so the faster vListInsertEnd() function
          * can be used in place of vListInsert. */
-        listINSERT_END( pxEventList, &( pxCurrentTCB->xEventListItem ) );
+        listINSERT_END( pxEventList, &( pxCurrentTCB->mut->xEventListItem ) );
 
         /* If the task should block indefinitely then set the block time to a
          * value that will be recognised as an indefinite delay inside the
@@ -1911,11 +1911,11 @@ BaseType_t xTaskRemoveFromEventList( const List_t * const pxEventList )
      * pxEventList is not empty. */
     pxUnblockedTCB = listGET_OWNER_OF_HEAD_ENTRY( pxEventList ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
     configASSERT( pxUnblockedTCB );
-    listREMOVE_ITEM( &( pxUnblockedTCB->xEventListItem ) );
+    listREMOVE_ITEM( &( pxUnblockedTCB->mut->xEventListItem ) );
 
     if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
     {
-        listREMOVE_ITEM( &( pxUnblockedTCB->xStateListItem ) );
+        listREMOVE_ITEM( &( pxUnblockedTCB->mut->xStateListItem ) );
         prvAddTaskToReadyList( pxUnblockedTCB );
 
         #if ( configUSE_TICKLESS_IDLE != 0 )
@@ -1936,7 +1936,7 @@ BaseType_t xTaskRemoveFromEventList( const List_t * const pxEventList )
     {
         /* The delayed and ready lists cannot be accessed, so hold this task
          * pending until the scheduler is resumed. */
-        listINSERT_END( &( xPendingReadyList ), &( pxUnblockedTCB->xEventListItem ) );
+        listINSERT_END( &( xPendingReadyList ), &( pxUnblockedTCB->mut->xEventListItem ) );
     }
 
     if( pxUnblockedTCB->uxPriority > pxCurrentTCB->uxPriority )
@@ -1994,7 +1994,7 @@ void vTaskRemoveFromUnorderedEventList( ListItem_t * pxEventListItem,
     /* Remove the task from the delayed list and add it to the ready list.  The
      * scheduler is suspended so interrupts will not be accessing the ready
      * lists. */
-    listREMOVE_ITEM( &( pxUnblockedTCB->xStateListItem ) );
+    listREMOVE_ITEM( &( pxUnblockedTCB->mut->xStateListItem ) );
     prvAddTaskToReadyList( pxUnblockedTCB );
 
     if( pxUnblockedTCB->uxPriority > pxCurrentTCB->uxPriority )
@@ -2432,11 +2432,11 @@ TickType_t uxTaskResetEventItemValue( void )
 {
     TickType_t uxReturn;
 
-    uxReturn = listGET_LIST_ITEM_VALUE( &( pxCurrentTCB->xEventListItem ) );
+    uxReturn = listGET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xEventListItem ) );
 
     /* Reset the event list item to its normal value - so it can be used with
      * queues and semaphores. */
-    listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->xEventListItem ), ( ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxCurrentTCB->uxPriority ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
+    listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xEventListItem ), ( ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxCurrentTCB->uxPriority ) ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
 
     return uxReturn;
 }
@@ -2455,10 +2455,10 @@ TickType_t uxTaskResetEventItemValue( void )
         taskENTER_CRITICAL();
         {
             /* Only block if the notification count is not already non-zero. */
-            if( pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ] == 0UL )
+            if( pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] == 0UL )
             {
                 /* Mark this task as waiting for a notification. */
-                pxCurrentTCB->ucNotifyState[ uxIndexToWait ] = taskWAITING_NOTIFICATION;
+                pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskWAITING_NOTIFICATION;
 
                 if( xTicksToWait > ( TickType_t ) 0 )
                 {
@@ -2486,17 +2486,17 @@ TickType_t uxTaskResetEventItemValue( void )
         taskENTER_CRITICAL();
         {
             traceTASK_NOTIFY_TAKE( uxIndexToWait );
-            ulReturn = pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ];
+            ulReturn = pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ];
 
             if( ulReturn != 0UL )
             {
                 if( xClearCountOnExit != pdFALSE )
                 {
-                    pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ] = 0UL;
+                    pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = 0UL;
                 }
                 else
                 {
-                    pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ] = ulReturn - ( uint32_t ) 1;
+                    pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = ulReturn - ( uint32_t ) 1;
                 }
             }
             else
@@ -2504,7 +2504,7 @@ TickType_t uxTaskResetEventItemValue( void )
                 mtCOVERAGE_TEST_MARKER();
             }
 
-            pxCurrentTCB->ucNotifyState[ uxIndexToWait ] = taskNOT_WAITING_NOTIFICATION;
+            pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskNOT_WAITING_NOTIFICATION;
         }
         taskEXIT_CRITICAL();
 
@@ -2529,15 +2529,15 @@ TickType_t uxTaskResetEventItemValue( void )
         taskENTER_CRITICAL();
         {
             /* Only block if a notification is not already pending. */
-            if( pxCurrentTCB->ucNotifyState[ uxIndexToWait ] != taskNOTIFICATION_RECEIVED )
+            if( pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] != taskNOTIFICATION_RECEIVED )
             {
                 /* Clear bits in the task's notification value as bits may get
                  * set  by the notifying task or interrupt.  This can be used to
                  * clear the value to zero. */
-                pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ] &= ~ulBitsToClearOnEntry;
+                pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] &= ~ulBitsToClearOnEntry;
 
                 /* Mark this task as waiting for a notification. */
-                pxCurrentTCB->ucNotifyState[ uxIndexToWait ] = taskWAITING_NOTIFICATION;
+                pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskWAITING_NOTIFICATION;
 
                 if( xTicksToWait > ( TickType_t ) 0 )
                 {
@@ -2570,14 +2570,14 @@ TickType_t uxTaskResetEventItemValue( void )
             {
                 /* Output the current notification value, which may or may not
                  * have changed. */
-                *pulNotificationValue = pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ];
+                *pulNotificationValue = pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ];
             }
 
             /* If ucNotifyValue is set then either the task never entered the
              * blocked state (because a notification was already pending) or the
              * task unblocked because of a notification.  Otherwise the task
              * unblocked because of a timeout. */
-            if( pxCurrentTCB->ucNotifyState[ uxIndexToWait ] != taskNOTIFICATION_RECEIVED )
+            if( pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] != taskNOTIFICATION_RECEIVED )
             {
                 /* A notification was not received. */
                 xReturn = pdFALSE;
@@ -2586,11 +2586,11 @@ TickType_t uxTaskResetEventItemValue( void )
             {
                 /* A notification was already pending or a notification was
                  * received while the task was waiting. */
-                pxCurrentTCB->ulNotifiedValue[ uxIndexToWait ] &= ~ulBitsToClearOnExit;
+                pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] &= ~ulBitsToClearOnExit;
                 xReturn = pdTRUE;
             }
 
-            pxCurrentTCB->ucNotifyState[ uxIndexToWait ] = taskNOT_WAITING_NOTIFICATION;
+            pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskNOT_WAITING_NOTIFICATION;
         }
         taskEXIT_CRITICAL();
 
@@ -2620,32 +2620,32 @@ TickType_t uxTaskResetEventItemValue( void )
         {
             if( pulPreviousNotificationValue != NULL )
             {
-                *pulPreviousNotificationValue = pxTCB->ulNotifiedValue[ uxIndexToNotify ];
+                *pulPreviousNotificationValue = pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ];
             }
 
-            ucOriginalNotifyState = pxTCB->ucNotifyState[ uxIndexToNotify ];
+            ucOriginalNotifyState = pxTCB->mut->ucNotifyState[ uxIndexToNotify ];
 
-            pxTCB->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
+            pxTCB->mut->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
 
             switch( eAction )
             {
                 case eSetBits:
-                    pxTCB->ulNotifiedValue[ uxIndexToNotify ] |= ulValue;
+                    pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] |= ulValue;
                     break;
 
                 case eIncrement:
-                    ( pxTCB->ulNotifiedValue[ uxIndexToNotify ] )++;
+                    ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
                     break;
 
                 case eSetValueWithOverwrite:
-                    pxTCB->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
+                    pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
                     break;
 
                 case eSetValueWithoutOverwrite:
 
                     if( ucOriginalNotifyState != taskNOTIFICATION_RECEIVED )
                     {
-                        pxTCB->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
+                        pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
                     }
                     else
                     {
@@ -2677,11 +2677,11 @@ TickType_t uxTaskResetEventItemValue( void )
              * notification then unblock it now. */
             if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
             {
-                listREMOVE_ITEM( &( pxTCB->xStateListItem ) );
+                listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
                 prvAddTaskToReadyList( pxTCB );
 
                 /* The task should not have been on an event list. */
-                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) == NULL );
+                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) == NULL );
 
                 #if ( configUSE_TICKLESS_IDLE != 0 )
                     {
@@ -2764,31 +2764,31 @@ TickType_t uxTaskResetEventItemValue( void )
         {
             if( pulPreviousNotificationValue != NULL )
             {
-                *pulPreviousNotificationValue = pxTCB->ulNotifiedValue[ uxIndexToNotify ];
+                *pulPreviousNotificationValue = pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ];
             }
 
-            ucOriginalNotifyState = pxTCB->ucNotifyState[ uxIndexToNotify ];
-            pxTCB->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
+            ucOriginalNotifyState = pxTCB->mut->ucNotifyState[ uxIndexToNotify ];
+            pxTCB->mut->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
 
             switch( eAction )
             {
                 case eSetBits:
-                    pxTCB->ulNotifiedValue[ uxIndexToNotify ] |= ulValue;
+                    pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] |= ulValue;
                     break;
 
                 case eIncrement:
-                    ( pxTCB->ulNotifiedValue[ uxIndexToNotify ] )++;
+                    ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
                     break;
 
                 case eSetValueWithOverwrite:
-                    pxTCB->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
+                    pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
                     break;
 
                 case eSetValueWithoutOverwrite:
 
                     if( ucOriginalNotifyState != taskNOTIFICATION_RECEIVED )
                     {
-                        pxTCB->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
+                        pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] = ulValue;
                     }
                     else
                     {
@@ -2820,18 +2820,18 @@ TickType_t uxTaskResetEventItemValue( void )
             if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
             {
                 /* The task should not have been on an event list. */
-                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) == NULL );
+                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) == NULL );
 
                 if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
                 {
-                    listREMOVE_ITEM( &( pxTCB->xStateListItem ) );
+                    listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
                 }
                 else
                 {
                     /* The delayed and ready lists cannot be accessed, so hold
                      * this task pending until the scheduler is resumed. */
-                    listINSERT_END( &( xPendingReadyList ), &( pxTCB->xEventListItem ) );
+                    listINSERT_END( &( xPendingReadyList ), &( pxTCB->mut->xEventListItem ) );
                 }
 
                 if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
@@ -2897,12 +2897,12 @@ TickType_t uxTaskResetEventItemValue( void )
 
         uxSavedInterruptStatus = portSET_INTERRUPT_MASK_FROM_ISR();
         {
-            ucOriginalNotifyState = pxTCB->ucNotifyState[ uxIndexToNotify ];
-            pxTCB->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
+            ucOriginalNotifyState = pxTCB->mut->ucNotifyState[ uxIndexToNotify ];
+            pxTCB->mut->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
 
             /* 'Giving' is equivalent to incrementing a count in a counting
              * semaphore. */
-            ( pxTCB->ulNotifiedValue[ uxIndexToNotify ] )++;
+            ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
 
             traceTASK_NOTIFY_GIVE_FROM_ISR( uxIndexToNotify );
 
@@ -2911,18 +2911,18 @@ TickType_t uxTaskResetEventItemValue( void )
             if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
             {
                 /* The task should not have been on an event list. */
-                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->xEventListItem ) ) == NULL );
+                configASSERT( listLIST_ITEM_CONTAINER( &( pxTCB->mut->xEventListItem ) ) == NULL );
 
                 if( uxSchedulerSuspended == ( UBaseType_t ) pdFALSE )
                 {
-                    listREMOVE_ITEM( &( pxTCB->xStateListItem ) );
+                    listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
                     prvAddTaskToReadyList( pxTCB );
                 }
                 else
                 {
                     /* The delayed and ready lists cannot be accessed, so hold
                      * this task pending until the scheduler is resumed. */
-                    listINSERT_END( &( xPendingReadyList ), &( pxTCB->xEventListItem ) );
+                    listINSERT_END( &( xPendingReadyList ), &( pxTCB->mut->xEventListItem ) );
                 }
 
                 if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
@@ -2967,9 +2967,9 @@ TickType_t uxTaskResetEventItemValue( void )
 
         taskENTER_CRITICAL();
         {
-            if( pxTCB->ucNotifyState[ uxIndexToClear ] == taskNOTIFICATION_RECEIVED )
+            if( pxTCB->mut->ucNotifyState[ uxIndexToClear ] == taskNOTIFICATION_RECEIVED )
             {
-                pxTCB->ucNotifyState[ uxIndexToClear ] = taskNOT_WAITING_NOTIFICATION;
+                pxTCB->mut->ucNotifyState[ uxIndexToClear ] = taskNOT_WAITING_NOTIFICATION;
                 xReturn = pdPASS;
             }
             else
@@ -3002,8 +3002,8 @@ TickType_t uxTaskResetEventItemValue( void )
         {
             /* Return the notification as it was before the bits were cleared,
              * then clear the bit mask. */
-            ulReturn = pxTCB->ulNotifiedValue[ uxIndexToClear ];
-            pxTCB->ulNotifiedValue[ uxIndexToClear ] &= ~ulBitsToClear;
+            ulReturn = pxTCB->mut->ulNotifiedValue[ uxIndexToClear ];
+            pxTCB->mut->ulNotifiedValue[ uxIndexToClear ] &= ~ulBitsToClear;
         }
         taskEXIT_CRITICAL();
 
@@ -3021,7 +3021,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 
     /* Remove the task from the ready list before adding it to the blocked list
      * as the same list item is used for both lists. */
-    if( uxListRemove( &( pxCurrentTCB->xStateListItem ) ) == ( UBaseType_t ) 0 )
+    if( uxListRemove( &( pxCurrentTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
     {
         /* The current task must be in a ready list, so there is no need to
          * check, and the port reset macro can be called directly. */
@@ -3039,7 +3039,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
                 /* Add the task to the suspended task list instead of a delayed task
                  * list to ensure it is not woken by a timing event.  It will block
                  * indefinitely. */
-                listINSERT_END( &xSuspendedTaskList, &( pxCurrentTCB->xStateListItem ) );
+                listINSERT_END( &xSuspendedTaskList, &( pxCurrentTCB->mut->xStateListItem ) );
             }
             else
             {
@@ -3049,19 +3049,19 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
                 xTimeToWake = xConstTickCount + xTicksToWait;
 
                 /* The list item will be inserted in wake time order. */
-                listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->xStateListItem ), xTimeToWake );
+                listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xStateListItem ), xTimeToWake );
 
                 if( xTimeToWake < xConstTickCount )
                 {
                     /* Wake time has overflowed.  Place this item in the overflow
                      * list. */
-                    vListInsert( pxOverflowDelayedTaskList, &( pxCurrentTCB->xStateListItem ) );
+                    vListInsert( pxOverflowDelayedTaskList, &( pxCurrentTCB->mut->xStateListItem ) );
                 }
                 else
                 {
                     /* The wake time has not overflowed, so the current block list
                      * is used. */
-                    vListInsert( pxDelayedTaskList, &( pxCurrentTCB->xStateListItem ) );
+                    vListInsert( pxDelayedTaskList, &( pxCurrentTCB->mut->xStateListItem ) );
 
                     /* If the task entering the blocked state was placed at the
                      * head of the list of blocked tasks then xNextTaskUnblockTime
@@ -3085,17 +3085,17 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
             xTimeToWake = xConstTickCount + xTicksToWait;
 
             /* The list item will be inserted in wake time order. */
-            listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->xStateListItem ), xTimeToWake );
+            listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xStateListItem ), xTimeToWake );
 
             if( xTimeToWake < xConstTickCount )
             {
                 /* Wake time has overflowed.  Place this item in the overflow list. */
-                vListInsert( pxOverflowDelayedTaskList, &( pxCurrentTCB->xStateListItem ) );
+                vListInsert( pxOverflowDelayedTaskList, &( pxCurrentTCB->mut->xStateListItem ) );
             }
             else
             {
                 /* The wake time has not overflowed, so the current block list is used. */
-                vListInsert( pxDelayedTaskList, &( pxCurrentTCB->xStateListItem ) );
+                vListInsert( pxDelayedTaskList, &( pxCurrentTCB->mut->xStateListItem ) );
 
                 /* If the task entering the blocked state was placed at the head of the
                  * list of blocked tasks then xNextTaskUnblockTime needs to be updated

@@ -14,23 +14,31 @@
 typedef TCB_t *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
 
+// array containing all .tasktable entries produced in TASK_REGISTER
+// (this array is generated from fragments by the linker)
+extern TCB_t tasktable_start[];
+extern TCB_t tasktable_end[];
+
 // TODO: make the entrypoint parameter strongly typed like PROGRAM_INIT_PARAM
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
     static_assert(t_priority < configMAX_PRIORITIES, "invalid priority");         \
     StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
+    TCB_mut_t t_ident ## _mutable = {                                             \
+        .pxTopOfStack    = NULL,                                                  \
+        .needs_restart   = false,                                                 \
+        .hit_restart     = false,                                                 \
+        /* no init for lists here */                                              \
+        .ulNotifiedValue = { 0 },                                                 \
+        .ucNotifyState   = { 0 },                                                 \
+    };                                                                            \
     __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
-        .pxTopOfStack    = NULL,              \
-        .start_routine   = t_start,           \
-        .start_arg       = t_arg,             \
-        .restartable     = t_restartable,     \
-        .needs_restart   = false,             \
-        .hit_restart     = false,             \
-        /* no init for lists here */          \
-        .uxPriority      = t_priority,        \
-        .pxStack         = t_ident ## _stack, \
-        .pcTaskName      = t_name,            \
-        .ulNotifiedValue = { 0 },             \
-        .ucNotifyState   = { 0 },             \
+        .mut             = &t_ident ## _mutable,                                  \
+        .start_routine   = t_start,                                               \
+        .start_arg       = t_arg,                                                 \
+        .restartable     = t_restartable,                                         \
+        .uxPriority      = t_priority,                                            \
+        .pxStack         = t_ident ## _stack,                                     \
+        .pcTaskName      = t_name,                                                \
     }
 
 // TODO: fix write to uxPriority

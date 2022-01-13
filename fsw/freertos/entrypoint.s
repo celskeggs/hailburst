@@ -87,9 +87,10 @@
     PUSH    {R3}
 
     /* Save the stack pointer in the TCB. */
-    LDR     R0, pxCurrentTCBConst
-    LDR     R1, [R0]
-    STR     SP, [R1]
+    LDR     R0, pxCurrentTCBConst   /* R0 = &pxCurrentTCB                   */
+    LDR     R1, [R0]                /* R1 = pxCurrentTCB                    */
+    LDR     R2, [R1]                /* R2 = &pxCurrentTCB->mut              */
+    STR     SP, [R2]                /* SP = pxCurrentTCB->mut->pxTopOfStack */
 
     .endm
 
@@ -100,7 +101,8 @@
     /* Set the SP to point to the stack of the task being restored. */
     LDR     R0, pxCurrentTCBConst
     LDR     R1, [R0]
-    LDR     SP, [R1]
+    LDR     R2, [R1]
+    LDR     SP, [R2]
 
     /* Is there a floating point context to restore?  If the restored
     ulPortTaskHasFPUContext is zero then no. */

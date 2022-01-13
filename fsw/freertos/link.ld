@@ -15,12 +15,12 @@ SECTIONS
         *(.initpoints);
         initpoints_end = .;
     } :text
-    .data : { *(.data*) } :data
     .tasktable : {
         tasktable_start = .;
         *(.tasktable);
         tasktable_end = .;
-    } :data
+    } :text
+    .data : { *(.data*) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
     . = 0xF8000000;
     .debugf_messages (INFO) : { *(.debugf_messages) }

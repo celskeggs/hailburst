@@ -87,27 +87,32 @@ typedef enum {
  * and stores task state information, including a pointer to the task's context
  * (the task's run time environment, including register values)
  */
-typedef struct TCB_st
+typedef struct
 {
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
-
-    void (*start_routine)(void*);
-    void *start_arg;
-    restartable_t restartable;
     bool needs_restart;
     bool hit_restart;
-
     ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
     ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
-    const UBaseType_t uxPriority;               /*< The priority of the task.  0 is the lowest priority. */
-    StackType_t * pxStack;                      /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
-    const char * pcTaskName;                    /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
         volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
     #endif
-} TCB_t;
+} TCB_mut_t;
+
+// this is an immutable structure
+typedef struct TCB_st
+{
+    TCB_mut_t * const mut;                      /*< THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
+
+    void (* const start_routine)(void*);
+    void * const start_arg;
+    const restartable_t restartable;
+    const UBaseType_t uxPriority;               /*< The priority of the task.  0 is the lowest priority. */
+    StackType_t * const pxStack;                /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
+    const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
+} const TCB_t;
 
 /*
  * Type by which tasks are referenced.  For example, a call to xTaskCreate

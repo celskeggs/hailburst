@@ -32,17 +32,13 @@ __attribute__((noreturn)) void task_suspend(void) {
 static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
 
-// also used in thread_registered_input
-extern TCB_t tasktable_start[];
-extern TCB_t tasktable_end[];
-
 static void restart_task_mainloop(void *opaque) {
     (void) opaque;
 
     for (;;) {
         for (thread_t thread = tasktable_start; thread < tasktable_end; thread++) {
-            if (thread->needs_restart == true) {
-                thread->needs_restart = false;
+            if (thread->mut->needs_restart == true) {
+                thread->mut->needs_restart = false;
                 thread_restart_other_task(thread);
             }
         }
@@ -56,7 +52,7 @@ __attribute__((noreturn)) void restart_current_task(void) {
 
     if (current_thread->restartable == RESTARTABLE) {
         // mark ourself as pending restart
-        current_thread->needs_restart = true;
+        current_thread->mut->needs_restart = true;
         // wake up the restart task
         if (atomic_load(task_restart_wake_initialized)) {
             (void) semaphore_give(&task_restart_wake);

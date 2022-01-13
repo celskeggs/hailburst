@@ -14,7 +14,7 @@ TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
 
 void task_entrypoint(TCB_t * state) {
 
-    if (state->hit_restart) {
+    if (state->mut->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
         scrubber_cycle_wait(state == &idle_task);
     }
@@ -39,16 +39,12 @@ void thread_restart_other_task(thread_t state) {
     // the TaskHandle could refer to undefined memory.
     taskENTER_CRITICAL();
     vTaskDelete(state);
-    state->hit_restart = true;
+    state->mut->hit_restart = true;
     thread_start_internal(state);
     taskEXIT_CRITICAL();
 
     debugf(WARNING, "Completed restart for task '%s'", state->pcTaskName);
 }
-
-// also used in restart_task_mainloop
-extern TCB_t tasktable_start[];
-extern TCB_t tasktable_end[];
 
 static void thread_registered_init(void) {
     debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);

@@ -12,8 +12,8 @@ SECTIONS
     . = 0x20000000;
     .text : { *(.text*) *(.rodata*) } :text
     .initpoints : { *(.initpoints) } :text
+    .tasktable : { *(.tasktable) } :text
     .data : { *(.data*) } :data
-    .tasktable : { *(.tasktable) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
     .debugf_messages (INFO) : { *(.debugf_messages) }
 }

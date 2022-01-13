@@ -84,7 +84,7 @@
  * the order that the port expects to find them.
  *
  */
-typedef struct TCB_st TCB_t;
+typedef struct TCB_st const TCB_t;
 StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                      TCB_t * pxNewTCB );
 
