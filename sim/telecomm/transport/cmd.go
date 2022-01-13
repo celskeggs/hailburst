@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 )
 
@@ -20,12 +21,24 @@ type Ping struct {
 	PingID uint32
 }
 
+func (c Ping) String() string {
+	return fmt.Sprintf("Ping(ID=0x%08x)", c.PingID)
+}
+
 func (Ping) CmdId() uint32 {
 	return PingCID
 }
 
 type MagSetPwrState struct {
 	PowerState bool
+}
+
+func (c MagSetPwrState) String() string {
+	if c.PowerState {
+		return "MagSetPwrState(ON)"
+	} else {
+		return "MagSetPwrState(OFF)"
+	}
 }
 
 func (MagSetPwrState) CmdId() uint32 {

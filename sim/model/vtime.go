@@ -50,7 +50,7 @@ func ParseTime(s string) (VirtualTime, error) {
 			panic("inconsistent; should never happen")
 		}
 	}
-	vt, ok := FromNanoseconds(sec * uint64(NanosecondsPerSecond) + nanosec)
+	vt, ok := FromNanoseconds(sec*uint64(NanosecondsPerSecond) + nanosec)
 	if !ok {
 		return TimeNever, errors.New("invalid total value")
 	}
@@ -135,6 +135,11 @@ func (t VirtualTime) Nanoseconds() uint64 {
 func FromNanoseconds(t uint64) (VirtualTime, bool) {
 	vt := VirtualTime(t)
 	return vt, vt.TimeExists()
+}
+
+func FromNanosecondsIgnore(t uint64) VirtualTime {
+	vt, _ := FromNanoseconds(t)
+	return vt
 }
 
 func FromNanosecondsAssume(t uint64) VirtualTime {

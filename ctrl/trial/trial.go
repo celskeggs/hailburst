@@ -196,6 +196,10 @@ func (opt Options) TimesyncSocketPath() string {
 	return path.Join(opt.TrialDir, "timesync.sock")
 }
 
+func (opt Options) ActivityLog() string {
+	return path.Join(opt.TrialDir, "activity.log")
+}
+
 func (opt Options) GuestLog() string {
 	return path.Join(opt.TrialDir, "guest.log")
 }
@@ -342,6 +346,17 @@ func (opt Options) StartQEMU(p *util.Processes) {
 	}
 }
 
+func (opt Options) StartActivityViewer(p *util.Processes) {
+	WaitUntilExists(opt.ActivityLog(), time.Second)
+	p.LaunchInTerminal(
+		[]string{
+			"tail", "-f", opt.ActivityLog(),
+		},
+		"Activity Log",
+		opt.TrialDir,
+	)
+}
+
 func (opt Options) StartViewer(p *util.Processes) {
 	WaitUntilExists(opt.GuestLog(), time.Second)
 	if opt.Linux {
@@ -407,6 +422,7 @@ func (opt Options) Launch() {
 	opt.StartQEMU(p)
 	opt.StartGDB(p)
 	if opt.Interactive {
+		opt.StartActivityViewer(p)
 		opt.StartViewer(p)
 	}
 

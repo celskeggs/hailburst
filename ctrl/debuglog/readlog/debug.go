@@ -17,6 +17,7 @@ const (
 )
 
 type LogLevel int
+
 const (
 	LogInvalid  LogLevel = 0
 	LogCritical LogLevel = 1

@@ -27,7 +27,7 @@ func MakeProcesses() *Processes {
 }
 
 var locations = []string{
-	"0+0", "948+0", "0+487", "948+487",
+	"117x25+0+0", "117x9+948+0", "117x25+0+487", "117x14+948+218", "117x25+948+487",
 }
 
 func wrapInXterm(argv []string, title string, i int) []string {
@@ -36,7 +36,7 @@ func wrapInXterm(argv []string, title string, i int) []string {
 		"xterm",
 		"-fa", "Monospace", "-fs", "10", // font configuration
 		"-T", title,
-		"-geometry", "117x25+" + locations[i%4],
+		"-geometry", locations[i%len(locations)],
 		"-e", fmt.Sprintf("(%s); read -p 'Press enter to exit...'", cmdline),
 	}
 }

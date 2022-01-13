@@ -42,7 +42,7 @@ func main() {
 			log.Printf("Encountered error while writing to log file: %v", err)
 		}
 		log.Printf("Wrote failure information to log file")
-	}, "reqs-raw.log", injectIOErrors, "io-dump.csv")
+	}, "reqs-raw.log", "activity.log", injectIOErrors, "io-dump.csv")
 	mon := MakeMonitor(app, time.Second*2, time.Second, func(lastTxmit model.VirtualTime) {
 		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", lastTxmit.Since(model.TimeZero).Seconds())
 		if err == nil {

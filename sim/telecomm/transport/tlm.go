@@ -45,11 +45,27 @@ type CmdReceived struct {
 	OriginalCommandId uint32 // the CID
 }
 
+func (c *CmdReceived) String() string {
+	return fmt.Sprintf("CmdReceived(OT=%v, OC=0x%08x)",
+		model.FromNanosecondsIgnore(c.OriginalTimestamp), c.OriginalCommandId)
+}
+
 type CmdCompleted struct {
 	BaseTelemetry
 	OriginalTimestamp uint64
 	OriginalCommandId uint32
 	Success           bool
+}
+
+func (c *CmdCompleted) String() string {
+	var success string
+	if c.Success {
+		success = "SUCCESS"
+	} else {
+		success = "FAILURE"
+	}
+	return fmt.Sprintf("CmdCompleted(OT=%v, OC=0x%08x, %s)",
+		model.FromNanosecondsIgnore(c.OriginalTimestamp), c.OriginalCommandId, success)
 }
 
 type CmdNotRecognized struct {
@@ -59,9 +75,18 @@ type CmdNotRecognized struct {
 	Length            uint32
 }
 
+func (c *CmdNotRecognized) String() string {
+	return fmt.Sprintf("CmdNotRecognized(OT=%v, OC=0x%08x, Len=%u)",
+		model.FromNanosecondsIgnore(c.OriginalTimestamp), c.OriginalCommandId, c.Length)
+}
+
 type TlmDropped struct {
 	BaseTelemetry
 	MessagesLost uint32
+}
+
+func (c *TlmDropped) String() string {
+	return fmt.Sprintf("TlmDropped(Messages=%u)", c.MessagesLost)
 }
 
 type Pong struct {
@@ -69,13 +94,25 @@ type Pong struct {
 	PingID uint32
 }
 
+func (c *Pong) String() string {
+	return fmt.Sprintf("Pong(ID=0x%08x)", c.PingID)
+}
+
 type ClockCalibrated struct {
 	BaseTelemetry
 	Adjustment int64
 }
 
+func (c *ClockCalibrated) String() string {
+	return fmt.Sprintf("ClockCalibrated(Adjustment=%+d)", c.Adjustment)
+}
+
 type Heartbeat struct {
 	BaseTelemetry
+}
+
+func (c *Heartbeat) String() string {
+	return "Heartbeat"
 }
 
 type MagPwrStateChanged struct {
@@ -83,13 +120,30 @@ type MagPwrStateChanged struct {
 	PowerState bool
 }
 
+func (c *MagPwrStateChanged) String() string {
+	if c.PowerState {
+		return "MagPwrStateChanged(OFF -> ON)"
+	} else {
+		return "MagPwrStateChanged(ON -> OFF)"
+	}
+}
+
 type MagReading struct {
 	ReadingTime      uint64
 	MagX, MagY, MagZ int16
 }
 
+func (c *MagReading) String() string {
+	return fmt.Sprintf("MagReading(T=%v, Mag=<%d,%d,%d>)",
+		model.FromNanosecondsIgnore(c.ReadingTime), c.MagX, c.MagY, c.MagZ)
+}
+
 type MagReadingsArray struct {
 	Readings []MagReading
+}
+
+func (c *MagReadingsArray) String() string {
+	return fmt.Sprintf("MagReadingsArray[N=%d]", len(c.Readings))
 }
 
 func (m *MagReadingsArray) Decode(_ Telemetry, dataBytes []byte, tlmId uint32) error {

@@ -5,10 +5,8 @@ import (
 	"github.com/celskeggs/hailburst/sim/telecomm"
 	"github.com/celskeggs/hailburst/sim/telecomm/transport"
 	"github.com/celskeggs/hailburst/sim/verifier/collector"
-	"log"
 	"math"
 	"math/rand"
-	"reflect"
 	"time"
 )
 
@@ -29,7 +27,6 @@ func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, int
 			panic("should not ever call genCmd with pendingCmd != nil")
 		}
 		pendingCmd = transport.GenerateCmd(ctx.Rand())
-		log.Printf("Sending command: %v %v", reflect.TypeOf(pendingCmd), pendingCmd)
 		update()
 	}
 	sender := transport.MakeSender(ctx, dest)

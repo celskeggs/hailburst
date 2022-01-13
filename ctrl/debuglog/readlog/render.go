@@ -66,7 +66,7 @@ func GetLines(filename string, lineNum uint32, count uint32) ([]string, error) {
 		curLine += 1
 		if curLine >= lineNum {
 			lines = append(lines, br.Text())
-			if curLine >= lineNum + count - 1 {
+			if curLine >= lineNum+count-1 {
 				return lines, nil
 			}
 		}
@@ -137,10 +137,10 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 			} else {
 				for i, lineText := range lines {
 					msg := fmt.Sprintf("%30s %s",
-						fmt.Sprintf("[%s:%d]", shortPath, firstLine + uint32(i)),
+						fmt.Sprintf("[%s:%d]", shortPath, firstLine+uint32(i)),
 						lineText,
 					)
-					if firstLine + uint32(i) == line.Metadata.LineNum {
+					if firstLine+uint32(i) == line.Metadata.LineNum {
 						msg = LogColor(line.Metadata.LogLevel, msg)
 					}
 					msgs = append(msgs, msg)
@@ -161,7 +161,7 @@ func Renderer(input <-chan Record, output io.Writer, srcPath string, full bool) 
 	return nil
 }
 
-func Filter(input <-chan Record, output chan <-Record, minLevel LogLevel, earliest, latest model.VirtualTime) {
+func Filter(input <-chan Record, output chan<- Record, minLevel LogLevel, earliest, latest model.VirtualTime) {
 	go func() {
 		defer close(output)
 		for record := range input {

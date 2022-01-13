@@ -5,7 +5,6 @@ import re
 import time
 
 import gdb
-
 from elftools.elf.constants import P_FLAGS
 from elftools.elf.elffile import ELFFile
 
@@ -171,7 +170,7 @@ class CSVWriter:
         self.flushable.flush()
         print("Writing log of injections to", pathname)
 
-    def write_other(self): # used for register and restart injection
+    def write_other(self):  # used for register and restart injection
         if self.writer is None:
             # not recording
             return
