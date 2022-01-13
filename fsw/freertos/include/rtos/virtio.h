@@ -70,9 +70,9 @@ struct virtio_console {
 
     struct virtio_device *devptr;
 
-    semaphore_t control_wake;
-    chart_t     control_rx;
-    chart_t     control_tx;
+    thread_t control_task;
+    chart_t  control_rx;
+    chart_t  control_tx;
 
     bool confirmed_port_present;
 };
@@ -104,14 +104,16 @@ void virtio_console_control_loop(struct virtio_console *console);
 
 #define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id) \
     VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select); \
+    extern struct virtio_console v_ident;                                    \
+    TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,            \
+                  virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);   \
     struct virtio_console v_ident = {                                        \
         .initialized = false,                                                \
         .devptr = &v_ident ## _device,                                       \
-        /* control_wake, control_rx, and control_tx are initialized later */ \
+        .control_task = &v_ident ## _task,                                   \
+        /* control_rx, and control_tx are initialized later */               \
         .confirmed_port_present = false,                                     \
-    };                                                                       \
-    TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,            \
-                  virtio_console_control_loop, &v_ident, NOT_RESTARTABLE)
+    }
 
 void *virtio_device_config_space(struct virtio_device *device);
 

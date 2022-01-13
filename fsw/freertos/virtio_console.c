@@ -81,10 +81,8 @@ void virtio_console_feature_select(uint64_t *features) {
 
 static void virtio_console_wake_control(void *opaque) {
     struct virtio_console *console = (struct virtio_console *) opaque;
-    assert(console != NULL && console->initialized);
-    // we ignore the case where we fail to give the semaphore... that just means another wake request is already on the
-    // queue, and therefore there's no need for us to enqueue another wakeup!
-    (void) semaphore_give(&console->control_wake);
+    assert(console != NULL);
+    task_rouse(console->control_task);
 }
 
 static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_t id, uint16_t event, uint16_t value) {
@@ -118,7 +116,7 @@ void virtio_console_control_loop(struct virtio_console *console) {
         // receive any requests on the receive queue
         struct io_rx_ent *rx_entry = chart_reply_start(&console->control_rx);
         if (rx_entry == NULL) {
-            semaphore_take(&console->control_wake);
+            task_doze();
             continue;
         }
 
@@ -208,9 +206,6 @@ void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
     virtio_device_setup_queue(console->devptr, base_queue + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, data_tx);
 
     debugf(DEBUG, "Complete VIRTIO device setup.");
-
-    // NOTE: the control task is created as part of VIRTIO_CONSOLE_REGISTER
-    semaphore_init(&console->control_wake);
 
     console->initialized = true;
 }
