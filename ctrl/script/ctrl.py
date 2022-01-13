@@ -2,6 +2,7 @@ import csv
 import math
 import random
 import re
+import time
 
 import gdb
 
@@ -143,10 +144,15 @@ def parse_time(s):
 
 def step_ns(ns):
     start = now()
+    start_real = time.time()
     gdb.execute("monitor stop_delayed %d" % ns)
     gdb.execute("continue")
+    elapsed_real = (time.time() - start_real) * 1e9
     end = now()
-    print("Executed from t=%d ns to t=%d ns (total = %d ns)" % (start, end, end - start))
+    print("Virtual time from t=%d ns to t=%d ns (total = %d ns)" % (start, end, end - start))
+    print("  Clock time elapsed: %d ns" % round(elapsed_real))
+    if elapsed_real > 0:
+        print("Simulation ratio: %.3f virtual/clock (higher is faster)" % ((end - start) / elapsed_real))
 
 
 class CSVWriter:
