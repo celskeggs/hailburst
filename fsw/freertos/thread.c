@@ -31,8 +31,6 @@ static void thread_start_internal(thread_t state) {
     TaskHandle_t handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
                                       state->preallocated_stack, &state->tcb);
     assert(handle != NULL && handle == &state->tcb);
-
-    vTaskSetApplicationTaskTag(&state->tcb, (void *) state);
 }
 
 void thread_restart_other_task(thread_t state) {

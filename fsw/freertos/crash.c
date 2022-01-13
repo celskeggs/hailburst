@@ -51,9 +51,10 @@ static void restart_task_mainloop(void *opaque) {
 }
 
 __attribute__((noreturn)) void restart_current_task(void) {
-    thread_t current_thread = (void *) xTaskGetApplicationTaskTag(NULL);
+    thread_t current_thread = task_get_current();
+    assert(current_thread != NULL);
 
-    if (current_thread != NULL && current_thread->restartable == RESTARTABLE) {
+    if (current_thread->restartable == RESTARTABLE) {
         // mark ourself as pending restart
         current_thread->needs_restart = true;
         // wake up the restart task

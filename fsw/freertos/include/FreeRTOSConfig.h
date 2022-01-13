@@ -17,7 +17,7 @@
 #define configIDLE_SHOULD_YIELD                 0
 #define configUSE_TASK_NOTIFICATIONS            1
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   1
-#define configUSE_MUTEXES                       1
+#define configUSE_MUTEXES                       0
 #define configUSE_RECURSIVE_MUTEXES             0
 #define configUSE_COUNTING_SEMAPHORES           0
 #define configUSE_ALTERNATIVE_API               0 /* Deprecated! */
@@ -25,11 +25,11 @@
 #define configUSE_QUEUE_SETS                    0
 #define configUSE_TIME_SLICING                  1
 #define configENABLE_BACKWARD_COMPATIBILITY     0
-#define configNUM_THREAD_LOCAL_STORAGE_POINTERS 5
+#define configNUM_THREAD_LOCAL_STORAGE_POINTERS 0
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
 #define configUSE_TASK_FPU_SUPPORT              2
-#define configUSE_APPLICATION_TASK_TAG          1
+#define configUSE_APPLICATION_TASK_TAG          0
 
 enum {
     PRIORITY_REPAIR  = 5, // only used for critical repair tasks!

@@ -47,6 +47,14 @@ typedef SemaphoreHandle_t semaphore_t;
         /* no need for anything for preallocated_ fields */   \
     }
 
+static inline thread_t task_get_current(void) {
+    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+    assert(handle != NULL);
+    thread_t task = (thread_t) ((uint8_t *) handle - offsetof(struct thread_st, tcb));
+    assert(task != NULL && &task->tcb == handle);
+    return task;
+}
+
 void task_suspend(void) __attribute__((noreturn));
 
 // TODO: more efficient semaphore preallocation approach
