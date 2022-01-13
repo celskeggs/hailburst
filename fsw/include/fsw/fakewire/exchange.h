@@ -19,7 +19,7 @@ typedef struct fw_exchange_st {
     chart_t *write_chart;    // client: switch task, server: exchange_thread, struct io_rx_ent (yes, actually!)
 } fw_exchange_t;
 
-void fakewire_exc_notify(void *opaque);
+void fakewire_exc_notify(fw_exchange_t *fwe);
 void fakewire_exc_init_internal(fw_exchange_t *fwe);
 void fakewire_exc_exchange_loop(void *fwe_opaque);
 

@@ -14,9 +14,9 @@ enum {
     RMAP_RECEIVE_TIMEOUT_NS = 2 * 1000 * 1000,
 };
 
-void rmap_notify_wake(void *opaque) {
-    assert(opaque != NULL);
-    rmap_t *rmap = (rmap_t *) opaque;
+void rmap_notify_wake(rmap_t *rmap) {
+    assert(rmap != NULL);
+
     // ignore result because a double-notification is equivalent to a single-notification
     (void) semaphore_give(rmap->wake_rmap);
 }

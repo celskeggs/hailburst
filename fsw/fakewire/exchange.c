@@ -12,8 +12,7 @@
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->label, ## __VA_ARGS__)
 
-void fakewire_exc_notify(void *opaque) {
-    fw_exchange_t *fwe = (fw_exchange_t *) opaque;
+void fakewire_exc_notify(fw_exchange_t *fwe) {
     assert(fwe != NULL);
 
     // we don't care if our give actually succeeds... if it doesn't, that just means there's already a wakeup pending,

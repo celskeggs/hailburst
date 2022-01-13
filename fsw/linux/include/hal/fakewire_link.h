@@ -22,8 +22,8 @@ typedef struct {
 
 void fakewire_link_rx_loop(void *opaque);
 void fakewire_link_tx_loop(void *opaque);
-void fakewire_link_notify_rx_chart(void *opaque);
-void fakewire_link_notify_tx_chart(void *opaque);
+void fakewire_link_notify_rx_chart(fw_link_t *fwl);
+void fakewire_link_notify_tx_chart(fw_link_t *fwl);
 void fakewire_link_configure(void *opaque);
 
 #define FAKEWIRE_LINK_REGISTER(l_ident, l_options, l_rx, l_tx)                                                        \

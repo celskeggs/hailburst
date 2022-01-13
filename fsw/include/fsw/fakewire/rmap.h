@@ -61,7 +61,7 @@ typedef struct {
     const rmap_addr_t *current_routing;
 } rmap_t;
 
-void rmap_notify_wake(void *opaque);
+void rmap_notify_wake(rmap_t *rmap);
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.

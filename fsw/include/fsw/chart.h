@@ -1,6 +1,8 @@
 #ifndef FSW_CHART_H
 #define FSW_CHART_H
 
+#include <fsw/preprocessor.h>
+
 /*
  * This file contains an implementation of a "sticky note chart" data structure.
  * This is a crash-safe IPC mechanism for a single client and a single server to communicate by passing back and forth
@@ -63,16 +65,20 @@ typedef struct {
         .reply_ptr = 0,                            \
     }
 
+// ********** READ ME IF YOU HAVE A COMPILER ERROR **********
+// IF YOU SEE A "invalid use of void expression" ERROR, THAT INDICATES THAT THE TYPE OF THE NOTIFICATION FUNCTION WAS
+// INCORRECT! The pointer passed and the pointed provided as a parameter are not the same type!
+
 // TODO: find a way for these to not require PROGRAM_INIT
 #define CHART_SERVER_NOTIFY(c_ident, notify_server_cb, param)   \
     static void c_ident ## _register_server(void) {             \
-        chart_attach_server(&c_ident, notify_server_cb, param); \
+        chart_attach_server(&c_ident, PP_ERASE_TYPE(notify_server_cb, param), param); \
     }                                                           \
     PROGRAM_INIT(STAGE_RAW, c_ident ## _register_server);
 
 #define CHART_CLIENT_NOTIFY(c_ident, notify_client_cb, param)   \
     static void c_ident ## _register_client(void) {             \
-        chart_attach_client(&c_ident, notify_client_cb, param); \
+        chart_attach_client(&c_ident, PP_ERASE_TYPE(notify_client_cb, param), param); \
     }                                                           \
     PROGRAM_INIT(STAGE_RAW, c_ident ## _register_client);
 

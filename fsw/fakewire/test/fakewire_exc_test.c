@@ -137,15 +137,13 @@ struct exchange_state {
     struct writer_config wc;
 };
 
-static void exchange_state_notify_reader(void *opaque) {
-    struct exchange_state *est = (struct exchange_state *) opaque;
+static void exchange_state_notify_reader(struct exchange_state *est) {
     assert(est != NULL);
 
     (void) semaphore_give(&est->rc.wake);
 }
 
-static void exchange_state_notify_writer(void *opaque) {
-    struct exchange_state *est = (struct exchange_state *) opaque;
+static void exchange_state_notify_writer(struct exchange_state *est) {
     assert(est != NULL);
 
     (void) semaphore_give(&est->wc.wake);

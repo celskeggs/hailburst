@@ -86,8 +86,7 @@ void fakewire_link_tx_loop(void *opaque) {
     }
 }
 
-void fakewire_link_notify_rx_chart(void *opaque) {
-    fw_link_t *fwl = (fw_link_t *) opaque;
+void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.
@@ -95,8 +94,7 @@ void fakewire_link_notify_rx_chart(void *opaque) {
     (void) semaphore_give(fwl->receive_wake);
 }
 
-void fakewire_link_notify_tx_chart(void *opaque) {
-    fw_link_t *fwl = (fw_link_t *) opaque;
+void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
     assert(fwl != NULL);
 
     // we don't worry about wakeups getting dropped.

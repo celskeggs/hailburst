@@ -1,6 +1,8 @@
 #ifndef FSW_INIT_H
 #define FSW_INIT_H
 
+#include <fsw/preprocessor.h>
+
 typedef struct {
     // these stages are defined to make sense for FreeRTOS, because there are more constraints there.
     enum init_stage {
@@ -11,13 +13,6 @@ typedef struct {
     void (*init_fn)(void *param);
     void *init_param;
 } __attribute__((__aligned__(16))) program_init; // alignment must be specified for x86_64 compatibility
-
-#define _PP_CHECK_TYPE(expr, type) \
-    __builtin_choose_expr( \
-        __builtin_types_compatible_p(typeof(expr), type), \
-        expr, /* return expr if type matches */ \
-        (void) 0 /* to cause a compile-time error */ \
-    )
 
 // ********** READ ME IF YOU HAVE A COMPILER ERROR **********
 // IF YOU SEE A "invalid use of void expression" ERROR, THAT INDICATES THAT THE TYPE OF THE REGISTERED FUNCTION WAS
@@ -30,7 +25,7 @@ typedef struct {
         { \
             /* make sure that the function is the correct form before casting it */ \
             /* note that casting it will be fine, because it will just ignore the unexpected argument in r0 */ \
-            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&callback, void (*)(void)), \
+            .init_fn = (void (*)(void*)) PP_CHECK_TYPE(&callback, void (*)(void)), \
             .init_stage = stage, \
             .init_param = NULL, \
         }
@@ -39,7 +34,7 @@ typedef struct {
     const __attribute__((section(".initpoints"))) program_init _initpoint_ ## callback ## _ ## ident = \
         { \
             /* make sure that param pointer type matches the function argument, since we'll be throwing them away! */ \
-            .init_fn = (void (*)(void*)) _PP_CHECK_TYPE(&callback, void (*)(typeof(*param)*)), \
+            .init_fn = PP_ERASE_TYPE(callback, param), \
             .init_stage = stage, \
             .init_param = param, \
         }
