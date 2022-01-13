@@ -20,18 +20,23 @@ enum {
 #define THREAD_CHECK(x) (thread_check((x), #x))
 #define THREAD_CHECK_OK(x, fm) (thread_check_ok((x), #x, (fm)))
 
-typedef struct thread_st {
-    void (*start_routine)(void *);
-    void *start_parameter;
-    pthread_t thread;
-} __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 typedef pthread_mutex_t mutex_t;
+
 // although there are semaphores available under POSIX, they are counting semaphores, and not binary semaphores.
 typedef struct {
     mutex_t        mut;
     pthread_cond_t cond;
     bool           is_available;
 } semaphore_t;
+
+typedef struct thread_st {
+    void (*start_routine)(void *);
+    void *start_parameter;
+    pthread_t thread;
+    semaphore_t rouse;
+} __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
+
+thread_t task_get_current(void);
 
 static inline void thread_check(int fail, const char *note) {
     if (fail != 0) {
@@ -94,5 +99,14 @@ bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
 // returns true if taken, false if timed out
 bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
 bool semaphore_give(semaphore_t *sema);
+
+static inline void task_rouse(thread_t task) {
+    assert(task != NULL);
+    (void) semaphore_give(&task->rouse);
+}
+
+static inline void task_doze(void) {
+    semaphore_take(&task_get_current()->rouse);
+}
 
 #endif /* FSW_LINUX_HAL_THREAD_H */
