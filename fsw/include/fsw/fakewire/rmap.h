@@ -49,9 +49,9 @@ typedef enum {
 } rmap_status_t;
 
 typedef struct {
-    semaphore_t *wake_rmap;
-    chart_t     *rx_chart;
-    chart_t     *tx_chart;
+    thread_t client_task;
+    chart_t *rx_chart;
+    chart_t *tx_chart;
 
     uint8_t *body_pointer;
     bool     lingering_read;
@@ -65,17 +65,16 @@ void rmap_notify_wake(rmap_t *rmap);
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
-#define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit)         \
-    SEMAPHORE_REGISTER(r_ident ## _semaphore);                                         \
-    CHART_REGISTER(r_receive, io_rx_pad_size(SCRATCH_MARGIN_READ + r_max_read), 2);    \
-    CHART_REGISTER(r_transmit, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2); \
-    rmap_t r_ident = {                                                                 \
-        .wake_rmap = &r_ident ## _semaphore,                                           \
-        .rx_chart = &r_receive,                                                        \
-        .tx_chart = &r_transmit,                                                       \
-    };                                                                                 \
-    CHART_SERVER_NOTIFY(r_receive, rmap_notify_wake, &r_ident);                        \
-    CHART_CLIENT_NOTIFY(r_transmit, rmap_notify_wake, &r_ident);
+#define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit, r_client_task) \
+    CHART_REGISTER(r_receive, io_rx_pad_size(SCRATCH_MARGIN_READ + r_max_read), 2);           \
+    CHART_REGISTER(r_transmit, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2);        \
+    rmap_t r_ident = {                                                                        \
+        .client_task = &r_client_task,                                                        \
+        .rx_chart = &r_receive,                                                               \
+        .tx_chart = &r_transmit,                                                              \
+    };                                                                                        \
+    CHART_SERVER_NOTIFY(r_receive, rmap_notify_wake, &r_ident);                               \
+    CHART_CLIENT_NOTIFY(r_transmit, rmap_notify_wake, &r_ident)
 
 // returns a pointer into which up to max_write_length bytes can be written.
 rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,

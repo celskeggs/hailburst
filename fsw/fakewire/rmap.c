@@ -17,8 +17,7 @@ enum {
 void rmap_notify_wake(rmap_t *rmap) {
     assert(rmap != NULL);
 
-    // ignore result because a double-notification is equivalent to a single-notification
-    (void) semaphore_give(rmap->wake_rmap);
+    task_rouse(rmap->client_task);
 }
 
 static void rmap_cancel_active_work(rmap_t *rmap) {
@@ -251,7 +250,7 @@ rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_
             // we did get a response! skip the rest of this timeout.
             break;
         }
-        semaphore_take_timed_abs(rmap->wake_rmap, transmit_timeout);
+        (void) local_doze_timed_abs(rmap->client_task, transmit_timeout);
     }
 
     // exactly how we determine the final status depends on whether we expect a reply from the remote device.
@@ -269,7 +268,7 @@ rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_
 
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
         while (clock_timestamp_monotonic() < timeout && !rmap_pull_write_reply(rmap, &write_reply)) {
-            semaphore_take_timed_abs(rmap->wake_rmap, timeout);
+            (void) local_doze_timed_abs(rmap->client_task, timeout);
         }
 
         if (rmap_pull_write_reply(rmap, &write_reply)) {
@@ -530,7 +529,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
             // we did get a response! skip the rest of this timeout.
             break;
         }
-        semaphore_take_timed_abs(rmap->wake_rmap, transmit_timeout);
+        (void) local_doze_timed_abs(rmap->client_task, transmit_timeout);
     }
 
     rmap_status_t status_out;
@@ -546,7 +545,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
         // next: wait for a reply!
         uint64_t timeout = clock_timestamp_monotonic() + RMAP_RECEIVE_TIMEOUT_NS;
         while (clock_timestamp_monotonic() < timeout && !rmap_pull_read_reply(rmap, routing, &read_reply)) {
-            semaphore_take_timed_abs(rmap->wake_rmap, timeout);
+            (void) local_doze_timed_abs(rmap->client_task, timeout);
         }
 
         if (rmap_pull_read_reply(rmap, routing, &read_reply)) {

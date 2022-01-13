@@ -90,15 +90,13 @@ static void tlm_sync_notify(void *opaque) {
     tlm_sync_endpoint_t *tep = (tlm_sync_endpoint_t *) opaque;
     assert(tep != NULL);
 
-    // it's fine if we can't give the semaphore; that just means there's already a wakeup pending
-    (void) semaphore_give(&tep->sync_wake);
+    local_rouse(tep->client_task);
 }
 
-void tlm_sync_init(tlm_sync_endpoint_t *tep) {
+void tlm_sync_init_internal(tlm_sync_endpoint_t *tep) {
     assert(tep != NULL);
     assert(telemetry.initialized);
 
-    semaphore_init(&tep->sync_wake);
     multichart_init_client(&tep->sync_client, &telemetry.sync_chart, 1, tlm_sync_notify, tep);
 }
 
@@ -127,7 +125,7 @@ static tlm_sync_t *telemetry_start_sync(tlm_sync_endpoint_t *tep) {
         if (sync != NULL) {
             return sync;
         }
-        semaphore_take(&tep->sync_wake);
+        local_doze(tep->client_task);
     }
 }
 
@@ -140,13 +138,11 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
     // wait for request to complete
     assert(multichart_client_note_count(&tep->sync_client) == 1);
     while (multichart_request_start(&tep->sync_client) == NULL) {
-        semaphore_take(&tep->sync_wake);
+        local_doze(tep->client_task);
     }
 }
 
-static void telemetry_mainloop(void *opaque) {
-    (void) opaque;
-
+static void telemetry_mainloop(void) {
     assert(telemetry.initialized == true);
     assert(telemetry.comm_encoder != NULL);
 

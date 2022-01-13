@@ -17,7 +17,7 @@ typedef struct {
 } tlm_mag_reading_t;
 
 typedef struct {
-    semaphore_t         sync_wake;
+    thread_t            client_task;
     multichart_client_t sync_client;
 } tlm_sync_endpoint_t;
 
@@ -32,9 +32,11 @@ void telemetry_init(comm_enc_t *encoder);
     tlm_async_endpoint_t t_ident; \
     PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_async_init, t_ident, &t_ident)
 
-#define TELEMETRY_SYNC_REGISTER(t_ident) \
-    tlm_sync_endpoint_t t_ident; \
-    PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_sync_init, t_ident, &t_ident)
+#define TELEMETRY_SYNC_REGISTER(t_ident, t_task)                               \
+    tlm_sync_endpoint_t t_ident = {                                            \
+        .client_task = t_task,                                                 \
+    };                                                                         \
+    PROGRAM_INIT_PARAM(STAGE_CRAFT, tlm_sync_init_internal, t_ident, &t_ident)
 
 // actual telemetry calls
 void tlm_async_init(tlm_async_endpoint_t *tep);
@@ -49,7 +51,7 @@ void tlm_heartbeat(tlm_async_endpoint_t *tep);
 void tlm_mag_pwr_state_changed(tlm_async_endpoint_t *tep, bool power_state);
 
 // synchronous telemetry writes
-void tlm_sync_init(tlm_sync_endpoint_t *tep);
+void tlm_sync_init_internal(tlm_sync_endpoint_t *tep);
 void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
                                void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param);
 

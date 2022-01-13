@@ -52,8 +52,15 @@ void radio_downlink_loop(radio_t *radio);
                     && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                            \
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                  \
                     && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                          \
-    RMAP_REGISTER(r_ident ## _up, r_up_capacity, REG_IO_BUFFER_SIZE, r_up_rx, r_up_tx);                           \
-    RMAP_REGISTER(r_ident ## _down, REG_IO_BUFFER_SIZE, r_down_capacity, r_down_rx, r_down_tx);                   \
+    extern radio_t r_ident;                                                                                       \
+    TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", PRIORITY_WORKERS,                                         \
+                  radio_uplink_loop, &r_ident, RESTARTABLE);                                                      \
+    TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", PRIORITY_WORKERS,                                     \
+                  radio_downlink_loop, &r_ident, RESTARTABLE);                                                    \
+    RMAP_REGISTER(r_ident ## _up,   r_up_capacity,   REG_IO_BUFFER_SIZE,                                          \
+                                    r_up_rx,   r_up_tx,   r_ident ## _up_task);                                   \
+    RMAP_REGISTER(r_ident ## _down, REG_IO_BUFFER_SIZE, r_down_capacity,                                          \
+                                    r_down_rx, r_down_tx, r_ident ## _down_task);                                 \
     radio_t r_ident = {                                                                                           \
         .rmap_up = &r_ident ## _up,                                                                               \
         .rmap_down = &r_ident ## _down,                                                                           \
@@ -65,10 +72,6 @@ void radio_downlink_loop(radio_t *radio);
         .uplink_buf_local = { 0 },                                                                                \
         .downlink_buf_local = { 0 },                                                                              \
     };                                                                                                            \
-    TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", PRIORITY_WORKERS,                                         \
-                  radio_uplink_loop, &r_ident, RESTARTABLE);                                                      \
-    TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", PRIORITY_WORKERS,                                     \
-                  radio_downlink_loop, &r_ident, RESTARTABLE);                                                    \
     static void r_ident ## _init(void) {                                                                          \
         stream_set_writer(&r_uplink, &r_ident ## _up_task);                                                       \
         stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                   \

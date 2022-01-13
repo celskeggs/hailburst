@@ -37,11 +37,13 @@ void magnetometer_telem_loop(magnetometer_t *mag);
     CHART_SERVER_NOTIFY(m_ident ## _readings, magnetometer_drop_notification, NULL);            \
     CHART_CLIENT_NOTIFY(m_ident ## _readings, magnetometer_drop_notification, NULL);            \
     TELEMETRY_ASYNC_REGISTER(m_ident ## _telemetry_async);                                      \
-    TELEMETRY_SYNC_REGISTER(m_ident ## _telemetry_sync);                                        \
-    RMAP_REGISTER(m_ident ## _endpoint, 8, 4, m_receive, m_transmit);                           \
     extern magnetometer_t m_ident;                                                              \
+    TASK_REGISTER(m_ident ## _telem, "mag_telem_loop", PRIORITY_WORKERS,                        \
+                  magnetometer_telem_loop, &m_ident, RESTARTABLE);                              \
     TASK_REGISTER(m_ident ## _query, "mag_query_loop", PRIORITY_WORKERS,                        \
                   magnetometer_query_loop, &m_ident, RESTARTABLE);                              \
+    TELEMETRY_SYNC_REGISTER(m_ident ## _telemetry_sync, &m_ident ## _telem);                    \
+    RMAP_REGISTER(m_ident ## _endpoint, 8, 4, m_receive, m_transmit, m_ident ## _query);        \
     magnetometer_t m_ident = {                                                                  \
         .endpoint = &m_ident ## _endpoint,                                                      \
         .address = (m_address),                                                                 \
@@ -51,8 +53,6 @@ void magnetometer_telem_loop(magnetometer_t *mag);
         .telemetry_async = &m_ident ## _telemetry_async,                                        \
         .telemetry_sync = &m_ident ## _telemetry_sync,                                          \
     };                                                                                          \
-    TASK_REGISTER(m_ident ## _telem, "mag_telem_loop", PRIORITY_WORKERS,                        \
-                  magnetometer_telem_loop, &m_ident, RESTARTABLE)
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered);
 
