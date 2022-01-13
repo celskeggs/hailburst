@@ -8,9 +8,17 @@
 #include <fsw/debug.h>
 #include <fsw/init.h>
 
-extern void prvIdleTask(void *pvParameters);
+static void thread_idle_main(void *opaque) {
+    (void) opaque;
 
-TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
+    while (1) {
+        // must have interrupts enabled for this to be safe
+        assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
+        asm volatile("WFI");
+    }
+}
+
+TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, thread_idle_main, NULL, RESTARTABLE);
 
 void task_entrypoint(TCB_t * state) {
 

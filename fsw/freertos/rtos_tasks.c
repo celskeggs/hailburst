@@ -307,13 +307,6 @@ static volatile UBaseType_t uxSchedulerSuspended = ( UBaseType_t ) pdFALSE;
 static void prvInitialiseTaskLists( void );
 
 /*
- * The idle task, which as all tasks is implemented as a never ending loop.
- * The idle task is automatically created and added to the ready lists upon
- * creation of the first user task.
- */
-void prvIdleTask( void *pvParameters );
-
-/*
  * The currently executing task is entering the Blocked state.  Add the task to
  * either the current or the overflow delayed task list.
  */
@@ -1430,24 +1423,6 @@ void vTaskMissedYield( void )
 {
     xYieldPending = pdTRUE;
 }
-/*
- * -----------------------------------------------------------
- * The Idle task.
- * ----------------------------------------------------------
- */
-void prvIdleTask( void *pvParameters )
-{
-    /* Stop warnings. */
-    ( void ) pvParameters;
-
-    /** THIS IS THE RTOS IDLE TASK - WHICH IS CREATED AUTOMATICALLY WHEN THE
-     * SCHEDULER IS STARTED. **/
-
-    for( ; ; )
-    {
-    }
-}
-/*-----------------------------------------------------------*/
 
 static void prvInitialiseTaskLists( void )
 {
