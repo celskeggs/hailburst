@@ -121,14 +121,6 @@
     #define configUSE_DAEMON_TASK_STARTUP_HOOK    0
 #endif
 
-#ifndef configUSE_COUNTING_SEMAPHORES
-    #define configUSE_COUNTING_SEMAPHORES    0
-#endif
-
-#ifndef configUSE_ALTERNATIVE_API
-    #define configUSE_ALTERNATIVE_API    0
-#endif
-
 #ifndef configIDLE_SHOULD_YIELD
     #define configIDLE_SHOULD_YIELD    1
 #endif
@@ -640,10 +632,6 @@
     #define configPOST_SLEEP_PROCESSING( x )
 #endif
 
-#ifndef configUSE_QUEUE_SETS
-    #define configUSE_QUEUE_SETS    0
-#endif
-
 #ifndef portTASK_USES_FLOATING_POINT
     #define portTASK_USES_FLOATING_POINT()
 #endif
@@ -764,12 +752,6 @@
     #define portTICK_TYPE_CLEAR_INTERRUPT_MASK_FROM_ISR( x )    ( void ) x
 #endif /* if ( portTICK_TYPE_IS_ATOMIC == 0 ) */
 
-/* Definitions to allow backward compatibility with FreeRTOS versions prior to
- * V8 if desired. */
-#ifndef configENABLE_BACKWARD_COMPATIBILITY
-    #define configENABLE_BACKWARD_COMPATIBILITY    1
-#endif
-
 #ifndef configPRINTF
 
 /* configPRINTF() was not defined, so define it away to nothing.  To use
@@ -797,44 +779,6 @@
 /* The application writer has not provided their own MIN macro, so define
  * the following generic implementation. */
     #define configMIN( a, b )    ( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
-#endif
-
-#if configENABLE_BACKWARD_COMPATIBILITY == 1
-    #define eTaskStateGet                 eTaskGetState
-    #define portTickType                  TickType_t
-    #define xTaskHandle                   TaskHandle_t
-    #define xQueueHandle                  QueueHandle_t
-    #define xSemaphoreHandle              SemaphoreHandle_t
-    #define xQueueSetHandle               QueueSetHandle_t
-    #define xQueueSetMemberHandle         QueueSetMemberHandle_t
-    #define xTimeOutType                  TimeOut_t
-    #define xMemoryRegion                 MemoryRegion_t
-    #define xTaskParameters               TaskParameters_t
-    #define xTaskStatusType               TaskStatus_t
-    #define xTimerHandle                  TimerHandle_t
-    #define xCoRoutineHandle              CoRoutineHandle_t
-    #define pdTASK_HOOK_CODE              TaskHookFunction_t
-    #define portTICK_RATE_MS              portTICK_PERIOD_MS
-    #define pcTaskGetTaskName             pcTaskGetName
-    #define pcTimerGetTimerName           pcTimerGetName
-    #define pcQueueGetQueueName           pcQueueGetName
-    #define vTaskGetTaskInfo              vTaskGetInfo
-    #define xTaskGetIdleRunTimeCounter    ulTaskGetIdleRunTimeCounter
-
-/* Backward compatibility within the scheduler code only - these definitions
- * are not really required but are included for completeness. */
-    #define tmrTIMER_CALLBACK             TimerCallbackFunction_t
-    #define pdTASK_CODE                   TaskFunction_t
-    #define xListItem                     ListItem_t
-    #define xList                         List_t
-
-/* For libraries that break the list data hiding, and access list structure
- * members directly (which is not supposed to be done). */
-    #define pxContainer                   pvContainer
-#endif /* configENABLE_BACKWARD_COMPATIBILITY */
-
-#if ( configUSE_ALTERNATIVE_API != 0 )
-    #error The alternative API was deprecated some time ago, and was removed in FreeRTOS V9.0 0
 #endif
 
 /* Set configUSE_TASK_FPU_SUPPORT to 0 to omit floating point support even
@@ -946,10 +890,6 @@ typedef struct xSTATIC_QUEUE
 
     #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
         uint8_t ucDummy6;
-    #endif
-
-    #if ( configUSE_QUEUE_SETS == 1 )
-        void * pvDummy7;
     #endif
 } StaticQueue_t;
 typedef StaticQueue_t StaticSemaphore_t;

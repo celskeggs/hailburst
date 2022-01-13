@@ -1927,18 +1927,12 @@ BaseType_t xTaskIncrementTick( void );
  * there be no higher priority tasks waiting on the same event) or
  * the delay period expires.
  *
- * The 'unordered' version replaces the event list item value with the
- * xItemValue value, and inserts the list item at the end of the list.
- *
- * The 'ordered' version uses the existing event list item value (which is the
- * owning task's priority) to insert the list item into the event list in task
- * priority order.
+ * The 'ordered' version (which is the only one remaining after refactoring)
+ * uses the existing event list item value (which is the owning task's
+ * priority) to insert the list item into the event list in task priority order.
  *
  * @param pxEventList The list containing tasks that are blocked waiting
  * for the event to occur.
- *
- * @param xItemValue The item value to use for the event list item when the
- * event list is not ordered by task priority.
  *
  * @param xTicksToWait The maximum amount of time that the task should wait
  * for the event to occur.  This is specified in kernel ticks, the constant
@@ -1947,9 +1941,6 @@ BaseType_t xTaskIncrementTick( void );
  */
 void vTaskPlaceOnEventList( List_t * const pxEventList,
                             const TickType_t xTicksToWait );
-void vTaskPlaceOnUnorderedEventList( List_t * pxEventList,
-                                     const TickType_t xItemValue,
-                                     const TickType_t xTicksToWait );
 
 /*
  * THIS FUNCTION MUST NOT BE USED FROM APPLICATION CODE.  IT IS AN
@@ -1975,24 +1966,16 @@ void vTaskPlaceOnEventListRestricted( List_t * const pxEventList,
  * Removes a task from both the specified event list and the list of blocked
  * tasks, and places it on a ready queue.
  *
- * xTaskRemoveFromEventList()/vTaskRemoveFromUnorderedEventList() will be called
- * if either an event occurs to unblock a task, or the block timeout period
- * expires.
- *
- * xTaskRemoveFromEventList() is used when the event list is in task priority
- * order.  It removes the list item from the head of the event list as that will
- * have the highest priority owning task of all the tasks on the event list.
- * vTaskRemoveFromUnorderedEventList() is used when the event list is not
- * ordered and the event list items hold something other than the owning tasks
- * priority.  In this case the event list item value is updated to the value
- * passed in the xItemValue parameter.
+ * xTaskRemoveFromEventList() will be called if either an event occurs to
+ * unblock a task, or the block timeout period expires. The event list is
+ * assumed to be in task priority order. It removes the list item from the
+ * head of the event list as that will have the highest priority owning
+ * task of all the tasks on the event list.
  *
  * @return pdTRUE if the task being removed has a higher priority than the task
  * making the call, otherwise pdFALSE.
  */
 BaseType_t xTaskRemoveFromEventList( const List_t * const pxEventList );
-void vTaskRemoveFromUnorderedEventList( ListItem_t * pxEventListItem,
-                                        const TickType_t xItemValue );
 
 /*
  * THIS FUNCTION MUST NOT BE USED FROM APPLICATION CODE.  IT IS ONLY

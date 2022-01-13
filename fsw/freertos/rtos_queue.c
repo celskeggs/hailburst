@@ -108,10 +108,6 @@ typedef struct QueueDefinition /* The old naming convention is used to prevent b
     #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
         uint8_t ucStaticallyAllocated; /*< Set to pdTRUE if the memory used by the queue was statically allocated to ensure no attempt is made to free the memory. */
     #endif
-
-    #if ( configUSE_QUEUE_SETS == 1 )
-        struct QueueDefinition * pxQueueSetContainer;
-    #endif
 } xQUEUE;
 
 /* The old xQUEUE name is maintained above then typedefed to the new Queue_t
@@ -184,15 +180,6 @@ static BaseType_t prvCopyDataToQueue( Queue_t * const pxQueue,
  */
 static void prvCopyDataFromQueue( Queue_t * const pxQueue,
                                   void * const pvBuffer );
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-/*
- * Checks to see if a queue is a member of a queue set, and if so, notifies
- * the queue set that the queue contains data.
- */
-    static BaseType_t prvNotifyQueueSetContainer( const Queue_t * const pxQueue );
-#endif
 
 /*
  * Called after a Queue_t structure has been allocated either statically or
@@ -453,85 +440,8 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
     pxNewQueue->uxItemSize = uxItemSize;
     ( void ) xQueueGenericReset( pxNewQueue, pdTRUE );
 
-    #if ( configUSE_QUEUE_SETS == 1 )
-        {
-            pxNewQueue->pxQueueSetContainer = NULL;
-        }
-    #endif /* configUSE_QUEUE_SETS */
-
     traceQUEUE_CREATE( pxNewQueue );
 }
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) )
-
-    QueueHandle_t xQueueCreateCountingSemaphoreStatic( const UBaseType_t uxMaxCount,
-                                                       const UBaseType_t uxInitialCount,
-                                                       StaticQueue_t * pxStaticQueue )
-    {
-        QueueHandle_t xHandle = NULL;
-
-        if( ( uxMaxCount != 0 ) &&
-            ( uxInitialCount <= uxMaxCount ) )
-        {
-            xHandle = xQueueGenericCreateStatic( uxMaxCount, queueSEMAPHORE_QUEUE_ITEM_LENGTH, NULL, pxStaticQueue, queueQUEUE_TYPE_COUNTING_SEMAPHORE );
-
-            if( xHandle != NULL )
-            {
-                ( ( Queue_t * ) xHandle )->uxMessagesWaiting = uxInitialCount;
-
-                traceCREATE_COUNTING_SEMAPHORE();
-            }
-            else
-            {
-                traceCREATE_COUNTING_SEMAPHORE_FAILED();
-            }
-        }
-        else
-        {
-            configASSERT( xHandle );
-            mtCOVERAGE_TEST_MARKER();
-        }
-
-        return xHandle;
-    }
-
-#endif /* ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) ) */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-
-    QueueHandle_t xQueueCreateCountingSemaphore( const UBaseType_t uxMaxCount,
-                                                 const UBaseType_t uxInitialCount )
-    {
-        QueueHandle_t xHandle = NULL;
-
-        if( ( uxMaxCount != 0 ) &&
-            ( uxInitialCount <= uxMaxCount ) )
-        {
-            xHandle = xQueueGenericCreate( uxMaxCount, queueSEMAPHORE_QUEUE_ITEM_LENGTH, queueQUEUE_TYPE_COUNTING_SEMAPHORE );
-
-            if( xHandle != NULL )
-            {
-                ( ( Queue_t * ) xHandle )->uxMessagesWaiting = uxInitialCount;
-
-                traceCREATE_COUNTING_SEMAPHORE();
-            }
-            else
-            {
-                traceCREATE_COUNTING_SEMAPHORE_FAILED();
-            }
-        }
-        else
-        {
-            configASSERT( xHandle );
-            mtCOVERAGE_TEST_MARKER();
-        }
-
-        return xHandle;
-    }
-
-#endif /* ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) ) */
 /*-----------------------------------------------------------*/
 
 BaseType_t xQueueGenericSend( QueueHandle_t xQueue,
@@ -567,101 +477,37 @@ BaseType_t xQueueGenericSend( QueueHandle_t xQueue,
             {
                 traceQUEUE_SEND( pxQueue );
 
-                #if ( configUSE_QUEUE_SETS == 1 )
+                xYieldRequired = prvCopyDataToQueue( pxQueue, pvItemToQueue, xCopyPosition );
+
+                /* If there was a task waiting for data to arrive on the
+                 * queue then unblock it now. */
+                if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
+                {
+                    if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
                     {
-                        const UBaseType_t uxPreviousMessagesWaiting = pxQueue->uxMessagesWaiting;
-
-                        xYieldRequired = prvCopyDataToQueue( pxQueue, pvItemToQueue, xCopyPosition );
-
-                        if( pxQueue->pxQueueSetContainer != NULL )
-                        {
-                            if( ( xCopyPosition == queueOVERWRITE ) && ( uxPreviousMessagesWaiting != ( UBaseType_t ) 0 ) )
-                            {
-                                /* Do not notify the queue set as an existing item
-                                 * was overwritten in the queue so the number of items
-                                 * in the queue has not changed. */
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                            else if( prvNotifyQueueSetContainer( pxQueue ) != pdFALSE )
-                            {
-                                /* The queue is a member of a queue set, and posting
-                                 * to the queue set caused a higher priority task to
-                                 * unblock. A context switch is required. */
-                                queueYIELD_IF_USING_PREEMPTION();
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                        else
-                        {
-                            /* If there was a task waiting for data to arrive on the
-                             * queue then unblock it now. */
-                            if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                            {
-                                if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                                {
-                                    /* The unblocked task has a priority higher than
-                                     * our own so yield immediately.  Yes it is ok to
-                                     * do this from within the critical section - the
-                                     * kernel takes care of that. */
-                                    queueYIELD_IF_USING_PREEMPTION();
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else if( xYieldRequired != pdFALSE )
-                            {
-                                /* This path is a special case that will only get
-                                 * executed if the task was holding multiple mutexes
-                                 * and the mutexes were given back in an order that is
-                                 * different to that in which they were taken. */
-                                queueYIELD_IF_USING_PREEMPTION();
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
+                        /* The unblocked task has a priority higher than
+                         * our own so yield immediately.  Yes it is ok to do
+                         * this from within the critical section - the kernel
+                         * takes care of that. */
+                        queueYIELD_IF_USING_PREEMPTION();
                     }
-                #else /* configUSE_QUEUE_SETS */
+                    else
                     {
-                        xYieldRequired = prvCopyDataToQueue( pxQueue, pvItemToQueue, xCopyPosition );
-
-                        /* If there was a task waiting for data to arrive on the
-                         * queue then unblock it now. */
-                        if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                        {
-                            if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                            {
-                                /* The unblocked task has a priority higher than
-                                 * our own so yield immediately.  Yes it is ok to do
-                                 * this from within the critical section - the kernel
-                                 * takes care of that. */
-                                queueYIELD_IF_USING_PREEMPTION();
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                        else if( xYieldRequired != pdFALSE )
-                        {
-                            /* This path is a special case that will only get
-                             * executed if the task was holding multiple mutexes and
-                             * the mutexes were given back in an order that is
-                             * different to that in which they were taken. */
-                            queueYIELD_IF_USING_PREEMPTION();
-                        }
-                        else
-                        {
-                            mtCOVERAGE_TEST_MARKER();
-                        }
+                        mtCOVERAGE_TEST_MARKER();
                     }
-                #endif /* configUSE_QUEUE_SETS */
+                }
+                else if( xYieldRequired != pdFALSE )
+                {
+                    /* This path is a special case that will only get
+                     * executed if the task was holding multiple mutexes and
+                     * the mutexes were given back in an order that is
+                     * different to that in which they were taken. */
+                    queueYIELD_IF_USING_PREEMPTION();
+                }
+                else
+                {
+                    mtCOVERAGE_TEST_MARKER();
+                }
 
                 taskEXIT_CRITICAL();
                 return pdPASS;
@@ -800,95 +646,33 @@ BaseType_t xQueueGenericSendFromISR( QueueHandle_t xQueue,
              * be done when the queue is unlocked later. */
             if( cTxLock == queueUNLOCKED )
             {
-                #if ( configUSE_QUEUE_SETS == 1 )
+                if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
+                {
+                    if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
                     {
-                        if( pxQueue->pxQueueSetContainer != NULL )
+                        /* The task waiting has a higher priority so record that a
+                         * context switch is required. */
+                        if( pxHigherPriorityTaskWoken != NULL )
                         {
-                            if( ( xCopyPosition == queueOVERWRITE ) && ( uxPreviousMessagesWaiting != ( UBaseType_t ) 0 ) )
-                            {
-                                /* Do not notify the queue set as an existing item
-                                 * was overwritten in the queue so the number of items
-                                 * in the queue has not changed. */
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                            else if( prvNotifyQueueSetContainer( pxQueue ) != pdFALSE )
-                            {
-                                /* The queue is a member of a queue set, and posting
-                                 * to the queue set caused a higher priority task to
-                                 * unblock.  A context switch is required. */
-                                if( pxHigherPriorityTaskWoken != NULL )
-                                {
-                                    *pxHigherPriorityTaskWoken = pdTRUE;
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                        else
-                        {
-                            if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                            {
-                                if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                                {
-                                    /* The task waiting has a higher priority so
-                                     *  record that a context switch is required. */
-                                    if( pxHigherPriorityTaskWoken != NULL )
-                                    {
-                                        *pxHigherPriorityTaskWoken = pdTRUE;
-                                    }
-                                    else
-                                    {
-                                        mtCOVERAGE_TEST_MARKER();
-                                    }
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                    }
-                #else /* configUSE_QUEUE_SETS */
-                    {
-                        if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                        {
-                            if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                            {
-                                /* The task waiting has a higher priority so record that a
-                                 * context switch is required. */
-                                if( pxHigherPriorityTaskWoken != NULL )
-                                {
-                                    *pxHigherPriorityTaskWoken = pdTRUE;
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
+                            *pxHigherPriorityTaskWoken = pdTRUE;
                         }
                         else
                         {
                             mtCOVERAGE_TEST_MARKER();
                         }
-
-                        /* Not used in this path. */
-                        ( void ) uxPreviousMessagesWaiting;
                     }
-                #endif /* configUSE_QUEUE_SETS */
+                    else
+                    {
+                        mtCOVERAGE_TEST_MARKER();
+                    }
+                }
+                else
+                {
+                    mtCOVERAGE_TEST_MARKER();
+                }
+
+                /* Not used in this path. */
+                ( void ) uxPreviousMessagesWaiting;
             }
             else
             {
@@ -978,85 +762,30 @@ BaseType_t xQueueGiveFromISR( QueueHandle_t xQueue,
              * be done when the queue is unlocked later. */
             if( cTxLock == queueUNLOCKED )
             {
-                #if ( configUSE_QUEUE_SETS == 1 )
+                if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
+                {
+                    if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
                     {
-                        if( pxQueue->pxQueueSetContainer != NULL )
+                        /* The task waiting has a higher priority so record that a
+                         * context switch is required. */
+                        if( pxHigherPriorityTaskWoken != NULL )
                         {
-                            if( prvNotifyQueueSetContainer( pxQueue ) != pdFALSE )
-                            {
-                                /* The semaphore is a member of a queue set, and
-                                 * posting to the queue set caused a higher priority
-                                 * task to unblock.  A context switch is required. */
-                                if( pxHigherPriorityTaskWoken != NULL )
-                                {
-                                    *pxHigherPriorityTaskWoken = pdTRUE;
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                        else
-                        {
-                            if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                            {
-                                if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                                {
-                                    /* The task waiting has a higher priority so
-                                     *  record that a context switch is required. */
-                                    if( pxHigherPriorityTaskWoken != NULL )
-                                    {
-                                        *pxHigherPriorityTaskWoken = pdTRUE;
-                                    }
-                                    else
-                                    {
-                                        mtCOVERAGE_TEST_MARKER();
-                                    }
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                    }
-                #else /* configUSE_QUEUE_SETS */
-                    {
-                        if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                        {
-                            if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                            {
-                                /* The task waiting has a higher priority so record that a
-                                 * context switch is required. */
-                                if( pxHigherPriorityTaskWoken != NULL )
-                                {
-                                    *pxHigherPriorityTaskWoken = pdTRUE;
-                                }
-                                else
-                                {
-                                    mtCOVERAGE_TEST_MARKER();
-                                }
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
+                            *pxHigherPriorityTaskWoken = pdTRUE;
                         }
                         else
                         {
                             mtCOVERAGE_TEST_MARKER();
                         }
                     }
-                #endif /* configUSE_QUEUE_SETS */
+                    else
+                    {
+                        mtCOVERAGE_TEST_MARKER();
+                    }
+                }
+                else
+                {
+                    mtCOVERAGE_TEST_MARKER();
+                }
             }
             else
             {
@@ -1870,69 +1599,25 @@ static void prvUnlockQueue( Queue_t * const pxQueue )
         {
             /* Data was posted while the queue was locked.  Are any tasks
              * blocked waiting for data to become available? */
-            #if ( configUSE_QUEUE_SETS == 1 )
+            /* Tasks that are removed from the event list will get added to
+             * the pending ready list as the scheduler is still suspended. */
+            if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
+            {
+                if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
                 {
-                    if( pxQueue->pxQueueSetContainer != NULL )
-                    {
-                        if( prvNotifyQueueSetContainer( pxQueue ) != pdFALSE )
-                        {
-                            /* The queue is a member of a queue set, and posting to
-                             * the queue set caused a higher priority task to unblock.
-                             * A context switch is required. */
-                            vTaskMissedYield();
-                        }
-                        else
-                        {
-                            mtCOVERAGE_TEST_MARKER();
-                        }
-                    }
-                    else
-                    {
-                        /* Tasks that are removed from the event list will get
-                         * added to the pending ready list as the scheduler is still
-                         * suspended. */
-                        if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                        {
-                            if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                            {
-                                /* The task waiting has a higher priority so record that a
-                                 * context switch is required. */
-                                vTaskMissedYield();
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
+                    /* The task waiting has a higher priority so record that
+                     * a context switch is required. */
+                    vTaskMissedYield();
                 }
-            #else /* configUSE_QUEUE_SETS */
+                else
                 {
-                    /* Tasks that are removed from the event list will get added to
-                     * the pending ready list as the scheduler is still suspended. */
-                    if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToReceive ) ) == pdFALSE )
-                    {
-                        if( xTaskRemoveFromEventList( &( pxQueue->xTasksWaitingToReceive ) ) != pdFALSE )
-                        {
-                            /* The task waiting has a higher priority so record that
-                             * a context switch is required. */
-                            vTaskMissedYield();
-                        }
-                        else
-                        {
-                            mtCOVERAGE_TEST_MARKER();
-                        }
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    mtCOVERAGE_TEST_MARKER();
                 }
-            #endif /* configUSE_QUEUE_SETS */
+            }
+            else
+            {
+                break;
+            }
 
             --cTxLock;
         }
@@ -2165,176 +1850,3 @@ BaseType_t xQueueIsQueueFullFromISR( const QueueHandle_t xQueue )
     } /*lint !e818 xQueue could not be pointer to const because it is a typedef. */
 
 #endif /* configQUEUE_REGISTRY_SIZE */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_QUEUE_SETS == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-
-    QueueSetHandle_t xQueueCreateSet( const UBaseType_t uxEventQueueLength )
-    {
-        QueueSetHandle_t pxQueue;
-
-        pxQueue = xQueueGenericCreate( uxEventQueueLength, ( UBaseType_t ) sizeof( Queue_t * ), queueQUEUE_TYPE_SET );
-
-        return pxQueue;
-    }
-
-#endif /* configUSE_QUEUE_SETS */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-    BaseType_t xQueueAddToSet( QueueSetMemberHandle_t xQueueOrSemaphore,
-                               QueueSetHandle_t xQueueSet )
-    {
-        BaseType_t xReturn;
-
-        taskENTER_CRITICAL();
-        {
-            if( ( ( Queue_t * ) xQueueOrSemaphore )->pxQueueSetContainer != NULL )
-            {
-                /* Cannot add a queue/semaphore to more than one queue set. */
-                xReturn = pdFAIL;
-            }
-            else if( ( ( Queue_t * ) xQueueOrSemaphore )->uxMessagesWaiting != ( UBaseType_t ) 0 )
-            {
-                /* Cannot add a queue/semaphore to a queue set if there are already
-                 * items in the queue/semaphore. */
-                xReturn = pdFAIL;
-            }
-            else
-            {
-                ( ( Queue_t * ) xQueueOrSemaphore )->pxQueueSetContainer = xQueueSet;
-                xReturn = pdPASS;
-            }
-        }
-        taskEXIT_CRITICAL();
-
-        return xReturn;
-    }
-
-#endif /* configUSE_QUEUE_SETS */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-    BaseType_t xQueueRemoveFromSet( QueueSetMemberHandle_t xQueueOrSemaphore,
-                                    QueueSetHandle_t xQueueSet )
-    {
-        BaseType_t xReturn;
-        Queue_t * const pxQueueOrSemaphore = ( Queue_t * ) xQueueOrSemaphore;
-
-        if( pxQueueOrSemaphore->pxQueueSetContainer != xQueueSet )
-        {
-            /* The queue was not a member of the set. */
-            xReturn = pdFAIL;
-        }
-        else if( pxQueueOrSemaphore->uxMessagesWaiting != ( UBaseType_t ) 0 )
-        {
-            /* It is dangerous to remove a queue from a set when the queue is
-             * not empty because the queue set will still hold pending events for
-             * the queue. */
-            xReturn = pdFAIL;
-        }
-        else
-        {
-            taskENTER_CRITICAL();
-            {
-                /* The queue is no longer contained in the set. */
-                pxQueueOrSemaphore->pxQueueSetContainer = NULL;
-            }
-            taskEXIT_CRITICAL();
-            xReturn = pdPASS;
-        }
-
-        return xReturn;
-    } /*lint !e818 xQueueSet could not be declared as pointing to const as it is a typedef. */
-
-#endif /* configUSE_QUEUE_SETS */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-    QueueSetMemberHandle_t xQueueSelectFromSet( QueueSetHandle_t xQueueSet,
-                                                TickType_t const xTicksToWait )
-    {
-        QueueSetMemberHandle_t xReturn = NULL;
-
-        ( void ) xQueueReceive( ( QueueHandle_t ) xQueueSet, &xReturn, xTicksToWait ); /*lint !e961 Casting from one typedef to another is not redundant. */
-        return xReturn;
-    }
-
-#endif /* configUSE_QUEUE_SETS */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-    QueueSetMemberHandle_t xQueueSelectFromSetFromISR( QueueSetHandle_t xQueueSet )
-    {
-        QueueSetMemberHandle_t xReturn = NULL;
-
-        ( void ) xQueueReceiveFromISR( ( QueueHandle_t ) xQueueSet, &xReturn, NULL ); /*lint !e961 Casting from one typedef to another is not redundant. */
-        return xReturn;
-    }
-
-#endif /* configUSE_QUEUE_SETS */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_QUEUE_SETS == 1 )
-
-    static BaseType_t prvNotifyQueueSetContainer( const Queue_t * const pxQueue )
-    {
-        Queue_t * pxQueueSetContainer = pxQueue->pxQueueSetContainer;
-        BaseType_t xReturn = pdFALSE;
-
-        /* This function must be called form a critical section. */
-
-        /* The following line is not reachable in unit tests because every call
-         * to prvNotifyQueueSetContainer is preceded by a check that
-         * pxQueueSetContainer != NULL */
-        configASSERT( pxQueueSetContainer ); /* LCOV_EXCL_BR_LINE */
-        configASSERT( pxQueueSetContainer->uxMessagesWaiting < pxQueueSetContainer->uxLength );
-
-        if( pxQueueSetContainer->uxMessagesWaiting < pxQueueSetContainer->uxLength )
-        {
-            const int8_t cTxLock = pxQueueSetContainer->cTxLock;
-
-            traceQUEUE_SET_SEND( pxQueueSetContainer );
-
-            /* The data copied is the handle of the queue that contains data. */
-            xReturn = prvCopyDataToQueue( pxQueueSetContainer, &pxQueue, queueSEND_TO_BACK );
-
-            if( cTxLock == queueUNLOCKED )
-            {
-                if( listLIST_IS_EMPTY( &( pxQueueSetContainer->xTasksWaitingToReceive ) ) == pdFALSE )
-                {
-                    if( xTaskRemoveFromEventList( &( pxQueueSetContainer->xTasksWaitingToReceive ) ) != pdFALSE )
-                    {
-                        /* The task waiting has a higher priority. */
-                        xReturn = pdTRUE;
-                    }
-                    else
-                    {
-                        mtCOVERAGE_TEST_MARKER();
-                    }
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-            else
-            {
-                configASSERT( cTxLock != queueINT8_MAX );
-
-                pxQueueSetContainer->cTxLock = ( int8_t ) ( cTxLock + 1 );
-            }
-        }
-        else
-        {
-            mtCOVERAGE_TEST_MARKER();
-        }
-
-        return xReturn;
-    }
-
-#endif /* configUSE_QUEUE_SETS */

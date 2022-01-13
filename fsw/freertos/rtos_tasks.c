@@ -1325,32 +1325,6 @@ void vTaskPlaceOnEventList( List_t * const pxEventList,
 }
 /*-----------------------------------------------------------*/
 
-void vTaskPlaceOnUnorderedEventList( List_t * pxEventList,
-                                     const TickType_t xItemValue,
-                                     const TickType_t xTicksToWait )
-{
-    configASSERT( pxEventList );
-
-    /* THIS FUNCTION MUST BE CALLED WITH THE SCHEDULER SUSPENDED.  It is used by
-     * the event groups implementation. */
-    configASSERT( uxSchedulerSuspended != 0 );
-
-    /* Store the item value in the event list item.  It is safe to access the
-     * event list item here as interrupts won't access the event list item of a
-     * task that is not in the Blocked state. */
-    listSET_LIST_ITEM_VALUE( &( pxCurrentTCB->mut->xEventListItem ), xItemValue | taskEVENT_LIST_ITEM_VALUE_IN_USE );
-
-    /* Place the event list item of the TCB at the end of the appropriate event
-     * list.  It is safe to access the event list here because it is part of an
-     * event group implementation - and interrupts don't access event groups
-     * directly (instead they access them indirectly by pending function calls to
-     * the task level). */
-    listINSERT_END( pxEventList, &( pxCurrentTCB->mut->xEventListItem ) );
-
-    prvAddCurrentTaskToDelayedList( xTicksToWait, pdTRUE );
-}
-/*-----------------------------------------------------------*/
-
 BaseType_t xTaskRemoveFromEventList( const List_t * const pxEventList )
 {
     TCB_t * pxUnblockedTCB;
@@ -1402,41 +1376,6 @@ BaseType_t xTaskRemoveFromEventList( const List_t * const pxEventList )
     }
 
     return xReturn;
-}
-/*-----------------------------------------------------------*/
-
-void vTaskRemoveFromUnorderedEventList( ListItem_t * pxEventListItem,
-                                        const TickType_t xItemValue )
-{
-    TCB_t * pxUnblockedTCB;
-
-    /* THIS FUNCTION MUST BE CALLED WITH THE SCHEDULER SUSPENDED.  It is used by
-     * the event flags implementation. */
-    configASSERT( uxSchedulerSuspended != pdFALSE );
-
-    /* Store the new item value in the event list. */
-    listSET_LIST_ITEM_VALUE( pxEventListItem, xItemValue | taskEVENT_LIST_ITEM_VALUE_IN_USE );
-
-    /* Remove the event list form the event flag.  Interrupts do not access
-     * event flags. */
-    pxUnblockedTCB = listGET_LIST_ITEM_OWNER( pxEventListItem ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-    configASSERT( pxUnblockedTCB );
-    listREMOVE_ITEM( pxEventListItem );
-
-    /* Remove the task from the delayed list and add it to the ready list.  The
-     * scheduler is suspended so interrupts will not be accessing the ready
-     * lists. */
-    listREMOVE_ITEM( &( pxUnblockedTCB->mut->xStateListItem ) );
-    prvAddTaskToReadyList( pxUnblockedTCB );
-
-    if( pxUnblockedTCB->uxPriority > pxCurrentTCB->uxPriority )
-    {
-        /* The unblocked task has a priority above that of the calling task, so
-         * a context switch is required.  This function is called with the
-         * scheduler suspended so xYieldPending is set so the context switch
-         * occurs immediately that the scheduler is resumed (unsuspended). */
-        xYieldPending = pdTRUE;
-    }
 }
 /*-----------------------------------------------------------*/
 
