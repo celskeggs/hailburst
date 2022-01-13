@@ -1,7 +1,6 @@
 #include <endian.h>
 #include <inttypes.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <hal/atomic.h>
 #include <hal/thread.h>
@@ -49,13 +48,6 @@ static bool magnetometer_set_register(magnetometer_t *mag, uint32_t reg, uint16_
     return false;
 }
 
-static void sleep_until(uint64_t target_time) {
-    int64_t remain;
-    while ((remain = target_time - clock_timestamp_monotonic()) > 0) {
-        usleep(remain / 1000);
-    }
-}
-
 static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *reading_out) {
     uint64_t reading_time = 0;
     // trigger reading
@@ -66,7 +58,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
         reading_out->reading_time = reading_time;
     }
 
-    usleep(15000);
+    task_delay(15000000);
 
     rmap_status_t status;
     for (int loop_retries = 0; loop_retries < 50; loop_retries++) {
@@ -101,7 +93,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
             return true;
         }
 
-        usleep(200);
+        task_delay(200000);
     }
     debugf(WARNING, "Magnetometer: ran out of loop retries while trying to take a reading.");
     return false;
@@ -195,7 +187,7 @@ void magnetometer_telemloop(void *mag_opaque) {
             chart_reply_send(mag->readings, write_count);
         }
 
-        sleep_until(last_telem_time + (uint64_t) 5500000000);
+        task_delay_abs(last_telem_time + (uint64_t) 5500000000);
     }
 }
 

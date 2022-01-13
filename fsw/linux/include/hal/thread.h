@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/time.h>
+#include <unistd.h>
+
+#include <fsw/clock.h>
 
 enum {
     NS_PER_SEC = 1000 * 1000 * 1000,
@@ -46,6 +49,18 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
         fprintf(stderr, "thread error: %d in %s\n", fail, note);
         abort();
     }
+}
+
+static inline void task_delay(uint64_t nanoseconds) {
+    usleep((nanoseconds + 999) / 1000);
+}
+
+static inline void task_delay_abs(uint64_t deadline_ns) {
+    int64_t remain = deadline_ns - clock_timestamp_monotonic();
+    if (remain > 0) {
+        task_delay(remain);
+    }
+    assert(clock_timestamp_monotonic() >= deadline_ns);
 }
 
 #define mutex_init(x)     THREAD_CHECK(pthread_mutex_init((x), NULL))

@@ -51,6 +51,16 @@ static inline thread_t task_get_current(void) {
 
 void task_suspend(void) __attribute__((noreturn));
 
+static inline void task_delay(uint64_t nanoseconds) {
+    vTaskDelay(timer_ns_to_ticks(nanoseconds));
+}
+
+static inline void task_delay_abs(uint64_t deadline_ns) {
+    // TODO: should I use vTaskDelayUntil instead?
+    vTaskDelay(timer_ticks_until_ns(deadline_ns));
+    assert(timer_now_ns() >= deadline_ns);
+}
+
 // TODO: more efficient semaphore preallocation approach
 #define SEMAPHORE_REGISTER(s_ident) \
     semaphore_t s_ident; \

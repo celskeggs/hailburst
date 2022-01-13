@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 #include <elf/elf.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
@@ -47,7 +45,7 @@ void scrubber_cycle_wait(bool is_idle) {
             // idle-priority task running. but we can't do this for everything, or the signals would clash.
             semaphore_take(&scrubber_idle_wake);
         } else {
-            usleep(10 * 1000); // wait about 10 milliseconds and then recheck
+            task_delay(10000000); // wait about 10 milliseconds and then recheck
         }
         max_attempts -= 1;
         if (max_attempts <= 0) {

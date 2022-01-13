@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #include <hal/thread.h>
 #include <fsw/clock.h>

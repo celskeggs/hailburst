@@ -1,7 +1,6 @@
 #include <endian.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <hal/watchdog.h>
 #include <fsw/debug.h>
@@ -442,7 +441,7 @@ void radio_uplink_loop(void *radio_opaque) {
 
         // only sleep if we haven't been reading all that much data. if we have, then we'd better keep at it!
         if (grabbed < 500) {
-            usleep(10000);
+            task_delay(10000000);
         }
 
         watchdog_ok(WATCHDOG_ASPECT_RADIO_UPLINK);
@@ -497,7 +496,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
             return false;
         }
         if (cur_len > 0) {
-            usleep(cur_len + 5);
+            task_delay((cur_len + 5) * 1000);
         } else {
             break;
         }

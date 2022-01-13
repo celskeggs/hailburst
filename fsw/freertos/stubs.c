@@ -14,10 +14,6 @@
 #include <fsw/init.h>
 #include <fsw/spacecraft.h>
 
-void usleep(unsigned long usec) {
-    vTaskDelay(timer_ns_to_ticks(usec * 1000));
-}
-
 void *malloc(size_t size) {
     return pvPortMalloc(size);
 }

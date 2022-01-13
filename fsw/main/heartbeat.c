@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 #include <hal/watchdog.h>
 #include <fsw/telemetry.h>
 
@@ -13,7 +11,7 @@ void heartbeat_mainloop(void *opaque) {
         tlm_heartbeat(&heartbeat_telemetry);
         watchdog_ok(WATCHDOG_ASPECT_HEARTBEAT);
 
-        usleep(120 * 1000);
+        task_delay(120000000);
     }
 }
 
