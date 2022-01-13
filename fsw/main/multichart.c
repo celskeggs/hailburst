@@ -47,7 +47,7 @@ void multichart_request_send(multichart_client_t *client, void *note) {
     struct note_header *header = chart_request_start(&client->chart);
     assert(header != NULL && header + 1 == note);
     // TODO: figure out a solution to the timestamp order <-> chart order race condition
-    header->insertion_timestamp = clock_timestamp();
+    header->insertion_timestamp = clock_timestamp_monotonic();
     chart_request_send(&client->chart, 1);
 }
 

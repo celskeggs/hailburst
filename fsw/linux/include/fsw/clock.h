@@ -14,10 +14,12 @@ static inline uint64_t clock_timestamp_monotonic(void) {
     return 1000000000 * (int64_t) ct.tv_sec + (int64_t) ct.tv_nsec;
 }
 
-static inline uint64_t clock_timestamp(void) {
-    return clock_timestamp_monotonic() + clock_offset_adj;
+static inline uint64_t clock_adjust_monotonic(uint64_t clock_mono) {
+    return clock_mono + clock_offset_adj;
 }
 
-void clock_wait_for_calibration(void);
+static inline uint64_t clock_timestamp(void) {
+    return clock_adjust_monotonic(clock_timestamp_monotonic());
+}
 
 #endif /* FSW_LINUX_FSW_CLOCK_H */

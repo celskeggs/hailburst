@@ -23,4 +23,11 @@ void clock_start_main(clock_device_t *clock);
         .address = (c_address),                                                                                 \
     }
 
+void clock_wait_for_calibration(void);
+
+extern const thread_t clock_cal_notify_task;
+
+#define CLOCK_DEPEND_ON_CALIBRATION(c_client_task) \
+    const thread_t clock_cal_notify_task = &c_client_task
+
 #endif /* FSW_CLOCK_INIT_H */

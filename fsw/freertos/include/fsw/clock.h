@@ -9,12 +9,13 @@ static inline uint64_t clock_timestamp_monotonic(void) {
     return timer_now_ns();
 }
 
-static inline uint64_t clock_timestamp(void) {
-    return timer_now_ns();
+// no difference between monotonic and adjusted clocks on FreeRTOS
+static inline uint64_t clock_adjust_monotonic(uint64_t clock_mono) {
+    return clock_mono;
 }
 
-static inline void clock_wait_for_calibration(void) {
-    /* do nothing; no calibration is required on FreeRTOS */
+static inline uint64_t clock_timestamp(void) {
+    return timer_now_ns();
 }
 
 #endif /* FSW_FREERTOS_FSW_CLOCK_H */

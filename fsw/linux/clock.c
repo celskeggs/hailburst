@@ -31,7 +31,6 @@ enum {
 };
 
 static bool clock_calibrated = false;
-SEMAPHORE_REGISTER(wake_calibrated);
 
 static bool clock_read_register(clock_device_t *device, uint32_t reg, void *output, size_t len) {
     assert(device != NULL);
@@ -47,11 +46,10 @@ static bool clock_read_register(clock_device_t *device, uint32_t reg, void *outp
 }
 
 void clock_wait_for_calibration(void) {
+    assert(clock != NULL);
     while (!atomic_load(clock_calibrated)) {
         debugf(DEBUG, "Stuck waiting for clock calibration before telemetry can be timestamped.");
-        semaphore_take(&wake_calibrated);
-        // wake up anyone else waiting
-        (void) semaphore_give(&wake_calibrated);
+        local_doze(clock_cal_notify_task);
     }
 }
 
@@ -85,7 +83,7 @@ void clock_start_main(clock_device_t *clock) {
 
     // notify anyone waiting
     atomic_store(clock_calibrated, true);
-    semaphore_give(&wake_calibrated);
+    local_rouse(clock_cal_notify_task);
 
     // and log our success, which will include a time using our new adjustment
     tlm_clock_calibrated(&clock_telemetry, clock_offset_adj);

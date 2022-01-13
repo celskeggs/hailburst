@@ -113,8 +113,6 @@ static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
 static void telemetry_async_send(tlm_async_endpoint_t *tep, tlm_async_t *async) {
     assert(tep != NULL && async != NULL);
 
-    clock_wait_for_calibration();
-
     multichart_request_send(&tep->client, async);
 }
 
@@ -174,12 +172,12 @@ static void telemetry_mainloop(void) {
         }
 
         // pull telemetry from multichart
-        uint64_t timestamp_ns = 0;
-        tlm_async_t *async_elm = multichart_reply_start(&telemetry.async_chart, &timestamp_ns);
+        uint64_t timestamp_ns_mono = 0;
+        tlm_async_t *async_elm = multichart_reply_start(&telemetry.async_chart, &timestamp_ns_mono);
         if (async_elm != NULL) {
             // convert async element to packet
             packet.cmd_tlm_id   = async_elm->telemetry_id;
-            packet.timestamp_ns = timestamp_ns;
+            packet.timestamp_ns = clock_adjust_monotonic(timestamp_ns_mono);
             packet.data_len     = async_elm->data_len;
             packet.data_bytes   = async_elm->data_bytes; // array->pointer
 
@@ -191,13 +189,13 @@ static void telemetry_mainloop(void) {
             watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
         } else {
             // pull synchronous telemetry from wall
-            tlm_sync_t *sync_elm = multichart_reply_start(&telemetry.sync_chart, &timestamp_ns);
+            tlm_sync_t *sync_elm = multichart_reply_start(&telemetry.sync_chart, &timestamp_ns_mono);
             if (sync_elm != NULL) {
                 assert(sync_elm->data_len <= TLM_MAX_SYNC_SIZE);
 
                 // convert sync element to packet
                 packet.cmd_tlm_id   = sync_elm->telemetry_id;
-                packet.timestamp_ns = timestamp_ns;
+                packet.timestamp_ns = clock_adjust_monotonic(timestamp_ns_mono);
                 packet.data_len     = sync_elm->data_len;
                 packet.data_bytes   = sync_elm->data_bytes;
 
