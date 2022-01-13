@@ -68,6 +68,11 @@ void radio_downlink_loop(radio_t *radio);
     TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", PRIORITY_WORKERS,                                         \
                   radio_uplink_loop, &r_ident, RESTARTABLE);                                                      \
     TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", PRIORITY_WORKERS,                                     \
-                  radio_downlink_loop, &r_ident, RESTARTABLE);
+                  radio_downlink_loop, &r_ident, RESTARTABLE);                                                    \
+    static void r_ident ## _init(void) {                                                                          \
+        stream_set_writer(&r_uplink, &r_ident ## _up_task);                                                       \
+        stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                   \
+    }                                                                                                             \
+    PROGRAM_INIT(STAGE_CRAFT, r_ident ## _init)
 
 #endif /* FSW_RADIO_H */

@@ -10,9 +10,8 @@
 // https://www.snellman.net/blog/archive/2016-12-13-ring-buffers/
 
 typedef struct {
-    // semaphores to notify when data is ready to be read or written
-    semaphore_t unblock_write;
-    semaphore_t unblock_read;
+    thread_t writer;
+    thread_t reader;
 
     uint8_t *memory;
     size_t   capacity;
@@ -22,6 +21,8 @@ typedef struct {
 } stream_t;
 
 void stream_init(stream_t *stream, size_t capacity);
+void stream_set_writer(stream_t *stream, thread_t writer);
+void stream_set_reader(stream_t *stream, thread_t reader);
 // may only be used by a single thread at a time
 void stream_write(stream_t *stream, uint8_t *data, size_t length);
 // may only be used by a single thread at a time

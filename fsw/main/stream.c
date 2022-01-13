@@ -7,8 +7,8 @@
 
 void stream_init(stream_t *stream, size_t capacity) {
     assert(stream != NULL);
-    semaphore_init(&stream->unblock_write);
-    semaphore_init(&stream->unblock_read);
+    stream->writer = NULL;
+    stream->reader = NULL;
     // make sure this is a power of two
     assert((capacity & (capacity - 1)) == 0);
     // make sure at least one bit is free
@@ -18,6 +18,22 @@ void stream_init(stream_t *stream, size_t capacity) {
     assert(stream->memory != NULL);
     stream->capacity = capacity;
     stream->read_idx = stream->write_idx = 0;
+}
+
+void stream_set_writer(stream_t *stream, thread_t writer) {
+    assert(stream != NULL && writer != NULL);
+    if (stream->writer != NULL) {
+        abortf("Stream already has writer %p registered, but writer %p also provided.", stream->writer, writer);
+    }
+    stream->writer = writer;
+}
+
+void stream_set_reader(stream_t *stream, thread_t reader) {
+    assert(stream != NULL && reader != NULL);
+    if (stream->reader != NULL) {
+        abortf("Stream already has reader %p registered, but reader %p also provided.", stream->reader, reader);
+    }
+    stream->reader = reader;
 }
 
 // masks an unwrapped index into a valid array offset
@@ -44,7 +60,7 @@ static inline size_t stream_take_fill(stream_t *stream) {
     assert(stream != NULL);
     size_t fill;
     while ((fill = stream_fill(stream)) == 0) {
-        semaphore_take(&stream->unblock_read);
+        local_doze(stream->reader);
     }
     return fill;
 }
@@ -54,7 +70,7 @@ static inline size_t stream_take_space(stream_t *stream) {
     assert(stream != NULL);
     size_t space;
     while ((space = stream_space(stream)) == 0) {
-        semaphore_take(&stream->unblock_write);
+        local_doze(stream->writer);
     }
     return space;
 }
@@ -86,7 +102,7 @@ static inline size_t stream_read_possible(stream_t *stream, uint8_t *data_out, s
 
 // may only be used by a single thread at a time
 size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length) {
-    assert(stream != NULL && data_out != NULL);
+    assert(stream != NULL && data_out != NULL && stream->reader != NULL && stream->writer != NULL);
     // read at least one byte, blocking if necessary
     size_t total_read = stream_read_possible(stream, data_out, max_length, true);
     assert(total_read >= 1 && total_read <= max_length);
@@ -102,7 +118,7 @@ size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length) {
         assert(total_read <= max_length);
     }
     // wake up the other end, now that more free space is available to it
-    semaphore_give(&stream->unblock_write);
+    local_rouse(stream->writer);
     return total_read;
 }
 
@@ -124,14 +140,14 @@ static inline size_t stream_write_possible(stream_t *stream, uint8_t *data_in, s
     // advance write index
     atomic_store(stream->write_idx, stream->write_idx + length);
     // wake up the other end
-    semaphore_give(&stream->unblock_read);
+    local_rouse(stream->reader);
     // return how much we actually wrote
     return length;
 }
 
 // may only be used by a single thread at a time
 void stream_write(stream_t *stream, uint8_t *data_in, size_t length) {
-    assert(stream != NULL && data_in != NULL);
+    assert(stream != NULL && data_in != NULL && stream->reader != NULL && stream->writer != NULL);
     while (length > 0) {
         // write as much as we can (at least one byte)
         size_t actual = stream_write_possible(stream, data_in, length);

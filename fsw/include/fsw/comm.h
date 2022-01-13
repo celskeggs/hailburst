@@ -29,10 +29,12 @@ typedef struct {
 } comm_enc_t;
 
 void comm_dec_init(comm_dec_t *dec, stream_t *uplink);
+void comm_dec_set_task(comm_dec_t *dec, thread_t thread);
 // NOTE: the byte array produced here will be reused on the next call
 void comm_dec_decode(comm_dec_t *dec, comm_packet_t *out);
 
 void comm_enc_init(comm_enc_t *enc, stream_t *downlink);
+void comm_enc_set_task(comm_enc_t *enc, thread_t thread);
 void comm_enc_encode(comm_enc_t *enc, comm_packet_t *in);
 
 #endif /* FSW_COMM_H */

@@ -28,6 +28,11 @@ void comm_dec_init(comm_dec_t *dec, stream_t *uplink) {
     dec->err_count = 0;
 }
 
+void comm_dec_set_task(comm_dec_t *dec, thread_t thread) {
+    assert(dec != NULL);
+    stream_set_reader(dec->uplink, thread);
+}
+
 // The range [0, protect_len) is reserved for use by the decoder, and therefore must not be touched by this function.
 static uint8_t comm_dec_next_byte(comm_dec_t *dec, size_t protect_len) {
     assert(dec != NULL && protect_len < COMM_SCRATCH_SIZE);
@@ -124,6 +129,11 @@ void comm_enc_init(comm_enc_t *enc, stream_t *downlink) {
     enc->downlink = downlink;
     enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
     assert(enc->scratch_buffer != NULL);
+}
+
+void comm_enc_set_task(comm_enc_t *enc, thread_t thread) {
+    assert(enc != NULL);
+    stream_set_writer(enc->downlink, thread);
 }
 
 static void comm_enc_escape_limited(comm_enc_t *enc, const uint8_t *data, size_t len) {

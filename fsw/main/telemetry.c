@@ -69,6 +69,7 @@ void telemetry_init(comm_enc_t *encoder) {
     multichart_init_server(&telemetry.sync_chart, sizeof(tlm_sync_t), telemetry_mainloop_notify, NULL);
 
     telemetry.comm_encoder = encoder;
+    comm_enc_set_task(encoder, &telemetry_task);
 
     telemetry.initialized = true;
 }
