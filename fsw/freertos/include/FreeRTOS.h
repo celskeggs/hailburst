@@ -89,28 +89,8 @@
     #error Missing definition:  configUSE_PREEMPTION must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
 #endif
 
-#ifndef configUSE_IDLE_HOOK
-    #error Missing definition:  configUSE_IDLE_HOOK must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
-#ifndef configUSE_TICK_HOOK
-    #error Missing definition:  configUSE_TICK_HOOK must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
 #ifndef configUSE_16_BIT_TICKS
     #error Missing definition:  configUSE_16_BIT_TICKS must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
-#ifndef configUSE_CO_ROUTINES
-    #define configUSE_CO_ROUTINES    0
-#endif
-
-#ifndef INCLUDE_vTaskPrioritySet
-    #define INCLUDE_vTaskPrioritySet    0
-#endif
-
-#ifndef INCLUDE_uxTaskPriorityGet
-    #define INCLUDE_uxTaskPriorityGet    0
 #endif
 
 #ifndef INCLUDE_vTaskDelete
@@ -121,62 +101,12 @@
     #define INCLUDE_vTaskSuspend    0
 #endif
 
-#ifdef INCLUDE_xTaskDelayUntil
-    #ifdef INCLUDE_vTaskDelayUntil
-
-/* INCLUDE_vTaskDelayUntil was replaced by INCLUDE_xTaskDelayUntil.  Backward
- * compatibility is maintained if only one or the other is defined, but
- * there is a conflict if both are defined. */
-        #error INCLUDE_vTaskDelayUntil and INCLUDE_xTaskDelayUntil are both defined.  INCLUDE_vTaskDelayUntil is no longer required and should be removed
-    #endif
-#endif
-
-#ifndef INCLUDE_xTaskDelayUntil
-    #ifdef INCLUDE_vTaskDelayUntil
-
-/* If INCLUDE_vTaskDelayUntil is set but INCLUDE_xTaskDelayUntil is not then
- * the project's FreeRTOSConfig.h probably pre-dates the introduction of
- * xTaskDelayUntil and setting INCLUDE_xTaskDelayUntil to whatever
- * INCLUDE_vTaskDelayUntil is set to will ensure backward compatibility.
- */
-        #define INCLUDE_xTaskDelayUntil    INCLUDE_vTaskDelayUntil
-    #endif
-#endif
-
 #ifndef INCLUDE_xTaskDelayUntil
     #define INCLUDE_xTaskDelayUntil    0
 #endif
 
 #ifndef INCLUDE_vTaskDelay
     #define INCLUDE_vTaskDelay    0
-#endif
-
-#ifndef INCLUDE_xQueueGetMutexHolder
-    #define INCLUDE_xQueueGetMutexHolder    0
-#endif
-
-#ifndef INCLUDE_xSemaphoreGetMutexHolder
-    #define INCLUDE_xSemaphoreGetMutexHolder    INCLUDE_xQueueGetMutexHolder
-#endif
-
-#ifndef INCLUDE_uxTaskGetStackHighWaterMark
-    #define INCLUDE_uxTaskGetStackHighWaterMark    0
-#endif
-
-#ifndef INCLUDE_uxTaskGetStackHighWaterMark2
-    #define INCLUDE_uxTaskGetStackHighWaterMark2    0
-#endif
-
-#ifndef INCLUDE_eTaskGetState
-    #define INCLUDE_eTaskGetState    0
-#endif
-
-#ifndef INCLUDE_xTaskResumeFromISR
-    #define INCLUDE_xTaskResumeFromISR    1
-#endif
-
-#ifndef INCLUDE_xTimerPendFunctionCall
-    #define INCLUDE_xTimerPendFunctionCall    0
 #endif
 
 #ifndef INCLUDE_xTaskGetSchedulerState
@@ -187,18 +117,8 @@
     #define INCLUDE_xTaskGetCurrentTaskHandle    0
 #endif
 
-#if configUSE_CO_ROUTINES != 0
-    #ifndef configMAX_CO_ROUTINE_PRIORITIES
-        #error configMAX_CO_ROUTINE_PRIORITIES must be greater than or equal to 1.
-    #endif
-#endif
-
 #ifndef configUSE_DAEMON_TASK_STARTUP_HOOK
     #define configUSE_DAEMON_TASK_STARTUP_HOOK    0
-#endif
-
-#ifndef configUSE_TIMERS
-    #define configUSE_TIMERS    0
 #endif
 
 #ifndef configUSE_COUNTING_SEMAPHORES
@@ -239,23 +159,6 @@
 #ifndef portSOFTWARE_BARRIER
     #define portSOFTWARE_BARRIER()
 #endif
-
-/* The timers module relies on xTaskGetSchedulerState(). */
-#if configUSE_TIMERS == 1
-
-    #ifndef configTIMER_TASK_PRIORITY
-        #error If configUSE_TIMERS is set to 1 then configTIMER_TASK_PRIORITY must also be defined.
-    #endif /* configTIMER_TASK_PRIORITY */
-
-    #ifndef configTIMER_QUEUE_LENGTH
-        #error If configUSE_TIMERS is set to 1 then configTIMER_QUEUE_LENGTH must also be defined.
-    #endif /* configTIMER_QUEUE_LENGTH */
-
-    #ifndef configTIMER_TASK_STACK_DEPTH
-        #error If configUSE_TIMERS is set to 1 then configTIMER_TASK_STACK_DEPTH must also be defined.
-    #endif /* configTIMER_TASK_STACK_DEPTH */
-
-#endif /* configUSE_TIMERS */
 
 #ifndef portSET_INTERRUPT_MASK_FROM_ISR
     #define portSET_INTERRUPT_MASK_FROM_ISR()    0
@@ -725,10 +628,6 @@
     #error configEXPECTED_IDLE_TIME_BEFORE_SLEEP must not be less than 2
 #endif
 
-#ifndef configUSE_TICKLESS_IDLE
-    #define configUSE_TICKLESS_IDLE    0
-#endif
-
 #ifndef configPRE_SUPPRESS_TICKS_AND_SLEEP_PROCESSING
     #define configPRE_SUPPRESS_TICKS_AND_SLEEP_PROCESSING( x )
 #endif
@@ -837,13 +736,6 @@
  * in a size_t. */
     #define configMESSAGE_BUFFER_LENGTH_TYPE    size_t
 #endif
-
-/* Sanity check the configuration. */
-#if ( configUSE_TICKLESS_IDLE != 0 )
-    #if ( INCLUDE_vTaskSuspend != 1 )
-        #error INCLUDE_vTaskSuspend must be set to 1 if configUSE_TICKLESS_IDLE is not set to 0
-    #endif /* INCLUDE_vTaskSuspend */
-#endif /* configUSE_TICKLESS_IDLE */
 
 #if ( ( configSUPPORT_STATIC_ALLOCATION == 0 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 0 ) )
     #error configSUPPORT_STATIC_ALLOCATION and configSUPPORT_DYNAMIC_ALLOCATION cannot both be 0, but can both be 1.

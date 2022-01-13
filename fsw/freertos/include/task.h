@@ -431,85 +431,6 @@ BaseType_t xTaskDelayUntil( TickType_t * const pxPreviousWakeTime,
 /**
  * task. h
  * @code{c}
- * UBaseType_t uxTaskPriorityGet( const TaskHandle_t xTask );
- * @endcode
- *
- * INCLUDE_uxTaskPriorityGet must be defined as 1 for this function to be available.
- * See the configuration section for more information.
- *
- * Obtain the priority of any task.
- *
- * @param xTask Handle of the task to be queried.  Passing a NULL
- * handle results in the priority of the calling task being returned.
- *
- * @return The priority of xTask.
- *
- * Example usage:
- * @code{c}
- * void vAFunction( void )
- * {
- * TaskHandle_t xHandle;
- *
- *   // Create a task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, tskIDLE_PRIORITY, &xHandle );
- *
- *   // ...
- *
- *   // Use the handle to obtain the priority of the created task.
- *   // It was created with tskIDLE_PRIORITY, but may have changed
- *   // it itself.
- *   if( uxTaskPriorityGet( xHandle ) != tskIDLE_PRIORITY )
- *   {
- *       // The task has changed it's priority.
- *   }
- *
- *   // ...
- *
- *   // Is our priority higher than the created task?
- *   if( uxTaskPriorityGet( xHandle ) < uxTaskPriorityGet( NULL ) )
- *   {
- *       // Our priority (obtained using NULL handle) is higher.
- *   }
- * }
- * @endcode
- * \defgroup uxTaskPriorityGet uxTaskPriorityGet
- * \ingroup TaskCtrl
- */
-UBaseType_t uxTaskPriorityGet( const TaskHandle_t xTask );
-
-/**
- * task. h
- * @code{c}
- * UBaseType_t uxTaskPriorityGetFromISR( const TaskHandle_t xTask );
- * @endcode
- *
- * A version of uxTaskPriorityGet() that can be used from an ISR.
- */
-UBaseType_t uxTaskPriorityGetFromISR( const TaskHandle_t xTask );
-
-/**
- * task. h
- * @code{c}
- * eTaskState eTaskGetState( TaskHandle_t xTask );
- * @endcode
- *
- * INCLUDE_eTaskGetState must be defined as 1 for this function to be available.
- * See the configuration section for more information.
- *
- * Obtain the state of any task.  States are encoded by the eTaskState
- * enumerated type.
- *
- * @param xTask Handle of the task to be queried.
- *
- * @return The state of xTask at the time the function was called.  Note the
- * state of the task might change between the function being called, and the
- * functions return value being tested by the calling task.
- */
-eTaskState eTaskGetState( TaskHandle_t xTask );
-
-/**
- * task. h
- * @code{c}
  * void vTaskGetInfo( TaskHandle_t xTask, TaskStatus_t *pxTaskStatus, BaseType_t xGetFreeStackSpace, eTaskState eState );
  * @endcode
  *
@@ -567,51 +488,6 @@ void vTaskGetInfo( TaskHandle_t xTask,
                    TaskStatus_t * pxTaskStatus,
                    BaseType_t xGetFreeStackSpace,
                    eTaskState eState );
-
-/**
- * task. h
- * @code{c}
- * void vTaskPrioritySet( TaskHandle_t xTask, UBaseType_t uxNewPriority );
- * @endcode
- *
- * INCLUDE_vTaskPrioritySet must be defined as 1 for this function to be available.
- * See the configuration section for more information.
- *
- * Set the priority of any task.
- *
- * A context switch will occur before the function returns if the priority
- * being set is higher than the currently executing task.
- *
- * @param xTask Handle to the task for which the priority is being set.
- * Passing a NULL handle results in the priority of the calling task being set.
- *
- * @param uxNewPriority The priority to which the task will be set.
- *
- * Example usage:
- * @code{c}
- * void vAFunction( void )
- * {
- * TaskHandle_t xHandle;
- *
- *   // Create a task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, tskIDLE_PRIORITY, &xHandle );
- *
- *   // ...
- *
- *   // Use the handle to raise the priority of the created task.
- *   vTaskPrioritySet( xHandle, tskIDLE_PRIORITY + 1 );
- *
- *   // ...
- *
- *   // Use a NULL handle to raise our priority to the same value.
- *   vTaskPrioritySet( NULL, tskIDLE_PRIORITY + 1 );
- * }
- * @endcode
- * \defgroup vTaskPrioritySet vTaskPrioritySet
- * \ingroup TaskCtrl
- */
-void vTaskPrioritySet( TaskHandle_t xTask,
-                       UBaseType_t uxNewPriority );
 
 /**
  * task. h
@@ -716,37 +592,6 @@ void vTaskSuspend( TaskHandle_t xTaskToSuspend );
  * \ingroup TaskCtrl
  */
 void vTaskResume( TaskHandle_t xTaskToResume );
-
-/**
- * task. h
- * @code{c}
- * void xTaskResumeFromISR( TaskHandle_t xTaskToResume );
- * @endcode
- *
- * INCLUDE_xTaskResumeFromISR must be defined as 1 for this function to be
- * available.  See the configuration section for more information.
- *
- * An implementation of vTaskResume() that can be called from within an ISR.
- *
- * A task that has been suspended by one or more calls to vTaskSuspend ()
- * will be made available for running again by a single call to
- * xTaskResumeFromISR ().
- *
- * xTaskResumeFromISR() should not be used to synchronise a task with an
- * interrupt if there is a chance that the interrupt could arrive prior to the
- * task being suspended - as this can lead to interrupts being missed. Use of a
- * semaphore as a synchronisation mechanism would avoid this eventuality.
- *
- * @param xTaskToResume Handle to the task being readied.
- *
- * @return pdTRUE if resuming the task should result in a context switch,
- * otherwise pdFALSE. This is used by the ISR to determine if a context switch
- * may be required following the ISR.
- *
- * \defgroup vTaskResumeFromISR vTaskResumeFromISR
- * \ingroup TaskCtrl
- */
-BaseType_t xTaskResumeFromISR( TaskHandle_t xTaskToResume );
 
 /*-----------------------------------------------------------
 * SCHEDULER CONTROL
@@ -1016,64 +861,6 @@ UBaseType_t uxTaskGetNumberOfTasks( void );
  */
 const char * pcTaskGetName( TaskHandle_t xTaskToQuery );
 
-/**
- * task.h
- * @code{c}
- * UBaseType_t uxTaskGetStackHighWaterMark( TaskHandle_t xTask );
- * @endcode
- *
- * INCLUDE_uxTaskGetStackHighWaterMark must be set to 1 in FreeRTOSConfig.h for
- * this function to be available.
- *
- * Returns the high water mark of the stack associated with xTask.  That is,
- * the minimum free stack space there has been (in words, so on a 32 bit machine
- * a value of 1 means 4 bytes) since the task started.  The smaller the returned
- * number the closer the task has come to overflowing its stack.
- *
- * uxTaskGetStackHighWaterMark() and uxTaskGetStackHighWaterMark2() are the
- * same except for their return type.  Using configSTACK_DEPTH_TYPE allows the
- * user to determine the return type.  It gets around the problem of the value
- * overflowing on 8-bit types without breaking backward compatibility for
- * applications that expect an 8-bit return type.
- *
- * @param xTask Handle of the task associated with the stack to be checked.
- * Set xTask to NULL to check the stack of the calling task.
- *
- * @return The smallest amount of free stack space there has been (in words, so
- * actual spaces on the stack rather than bytes) since the task referenced by
- * xTask was created.
- */
-UBaseType_t uxTaskGetStackHighWaterMark( TaskHandle_t xTask );
-
-/**
- * task.h
- * @code{c}
- * configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
- * @endcode
- *
- * INCLUDE_uxTaskGetStackHighWaterMark2 must be set to 1 in FreeRTOSConfig.h for
- * this function to be available.
- *
- * Returns the high water mark of the stack associated with xTask.  That is,
- * the minimum free stack space there has been (in words, so on a 32 bit machine
- * a value of 1 means 4 bytes) since the task started.  The smaller the returned
- * number the closer the task has come to overflowing its stack.
- *
- * uxTaskGetStackHighWaterMark() and uxTaskGetStackHighWaterMark2() are the
- * same except for their return type.  Using configSTACK_DEPTH_TYPE allows the
- * user to determine the return type.  It gets around the problem of the value
- * overflowing on 8-bit types without breaking backward compatibility for
- * applications that expect an 8-bit return type.
- *
- * @param xTask Handle of the task associated with the stack to be checked.
- * Set xTask to NULL to check the stack of the calling task.
- *
- * @return The smallest amount of free stack space there has been (in words, so
- * actual spaces on the stack rather than bytes) since the task referenced by
- * xTask was created.
- */
-configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
-
 #if ( configCHECK_FOR_STACK_OVERFLOW > 0 )
 
 /**
@@ -1091,20 +878,6 @@ configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
  */
     void vApplicationStackOverflowHook( TaskHandle_t xTask,
                                         const char * pcTaskName );
-
-#endif
-
-#if  ( configUSE_TICK_HOOK > 0 )
-
-/**
- *  task.h
- * @code{c}
- * void vApplicationTickHook( void );
- * @endcode
- *
- * This hook function is called in the system tick handler after any OS work is completed.
- */
-    void vApplicationTickHook( void ); /*lint !e526 Symbol not defined as it is an application callback. */
 
 #endif
 
@@ -2232,12 +2005,6 @@ void vTaskRemoveFromUnorderedEventList( ListItem_t * pxEventListItem,
 portDONT_DISCARD void vTaskSwitchContext( void );
 
 /*
- * THESE FUNCTIONS MUST NOT BE USED FROM APPLICATION CODE.  THEY ARE USED BY
- * THE EVENT BITS MODULE.
- */
-TickType_t uxTaskResetEventItemValue( void );
-
-/*
  * Return the handle of the calling task.
  */
 TaskHandle_t xTaskGetCurrentTaskHandle( void );
@@ -2288,32 +2055,6 @@ UBaseType_t uxTaskGetTaskNumber( TaskHandle_t xTask );
  */
 void vTaskSetTaskNumber( TaskHandle_t xTask,
                          const UBaseType_t uxHandle );
-
-/*
- * Only available when configUSE_TICKLESS_IDLE is set to 1.
- * If tickless mode is being used, or a low power mode is implemented, then
- * the tick interrupt will not execute during idle periods.  When this is the
- * case, the tick count value maintained by the scheduler needs to be kept up
- * to date with the actual execution time by being skipped forward by a time
- * equal to the idle period.
- */
-void vTaskStepTick( const TickType_t xTicksToJump );
-
-/*
- * Only available when configUSE_TICKLESS_IDLE is set to 1.
- * Provided for use within portSUPPRESS_TICKS_AND_SLEEP() to allow the port
- * specific sleep function to determine if it is ok to proceed with the sleep,
- * and if it is ok to proceed, if it is ok to sleep indefinitely.
- *
- * This function is necessary because portSUPPRESS_TICKS_AND_SLEEP() is only
- * called with the scheduler suspended, not from within a critical section.  It
- * is therefore possible for an interrupt to request a context switch between
- * portSUPPRESS_TICKS_AND_SLEEP() and the low power mode actually being
- * entered.  eTaskConfirmSleepModeStatus() should be called from a short
- * critical section between the timer being stopped and the sleep mode being
- * entered to ensure it is ok to proceed into the sleep mode.
- */
-eSleepModeStatus eTaskConfirmSleepModeStatus( void );
 
 /*
  * For internal use only.  Increment the mutex held count when a mutex is
