@@ -48,14 +48,7 @@
     #include <stdio.h>
 #endif /* configUSE_STATS_FORMATTING_FUNCTIONS == 1 ) */
 
-#if ( configUSE_PREEMPTION == 0 )
-
-/* If the cooperative scheduler is being used then a yield should not be
- * performed just because a higher priority task has been woken. */
-    #define taskYIELD_IF_USING_PREEMPTION()
-#else
-    #define taskYIELD_IF_USING_PREEMPTION()    portYIELD_WITHIN_API()
-#endif
+#define taskYIELD_IF_USING_PREEMPTION()    portYIELD_WITHIN_API()
 
 /* Values that can be assigned to the ucNotifyState member of the TCB. */
 #define taskNOT_WAITING_NOTIFICATION              ( ( uint8_t ) 0 ) /* Must be zero as it is the initialised value. */
@@ -317,14 +310,8 @@ static void prvInitialiseTaskLists( void );
  * The idle task, which as all tasks is implemented as a never ending loop.
  * The idle task is automatically created and added to the ready lists upon
  * creation of the first user task.
- *
- * The portTASK_FUNCTION_PROTO() macro is used to allow port/compiler specific
- * language extensions.  The equivalent prototype for this function is:
- *
- * void prvIdleTask( void *pvParameters );
- *
  */
-portTASK_FUNCTION_PROTO( prvIdleTask, pvParameters );
+void prvIdleTask( void *pvParameters );
 
 /*
  * The currently executing task is entering the Blocked state.  Add the task to
@@ -1018,11 +1005,7 @@ BaseType_t xTaskResumeAll( void )
 
                 if( xYieldPending != pdFALSE )
                 {
-                    #if ( configUSE_PREEMPTION != 0 )
-                        {
-                            xAlreadyYielded = pdTRUE;
-                        }
-                    #endif
+                    xAlreadyYielded = pdTRUE;
                     taskYIELD_IF_USING_PREEMPTION();
                 }
                 else
@@ -1216,24 +1199,18 @@ BaseType_t xTaskIncrementTick( void )
                      * list. */
                     prvAddTaskToReadyList( pxTCB );
 
-                    /* A task being unblocked cannot cause an immediate
-                     * context switch if preemption is turned off. */
-                    #if ( configUSE_PREEMPTION == 1 )
-                        {
-                            /* Preemption is on, but a context switch should
-                             * only be performed if the unblocked task has a
-                             * priority that is equal to or higher than the
-                             * currently executing task. */
-                            if( pxTCB->uxPriority >= pxCurrentTCB->uxPriority )
-                            {
-                                xSwitchRequired = pdTRUE;
-                            }
-                            else
-                            {
-                                mtCOVERAGE_TEST_MARKER();
-                            }
-                        }
-                    #endif /* configUSE_PREEMPTION */
+                    /* Preemption is on, but a context switch should
+                     * only be performed if the unblocked task has a
+                     * priority that is equal to or higher than the
+                     * currently executing task. */
+                    if( pxTCB->uxPriority >= pxCurrentTCB->uxPriority )
+                    {
+                        xSwitchRequired = pdTRUE;
+                    }
+                    else
+                    {
+                        mtCOVERAGE_TEST_MARKER();
+                    }
                 }
             }
         }
@@ -1241,7 +1218,7 @@ BaseType_t xTaskIncrementTick( void )
         /* Tasks of equal priority to the currently running task will share
          * processing time (time slice) if preemption is on, and the application
          * writer has not explicitly turned time slicing off. */
-        #if ( ( configUSE_PREEMPTION == 1 ) && ( configUSE_TIME_SLICING == 1 ) )
+        #if ( configUSE_TIME_SLICING == 1 )
             {
                 if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ pxCurrentTCB->uxPriority ] ) ) > ( UBaseType_t ) 1 )
                 {
@@ -1252,20 +1229,16 @@ BaseType_t xTaskIncrementTick( void )
                     mtCOVERAGE_TEST_MARKER();
                 }
             }
-        #endif /* ( ( configUSE_PREEMPTION == 1 ) && ( configUSE_TIME_SLICING == 1 ) ) */
+        #endif /* ( configUSE_TIME_SLICING == 1 ) */
 
-        #if ( configUSE_PREEMPTION == 1 )
-            {
-                if( xYieldPending != pdFALSE )
-                {
-                    xSwitchRequired = pdTRUE;
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-        #endif /* configUSE_PREEMPTION */
+        if( xYieldPending != pdFALSE )
+        {
+            xSwitchRequired = pdTRUE;
+        }
+        else
+        {
+            mtCOVERAGE_TEST_MARKER();
+        }
     }
     else
     {
@@ -1461,14 +1434,8 @@ void vTaskMissedYield( void )
  * -----------------------------------------------------------
  * The Idle task.
  * ----------------------------------------------------------
- *
- * The portTASK_FUNCTION() macro is used to allow port/compiler specific
- * language extensions.  The equivalent prototype for this function is:
- *
- * void prvIdleTask( void *pvParameters );
- *
  */
-portTASK_FUNCTION( prvIdleTask, pvParameters )
+void prvIdleTask( void *pvParameters )
 {
     /* Stop warnings. */
     ( void ) pvParameters;
@@ -1476,44 +1443,8 @@ portTASK_FUNCTION( prvIdleTask, pvParameters )
     /** THIS IS THE RTOS IDLE TASK - WHICH IS CREATED AUTOMATICALLY WHEN THE
      * SCHEDULER IS STARTED. **/
 
-    /* In case a task that has a secure context deletes itself, in which case
-     * the idle task is responsible for deleting the task's secure context, if
-     * any. */
-    portALLOCATE_SECURE_CONTEXT( configMINIMAL_SECURE_STACK_SIZE );
-
     for( ; ; )
     {
-        #if ( configUSE_PREEMPTION == 0 )
-            {
-                /* If we are not using preemption we keep forcing a task switch to
-                 * see if any other task has become available.  If we are using
-                 * preemption we don't need to do this as any task becoming available
-                 * will automatically get the processor anyway. */
-                taskYIELD();
-            }
-        #endif /* configUSE_PREEMPTION */
-
-        #if ( ( configUSE_PREEMPTION == 1 ) && ( configIDLE_SHOULD_YIELD == 1 ) )
-            {
-                /* When using preemption tasks of equal priority will be
-                 * timesliced.  If a task that is sharing the idle priority is ready
-                 * to run then the idle task should yield before the end of the
-                 * timeslice.
-                 *
-                 * A critical region is not required here as we are just reading from
-                 * the list, and an occasional incorrect value will not matter.  If
-                 * the ready list at the idle priority contains more than one task
-                 * then a task other than the idle task is ready to execute. */
-                if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ tskIDLE_PRIORITY ] ) ) > ( UBaseType_t ) 1 )
-                {
-                    taskYIELD();
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-        #endif /* ( ( configUSE_PREEMPTION == 1 ) && ( configIDLE_SHOULD_YIELD == 1 ) ) */
     }
 }
 /*-----------------------------------------------------------*/

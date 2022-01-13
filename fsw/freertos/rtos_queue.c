@@ -70,14 +70,7 @@ typedef struct SemaphoreData
 #define queueSEMAPHORE_QUEUE_ITEM_LENGTH    ( ( UBaseType_t ) 0 )
 #define queueMUTEX_GIVE_BLOCK_TIME          ( ( TickType_t ) 0U )
 
-#if ( configUSE_PREEMPTION == 0 )
-
-/* If the cooperative scheduler is being used then a yield should not be
- * performed just because a higher priority task has been woken. */
-    #define queueYIELD_IF_USING_PREEMPTION()
-#else
-    #define queueYIELD_IF_USING_PREEMPTION()    portYIELD_WITHIN_API()
-#endif
+#define queueYIELD_IF_USING_PREEMPTION()    portYIELD_WITHIN_API()
 
 /*
  * Definition of the queue used by the scheduler.
@@ -108,40 +101,9 @@ typedef struct QueueDefinition /* The old naming convention is used to prevent b
     #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
         uint8_t ucStaticallyAllocated; /*< Set to pdTRUE if the memory used by the queue was statically allocated to ensure no attempt is made to free the memory. */
     #endif
-} xQUEUE;
-
-/* The old xQUEUE name is maintained above then typedefed to the new Queue_t
- * name below to enable the use of older kernel aware debuggers. */
-typedef xQUEUE Queue_t;
+} Queue_t;
 
 /*-----------------------------------------------------------*/
-
-/*
- * The queue registry is just a means for kernel aware debuggers to locate
- * queue structures.  It has no other purpose so is an optional component.
- */
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-
-/* The type stored within the queue registry array.  This allows a name
- * to be assigned to each queue making kernel aware debugging a little
- * more user friendly. */
-    typedef struct QUEUE_REGISTRY_ITEM
-    {
-        const char * pcQueueName; /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-        QueueHandle_t xHandle;
-    } xQueueRegistryItem;
-
-/* The old xQueueRegistryItem name is maintained above then typedefed to the
- * new xQueueRegistryItem name below to enable the use of older kernel aware
- * debuggers. */
-    typedef xQueueRegistryItem QueueRegistryItem_t;
-
-/* The queue registry is simply an array of QueueRegistryItem_t structures.
- * The pcQueueName member of a structure being NULL is indicative of the
- * array position being vacant. */
-    QueueRegistryItem_t xQueueRegistry[ configQUEUE_REGISTRY_SIZE ];
-
-#endif /* configQUEUE_REGISTRY_SIZE */
 
 /*
  * Unlocks a queue locked by a call to prvLockQueue.  Locking a queue does not
@@ -1456,12 +1418,6 @@ void vQueueDelete( QueueHandle_t xQueue )
     configASSERT( pxQueue );
     traceQUEUE_DELETE( pxQueue );
 
-    #if ( configQUEUE_REGISTRY_SIZE > 0 )
-        {
-            vQueueUnregisterQueue( pxQueue );
-        }
-    #endif
-
     #if ( ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 0 ) )
         {
             /* The queue can only have been allocated dynamically - free it
@@ -1738,115 +1694,3 @@ BaseType_t xQueueIsQueueFullFromISR( const QueueHandle_t xQueue )
 
     return xReturn;
 } /*lint !e818 xQueue could not be pointer to const because it is a typedef. */
-/*-----------------------------------------------------------*/
-
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-
-    void vQueueAddToRegistry( QueueHandle_t xQueue,
-                              const char * pcQueueName ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-    {
-        UBaseType_t ux;
-
-        configASSERT( xQueue );
-
-        QueueRegistryItem_t * pxEntryToWrite = NULL;
-
-        if( pcQueueName != NULL )
-        {
-            /* See if there is an empty space in the registry.  A NULL name denotes
-             * a free slot. */
-            for( ux = ( UBaseType_t ) 0U; ux < ( UBaseType_t ) configQUEUE_REGISTRY_SIZE; ux++ )
-            {
-                /* Replace an existing entry if the queue is already in the registry. */
-                if( xQueue == xQueueRegistry[ ux ].xHandle )
-                {
-                    pxEntryToWrite = &( xQueueRegistry[ ux ] );
-                    break;
-                }
-                /* Otherwise, store in the next empty location */
-                else if( ( pxEntryToWrite == NULL ) && ( xQueueRegistry[ ux ].pcQueueName == NULL ) )
-                {
-                    pxEntryToWrite = &( xQueueRegistry[ ux ] );
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-        }
-
-        if( pxEntryToWrite != NULL )
-        {
-            /* Store the information on this queue. */
-            pxEntryToWrite->pcQueueName = pcQueueName;
-            pxEntryToWrite->xHandle = xQueue;
-
-            traceQUEUE_REGISTRY_ADD( xQueue, pcQueueName );
-        }
-    }
-
-#endif /* configQUEUE_REGISTRY_SIZE */
-/*-----------------------------------------------------------*/
-
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-
-    const char * pcQueueGetName( QueueHandle_t xQueue ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-    {
-        UBaseType_t ux;
-        const char * pcReturn = NULL; /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-
-        configASSERT( xQueue );
-
-        /* Note there is nothing here to protect against another task adding or
-         * removing entries from the registry while it is being searched. */
-
-        for( ux = ( UBaseType_t ) 0U; ux < ( UBaseType_t ) configQUEUE_REGISTRY_SIZE; ux++ )
-        {
-            if( xQueueRegistry[ ux ].xHandle == xQueue )
-            {
-                pcReturn = xQueueRegistry[ ux ].pcQueueName;
-                break;
-            }
-            else
-            {
-                mtCOVERAGE_TEST_MARKER();
-            }
-        }
-
-        return pcReturn;
-    } /*lint !e818 xQueue cannot be a pointer to const because it is a typedef. */
-
-#endif /* configQUEUE_REGISTRY_SIZE */
-/*-----------------------------------------------------------*/
-
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-
-    void vQueueUnregisterQueue( QueueHandle_t xQueue )
-    {
-        UBaseType_t ux;
-
-        configASSERT( xQueue );
-
-        /* See if the handle of the queue being unregistered in actually in the
-         * registry. */
-        for( ux = ( UBaseType_t ) 0U; ux < ( UBaseType_t ) configQUEUE_REGISTRY_SIZE; ux++ )
-        {
-            if( xQueueRegistry[ ux ].xHandle == xQueue )
-            {
-                /* Set the name to NULL to show that this slot if free again. */
-                xQueueRegistry[ ux ].pcQueueName = NULL;
-
-                /* Set the handle to NULL to ensure the same queue handle cannot
-                 * appear in the registry twice if it is added, removed, then
-                 * added again. */
-                xQueueRegistry[ ux ].xHandle = ( QueueHandle_t ) 0;
-                break;
-            }
-            else
-            {
-                mtCOVERAGE_TEST_MARKER();
-            }
-        }
-    } /*lint !e818 xQueue could not be pointer to const because it is a typedef. */
-
-#endif /* configQUEUE_REGISTRY_SIZE */

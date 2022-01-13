@@ -85,10 +85,6 @@
     #error configMAX_PRIORITIES must be defined to be greater than or equal to 1.
 #endif
 
-#ifndef configUSE_PREEMPTION
-    #error Missing definition:  configUSE_PREEMPTION must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
 #ifndef configUSE_16_BIT_TICKS
     #error Missing definition:  configUSE_16_BIT_TICKS must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
 #endif
@@ -119,10 +115,6 @@
 
 #ifndef configUSE_DAEMON_TASK_STARTUP_HOOK
     #define configUSE_DAEMON_TASK_STARTUP_HOOK    0
-#endif
-
-#ifndef configIDLE_SHOULD_YIELD
-    #define configIDLE_SHOULD_YIELD    1
 #endif
 
 #ifndef configASSERT
@@ -170,16 +162,6 @@
 
 #ifndef portSETUP_TCB
     #define portSETUP_TCB( pxTCB )    ( void ) pxTCB
-#endif
-
-#ifndef configQUEUE_REGISTRY_SIZE
-    #define configQUEUE_REGISTRY_SIZE    0U
-#endif
-
-#if ( configQUEUE_REGISTRY_SIZE < 1 )
-    #define vQueueAddToRegistry( xQueue, pcName )
-    #define vQueueUnregisterQueue( xQueue )
-    #define pcQueueGetName( xQueue )
 #endif
 
 #ifndef portPOINTER_SIZE_TYPE
@@ -634,10 +616,6 @@
 
 #ifndef portTASK_USES_FLOATING_POINT
     #define portTASK_USES_FLOATING_POINT()
-#endif
-
-#ifndef portALLOCATE_SECURE_CONTEXT
-    #define portALLOCATE_SECURE_CONTEXT( ulSecureStackSize )
 #endif
 
 #ifndef portDONT_DISCARD

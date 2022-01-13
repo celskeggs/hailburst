@@ -1483,66 +1483,6 @@ BaseType_t xQueueGiveMutexRecursive( QueueHandle_t xMutex );
 #define xQueueReset( xQueue )    xQueueGenericReset( xQueue, pdFALSE )
 
 /*
- * The registry is provided as a means for kernel aware debuggers to
- * locate queues, semaphores and mutexes.  Call vQueueAddToRegistry() add
- * a queue, semaphore or mutex handle to the registry if you want the handle
- * to be available to a kernel aware debugger.  If you are not using a kernel
- * aware debugger then this function can be ignored.
- *
- * configQUEUE_REGISTRY_SIZE defines the maximum number of handles the
- * registry can hold.  configQUEUE_REGISTRY_SIZE must be greater than 0
- * within FreeRTOSConfig.h for the registry to be available.  Its value
- * does not effect the number of queues, semaphores and mutexes that can be
- * created - just the number that the registry can hold.
- *
- * If vQueueAddToRegistry is called more than once with the same xQueue
- * parameter, the registry will store the pcQueueName parameter from the
- * most recent call to vQueueAddToRegistry.
- *
- * @param xQueue The handle of the queue being added to the registry.  This
- * is the handle returned by a call to xQueueCreate().  Semaphore and mutex
- * handles can also be passed in here.
- *
- * @param pcQueueName The name to be associated with the handle.  This is the
- * name that the kernel aware debugger will display.  The queue registry only
- * stores a pointer to the string - so the string must be persistent (global or
- * preferably in ROM/Flash), not on the stack.
- */
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-    void vQueueAddToRegistry( QueueHandle_t xQueue,
-                              const char * pcQueueName ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-#endif
-
-/*
- * The registry is provided as a means for kernel aware debuggers to
- * locate queues, semaphores and mutexes.  Call vQueueAddToRegistry() add
- * a queue, semaphore or mutex handle to the registry if you want the handle
- * to be available to a kernel aware debugger, and vQueueUnregisterQueue() to
- * remove the queue, semaphore or mutex from the register.  If you are not using
- * a kernel aware debugger then this function can be ignored.
- *
- * @param xQueue The handle of the queue being removed from the registry.
- */
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-    void vQueueUnregisterQueue( QueueHandle_t xQueue );
-#endif
-
-/*
- * The queue registry is provided as a means for kernel aware debuggers to
- * locate queues, semaphores and mutexes.  Call pcQueueGetName() to look
- * up and return the name of a queue in the queue registry from the queue's
- * handle.
- *
- * @param xQueue The handle of the queue the name of which will be returned.
- * @return If the queue is in the registry then a pointer to the name of the
- * queue is returned.  If the queue is not in the registry then NULL is
- * returned.
- */
-#if ( configQUEUE_REGISTRY_SIZE > 0 )
-    const char * pcQueueGetName( QueueHandle_t xQueue ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-#endif
-
-/*
  * Generic version of the function used to create a queue using dynamic memory
  * allocation.  This is called by other functions and macros that create other
  * RTOS objects that use the queue structure as their base.

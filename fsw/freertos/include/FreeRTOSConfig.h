@@ -5,17 +5,14 @@
 
 #include <fsw/debug.h> // for assert
 
-#define configUSE_PREEMPTION                    1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 // configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      1000
 #define configMAX_PRIORITIES                    6
 #define configMINIMAL_STACK_SIZE                512
 #define configUSE_16_BIT_TICKS                  0
-#define configIDLE_SHOULD_YIELD                 0
 #define configUSE_TASK_NOTIFICATIONS            1
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   1
-#define configQUEUE_REGISTRY_SIZE               0
 #define configUSE_TIME_SLICING                  1
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t

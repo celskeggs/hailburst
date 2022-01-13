@@ -107,12 +107,6 @@ interrupts that have a priority below configMAX_API_CALL_INTERRUPT_PRIORITY. */
 
 /*-----------------------------------------------------------*/
 
-/* Task function macros as described on the FreeRTOS.org WEB site.  These are
-not required for this port but included in case common demo code that uses these
-macros is used. */
-#define portTASK_FUNCTION_PROTO( vFunction, pvParameters )  void vFunction( void *pvParameters )
-#define portTASK_FUNCTION( vFunction, pvParameters )    void vFunction( void *pvParameters )
-
 /* Prototype of the FreeRTOS tick handler.  This must be installed as the
 handler for whichever peripheral is used to generate the RTOS tick. */
 void FreeRTOS_Tick_Handler( void );
