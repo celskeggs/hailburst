@@ -61,6 +61,23 @@ static inline void task_delay_abs(uint64_t deadline_ns) {
     assert(timer_now_ns() >= deadline_ns);
 }
 
+static inline void task_rouse(thread_t task) {
+    assert(task != NULL);
+    BaseType_t result = xTaskNotifyGive(task);
+    assert(result == pdPASS);
+}
+
+static inline void task_rouse_from_isr(thread_t task, BaseType_t *was_woken) {
+    assert(task != NULL && was_woken != NULL);
+    vTaskNotifyGiveFromISR(task, was_woken);
+}
+
+static inline void task_doze(void) {
+    BaseType_t value;
+    value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    assert(value != 0);
+}
+
 // TODO: more efficient semaphore preallocation approach
 #define SEMAPHORE_REGISTER(s_ident) \
     semaphore_t s_ident; \

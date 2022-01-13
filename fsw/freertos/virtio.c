@@ -207,9 +207,7 @@ void virtio_monitor_loop(void *opaque_device) {
         }
 
         // wait for event, which might either be from the chart or from the IRQ callback
-        BaseType_t value;
-        value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        assert(value != 0);
+        task_doze();
 
         // process event
 #ifdef DEBUG_VIRTQ
@@ -226,8 +224,7 @@ static void virtio_device_irq_callback(void *opaque_device) {
     BaseType_t was_woken = pdFALSE;
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
-        // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-        vTaskNotifyGiveFromISR(device->monitor_task, &was_woken);
+        task_rouse_from_isr(device->monitor_task, &was_woken);
     }
     device->mmio->interrupt_ack = status;
     portYIELD_FROM_ISR(was_woken);
@@ -238,9 +235,7 @@ static void virtio_device_chart_wakeup(void *opaque) {
     assert(device != NULL && device->initialized == true && device->monitor_task != NULL
              && device->monitor_started == true);
 
-    // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-    BaseType_t result = xTaskNotifyGive(device->monitor_task);
-    assert(result == pdPASS);
+    task_rouse(device->monitor_task);
 }
 
 void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction,
