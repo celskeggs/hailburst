@@ -21,30 +21,6 @@ void rmap_notify_wake(void *opaque) {
     (void) semaphore_give(rmap->wake_rmap);
 }
 
-void rmap_init(rmap_t *rmap, size_t max_read_length, size_t max_write_length, chart_t **rx_out, chart_t **tx_out) {
-    assert(rmap != NULL && rx_out != NULL && tx_out != NULL);
-    assert(max_read_length <= RMAP_MAX_DATA_LEN);
-    assert(max_write_length <= RMAP_MAX_DATA_LEN);
-
-    memset(rmap, 0, sizeof(rmap_t));
-
-    rmap->wake_rmap = malloc(sizeof(semaphore_t));
-    assert(rmap->wake_rmap != NULL);
-    *rx_out = rmap->rx_chart = malloc(sizeof(chart_t));
-    assert(*rx_out != NULL);
-    *tx_out = rmap->tx_chart = malloc(sizeof(chart_t));
-    assert(*tx_out != NULL);
-
-    semaphore_init(rmap->wake_rmap);
-
-    // 2 packets: so that the switch will let us force the first aside.
-    chart_init(rmap->tx_chart, io_rx_pad_size(SCRATCH_MARGIN_WRITE + max_write_length), 2);
-    chart_attach_client(rmap->tx_chart, rmap_notify_wake, rmap);
-    // 4 packets: so that if multiple packets arrive at once, we won't drop them.
-    chart_init(rmap->rx_chart, io_rx_pad_size(SCRATCH_MARGIN_READ + max_read_length), 2);
-    chart_attach_server(rmap->rx_chart, rmap_notify_wake, rmap);
-}
-
 static void rmap_cancel_active_work(rmap_t *rmap) {
     assert(rmap != NULL);
     if (rmap->current_routing != NULL) {

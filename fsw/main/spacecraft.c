@@ -98,6 +98,8 @@ static const fw_link_options_t exchange_options = {
 };
 FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_tx_chart);
 
+CLOCK_REGISTER(sc_clock, clock_routing, clock_rx, clock_tx);
+
 RADIO_REGISTER(sc_radio, radio_up_routing,   radio_up_rx,   radio_up_tx,   UPLINK_STREAM_CAPACITY,
                          radio_down_routing, radio_down_rx, radio_down_tx, DOWNLINK_STREAM_CAPACITY,
                          sc.uplink_stream,   sc.downlink_stream);
@@ -130,13 +132,12 @@ void spacecraft_init(void) {
     comm_enc_init(&sc.comm_encoder, &sc.downlink_stream);
     telemetry_init(&sc.comm_encoder);
 
+#ifdef CLOCK_EXISTS
     debugf(INFO, "Initializing clock...");
-    chart_t *clock_rx = NULL, *clock_tx = NULL;
-    clock_init(&clock_routing, &clock_rx, &clock_tx);
-    // we need to check, because the clock driver is only necessary on Linux right now, not on FreeRTOS.
-    if (clock_rx != NULL || clock_tx != NULL) {
-        switch_add_port(&fce_vswitch, VPORT_CLOCK, clock_tx, clock_rx);
-    }
+    switch_add_port(&fce_vswitch, VPORT_CLOCK, &clock_tx, &clock_rx);
+#else
+    (void) clock_routing;
+#endif /* CLOCK_EXISTS */
 
     debugf(INFO, "Attaching radio...");
     switch_add_port(&fce_vswitch, VPORT_RADIO_UP, &radio_up_tx, &radio_up_rx);

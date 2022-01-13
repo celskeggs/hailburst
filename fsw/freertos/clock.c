@@ -3,21 +3,13 @@
 #include <fsw/clock_init.h>
 #include <fsw/telemetry.h>
 
-static tlm_async_endpoint_t telemetry;
-
-void clock_init(const rmap_addr_t *address, chart_t **rx_out, chart_t **tx_out) {
-    (void) address;
-    *rx_out = NULL;
-    *tx_out = NULL;
-
-    tlm_async_init(&telemetry);
-}
+TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
 static void clock_start_main(void *opaque) {
     (void) opaque;
 
     // no adjustment needed on FreeRTOS.
-    tlm_clock_calibrated(&telemetry, 0);
+    tlm_clock_calibrated(&clock_telemetry, 0);
 
     // nothing left to do.
     task_suspend();
