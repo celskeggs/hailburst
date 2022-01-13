@@ -15,7 +15,7 @@
 #define configIDLE_SHOULD_YIELD                 0
 #define configUSE_TASK_NOTIFICATIONS            1
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   1
-#define configQUEUE_REGISTRY_SIZE               10
+#define configQUEUE_REGISTRY_SIZE               0
 #define configUSE_TIME_SLICING                  1
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
