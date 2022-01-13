@@ -227,7 +227,7 @@ static void virtio_device_irq_callback(void *opaque_device) {
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
         // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-        vTaskNotifyGiveFromISR(&device->monitor_task->tcb, &was_woken);
+        vTaskNotifyGiveFromISR(device->monitor_task, &was_woken);
     }
     device->mmio->interrupt_ack = status;
     portYIELD_FROM_ISR(was_woken);
@@ -239,7 +239,7 @@ static void virtio_device_chart_wakeup(void *opaque) {
              && device->monitor_started == true);
 
     // TODO: find a way to do this that doesn't involve accessing private fields of thread_t
-    BaseType_t result = xTaskNotifyGive(&device->monitor_task->tcb);
+    BaseType_t result = xTaskNotifyGive(device->monitor_task);
     assert(result == pdPASS);
 }
 

@@ -32,9 +32,9 @@ __attribute__((noreturn)) void task_suspend(void) {
 static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
 
-// also used in thread.c
-extern struct thread_st tasktable_start[];
-extern struct thread_st tasktable_end[];
+// also used in thread_registered_input
+extern TCB_t tasktable_start[];
+extern TCB_t tasktable_end[];
 
 static void restart_task_mainloop(void *opaque) {
     (void) opaque;
@@ -170,7 +170,7 @@ void task_abort_handler(unsigned int trap_mode) {
     restart_current_task();
 }
 
-void vApplicationStackOverflowHook(TaskHandle_t task, char *pcTaskName) {
+void vApplicationStackOverflowHook(TaskHandle_t task, const char *pcTaskName) {
     (void) task;
 
     uint64_t now = timer_now_ns();

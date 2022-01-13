@@ -98,9 +98,7 @@ context. */
 
 /* Constants required to setup the initial task context. */
 #define portINITIAL_SPSR                ( ( StackType_t ) 0x1f ) /* System mode, ARM mode, IRQ enabled FIQ enabled. */
-#define portTHUMB_MODE_BIT              ( ( StackType_t ) 0x20 )
 #define portINTERRUPT_ENABLE_BIT        ( 0x80UL )
-#define portTHUMB_MODE_ADDRESS          ( 0x01UL )
 
 /* Used by portASSERT_IF_INTERRUPT_PRIORITY_INVALID() when ensuring the binary
 point is zero. */
@@ -195,10 +193,13 @@ __attribute__(( used )) const uint32_t ulMaxAPIPriorityMask = ( configMAX_API_CA
 
 /*-----------------------------------------------------------*/
 
+// available in thread.c
+extern void task_entrypoint( TCB_t * task );
+
 /*
  * See header file for description.
  */
-StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t pxCode, void *pvParameters )
+StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB )
 {
     /* Setup the initial stack of the task.  The stack is set exactly as
     expected by the portRESTORE_CONTEXT() macro.
@@ -213,17 +214,10 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
     *pxTopOfStack = ( StackType_t ) NULL;
     pxTopOfStack--;
     *pxTopOfStack = ( StackType_t ) portINITIAL_SPSR;
-
-    if( ( ( uint32_t ) pxCode & portTHUMB_MODE_ADDRESS ) != 0x00UL )
-    {
-        /* The task will start in THUMB mode. */
-        *pxTopOfStack |= portTHUMB_MODE_BIT;
-    }
-
     pxTopOfStack--;
 
     /* Next the return address, which in this case is the start of the task. */
-    *pxTopOfStack = ( StackType_t ) pxCode;
+    *pxTopOfStack = ( StackType_t ) task_entrypoint;
     pxTopOfStack--;
 
     /* Next all the registers other than the stack pointer. */
@@ -253,7 +247,7 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TaskFunction_t px
     pxTopOfStack--;
     *pxTopOfStack = ( StackType_t ) 0x01010101; /* R1 */
     pxTopOfStack--;
-    *pxTopOfStack = ( StackType_t ) pvParameters; /* R0 */
+    *pxTopOfStack = ( StackType_t ) pxNewTCB; /* R0 */
     pxTopOfStack--;
 
     /* The task will start with a critical nesting count of 0 as interrupts are

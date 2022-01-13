@@ -334,17 +334,6 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
                                             const BaseType_t xCanBlockIndefinitely );
 
 /*
- * Searches pxList for a task with name pcNameToQuery - returning a handle to
- * the task if it is found, or NULL if the task is not found.
- */
-#if ( INCLUDE_xTaskGetHandle == 1 )
-
-    static TCB_t * prvSearchForNameWithinSingleList( List_t * pxList,
-                                                     const char pcNameToQuery[] );
-
-#endif
-
-/*
  * When a task is created, the stack of the task is filled with a known value.
  * This function determines the 'high water mark' of the task stack by
  * determining how much of the stack remains at the original preset value.
@@ -377,18 +366,6 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 static void prvResetNextTaskUnblockTime( void );
 
 /*
- * Called after a Task_t structure has been allocated either statically or
- * dynamically to fill in the structure's members.
- */
-static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
-                                  const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                                  const uint32_t ulStackDepth,
-                                  void * const pvParameters,
-                                  UBaseType_t uxPriority,
-                                  TaskHandle_t * const pxCreatedTask,
-                                  TCB_t * pxNewTCB );
-
-/*
  * Called after a new task has been created and initialised to place the task
  * under the control of the scheduler.
  */
@@ -396,103 +373,30 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB );
 
 /*-----------------------------------------------------------*/
 
-TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
-                                const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                                const uint32_t ulStackDepth,
-                                void * const pvParameters,
-                                UBaseType_t uxPriority,
-                                StackType_t * const puxStackBuffer,
-                                TCB_t * const pxTaskBuffer )
+// called from thread.c
+void thread_start_internal( TCB_t * pxNewTCB )
 {
-    TCB_t * pxNewTCB;
-    TaskHandle_t xReturn;
+    assert(pxNewTCB != NULL);
 
-    configASSERT( puxStackBuffer != NULL );
-    configASSERT( pxTaskBuffer != NULL );
-
-    /* The memory used for the task's TCB and stack are passed into this
-     * function - use them. */
-    pxNewTCB = pxTaskBuffer;
-    pxNewTCB->pxStack = ( StackType_t * ) puxStackBuffer;
-
-    prvInitialiseNewTask( pxTaskCode, pcName, ulStackDepth, pvParameters, uxPriority, &xReturn, pxNewTCB );
-    prvAddNewTaskToReadyList( pxNewTCB );
-
-    return xReturn;
-}
-
-/*-----------------------------------------------------------*/
-
-static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
-                                  const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                                  const uint32_t ulStackDepth,
-                                  void * const pvParameters,
-                                  UBaseType_t uxPriority,
-                                  TaskHandle_t * const pxCreatedTask,
-                                  TCB_t * pxNewTCB )
-{
     StackType_t * pxTopOfStack;
-    UBaseType_t x;
 
     /* Avoid dependency on memset() if it is not required. */
     #if ( tskSET_NEW_STACKS_TO_KNOWN_VALUE == 1 )
         {
             /* Fill the stack with a known value to assist debugging. */
-            ( void ) memset( pxNewTCB->pxStack, ( int ) tskSTACK_FILL_BYTE, ( size_t ) ulStackDepth * sizeof( StackType_t ) );
+            ( void ) memset( pxNewTCB->pxStack, ( int ) tskSTACK_FILL_BYTE, RTOS_STACK_SIZE * sizeof( StackType_t ) );
         }
     #endif /* tskSET_NEW_STACKS_TO_KNOWN_VALUE */
 
     /* Calculate the top of stack address. */
-    pxTopOfStack = &( pxNewTCB->pxStack[ ulStackDepth - ( uint32_t ) 1 ] );
+    pxTopOfStack = &( pxNewTCB->pxStack[ RTOS_STACK_SIZE - ( uint32_t ) 1 ] );
     pxTopOfStack = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) ); /*lint !e923 !e9033 !e9078 MISRA exception.  Avoiding casts between pointers and integers is not practical.  Size differences accounted for using portPOINTER_SIZE_TYPE type.  Checked by assert(). */
 
     /* Check the alignment of the calculated top of stack is correct. */
     configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
 
-    /* Store the task name in the TCB. */
-    if( pcName != NULL )
-    {
-        for( x = ( UBaseType_t ) 0; x < ( UBaseType_t ) configMAX_TASK_NAME_LEN; x++ )
-        {
-            pxNewTCB->pcTaskName[ x ] = pcName[ x ];
-
-            /* Don't copy all configMAX_TASK_NAME_LEN if the string is shorter than
-             * configMAX_TASK_NAME_LEN characters just in case the memory after the
-             * string is not accessible (extremely unlikely). */
-            if( pcName[ x ] == ( char ) 0x00 )
-            {
-                break;
-            }
-            else
-            {
-                mtCOVERAGE_TEST_MARKER();
-            }
-        }
-
-        /* Ensure the name string is terminated in the case that the string length
-         * was greater or equal to configMAX_TASK_NAME_LEN. */
-        pxNewTCB->pcTaskName[ configMAX_TASK_NAME_LEN - 1 ] = '\0';
-    }
-    else
-    {
-        /* The task has not been given a name, so just ensure there is a NULL
-         * terminator when it is read out. */
-        pxNewTCB->pcTaskName[ 0 ] = 0x00;
-    }
-
     /* This is used as an array index so must ensure it's not too large. */
-    configASSERT( uxPriority < configMAX_PRIORITIES );
-
-    if( uxPriority >= ( UBaseType_t ) configMAX_PRIORITIES )
-    {
-        uxPriority = ( UBaseType_t ) configMAX_PRIORITIES - ( UBaseType_t ) 1U;
-    }
-    else
-    {
-        mtCOVERAGE_TEST_MARKER();
-    }
-
-    pxNewTCB->uxPriority = uxPriority;
+    configASSERT( pxNewTCB->uxPriority < configMAX_PRIORITIES );
 
     vListInitialiseItem( &( pxNewTCB->xStateListItem ) );
     vListInitialiseItem( &( pxNewTCB->xEventListItem ) );
@@ -502,7 +406,7 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
     listSET_LIST_ITEM_OWNER( &( pxNewTCB->xStateListItem ), pxNewTCB );
 
     /* Event lists are always in priority order. */
-    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) uxPriority ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
+    listSET_LIST_ITEM_VALUE( &( pxNewTCB->xEventListItem ), ( TickType_t ) configMAX_PRIORITIES - ( TickType_t ) pxNewTCB->uxPriority ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
     listSET_LIST_ITEM_OWNER( &( pxNewTCB->xEventListItem ), pxNewTCB );
 
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
@@ -516,29 +420,9 @@ static void prvInitialiseNewTask( TaskFunction_t pxTaskCode,
      * but had been interrupted by the scheduler.  The return address is set
      * to the start of the task function. Once the stack has been initialised
      * the top of stack variable is updated. */
-    /* If the port has capability to detect stack overflow,
-     * pass the stack end address to the stack initialization
-     * function as well. */
-    #if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
-        {
-            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB->pxStack, pxTaskCode, pvParameters );
-        }
-    #else /* portHAS_STACK_OVERFLOW_CHECKING */
-        {
-            pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxTaskCode, pvParameters );
-        }
-    #endif /* portHAS_STACK_OVERFLOW_CHECKING */
+    pxNewTCB->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
 
-    if( pxCreatedTask != NULL )
-    {
-        /* Pass the handle out in an anonymous way.  The handle can be used to
-         * change the created task's priority, delete the created task, etc.*/
-        *pxCreatedTask = ( TaskHandle_t ) pxNewTCB;
-    }
-    else
-    {
-        mtCOVERAGE_TEST_MARKER();
-    }
+    prvAddNewTaskToReadyList(pxNewTCB);
 }
 /*-----------------------------------------------------------*/
 
@@ -1675,7 +1559,7 @@ UBaseType_t uxTaskGetNumberOfTasks( void )
 }
 /*-----------------------------------------------------------*/
 
-char * pcTaskGetName( TaskHandle_t xTaskToQuery ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
+const char * pcTaskGetName( TaskHandle_t xTaskToQuery ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
 {
     TCB_t * pxTCB;
 
@@ -1686,152 +1570,6 @@ char * pcTaskGetName( TaskHandle_t xTaskToQuery ) /*lint !e971 Unqualified char 
     return &( pxTCB->pcTaskName[ 0 ] );
 }
 /*-----------------------------------------------------------*/
-
-#if ( INCLUDE_xTaskGetHandle == 1 )
-
-    static TCB_t * prvSearchForNameWithinSingleList( List_t * pxList,
-                                                     const char pcNameToQuery[] )
-    {
-        TCB_t * pxNextTCB, * pxFirstTCB, * pxReturn = NULL;
-        UBaseType_t x;
-        char cNextChar;
-        BaseType_t xBreakLoop;
-
-        /* This function is called with the scheduler suspended. */
-
-        if( listCURRENT_LIST_LENGTH( pxList ) > ( UBaseType_t ) 0 )
-        {
-            listGET_OWNER_OF_NEXT_ENTRY( pxFirstTCB, pxList ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-
-            do
-            {
-                listGET_OWNER_OF_NEXT_ENTRY( pxNextTCB, pxList ); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
-
-                /* Check each character in the name looking for a match or
-                 * mismatch. */
-                xBreakLoop = pdFALSE;
-
-                for( x = ( UBaseType_t ) 0; x < ( UBaseType_t ) configMAX_TASK_NAME_LEN; x++ )
-                {
-                    cNextChar = pxNextTCB->pcTaskName[ x ];
-
-                    if( cNextChar != pcNameToQuery[ x ] )
-                    {
-                        /* Characters didn't match. */
-                        xBreakLoop = pdTRUE;
-                    }
-                    else if( cNextChar == ( char ) 0x00 )
-                    {
-                        /* Both strings terminated, a match must have been
-                         * found. */
-                        pxReturn = pxNextTCB;
-                        xBreakLoop = pdTRUE;
-                    }
-                    else
-                    {
-                        mtCOVERAGE_TEST_MARKER();
-                    }
-
-                    if( xBreakLoop != pdFALSE )
-                    {
-                        break;
-                    }
-                }
-
-                if( pxReturn != NULL )
-                {
-                    /* The handle has been found. */
-                    break;
-                }
-            } while( pxNextTCB != pxFirstTCB );
-        }
-        else
-        {
-            mtCOVERAGE_TEST_MARKER();
-        }
-
-        return pxReturn;
-    }
-
-#endif /* INCLUDE_xTaskGetHandle */
-/*-----------------------------------------------------------*/
-
-#if ( INCLUDE_xTaskGetHandle == 1 )
-
-    TaskHandle_t xTaskGetHandle( const char * pcNameToQuery ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-    {
-        UBaseType_t uxQueue = configMAX_PRIORITIES;
-        TCB_t * pxTCB;
-
-        /* Task names will be truncated to configMAX_TASK_NAME_LEN - 1 bytes. */
-        configASSERT( strlen( pcNameToQuery ) < configMAX_TASK_NAME_LEN );
-
-        vTaskSuspendAll();
-        {
-            /* Search the ready lists. */
-            do
-            {
-                uxQueue--;
-                pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) &( pxReadyTasksLists[ uxQueue ] ), pcNameToQuery );
-
-                if( pxTCB != NULL )
-                {
-                    /* Found the handle. */
-                    break;
-                }
-            } while( uxQueue > ( UBaseType_t ) tskIDLE_PRIORITY ); /*lint !e961 MISRA exception as the casts are only redundant for some ports. */
-
-            /* Search the delayed lists. */
-            if( pxTCB == NULL )
-            {
-                pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) pxDelayedTaskList, pcNameToQuery );
-            }
-
-            if( pxTCB == NULL )
-            {
-                pxTCB = prvSearchForNameWithinSingleList( ( List_t * ) pxOverflowDelayedTaskList, pcNameToQuery );
-            }
-
-            #if ( INCLUDE_vTaskSuspend == 1 )
-                {
-                    if( pxTCB == NULL )
-                    {
-                        /* Search the suspended list. */
-                        pxTCB = prvSearchForNameWithinSingleList( &xSuspendedTaskList, pcNameToQuery );
-                    }
-                }
-            #endif
-
-            #if ( INCLUDE_vTaskDelete == 1 )
-                {
-                    if( pxTCB == NULL )
-                    {
-                        /* Search the deleted list. */
-                        pxTCB = prvSearchForNameWithinSingleList( &xTasksWaitingTermination, pcNameToQuery );
-                    }
-                }
-            #endif
-        }
-        ( void ) xTaskResumeAll();
-
-        return pxTCB;
-    }
-
-#endif /* INCLUDE_xTaskGetHandle */
-/*-----------------------------------------------------------*/
-
-#if ( INCLUDE_xTaskGetIdleTaskHandle == 1 )
-
-    TaskHandle_t xTaskGetIdleTaskHandle( void )
-    {
-        /* If xTaskGetIdleTaskHandle() is called before the scheduler has been
-         * started, then xIdleTaskHandle will be NULL. */
-        configASSERT( ( xIdleTaskHandle != NULL ) );
-        return xIdleTaskHandle;
-    }
-
-#endif /* INCLUDE_xTaskGetIdleTaskHandle */
-/*----------------------------------------------------------*/
 
 /* This conditional compilation should use inequality to 0, not equality to 1.
  * This is to ensure vTaskStepTick() is available when user defined low power mode

@@ -4,6 +4,8 @@ PHDRS
     data PT_LOAD; /* read-and-write */
 }
 
+FORCE_COMMON_ALLOCATION;
+
 SECTIONS
 {
     /* use invalid start location, because this will be relocated later */

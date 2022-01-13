@@ -73,6 +73,13 @@
  */
 typedef BaseType_t (* TaskHookFunction_t)( void * );
 
+#define RTOS_STACK_SIZE ( 1000 )
+
+typedef enum {
+    NOT_RESTARTABLE = 0,
+    RESTARTABLE,
+} restartable_t;
+
 /**
  * task. h
  *
@@ -80,15 +87,21 @@ typedef BaseType_t (* TaskHookFunction_t)( void * );
  * and stores task state information, including a pointer to the task's context
  * (the task's run time environment, including register values)
  */
-typedef struct
+typedef struct TCB_st
 {
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
 
+    void (*start_routine)(void*);
+    void *start_arg;
+    restartable_t restartable;
+    bool needs_restart;
+    bool hit_restart;
+
     ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
     ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
-    UBaseType_t uxPriority;                     /*< The priority of the task.  0 is the lowest priority. */
-    StackType_t * pxStack;                      /*< Points to the start of the stack. */
-    char pcTaskName[ configMAX_TASK_NAME_LEN ]; /*< Descriptive name given to the task when created.  Facilitates debugging only. */ /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
+    const UBaseType_t uxPriority;               /*< The priority of the task.  0 is the lowest priority. */
+    StackType_t * pxStack;                      /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
+    const char * pcTaskName;                    /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
@@ -235,124 +248,6 @@ typedef enum
 /*-----------------------------------------------------------
 * TASK CREATION API
 *----------------------------------------------------------*/
-
-/**
- * task. h
- * @code{c}
- * TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
- *                               const char *pcName,
- *                               uint32_t ulStackDepth,
- *                               void *pvParameters,
- *                               UBaseType_t uxPriority,
- *                               StackType_t *puxStackBuffer,
- *                               TCB_t *pxTaskBuffer );
- * @endcode
- *
- * Create a new task and add it to the list of tasks that are ready to run.
- *
- * Internally, within the FreeRTOS implementation, tasks use two blocks of
- * memory.  The first block is used to hold the task's data structures.  The
- * second block is used by the task as its stack.  If a task is created using
- * xTaskCreate() then both blocks of memory are automatically dynamically
- * allocated inside the xTaskCreate() function.  (see
- * https://www.FreeRTOS.org/a00111.html).  If a task is created using
- * xTaskCreateStatic() then the application writer must provide the required
- * memory.  xTaskCreateStatic() therefore allows a task to be created without
- * using any dynamic memory allocation.
- *
- * @param pxTaskCode Pointer to the task entry function.  Tasks
- * must be implemented to never return (i.e. continuous loop).
- *
- * @param pcName A descriptive name for the task.  This is mainly used to
- * facilitate debugging.  The maximum length of the string is defined by
- * configMAX_TASK_NAME_LEN in FreeRTOSConfig.h.
- *
- * @param ulStackDepth The size of the task stack specified as the number of
- * variables the stack can hold - not the number of bytes.  For example, if
- * the stack is 32-bits wide and ulStackDepth is defined as 100 then 400 bytes
- * will be allocated for stack storage.
- *
- * @param pvParameters Pointer that will be used as the parameter for the task
- * being created.
- *
- * @param uxPriority The priority at which the task will run.
- *
- * @param puxStackBuffer Must point to a StackType_t array that has at least
- * ulStackDepth indexes - the array will then be used as the task's stack,
- * removing the need for the stack to be allocated dynamically.
- *
- * @param pxTaskBuffer Must point to a variable of type TCB_t, which will
- * then be used to hold the task's data structures, removing the need for the
- * memory to be allocated dynamically.
- *
- * @return If neither puxStackBuffer nor pxTaskBuffer are NULL, then the task
- * will be created and a handle to the created task is returned.  If either
- * puxStackBuffer or pxTaskBuffer are NULL then the task will not be created and
- * NULL is returned.
- *
- * Example usage:
- * @code{c}
- *
- *  // Dimensions of the buffer that the task being created will use as its stack.
- *  // NOTE:  This is the number of words the stack will hold, not the number of
- *  // bytes.  For example, if each stack item is 32-bits, and this is set to 100,
- *  // then 400 bytes (100 * 32-bits) will be allocated.
- #define STACK_SIZE 200
- *
- *  // Structure that will hold the TCB of the task being created.
- *  TCB_t xTaskBuffer;
- *
- *  // Buffer that the task being created will use as its stack.  Note this is
- *  // an array of StackType_t variables.  The size of StackType_t is dependent on
- *  // the RTOS port.
- *  StackType_t xStack[ STACK_SIZE ];
- *
- *  // Function that implements the task being created.
- *  void vTaskCode( void * pvParameters )
- *  {
- *      // The parameter value is expected to be 1 as 1 is passed in the
- *      // pvParameters value in the call to xTaskCreateStatic().
- *      configASSERT( ( uint32_t ) pvParameters == 1UL );
- *
- *      for( ;; )
- *      {
- *          // Task code goes here.
- *      }
- *  }
- *
- *  // Function that creates a task.
- *  void vOtherFunction( void )
- *  {
- *      TaskHandle_t xHandle = NULL;
- *
- *      // Create the task without using any dynamic memory allocation.
- *      xHandle = xTaskCreateStatic(
- *                    vTaskCode,       // Function that implements the task.
- *                    "NAME",          // Text name for the task.
- *                    STACK_SIZE,      // Stack size in words, not bytes.
- *                    ( void * ) 1,    // Parameter passed into the task.
- *                    tskIDLE_PRIORITY,// Priority at which the task is created.
- *                    xStack,          // Array to use as the task's stack.
- *                    &xTaskBuffer );  // Variable to hold the task's data structure.
- *
- *      // puxStackBuffer and pxTaskBuffer were not NULL, so the task will have
- *      // been created, and xHandle will be the task's handle.  Use the handle
- *      // to suspend the task.
- *      vTaskSuspend( xHandle );
- *  }
- * @endcode
- * \defgroup xTaskCreateStatic xTaskCreateStatic
- * \ingroup Tasks
- */
-#if ( configSUPPORT_STATIC_ALLOCATION == 1 )
-    TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode,
-                                    const char * const pcName, /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-                                    const uint32_t ulStackDepth,
-                                    void * const pvParameters,
-                                    UBaseType_t uxPriority,
-                                    StackType_t * const puxStackBuffer,
-                                    TCB_t * const pxTaskBuffer );
-#endif /* configSUPPORT_STATIC_ALLOCATION */
 
 /**
  * task. h
@@ -1104,7 +999,7 @@ UBaseType_t uxTaskGetNumberOfTasks( void );
 /**
  * task. h
  * @code{c}
- * char *pcTaskGetName( TaskHandle_t xTaskToQuery );
+ * const char *pcTaskGetName( TaskHandle_t xTaskToQuery );
  * @endcode
  *
  * @return The text (human readable) name of the task referenced by the handle
@@ -1114,25 +1009,7 @@ UBaseType_t uxTaskGetNumberOfTasks( void );
  * \defgroup pcTaskGetName pcTaskGetName
  * \ingroup TaskUtils
  */
-char * pcTaskGetName( TaskHandle_t xTaskToQuery ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-
-/**
- * task. h
- * @code{c}
- * TaskHandle_t xTaskGetHandle( const char *pcNameToQuery );
- * @endcode
- *
- * NOTE:  This function takes a relatively long time to complete and should be
- * used sparingly.
- *
- * @return The handle of the task that has the human readable name pcNameToQuery.
- * NULL is returned if no matching name is found.  INCLUDE_xTaskGetHandle
- * must be set to 1 in FreeRTOSConfig.h for pcTaskGetHandle() to be available.
- *
- * \defgroup pcTaskGetHandle pcTaskGetHandle
- * \ingroup TaskUtils
- */
-TaskHandle_t xTaskGetHandle( const char * pcNameToQuery ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
+const char * pcTaskGetName( TaskHandle_t xTaskToQuery );
 
 /**
  * task.h
@@ -1197,7 +1074,7 @@ configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
 /**
  * task.h
  * @code{c}
- * void vApplicationStackOverflowHook( TaskHandle_t xTask char *pcTaskName);
+ * void vApplicationStackOverflowHook( TaskHandle_t xTask, const char *pcTaskName);
  * @endcode
  *
  * The application stack overflow hook is called when a stack overflow is detected for a task.
@@ -1208,7 +1085,7 @@ configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
  * @param pcTaskName A character string containing the name of the offending task.
  */
     void vApplicationStackOverflowHook( TaskHandle_t xTask,
-                                        char * pcTaskName );
+                                        const char * pcTaskName );
 
 #endif
 
@@ -1241,15 +1118,6 @@ configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
  */
 BaseType_t xTaskCallApplicationTaskHook( TaskHandle_t xTask,
                                          void * pvParameter );
-
-/**
- * xTaskGetIdleTaskHandle() is only available if
- * INCLUDE_xTaskGetIdleTaskHandle is set to 1 in FreeRTOSConfig.h.
- *
- * Simply returns the handle of the idle task.  It is not valid to call
- * xTaskGetIdleTaskHandle() before the scheduler has been started.
- */
-TaskHandle_t xTaskGetIdleTaskHandle( void );
 
 /**
  * task. h

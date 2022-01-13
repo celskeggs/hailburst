@@ -12,7 +12,6 @@
 #define configTICK_RATE_HZ                      1000
 #define configMAX_PRIORITIES                    6
 #define configMINIMAL_STACK_SIZE                512
-#define configMAX_TASK_NAME_LEN                 16
 #define configUSE_16_BIT_TICKS                  0
 #define configIDLE_SHOULD_YIELD                 0
 #define configUSE_TASK_NOTIFICATIONS            1
@@ -91,11 +90,9 @@ extern void vConfigureTickInterrupt(void);
 #define INCLUDE_xTaskGetSchedulerState          1
 #define INCLUDE_xTaskGetCurrentTaskHandle       1
 #define INCLUDE_uxTaskGetStackHighWaterMark     0
-#define INCLUDE_xTaskGetIdleTaskHandle          0
 #define INCLUDE_eTaskGetState                   0
 #define INCLUDE_xEventGroupSetBitFromISR        0
 #define INCLUDE_xTimerPendFunctionCall          0
-#define INCLUDE_xTaskGetHandle                  0
 #define INCLUDE_xTaskResumeFromISR              0
 
 /* A header file that defines trace macro can be included here. */

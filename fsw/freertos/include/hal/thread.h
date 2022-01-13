@@ -11,48 +11,34 @@
 #include <rtos/timer.h>
 #include <fsw/debug.h>
 
-enum {
-    STACK_SIZE = 1000,
-};
-
-typedef enum {
-    NOT_RESTARTABLE = 0,
-    RESTARTABLE,
-} restartable_t;
-
-typedef struct thread_st {
-    const char         *name;
-    int                 priority;
-    void              (*start_routine)(void*);
-    void               *arg;
-    restartable_t       restartable;
-    bool                needs_restart;
-    bool                hit_restart;
-    TCB_t               tcb;
-    StackType_t         preallocated_stack[STACK_SIZE];
-} *thread_t;
+typedef TCB_t *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
 
 // TODO: make the entrypoint parameter strongly typed like PROGRAM_INIT_PARAM
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
-    static_assert(t_priority < configMAX_PRIORITIES, "invalid priority"); \
-    __attribute__((section(".tasktable"))) struct thread_st t_ident = {   \
-        .name          = t_name,        \
-        .priority      = t_priority,    \
-        .start_routine = t_start,       \
-        .arg           = t_arg,         \
-        .restartable   = t_restartable, \
-        .needs_restart = false,         \
-        .hit_restart   = false,         \
-        /* no need for anything for preallocated_ fields */   \
+    static_assert(t_priority < configMAX_PRIORITIES, "invalid priority");         \
+    StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
+    __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
+        .pxTopOfStack    = NULL,              \
+        .start_routine   = t_start,           \
+        .start_arg       = t_arg,             \
+        .restartable     = t_restartable,     \
+        .needs_restart   = false,             \
+        .hit_restart     = false,             \
+        /* no init for lists here */          \
+        .uxPriority      = t_priority,        \
+        .pxStack         = t_ident ## _stack, \
+        .pcTaskName      = t_name,            \
+        .ulNotifiedValue = { 0 },             \
+        .ucNotifyState   = { 0 },             \
     }
+
+// TODO: fix write to uxPriority
 
 static inline thread_t task_get_current(void) {
     TaskHandle_t handle = xTaskGetCurrentTaskHandle();
     assert(handle != NULL);
-    thread_t task = (thread_t) ((uint8_t *) handle - offsetof(struct thread_st, tcb));
-    assert(task != NULL && &task->tcb == handle);
-    return task;
+    return handle;
 }
 
 void task_suspend(void) __attribute__((noreturn));

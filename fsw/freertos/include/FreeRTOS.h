@@ -35,6 +35,7 @@
  * Include the generic headers required for the FreeRTOS port being used.
  */
 #include <stddef.h>
+#include <stdbool.h>
 
 /*
  * If stdint.h cannot be located then:
@@ -150,20 +151,12 @@
     #define INCLUDE_vTaskDelay    0
 #endif
 
-#ifndef INCLUDE_xTaskGetIdleTaskHandle
-    #define INCLUDE_xTaskGetIdleTaskHandle    0
-#endif
-
 #ifndef INCLUDE_xQueueGetMutexHolder
     #define INCLUDE_xQueueGetMutexHolder    0
 #endif
 
 #ifndef INCLUDE_xSemaphoreGetMutexHolder
     #define INCLUDE_xSemaphoreGetMutexHolder    INCLUDE_xQueueGetMutexHolder
-#endif
-
-#ifndef INCLUDE_xTaskGetHandle
-    #define INCLUDE_xTaskGetHandle    0
 #endif
 
 #ifndef INCLUDE_uxTaskGetStackHighWaterMark
@@ -216,16 +209,8 @@
     #define configUSE_ALTERNATIVE_API    0
 #endif
 
-#ifndef configMAX_TASK_NAME_LEN
-    #define configMAX_TASK_NAME_LEN    16
-#endif
-
 #ifndef configIDLE_SHOULD_YIELD
     #define configIDLE_SHOULD_YIELD    1
-#endif
-
-#if configMAX_TASK_NAME_LEN < 1
-    #error configMAX_TASK_NAME_LEN must be set to a minimum of 1 in FreeRTOSConfig.h
 #endif
 
 #ifndef configASSERT

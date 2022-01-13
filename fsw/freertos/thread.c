@@ -12,8 +12,7 @@ extern void prvIdleTask(void *pvParameters);
 
 TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, prvIdleTask, NULL, RESTARTABLE);
 
-static void thread_entrypoint(void *opaque) {
-    thread_t state = (thread_t) opaque;
+void task_entrypoint(TCB_t * state) {
 
     if (state->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
@@ -22,38 +21,34 @@ static void thread_entrypoint(void *opaque) {
 
     task_clear_crash();
 
-    state->start_routine(state->arg);
+    state->start_routine(state->start_arg);
 
     restartf("Task main loop unexpectedly returned.");
 }
 
-static void thread_start_internal(thread_t state) {
-    TaskHandle_t handle = xTaskCreateStatic(thread_entrypoint, state->name, STACK_SIZE, state, state->priority,
-                                      state->preallocated_stack, &state->tcb);
-    assert(handle != NULL && handle == &state->tcb);
-}
+extern void thread_start_internal(thread_t state);
 
 void thread_restart_other_task(thread_t state) {
     assert(state != NULL);
     assert(state->restartable == RESTARTABLE);
-    assert(&state->tcb != xTaskGetCurrentTaskHandle());
+    assert(state != xTaskGetCurrentTaskHandle());
 
-    debugf(WARNING, "Restarting task '%s'", state->name);
+    debugf(WARNING, "Restarting task '%s'", state->pcTaskName);
 
     // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
     // the TaskHandle could refer to undefined memory.
     taskENTER_CRITICAL();
-    vTaskDelete(&state->tcb);
+    vTaskDelete(state);
     state->hit_restart = true;
     thread_start_internal(state);
     taskEXIT_CRITICAL();
 
-    debugf(WARNING, "Completed restart for task '%s'", state->name);
+    debugf(WARNING, "Completed restart for task '%s'", state->pcTaskName);
 }
 
 // also used in restart_task_mainloop
-extern struct thread_st tasktable_start[];
-extern struct thread_st tasktable_end[];
+extern TCB_t tasktable_start[];
+extern TCB_t tasktable_end[];
 
 static void thread_registered_init(void) {
     debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);

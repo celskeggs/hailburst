@@ -63,10 +63,6 @@
     #define portNUM_CONFIGURABLE_REGIONS    1
 #endif
 
-#ifndef portHAS_STACK_OVERFLOW_CHECKING
-    #define portHAS_STACK_OVERFLOW_CHECKING    0
-#endif
-
 #ifndef portARCH_NAME
     #define portARCH_NAME    NULL
 #endif
@@ -88,16 +84,9 @@
  * the order that the port expects to find them.
  *
  */
-#if ( portHAS_STACK_OVERFLOW_CHECKING == 1 )
-    StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                         StackType_t * pxEndOfStack,
-                                         TaskFunction_t pxCode,
-                                         void * pvParameters );
-#else
-    StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                         TaskFunction_t pxCode,
-                                         void * pvParameters );
-#endif
+typedef struct TCB_st TCB_t;
+StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
+                                     TCB_t * pxNewTCB );
 
 /* Used by heap_5.c to define the start address and size of each memory region
  * that together comprise the total FreeRTOS heap space. */
@@ -145,7 +134,6 @@ void * pvPortMalloc( size_t xSize );
 void vPortFree( void * pv );
 void vPortInitialiseBlocks( void );
 size_t xPortGetFreeHeapSize( void );
-size_t xPortGetMinimumEverFreeHeapSize( void );
 
 #if ( configSTACK_ALLOCATION_FROM_SEPARATE_HEAP == 1 )
     void * pvPortMallocStack( size_t xSize );
