@@ -116,11 +116,6 @@ typedef struct QueueDefinition /* The old naming convention is used to prevent b
     #if ( configUSE_QUEUE_SETS == 1 )
         struct QueueDefinition * pxQueueSetContainer;
     #endif
-
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxQueueNumber;
-        uint8_t ucQueueType;
-    #endif
 } xQUEUE;
 
 /* The old xQUEUE name is maintained above then typedefed to the new Queue_t
@@ -213,26 +208,6 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
                                    const uint8_t ucQueueType,
                                    Queue_t * pxNewQueue );
 
-/*
- * Mutexes are a special type of queue.  When a mutex is created, first the
- * queue is created, then prvInitialiseMutex() is called to configure the queue
- * as a mutex.
- */
-#if ( configUSE_MUTEXES == 1 )
-    static void prvInitialiseMutex( Queue_t * pxNewQueue );
-#endif
-
-#if ( configUSE_MUTEXES == 1 )
-
-/*
- * If a task waiting for a mutex causes the mutex holder to inherit a
- * priority, but the waiting task times out, then the holder should
- * disinherit the priority - but only down to the highest priority of any
- * other tasks that are waiting for the same mutex.  This function returns
- * that priority.
- */
-    static UBaseType_t prvGetDisinheritPriorityAfterTimeout( const Queue_t * const pxQueue );
-#endif
 /*-----------------------------------------------------------*/
 
 /*
@@ -482,12 +457,6 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
     pxNewQueue->uxItemSize = uxItemSize;
     ( void ) xQueueGenericReset( pxNewQueue, pdTRUE );
 
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        {
-            pxNewQueue->ucQueueType = ucQueueType;
-        }
-    #endif /* configUSE_TRACE_FACILITY */
-
     #if ( configUSE_QUEUE_SETS == 1 )
         {
             pxNewQueue->pxQueueSetContainer = NULL;
@@ -496,230 +465,6 @@ static void prvInitialiseNewQueue( const UBaseType_t uxQueueLength,
 
     traceQUEUE_CREATE( pxNewQueue );
 }
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_MUTEXES == 1 )
-
-    static void prvInitialiseMutex( Queue_t * pxNewQueue )
-    {
-        if( pxNewQueue != NULL )
-        {
-            /* The queue create function will set all the queue structure members
-            * correctly for a generic queue, but this function is creating a
-            * mutex.  Overwrite those members that need to be set differently -
-            * in particular the information required for priority inheritance. */
-            pxNewQueue->u.xSemaphore.xMutexHolder = NULL;
-            pxNewQueue->uxQueueType = queueQUEUE_IS_MUTEX;
-
-            /* In case this is a recursive mutex. */
-            pxNewQueue->u.xSemaphore.uxRecursiveCallCount = 0;
-
-            traceCREATE_MUTEX( pxNewQueue );
-
-            /* Start with the semaphore in the expected state. */
-            ( void ) xQueueGenericSend( pxNewQueue, NULL, ( TickType_t ) 0U, queueSEND_TO_BACK );
-        }
-        else
-        {
-            traceCREATE_MUTEX_FAILED();
-        }
-    }
-
-#endif /* configUSE_MUTEXES */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_MUTEXES == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-
-    QueueHandle_t xQueueCreateMutex( const uint8_t ucQueueType )
-    {
-        QueueHandle_t xNewQueue;
-        const UBaseType_t uxMutexLength = ( UBaseType_t ) 1, uxMutexSize = ( UBaseType_t ) 0;
-
-        xNewQueue = xQueueGenericCreate( uxMutexLength, uxMutexSize, ucQueueType );
-        prvInitialiseMutex( ( Queue_t * ) xNewQueue );
-
-        return xNewQueue;
-    }
-
-#endif /* configUSE_MUTEXES */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_MUTEXES == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) )
-
-    QueueHandle_t xQueueCreateMutexStatic( const uint8_t ucQueueType,
-                                           StaticQueue_t * pxStaticQueue )
-    {
-        QueueHandle_t xNewQueue;
-        const UBaseType_t uxMutexLength = ( UBaseType_t ) 1, uxMutexSize = ( UBaseType_t ) 0;
-
-        /* Prevent compiler warnings about unused parameters if
-         * configUSE_TRACE_FACILITY does not equal 1. */
-        ( void ) ucQueueType;
-
-        xNewQueue = xQueueGenericCreateStatic( uxMutexLength, uxMutexSize, NULL, pxStaticQueue, ucQueueType );
-        prvInitialiseMutex( ( Queue_t * ) xNewQueue );
-
-        return xNewQueue;
-    }
-
-#endif /* configUSE_MUTEXES */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_MUTEXES == 1 ) && ( INCLUDE_xSemaphoreGetMutexHolder == 1 ) )
-
-    TaskHandle_t xQueueGetMutexHolder( QueueHandle_t xSemaphore )
-    {
-        TaskHandle_t pxReturn;
-        Queue_t * const pxSemaphore = ( Queue_t * ) xSemaphore;
-
-        configASSERT( xSemaphore );
-
-        /* This function is called by xSemaphoreGetMutexHolder(), and should not
-         * be called directly.  Note:  This is a good way of determining if the
-         * calling task is the mutex holder, but not a good way of determining the
-         * identity of the mutex holder, as the holder may change between the
-         * following critical section exiting and the function returning. */
-        taskENTER_CRITICAL();
-        {
-            if( pxSemaphore->uxQueueType == queueQUEUE_IS_MUTEX )
-            {
-                pxReturn = pxSemaphore->u.xSemaphore.xMutexHolder;
-            }
-            else
-            {
-                pxReturn = NULL;
-            }
-        }
-        taskEXIT_CRITICAL();
-
-        return pxReturn;
-    } /*lint !e818 xSemaphore cannot be a pointer to const because it is a typedef. */
-
-#endif /* if ( ( configUSE_MUTEXES == 1 ) && ( INCLUDE_xSemaphoreGetMutexHolder == 1 ) ) */
-/*-----------------------------------------------------------*/
-
-#if ( ( configUSE_MUTEXES == 1 ) && ( INCLUDE_xSemaphoreGetMutexHolder == 1 ) )
-
-    TaskHandle_t xQueueGetMutexHolderFromISR( QueueHandle_t xSemaphore )
-    {
-        TaskHandle_t pxReturn;
-
-        configASSERT( xSemaphore );
-
-        /* Mutexes cannot be used in interrupt service routines, so the mutex
-         * holder should not change in an ISR, and therefore a critical section is
-         * not required here. */
-        if( ( ( Queue_t * ) xSemaphore )->uxQueueType == queueQUEUE_IS_MUTEX )
-        {
-            pxReturn = ( ( Queue_t * ) xSemaphore )->u.xSemaphore.xMutexHolder;
-        }
-        else
-        {
-            pxReturn = NULL;
-        }
-
-        return pxReturn;
-    } /*lint !e818 xSemaphore cannot be a pointer to const because it is a typedef. */
-
-#endif /* if ( ( configUSE_MUTEXES == 1 ) && ( INCLUDE_xSemaphoreGetMutexHolder == 1 ) ) */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_RECURSIVE_MUTEXES == 1 )
-
-    BaseType_t xQueueGiveMutexRecursive( QueueHandle_t xMutex )
-    {
-        BaseType_t xReturn;
-        Queue_t * const pxMutex = ( Queue_t * ) xMutex;
-
-        configASSERT( pxMutex );
-
-        /* If this is the task that holds the mutex then xMutexHolder will not
-         * change outside of this task.  If this task does not hold the mutex then
-         * pxMutexHolder can never coincidentally equal the tasks handle, and as
-         * this is the only condition we are interested in it does not matter if
-         * pxMutexHolder is accessed simultaneously by another task.  Therefore no
-         * mutual exclusion is required to test the pxMutexHolder variable. */
-        if( pxMutex->u.xSemaphore.xMutexHolder == xTaskGetCurrentTaskHandle() )
-        {
-            traceGIVE_MUTEX_RECURSIVE( pxMutex );
-
-            /* uxRecursiveCallCount cannot be zero if xMutexHolder is equal to
-             * the task handle, therefore no underflow check is required.  Also,
-             * uxRecursiveCallCount is only modified by the mutex holder, and as
-             * there can only be one, no mutual exclusion is required to modify the
-             * uxRecursiveCallCount member. */
-            ( pxMutex->u.xSemaphore.uxRecursiveCallCount )--;
-
-            /* Has the recursive call count unwound to 0? */
-            if( pxMutex->u.xSemaphore.uxRecursiveCallCount == ( UBaseType_t ) 0 )
-            {
-                /* Return the mutex.  This will automatically unblock any other
-                 * task that might be waiting to access the mutex. */
-                ( void ) xQueueGenericSend( pxMutex, NULL, queueMUTEX_GIVE_BLOCK_TIME, queueSEND_TO_BACK );
-            }
-            else
-            {
-                mtCOVERAGE_TEST_MARKER();
-            }
-
-            xReturn = pdPASS;
-        }
-        else
-        {
-            /* The mutex cannot be given because the calling task is not the
-             * holder. */
-            xReturn = pdFAIL;
-
-            traceGIVE_MUTEX_RECURSIVE_FAILED( pxMutex );
-        }
-
-        return xReturn;
-    }
-
-#endif /* configUSE_RECURSIVE_MUTEXES */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_RECURSIVE_MUTEXES == 1 )
-
-    BaseType_t xQueueTakeMutexRecursive( QueueHandle_t xMutex,
-                                         TickType_t xTicksToWait )
-    {
-        BaseType_t xReturn;
-        Queue_t * const pxMutex = ( Queue_t * ) xMutex;
-
-        configASSERT( pxMutex );
-
-        /* Comments regarding mutual exclusion as per those within
-         * xQueueGiveMutexRecursive(). */
-
-        traceTAKE_MUTEX_RECURSIVE( pxMutex );
-
-        if( pxMutex->u.xSemaphore.xMutexHolder == xTaskGetCurrentTaskHandle() )
-        {
-            ( pxMutex->u.xSemaphore.uxRecursiveCallCount )++;
-            xReturn = pdPASS;
-        }
-        else
-        {
-            xReturn = xQueueSemaphoreTake( pxMutex, xTicksToWait );
-
-            /* pdPASS will only be returned if the mutex was successfully
-             * obtained.  The calling task may have entered the Blocked state
-             * before reaching here. */
-            if( xReturn != pdFAIL )
-            {
-                ( pxMutex->u.xSemaphore.uxRecursiveCallCount )++;
-            }
-            else
-            {
-                traceTAKE_MUTEX_RECURSIVE_FAILED( pxMutex );
-            }
-        }
-
-        return xReturn;
-    }
-
-#endif /* configUSE_RECURSIVE_MUTEXES */
 /*-----------------------------------------------------------*/
 
 #if ( ( configUSE_COUNTING_SEMAPHORES == 1 ) && ( configSUPPORT_STATIC_ALLOCATION == 1 ) )
@@ -1490,10 +1235,6 @@ BaseType_t xQueueSemaphoreTake( QueueHandle_t xQueue,
     TimeOut_t xTimeOut;
     Queue_t * const pxQueue = xQueue;
 
-    #if ( configUSE_MUTEXES == 1 )
-        BaseType_t xInheritanceOccurred = pdFALSE;
-    #endif
-
     /* Check the queue pointer is not NULL. */
     configASSERT( ( pxQueue ) );
 
@@ -1529,21 +1270,6 @@ BaseType_t xQueueSemaphoreTake( QueueHandle_t xQueue,
                  * messages waiting is the semaphore's count.  Reduce the count. */
                 pxQueue->uxMessagesWaiting = uxSemaphoreCount - ( UBaseType_t ) 1;
 
-                #if ( configUSE_MUTEXES == 1 )
-                    {
-                        if( pxQueue->uxQueueType == queueQUEUE_IS_MUTEX )
-                        {
-                            /* Record the information required to implement
-                             * priority inheritance should it become necessary. */
-                            pxQueue->u.xSemaphore.xMutexHolder = pvTaskIncrementMutexHeldCount();
-                        }
-                        else
-                        {
-                            mtCOVERAGE_TEST_MARKER();
-                        }
-                    }
-                #endif /* configUSE_MUTEXES */
-
                 /* Check to see if other tasks are blocked waiting to give the
                  * semaphore, and if so, unblock the highest priority such task. */
                 if( listLIST_IS_EMPTY( &( pxQueue->xTasksWaitingToSend ) ) == pdFALSE )
@@ -1569,15 +1295,6 @@ BaseType_t xQueueSemaphoreTake( QueueHandle_t xQueue,
             {
                 if( xTicksToWait == ( TickType_t ) 0 )
                 {
-                    /* For inheritance to have occurred there must have been an
-                     * initial timeout, and an adjusted timeout cannot become 0, as
-                     * if it were 0 the function would have exited. */
-                    #if ( configUSE_MUTEXES == 1 )
-                        {
-                            configASSERT( xInheritanceOccurred == pdFALSE );
-                        }
-                    #endif /* configUSE_MUTEXES */
-
                     /* The semaphore count was 0 and no block time is specified
                      * (or the block time has expired) so exit now. */
                     taskEXIT_CRITICAL();
@@ -1617,23 +1334,6 @@ BaseType_t xQueueSemaphoreTake( QueueHandle_t xQueue,
             {
                 traceBLOCKING_ON_QUEUE_RECEIVE( pxQueue );
 
-                #if ( configUSE_MUTEXES == 1 )
-                    {
-                        if( pxQueue->uxQueueType == queueQUEUE_IS_MUTEX )
-                        {
-                            taskENTER_CRITICAL();
-                            {
-                                xInheritanceOccurred = xTaskPriorityInherit( pxQueue->u.xSemaphore.xMutexHolder );
-                            }
-                            taskEXIT_CRITICAL();
-                        }
-                        else
-                        {
-                            mtCOVERAGE_TEST_MARKER();
-                        }
-                    }
-                #endif /* if ( configUSE_MUTEXES == 1 ) */
-
                 vTaskPlaceOnEventList( &( pxQueue->xTasksWaitingToReceive ), xTicksToWait );
                 prvUnlockQueue( pxQueue );
 
@@ -1666,30 +1366,6 @@ BaseType_t xQueueSemaphoreTake( QueueHandle_t xQueue,
              * queue being empty is equivalent to the semaphore count being 0. */
             if( prvIsQueueEmpty( pxQueue ) != pdFALSE )
             {
-                #if ( configUSE_MUTEXES == 1 )
-                    {
-                        /* xInheritanceOccurred could only have be set if
-                         * pxQueue->uxQueueType == queueQUEUE_IS_MUTEX so no need to
-                         * test the mutex type again to check it is actually a mutex. */
-                        if( xInheritanceOccurred != pdFALSE )
-                        {
-                            taskENTER_CRITICAL();
-                            {
-                                UBaseType_t uxHighestWaitingPriority;
-
-                                /* This task blocking on the mutex caused another
-                                 * task to inherit this task's priority.  Now this task
-                                 * has timed out the priority should be disinherited
-                                 * again, but only as low as the next highest priority
-                                 * task that is waiting for the same mutex. */
-                                uxHighestWaitingPriority = prvGetDisinheritPriorityAfterTimeout( pxQueue );
-                                vTaskPriorityDisinheritAfterTimeout( pxQueue->u.xSemaphore.xMutexHolder, uxHighestWaitingPriority );
-                            }
-                            taskEXIT_CRITICAL();
-                        }
-                    }
-                #endif /* configUSE_MUTEXES */
-
                 traceQUEUE_RECEIVE_FAILED( pxQueue );
                 return errQUEUE_EMPTY;
             }
@@ -2090,64 +1766,6 @@ void vQueueDelete( QueueHandle_t xQueue )
 }
 /*-----------------------------------------------------------*/
 
-#if ( configUSE_TRACE_FACILITY == 1 )
-
-    UBaseType_t uxQueueGetQueueNumber( QueueHandle_t xQueue )
-    {
-        return ( ( Queue_t * ) xQueue )->uxQueueNumber;
-    }
-
-#endif /* configUSE_TRACE_FACILITY */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_TRACE_FACILITY == 1 )
-
-    void vQueueSetQueueNumber( QueueHandle_t xQueue,
-                               UBaseType_t uxQueueNumber )
-    {
-        ( ( Queue_t * ) xQueue )->uxQueueNumber = uxQueueNumber;
-    }
-
-#endif /* configUSE_TRACE_FACILITY */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_TRACE_FACILITY == 1 )
-
-    uint8_t ucQueueGetQueueType( QueueHandle_t xQueue )
-    {
-        return ( ( Queue_t * ) xQueue )->ucQueueType;
-    }
-
-#endif /* configUSE_TRACE_FACILITY */
-/*-----------------------------------------------------------*/
-
-#if ( configUSE_MUTEXES == 1 )
-
-    static UBaseType_t prvGetDisinheritPriorityAfterTimeout( const Queue_t * const pxQueue )
-    {
-        UBaseType_t uxHighestPriorityOfWaitingTasks;
-
-        /* If a task waiting for a mutex causes the mutex holder to inherit a
-         * priority, but the waiting task times out, then the holder should
-         * disinherit the priority - but only down to the highest priority of any
-         * other tasks that are waiting for the same mutex.  For this purpose,
-         * return the priority of the highest priority task that is waiting for the
-         * mutex. */
-        if( listCURRENT_LIST_LENGTH( &( pxQueue->xTasksWaitingToReceive ) ) > 0U )
-        {
-            uxHighestPriorityOfWaitingTasks = ( UBaseType_t ) configMAX_PRIORITIES - ( UBaseType_t ) listGET_ITEM_VALUE_OF_HEAD_ENTRY( &( pxQueue->xTasksWaitingToReceive ) );
-        }
-        else
-        {
-            uxHighestPriorityOfWaitingTasks = tskIDLE_PRIORITY;
-        }
-
-        return uxHighestPriorityOfWaitingTasks;
-    }
-
-#endif /* configUSE_MUTEXES */
-/*-----------------------------------------------------------*/
-
 static BaseType_t prvCopyDataToQueue( Queue_t * const pxQueue,
                                       const void * pvItemToQueue,
                                       const BaseType_t xPosition )
@@ -2161,20 +1779,7 @@ static BaseType_t prvCopyDataToQueue( Queue_t * const pxQueue,
 
     if( pxQueue->uxItemSize == ( UBaseType_t ) 0 )
     {
-        #if ( configUSE_MUTEXES == 1 )
-            {
-                if( pxQueue->uxQueueType == queueQUEUE_IS_MUTEX )
-                {
-                    /* The mutex is no longer being held. */
-                    xReturn = xTaskPriorityDisinherit( pxQueue->u.xSemaphore.xMutexHolder );
-                    pxQueue->u.xSemaphore.xMutexHolder = NULL;
-                }
-                else
-                {
-                    mtCOVERAGE_TEST_MARKER();
-                }
-            }
-        #endif /* configUSE_MUTEXES */
+        /* nothing left to do here after refactoring */
     }
     else if( xPosition == queueSEND_TO_BACK )
     {

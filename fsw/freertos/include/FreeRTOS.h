@@ -204,22 +204,6 @@
     #define configUSE_DAEMON_TASK_STARTUP_HOOK    0
 #endif
 
-#ifndef configUSE_APPLICATION_TASK_TAG
-    #define configUSE_APPLICATION_TASK_TAG    0
-#endif
-
-#ifndef configNUM_THREAD_LOCAL_STORAGE_POINTERS
-    #define configNUM_THREAD_LOCAL_STORAGE_POINTERS    0
-#endif
-
-#ifndef configUSE_RECURSIVE_MUTEXES
-    #define configUSE_RECURSIVE_MUTEXES    0
-#endif
-
-#ifndef configUSE_MUTEXES
-    #define configUSE_MUTEXES    0
-#endif
-
 #ifndef configUSE_TIMERS
     #define configUSE_TIMERS    0
 #endif
@@ -416,10 +400,6 @@
 
 #ifndef configCHECK_FOR_STACK_OVERFLOW
     #define configCHECK_FOR_STACK_OVERFLOW    0
-#endif
-
-#ifndef configRECORD_STACK_HIGH_ADDRESS
-    #define configRECORD_STACK_HIGH_ADDRESS    0
 #endif
 
 #ifndef configINCLUDE_FREERTOS_TASK_C_ADDITIONS_H
@@ -736,28 +716,6 @@
     #define traceSTREAM_BUFFER_RECEIVE_FROM_ISR( xStreamBuffer, xReceivedLength )
 #endif
 
-#ifndef configGENERATE_RUN_TIME_STATS
-    #define configGENERATE_RUN_TIME_STATS    0
-#endif
-
-#if ( configGENERATE_RUN_TIME_STATS == 1 )
-
-    #ifndef portCONFIGURE_TIMER_FOR_RUN_TIME_STATS
-        #error If configGENERATE_RUN_TIME_STATS is defined then portCONFIGURE_TIMER_FOR_RUN_TIME_STATS must also be defined.  portCONFIGURE_TIMER_FOR_RUN_TIME_STATS should call a port layer function to setup a peripheral timer/counter that can then be used as the run time counter time base.
-    #endif /* portCONFIGURE_TIMER_FOR_RUN_TIME_STATS */
-
-    #ifndef portGET_RUN_TIME_COUNTER_VALUE
-        #ifndef portALT_GET_RUN_TIME_COUNTER_VALUE
-            #error If configGENERATE_RUN_TIME_STATS is defined then either portGET_RUN_TIME_COUNTER_VALUE or portALT_GET_RUN_TIME_COUNTER_VALUE must also be defined.  See the examples provided and the FreeRTOS web site for more information.
-        #endif /* portALT_GET_RUN_TIME_COUNTER_VALUE */
-    #endif /* portGET_RUN_TIME_COUNTER_VALUE */
-
-#endif /* configGENERATE_RUN_TIME_STATS */
-
-#ifndef portCONFIGURE_TIMER_FOR_RUN_TIME_STATS
-    #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
-#endif
-
 #ifndef configUSE_MALLOC_FAILED_HOOK
     #define configUSE_MALLOC_FAILED_HOOK    0
 #endif
@@ -824,10 +782,6 @@
 
 #ifndef portASSERT_IF_INTERRUPT_PRIORITY_INVALID
     #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()
-#endif
-
-#ifndef configUSE_TRACE_FACILITY
-    #define configUSE_TRACE_FACILITY    0
 #endif
 
 #ifndef mtCOVERAGE_TEST_MARKER
@@ -908,10 +862,6 @@
 
 #if ( ( configSUPPORT_STATIC_ALLOCATION == 0 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 0 ) )
     #error configSUPPORT_STATIC_ALLOCATION and configSUPPORT_DYNAMIC_ALLOCATION cannot both be 0, but can both be 1.
-#endif
-
-#if ( ( configUSE_RECURSIVE_MUTEXES == 1 ) && ( configUSE_MUTEXES != 1 ) )
-    #error configUSE_MUTEXES must be set to 1 to use recursive mutexes
 #endif
 
 #ifndef configINITIAL_TICK_COUNT
@@ -1124,11 +1074,6 @@ typedef struct xSTATIC_QUEUE
     #if ( configUSE_QUEUE_SETS == 1 )
         void * pvDummy7;
     #endif
-
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxDummy8;
-        uint8_t ucDummy9;
-    #endif
 } StaticQueue_t;
 typedef StaticQueue_t StaticSemaphore_t;
 
@@ -1150,10 +1095,6 @@ typedef struct xSTATIC_EVENT_GROUP
 {
     TickType_t xDummy1;
     StaticList_t xDummy2;
-
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxDummy3;
-    #endif
 
     #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
         uint8_t ucDummy4;
@@ -1181,9 +1122,6 @@ typedef struct xSTATIC_TIMER
     TickType_t xDummy3;
     void * pvDummy5;
     TaskFunction_t pvDummy6;
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxDummy7;
-    #endif
     uint8_t ucDummy8;
 } StaticTimer_t;
 
@@ -1206,9 +1144,6 @@ typedef struct xSTATIC_STREAM_BUFFER
     size_t uxDummy1[ 4 ];
     void * pvDummy2[ 3 ];
     uint8_t ucDummy3;
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxDummy4;
-    #endif
 } StaticStreamBuffer_t;
 
 /* Message buffers are built on stream buffers. */

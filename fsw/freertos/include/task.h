@@ -90,32 +90,6 @@ typedef struct
     StackType_t * pxStack;                      /*< Points to the start of the stack. */
     char pcTaskName[ configMAX_TASK_NAME_LEN ]; /*< Descriptive name given to the task when created.  Facilitates debugging only. */ /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
 
-    #if ( ( configRECORD_STACK_HIGH_ADDRESS == 1 ) )
-        StackType_t * pxEndOfStack; /*< Points to the highest valid address for the stack. */
-    #endif
-
-    #if ( configUSE_TRACE_FACILITY == 1 )
-        UBaseType_t uxTCBNumber;  /*< Stores a number that increments each time a TCB is created.  It allows debuggers to determine when a task has been deleted and then recreated. */
-        UBaseType_t uxTaskNumber; /*< Stores a number specifically for use by third party trace code. */
-    #endif
-
-    #if ( configUSE_MUTEXES == 1 )
-        UBaseType_t uxBasePriority; /*< The priority last assigned to the task - used by the priority inheritance mechanism. */
-        UBaseType_t uxMutexesHeld;
-    #endif
-
-    #if ( configUSE_APPLICATION_TASK_TAG == 1 )
-        TaskHookFunction_t pxTaskTag;
-    #endif
-
-    #if ( configNUM_THREAD_LOCAL_STORAGE_POINTERS > 0 )
-        void * pvThreadLocalStoragePointers[ configNUM_THREAD_LOCAL_STORAGE_POINTERS ];
-    #endif
-
-    #if ( configGENERATE_RUN_TIME_STATS == 1 )
-        configRUN_TIME_COUNTER_TYPE ulRunTimeCounter; /*< Stores the amount of time the task has spent in the Running state. */
-    #endif
-
     #if ( configUSE_TASK_NOTIFICATIONS == 1 )
         volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
         volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
@@ -171,8 +145,6 @@ typedef struct xTASK_STATUS
     UBaseType_t xTaskNumber;                      /* A number unique to the task. */
     eTaskState eCurrentState;                     /* The state in which the task existed when the structure was populated. */
     UBaseType_t uxCurrentPriority;                /* The priority at which the task was running (may be inherited) when the structure was populated. */
-    UBaseType_t uxBasePriority;                   /* The priority to which the task will return if the task's current priority has been inherited to avoid unbounded priority inversion when obtaining a mutex.  Only valid if configUSE_MUTEXES is defined as 1 in FreeRTOSConfig.h. */
-    configRUN_TIME_COUNTER_TYPE ulRunTimeCounter; /* The total run time allocated to the task so far, as defined by the run time stats clock.  See https://www.FreeRTOS.org/rtos-run-time-stats.html.  Only valid when configGENERATE_RUN_TIME_STATS is defined as 1 in FreeRTOSConfig.h. */
     StackType_t * pxStackBase;                    /* Points to the lowest address of the task's stack area. */
     configSTACK_DEPTH_TYPE usStackHighWaterMark;  /* The minimum amount of stack space that has remained for the task since the task was created.  The closer this value is to zero the closer the task has come to overflowing its stack. */
 } TaskStatus_t;
@@ -1220,68 +1192,6 @@ UBaseType_t uxTaskGetStackHighWaterMark( TaskHandle_t xTask );
  */
 configSTACK_DEPTH_TYPE uxTaskGetStackHighWaterMark2( TaskHandle_t xTask );
 
-/* When using trace macros it is sometimes necessary to include task.h before
- * FreeRTOS.h.  When this is done TaskHookFunction_t will not yet have been defined,
- * so the following two prototypes will cause a compilation error.  This can be
- * fixed by simply guarding against the inclusion of these two prototypes unless
- * they are explicitly required by the configUSE_APPLICATION_TASK_TAG configuration
- * constant. */
-#ifdef configUSE_APPLICATION_TASK_TAG
-    #if configUSE_APPLICATION_TASK_TAG == 1
-
-/**
- * task.h
- * @code{c}
- * void vTaskSetApplicationTaskTag( TaskHandle_t xTask, TaskHookFunction_t pxHookFunction );
- * @endcode
- *
- * Sets pxHookFunction to be the task hook function used by the task xTask.
- * Passing xTask as NULL has the effect of setting the calling tasks hook
- * function.
- */
-        void vTaskSetApplicationTaskTag( TaskHandle_t xTask,
-                                         TaskHookFunction_t pxHookFunction );
-
-/**
- * task.h
- * @code{c}
- * void xTaskGetApplicationTaskTag( TaskHandle_t xTask );
- * @endcode
- *
- * Returns the pxHookFunction value assigned to the task xTask.  Do not
- * call from an interrupt service routine - call
- * xTaskGetApplicationTaskTagFromISR() instead.
- */
-        TaskHookFunction_t xTaskGetApplicationTaskTag( TaskHandle_t xTask );
-
-/**
- * task.h
- * @code{c}
- * void xTaskGetApplicationTaskTagFromISR( TaskHandle_t xTask );
- * @endcode
- *
- * Returns the pxHookFunction value assigned to the task xTask.  Can
- * be called from an interrupt service routine.
- */
-        TaskHookFunction_t xTaskGetApplicationTaskTagFromISR( TaskHandle_t xTask );
-    #endif /* configUSE_APPLICATION_TASK_TAG ==1 */
-#endif /* ifdef configUSE_APPLICATION_TASK_TAG */
-
-#if ( configNUM_THREAD_LOCAL_STORAGE_POINTERS > 0 )
-
-/* Each task contains an array of pointers that is dimensioned by the
- * configNUM_THREAD_LOCAL_STORAGE_POINTERS setting in FreeRTOSConfig.h.  The
- * kernel does not use the pointers itself, so the application writer can use
- * the pointers for any purpose they wish.  The following two functions are
- * used to set and query a pointer respectively. */
-    void vTaskSetThreadLocalStoragePointer( TaskHandle_t xTaskToSet,
-                                            BaseType_t xIndex,
-                                            void * pvValue );
-    void * pvTaskGetThreadLocalStoragePointer( TaskHandle_t xTaskToQuery,
-                                               BaseType_t xIndex );
-
-#endif
-
 #if ( configCHECK_FOR_STACK_OVERFLOW > 0 )
 
 /**
@@ -1342,107 +1252,6 @@ BaseType_t xTaskCallApplicationTaskHook( TaskHandle_t xTask,
 TaskHandle_t xTaskGetIdleTaskHandle( void );
 
 /**
- * configUSE_TRACE_FACILITY must be defined as 1 in FreeRTOSConfig.h for
- * uxTaskGetSystemState() to be available.
- *
- * uxTaskGetSystemState() populates an TaskStatus_t structure for each task in
- * the system.  TaskStatus_t structures contain, among other things, members
- * for the task handle, task name, task priority, task state, and total amount
- * of run time consumed by the task.  See the TaskStatus_t structure
- * definition in this file for the full member list.
- *
- * NOTE:  This function is intended for debugging use only as its use results in
- * the scheduler remaining suspended for an extended period.
- *
- * @param pxTaskStatusArray A pointer to an array of TaskStatus_t structures.
- * The array must contain at least one TaskStatus_t structure for each task
- * that is under the control of the RTOS.  The number of tasks under the control
- * of the RTOS can be determined using the uxTaskGetNumberOfTasks() API function.
- *
- * @param uxArraySize The size of the array pointed to by the pxTaskStatusArray
- * parameter.  The size is specified as the number of indexes in the array, or
- * the number of TaskStatus_t structures contained in the array, not by the
- * number of bytes in the array.
- *
- * @param pulTotalRunTime If configGENERATE_RUN_TIME_STATS is set to 1 in
- * FreeRTOSConfig.h then *pulTotalRunTime is set by uxTaskGetSystemState() to the
- * total run time (as defined by the run time stats clock, see
- * https://www.FreeRTOS.org/rtos-run-time-stats.html) since the target booted.
- * pulTotalRunTime can be set to NULL to omit the total run time information.
- *
- * @return The number of TaskStatus_t structures that were populated by
- * uxTaskGetSystemState().  This should equal the number returned by the
- * uxTaskGetNumberOfTasks() API function, but will be zero if the value passed
- * in the uxArraySize parameter was too small.
- *
- * Example usage:
- * @code{c}
- *  // This example demonstrates how a human readable table of run time stats
- *  // information is generated from raw data provided by uxTaskGetSystemState().
- *  // The human readable table is written to pcWriteBuffer
- *  void vTaskGetRunTimeStats( char *pcWriteBuffer )
- *  {
- *  TaskStatus_t *pxTaskStatusArray;
- *  volatile UBaseType_t uxArraySize, x;
- *  configRUN_TIME_COUNTER_TYPE ulTotalRunTime, ulStatsAsPercentage;
- *
- *      // Make sure the write buffer does not contain a string.
- * pcWriteBuffer = 0x00;
- *
- *      // Take a snapshot of the number of tasks in case it changes while this
- *      // function is executing.
- *      uxArraySize = uxTaskGetNumberOfTasks();
- *
- *      // Allocate a TaskStatus_t structure for each task.  An array could be
- *      // allocated statically at compile time.
- *      pxTaskStatusArray = pvPortMalloc( uxArraySize * sizeof( TaskStatus_t ) );
- *
- *      if( pxTaskStatusArray != NULL )
- *      {
- *          // Generate raw status information about each task.
- *          uxArraySize = uxTaskGetSystemState( pxTaskStatusArray, uxArraySize, &ulTotalRunTime );
- *
- *          // For percentage calculations.
- *          ulTotalRunTime /= 100UL;
- *
- *          // Avoid divide by zero errors.
- *          if( ulTotalRunTime > 0 )
- *          {
- *              // For each populated position in the pxTaskStatusArray array,
- *              // format the raw data as human readable ASCII data
- *              for( x = 0; x < uxArraySize; x++ )
- *              {
- *                  // What percentage of the total run time has the task used?
- *                  // This will always be rounded down to the nearest integer.
- *                  // ulTotalRunTimeDiv100 has already been divided by 100.
- *                  ulStatsAsPercentage = pxTaskStatusArray[ x ].ulRunTimeCounter / ulTotalRunTime;
- *
- *                  if( ulStatsAsPercentage > 0UL )
- *                  {
- *                      sprintf( pcWriteBuffer, "%s\t\t%lu\t\t%lu%%\r\n", pxTaskStatusArray[ x ].pcTaskName, pxTaskStatusArray[ x ].ulRunTimeCounter, ulStatsAsPercentage );
- *                  }
- *                  else
- *                  {
- *                      // If the percentage is zero here then the task has
- *                      // consumed less than 1% of the total run time.
- *                      sprintf( pcWriteBuffer, "%s\t\t%lu\t\t<1%%\r\n", pxTaskStatusArray[ x ].pcTaskName, pxTaskStatusArray[ x ].ulRunTimeCounter );
- *                  }
- *
- *                  pcWriteBuffer += strlen( ( char * ) pcWriteBuffer );
- *              }
- *          }
- *
- *          // The array is no longer needed, free the memory it consumes.
- *          vPortFree( pxTaskStatusArray );
- *      }
- *  }
- *  @endcode
- */
-UBaseType_t uxTaskGetSystemState( TaskStatus_t * const pxTaskStatusArray,
-                                  const UBaseType_t uxArraySize,
-                                  configRUN_TIME_COUNTER_TYPE * const pulTotalRunTime );
-
-/**
  * task. h
  * @code{c}
  * void vTaskList( char *pcWriteBuffer );
@@ -1492,103 +1301,6 @@ UBaseType_t uxTaskGetSystemState( TaskStatus_t * const pxTaskStatusArray,
  * \ingroup TaskUtils
  */
 void vTaskList( char * pcWriteBuffer ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-
-/**
- * task. h
- * @code{c}
- * void vTaskGetRunTimeStats( char *pcWriteBuffer );
- * @endcode
- *
- * configGENERATE_RUN_TIME_STATS and configUSE_STATS_FORMATTING_FUNCTIONS
- * must both be defined as 1 for this function to be available.  The application
- * must also then provide definitions for
- * portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() and portGET_RUN_TIME_COUNTER_VALUE()
- * to configure a peripheral timer/counter and return the timers current count
- * value respectively.  The counter should be at least 10 times the frequency of
- * the tick count.
- *
- * NOTE 1: This function will disable interrupts for its duration.  It is
- * not intended for normal application runtime use but as a debug aid.
- *
- * Setting configGENERATE_RUN_TIME_STATS to 1 will result in a total
- * accumulated execution time being stored for each task.  The resolution
- * of the accumulated time value depends on the frequency of the timer
- * configured by the portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() macro.
- * Calling vTaskGetRunTimeStats() writes the total execution time of each
- * task into a buffer, both as an absolute count value and as a percentage
- * of the total system execution time.
- *
- * NOTE 2:
- *
- * This function is provided for convenience only, and is used by many of the
- * demo applications.  Do not consider it to be part of the scheduler.
- *
- * vTaskGetRunTimeStats() calls uxTaskGetSystemState(), then formats part of the
- * uxTaskGetSystemState() output into a human readable table that displays the
- * amount of time each task has spent in the Running state in both absolute and
- * percentage terms.
- *
- * vTaskGetRunTimeStats() has a dependency on the sprintf() C library function
- * that might bloat the code size, use a lot of stack, and provide different
- * results on different platforms.  An alternative, tiny, third party, and
- * limited functionality implementation of sprintf() is provided in many of the
- * FreeRTOS/Demo sub-directories in a file called printf-stdarg.c (note
- * printf-stdarg.c does not provide a full snprintf() implementation!).
- *
- * It is recommended that production systems call uxTaskGetSystemState() directly
- * to get access to raw stats data, rather than indirectly through a call to
- * vTaskGetRunTimeStats().
- *
- * @param pcWriteBuffer A buffer into which the execution times will be
- * written, in ASCII form.  This buffer is assumed to be large enough to
- * contain the generated report.  Approximately 40 bytes per task should
- * be sufficient.
- *
- * \defgroup vTaskGetRunTimeStats vTaskGetRunTimeStats
- * \ingroup TaskUtils
- */
-void vTaskGetRunTimeStats( char * pcWriteBuffer ); /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-
-/**
- * task. h
- * @code{c}
- * configRUN_TIME_COUNTER_TYPE ulTaskGetIdleRunTimeCounter( void );
- * configRUN_TIME_COUNTER_TYPE ulTaskGetIdleRunTimePercent( void );
- * @endcode
- *
- * configGENERATE_RUN_TIME_STATS, configUSE_STATS_FORMATTING_FUNCTIONS and
- * INCLUDE_xTaskGetIdleTaskHandle must all be defined as 1 for these functions
- * to be available.  The application must also then provide definitions for
- * portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() and portGET_RUN_TIME_COUNTER_VALUE()
- * to configure a peripheral timer/counter and return the timers current count
- * value respectively.  The counter should be at least 10 times the frequency of
- * the tick count.
- *
- * Setting configGENERATE_RUN_TIME_STATS to 1 will result in a total
- * accumulated execution time being stored for each task.  The resolution
- * of the accumulated time value depends on the frequency of the timer
- * configured by the portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() macro.
- * While uxTaskGetSystemState() and vTaskGetRunTimeStats() writes the total
- * execution time of each task into a buffer, ulTaskGetIdleRunTimeCounter()
- * returns the total execution time of just the idle task and
- * ulTaskGetIdleRunTimePercent() returns the percentage of the CPU time used by
- * just the idle task.
- *
- * Note the amount of idle time is only a good measure of the slack time in a
- * system if there are no other tasks executing at the idle priority, tickless
- * idle is not used, and configIDLE_SHOULD_YIELD is set to 0.
- *
- * @return The total run time of the idle task or the percentage of the total
- * run time consumed by the idle task.  This is the amount of time the
- * idle task has actually been executing.  The unit of time is dependent on the
- * frequency configured using the portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() and
- * portGET_RUN_TIME_COUNTER_VALUE() macros.
- *
- * \defgroup ulTaskGetIdleRunTimeCounter ulTaskGetIdleRunTimeCounter
- * \ingroup TaskUtils
- */
-configRUN_TIME_COUNTER_TYPE ulTaskGetIdleRunTimeCounter( void );
-configRUN_TIME_COUNTER_TYPE ulTaskGetIdleRunTimePercent( void );
 
 /**
  * task. h
