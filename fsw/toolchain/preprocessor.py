@@ -15,7 +15,7 @@ ARG_LONG_LONG = "unsigned long long"
 ARG_PTRDIFF_T = "ptrdiff_t"
 ARG_INTMAX_T = "intmax_t"
 ARG_SIZE_T = "size_t"
-ARG_VOIDPTR = "void*"
+ARG_VOIDPTR = "const void *"
 ARG_DOUBLE = "double"
 ARG_STRING = "const char *"
 
