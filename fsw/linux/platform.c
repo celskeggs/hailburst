@@ -36,7 +36,8 @@ void start_predef_threads(void) {
     debugf(DEBUG, "Preparing rouse semaphores for %u predefined threads...",
                     (uint32_t) (tasktable_end - tasktable_start));
     for (thread_t task = tasktable_start; task < tasktable_end; task++) {
-        semaphore_init(&task->rouse);
+        semaphore_init(&task->top_rouse);
+        semaphore_init(&task->local_rouse);
     }
     debugf(DEBUG, "Starting predefined threads...");
     for (thread_t task = tasktable_start; task < tasktable_end; task++) {

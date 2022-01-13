@@ -34,7 +34,8 @@ typedef struct thread_st {
     void (*start_routine)(void *);
     void *start_parameter;
     pthread_t thread;
-    semaphore_t rouse;
+    semaphore_t top_rouse;
+    semaphore_t local_rouse;
 } __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 
 thread_t task_get_current(void);
@@ -104,26 +105,57 @@ bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
 bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
 bool semaphore_give(semaphore_t *sema);
 
+// top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
+
 static inline void task_rouse(thread_t task) {
     assert(task != NULL);
-    (void) semaphore_give(&task->rouse);
+    (void) semaphore_give(&task->top_rouse);
 }
 
 static inline void task_doze(void) {
-    semaphore_take(&task_get_current()->rouse);
+    semaphore_take(&task_get_current()->top_rouse);
 }
 
 // does not actually block
 static inline bool task_doze_try(void) {
-    return semaphore_take_try(&task_get_current()->rouse);
+    return semaphore_take_try(&task_get_current()->top_rouse);
 }
 
 static inline bool task_doze_timed(uint64_t nanoseconds) {
-    return semaphore_take_timed(&task_get_current()->rouse, nanoseconds);
+    return semaphore_take_timed(&task_get_current()->top_rouse, nanoseconds);
 }
 
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
-    return semaphore_take_timed_abs(&task_get_current()->rouse, deadline_ns);
+    return semaphore_take_timed_abs(&task_get_current()->top_rouse, deadline_ns);
+}
+
+// primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
+// whether other code may interfere with this.
+
+static inline void local_rouse(thread_t task) {
+    assert(task != NULL);
+    (void) semaphore_give(&task->local_rouse);
+}
+
+static inline void local_doze(thread_t task) {
+    assert(task == task_get_current());
+    semaphore_take(&task_get_current()->local_rouse);
+}
+
+// does not actually block
+static inline bool local_doze_try(thread_t task) {
+    assert(task == task_get_current());
+    return semaphore_take_try(&task_get_current()->local_rouse);
+}
+
+static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
+    assert(task == task_get_current());
+    return semaphore_take_timed(&task_get_current()->local_rouse, nanoseconds);
+}
+
+static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
+    assert(task == task_get_current());
+    return semaphore_take_timed_abs(&task_get_current()->local_rouse, deadline_ns);
 }
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

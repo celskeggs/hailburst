@@ -64,34 +64,73 @@ static inline void task_delay_abs(uint64_t deadline_ns) {
     assert(timer_now_ns() >= deadline_ns);
 }
 
+// top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
+
+enum {
+    NOTIFY_INDEX_TOP_LEVEL = 0,
+    NOTIFY_INDEX_LOCAL     = 1,
+};
+
 static inline void task_rouse(thread_t task) {
     assert(task != NULL);
-    BaseType_t result = xTaskNotifyGive(task);
+    BaseType_t result = xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_TOP_LEVEL);
     assert(result == pdPASS);
 }
 
 static inline void task_rouse_from_isr(thread_t task, BaseType_t *was_woken) {
     assert(task != NULL && was_woken != NULL);
-    vTaskNotifyGiveFromISR(task, was_woken);
+    vTaskNotifyGiveIndexedFromISR(task, NOTIFY_INDEX_TOP_LEVEL, was_woken);
 }
 
 static inline void task_doze(void) {
     BaseType_t value;
-    value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    value = ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, portMAX_DELAY);
     assert(value != 0);
 }
 
 // does not actually block
 static inline bool task_doze_try(void) {
-    return ulTaskNotifyTake(pdTRUE, 0) > 0;
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, 0) > 0;
 }
 
 static inline bool task_doze_timed(uint64_t nanoseconds) {
-    return ulTaskNotifyTake(pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
 }
 
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
-    return ulTaskNotifyTake(pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+}
+
+// primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
+// whether other code may interfere with this.
+
+static inline void local_rouse(thread_t task) {
+    assert(task != NULL);
+    BaseType_t result = xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_LOCAL);
+    assert(result == pdPASS);
+}
+
+static inline void local_doze(thread_t task) {
+    assert(task == task_get_current());
+    BaseType_t value;
+    value = ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, portMAX_DELAY);
+    assert(value != 0);
+}
+
+// does not actually block
+static inline bool local_doze_try(thread_t task) {
+    assert(task == task_get_current());
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, 0) > 0;
+}
+
+static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
+    assert(task == task_get_current());
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
+}
+
+static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
+    assert(task == task_get_current());
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
 }
 
 // TODO: more efficient semaphore preallocation approach
