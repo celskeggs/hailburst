@@ -8,9 +8,7 @@
 #include <fsw/debug.h>
 #include <fsw/init.h>
 
-static void thread_idle_main(void *opaque) {
-    (void) opaque;
-
+static void thread_idle_main(void) {
     while (1) {
         // must have interrupts enabled for this to be safe
         assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);

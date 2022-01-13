@@ -42,8 +42,8 @@ typedef struct {
     uint8_t        downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
 } radio_t;
 
-void radio_uplink_loop(void *radio_opaque);
-void radio_downlink_loop(void *radio_opaque);
+void radio_uplink_loop(radio_t *radio);
+void radio_downlink_loop(radio_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
 #define RADIO_REGISTER(r_ident, r_up_addr, r_up_rx, r_up_tx, r_up_capacity,                                       \

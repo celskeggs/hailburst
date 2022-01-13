@@ -191,9 +191,8 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
     }
 }
 
-void virtio_monitor_loop(void *opaque_device) {
-    assert(opaque_device != NULL);
-    struct virtio_device *device = (struct virtio_device *) opaque_device;
+void virtio_monitor_loop(struct virtio_device *device) {
+    assert(device != NULL);
 
     device->monitor_started = true;
 

@@ -47,9 +47,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
     }
 }
 
-static void scrubber_mainloop(void *opaque) {
-    (void) opaque;
-
+static void scrubber_mainloop(void) {
     for (;;) {
         assert(scrubber_data_local.kernel_elf_rom != NULL);
 

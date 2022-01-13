@@ -15,9 +15,8 @@
 
 #define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->options.label, ## __VA_ARGS__))
 
-void fakewire_link_rx_loop(void *opaque) {
-    assert(opaque != NULL);
-    fw_link_t *fwl = (fw_link_t*) opaque;
+void fakewire_link_rx_loop(fw_link_t *fwl) {
+    assert(fwl != NULL);
 
     // make sure we wait for fds to actually be populated
     semaphore_take(fwl->fds_ready);
@@ -52,9 +51,8 @@ void fakewire_link_rx_loop(void *opaque) {
     }
 }
 
-void fakewire_link_tx_loop(void *opaque) {
-    assert(opaque != NULL);
-    fw_link_t *fwl = (fw_link_t*) opaque;
+void fakewire_link_tx_loop(fw_link_t *fwl) {
+    assert(fwl != NULL);
 
     // make sure we wait for fds to actually be populated
     semaphore_take(fwl->fds_ready);
@@ -102,9 +100,8 @@ void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
     (void) semaphore_give(fwl->transmit_wake);
 }
 
-void fakewire_link_configure(void *opaque) {
-    assert(opaque != NULL);
-    fw_link_t *fwl = (fw_link_t*) opaque;
+void fakewire_link_configure(fw_link_t *fwl) {
+    assert(fwl != NULL);
     fw_link_options_t opts = fwl->options;
 
     // let's open the file descriptors for our I/O backend of choice

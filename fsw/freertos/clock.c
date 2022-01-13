@@ -5,9 +5,7 @@
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
-static void clock_start_main(void *opaque) {
-    (void) opaque;
-
+static void clock_start_main(void) {
     // no adjustment needed on FreeRTOS.
     tlm_clock_calibrated(&clock_telemetry, 0);
 

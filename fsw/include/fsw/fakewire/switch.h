@@ -28,8 +28,8 @@ typedef struct {
     thread_t switch_task;
 } switch_t;
 
-void switch_mainloop_internal(void *opaque);
-void switch_init_internal(switch_t *opaque);
+void switch_mainloop_internal(switch_t *sw);
+void switch_init_internal(switch_t *sw);
 
 #define SWITCH_REGISTER(v_ident)                       \
     extern switch_t v_ident;                                                                   \

@@ -108,8 +108,7 @@ static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
     return port;
 }
 
-void virtio_console_control_loop(void *opaque) {
-    struct virtio_console *console = (struct virtio_console *) opaque;
+void virtio_console_control_loop(struct virtio_console *console) {
     assert(console != NULL && console->initialized);
 
     // request initialization

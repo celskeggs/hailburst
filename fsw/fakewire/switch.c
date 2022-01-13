@@ -79,9 +79,8 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     return true;
 }
 
-void switch_mainloop_internal(void *opaque) {
-    assert(opaque != NULL);
-    switch_t *sw = (switch_t *) opaque;
+void switch_mainloop_internal(switch_t *sw) {
+    assert(sw != NULL);
 
     for (;;) {
         // attempt to perform transfer for each port

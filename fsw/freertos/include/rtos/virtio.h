@@ -78,8 +78,8 @@ struct virtio_console {
 };
 
 void virtio_device_init_internal(struct virtio_device *device);
-void virtio_device_start_internal(struct virtio_device *opaque_device);
-void virtio_monitor_loop(void *opaque_device);
+void virtio_device_start_internal(struct virtio_device *device);
+void virtio_monitor_loop(struct virtio_device *device);
 
 #define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select) \
     extern struct virtio_device v_ident;                       \
@@ -100,7 +100,7 @@ void virtio_monitor_loop(void *opaque_device);
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
 void virtio_console_feature_select(uint64_t *features);
-void virtio_console_control_loop(void *opaque);
+void virtio_console_control_loop(struct virtio_console *console);
 
 #define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id) \
     VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select); \

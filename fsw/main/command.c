@@ -115,9 +115,8 @@ static cmd_status_t cmd_execute(spacecraft_t *sc, tlm_async_endpoint_t *telemetr
 
 TELEMETRY_ASYNC_REGISTER(cmd_telemetry);
 
-void cmd_mainloop(void *opaque) {
-    assert(opaque != NULL);
-    spacecraft_t *sc = (spacecraft_t *) opaque;
+void cmd_mainloop(spacecraft_t *sc) {
+    assert(sc != NULL);
     comm_packet_t packet;
     cmd_status_t status;
 

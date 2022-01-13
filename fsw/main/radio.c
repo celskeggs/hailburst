@@ -414,8 +414,7 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     return total_read;
 }
 
-void radio_uplink_loop(void *radio_opaque) {
-    radio_t *radio = (radio_t *) radio_opaque;
+void radio_uplink_loop(radio_t *radio) {
     assert(radio != NULL);
 
     // (re)configure uplink side of radio
@@ -513,8 +512,7 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     return true;
 }
 
-void radio_downlink_loop(void *radio_opaque) {
-    radio_t *radio = (radio_t *) radio_opaque;
+void radio_downlink_loop(radio_t *radio) {
     assert(radio != NULL);
 
     // (re)configure downlink side of radio

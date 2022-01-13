@@ -10,6 +10,7 @@
 
 #include <rtos/timer.h>
 #include <fsw/debug.h>
+#include <fsw/preprocessor.h>
 
 typedef TCB_t *thread_t;
 typedef SemaphoreHandle_t semaphore_t;
@@ -33,7 +34,7 @@ extern TCB_t tasktable_end[];
     };                                                                            \
     __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
         .mut             = &t_ident ## _mutable,                                  \
-        .start_routine   = t_start,                                               \
+        .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
         .start_arg       = t_arg,                                                 \
         .restartable     = t_restartable,                                         \
         .uxPriority      = t_priority,                                            \

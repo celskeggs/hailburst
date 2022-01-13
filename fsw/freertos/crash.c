@@ -32,9 +32,7 @@ __attribute__((noreturn)) void task_suspend(void) {
 static bool        task_restart_wake_initialized = false;
 static semaphore_t task_restart_wake;
 
-static void restart_task_mainloop(void *opaque) {
-    (void) opaque;
-
+static void restart_task_mainloop(void) {
     for (;;) {
         for (thread_t thread = tasktable_start; thread < tasktable_end; thread++) {
             if (thread->mut->needs_restart == true) {

@@ -3,9 +3,7 @@
 
 TELEMETRY_ASYNC_REGISTER(heartbeat_telemetry);
 
-void heartbeat_mainloop(void *opaque) {
-    (void) opaque;
-
+static void heartbeat_mainloop(void) {
     // beat every 120 milliseconds (requirement is 150 milliseconds, so this is plenty fast)
     for (;;) {
         tlm_heartbeat(&heartbeat_telemetry);

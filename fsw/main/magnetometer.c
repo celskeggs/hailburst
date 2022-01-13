@@ -99,8 +99,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     return false;
 }
 
-void magnetometer_mainloop(void *mag_opaque) {
-    magnetometer_t *mag = (magnetometer_t *) mag_opaque;
+void magnetometer_mainloop(magnetometer_t *mag) {
     assert(mag != NULL);
 
     for (;;) {
@@ -170,8 +169,7 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(mag->readings, index);
 }
 
-void magnetometer_telemloop(void *mag_opaque) {
-    magnetometer_t *mag = (magnetometer_t *) mag_opaque;
+void magnetometer_telemloop(magnetometer_t *mag) {
     assert(mag != NULL);
 
     // runs every 5.5 seconds to meet requirements
@@ -191,8 +189,7 @@ void magnetometer_telemloop(void *mag_opaque) {
     }
 }
 
-void magnetometer_drop_notification(void *opaque) {
-    (void) opaque;
+void magnetometer_drop_notification(void) {
     // we're only using the chart as a datastructure, so no need for notifications.
 }
 

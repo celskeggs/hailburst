@@ -57,8 +57,7 @@ void clock_wait_for_calibration(void) {
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
-void clock_start_main(void *opaque) {
-    clock_device_t *clock = (clock_device_t *) opaque;
+void clock_start_main(clock_device_t *clock) {
     assert(clock != NULL);
     assert(!clock_calibrated);
 

@@ -12,7 +12,7 @@ typedef struct {
     const rmap_addr_t     address;
 } clock_device_t;
 
-void clock_start_main(void *opaque);
+void clock_start_main(clock_device_t *clock);
 
 #define CLOCK_REGISTER(c_ident, c_address, c_rx, c_tx)                                                         \
     RMAP_REGISTER(c_ident ## _rmap, sizeof(uint64_t), 0, c_rx, c_tx);                                          \

@@ -21,7 +21,7 @@ typedef struct fw_exchange_st {
 
 void fakewire_exc_notify(fw_exchange_t *fwe);
 void fakewire_exc_init_internal(fw_exchange_t *fwe);
-void fakewire_exc_exchange_loop(void *fwe_opaque);
+void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
 
 #define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart) \
     extern fw_exchange_t e_ident;                                                        \

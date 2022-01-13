@@ -28,9 +28,9 @@ typedef struct {
     tlm_sync_endpoint_t  *telemetry_sync;
 } magnetometer_t;
 
-void magnetometer_drop_notification(void *opaque);
-void magnetometer_mainloop(void *mag_opaque);
-void magnetometer_telemloop(void *mag_opaque);
+void magnetometer_drop_notification(void);
+void magnetometer_mainloop(magnetometer_t *mag);
+void magnetometer_telemloop(magnetometer_t *mag);
 
 #define MAGNETOMETER_REGISTER(m_ident, m_address, m_receive, m_transmit)                        \
     CHART_REGISTER(m_ident ## _readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS); \

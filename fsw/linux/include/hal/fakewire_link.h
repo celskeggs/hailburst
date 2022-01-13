@@ -20,11 +20,11 @@ typedef struct {
     semaphore_t *fds_ready;
 } fw_link_t;
 
-void fakewire_link_rx_loop(void *opaque);
-void fakewire_link_tx_loop(void *opaque);
+void fakewire_link_rx_loop(fw_link_t *fwl);
+void fakewire_link_tx_loop(fw_link_t *fwl);
 void fakewire_link_notify_rx_chart(fw_link_t *fwl);
 void fakewire_link_notify_tx_chart(fw_link_t *fwl);
-void fakewire_link_configure(void *opaque);
+void fakewire_link_configure(fw_link_t *fwl);
 
 #define FAKEWIRE_LINK_REGISTER(l_ident, l_options, l_rx, l_tx)                                                        \
     SEMAPHORE_REGISTER(l_ident ## _rxs);                                                                              \

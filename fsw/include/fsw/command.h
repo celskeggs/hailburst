@@ -6,7 +6,7 @@
 
 #include <fsw/spacecraft.h>
 
-void cmd_mainloop(void *opaque);
+void cmd_mainloop(spacecraft_t *sc);
 
 // may only be used once
 #define COMMAND_REGISTER(c_ident, c_spacecraft) \

@@ -53,9 +53,7 @@ struct reader_config {
     semaphore_t complete;
 };
 
-static void exchange_reader(void *opaque) {
-    struct reader_config *rc = (struct reader_config *) opaque;
-
+static void exchange_reader(struct reader_config *rc) {
     int last_packet_marker = 1;
     do {
         struct io_rx_ent *ent = chart_reply_start(rc->read_chart);
@@ -102,9 +100,7 @@ struct writer_config {
     semaphore_t complete;
 };
 
-static void exchange_writer(void *opaque) {
-    struct writer_config *wc = (struct writer_config *) opaque;
-
+static void exchange_writer(struct writer_config *wc) {
     assert(wc->pass == false);
 
     struct packet_chain *chain = wc->chain_in;
