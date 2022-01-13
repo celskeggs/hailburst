@@ -25,22 +25,22 @@ typedef struct {
 
     uint8_t routing_table[SWITCH_ROUTES];
 
-    semaphore_t switching_wake;
+    thread_t switch_task;
 } switch_t;
 
 void switch_mainloop_internal(void *opaque);
 void switch_init_internal(switch_t *opaque);
 
 #define SWITCH_REGISTER(v_ident)                       \
+    extern switch_t v_ident;                                                                   \
+    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_SERVERS, switch_mainloop_internal, \
+                  &v_ident, RESTARTABLE);                                                      \
     switch_t v_ident = {                               \
         .ports_inbound = { NULL },                     \
         .ports_outbound = { NULL },                    \
         .routing_table = { 0 },                        \
-        /* switching_wake will be initialized later */ \
-    };                                                 \
-    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_SERVERS, switch_mainloop_internal, \
-                  &v_ident, RESTARTABLE);                                                      \
-    PROGRAM_INIT_PARAM(STAGE_READY, switch_init_internal, v_ident, &v_ident)
+        .switch_task = &v_ident ## _task,              \
+    };
 
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.

@@ -5,12 +5,6 @@
 #include <fsw/io.h>
 #include <fsw/fakewire/switch.h>
 
-void switch_init_internal(switch_t *sw) {
-    assert(sw != NULL);
-
-    semaphore_init(&sw->switching_wake);
-}
-
 // returns TRUE if packet is consumed.
 static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, struct io_rx_ent *entry,
                           chart_t **outbound_out) {
@@ -111,7 +105,7 @@ void switch_mainloop_internal(void *opaque) {
             }
         }
         if (!made_progress) {
-            semaphore_take(&sw->switching_wake);
+            task_doze();
         }
     }
 }
@@ -120,8 +114,8 @@ static void switch_notify_loop(void *opaque) {
     assert(opaque != NULL);
     switch_t *sw = (switch_t *) opaque;
 
-    // if semaphore has already been notified, that's fine; no need to do it again.
-    (void) semaphore_give(&sw->switching_wake);
+    // wake up the transfer loop
+    task_rouse(sw->switch_task);
 }
 
 void switch_add_port(switch_t *sw, uint8_t port_number, chart_t *inbound, chart_t *outbound) {
