@@ -15,15 +15,11 @@
 void fakewire_exc_notify(fw_exchange_t *fwe) {
     assert(fwe != NULL);
 
-    // we don't care if our give actually succeeds... if it doesn't, that just means there's already a wakeup pending,
-    // and in that case it'll be woken up anyway!
-    (void) semaphore_give(&fwe->exchange_wake);
+    task_rouse(fwe->exchange_task);
 }
 
 void fakewire_exc_init_internal(fw_exchange_t *fwe) {
     assert(fwe != NULL);
-
-    semaphore_init(&fwe->exchange_wake);
 
     fakewire_enc_init(&fwe->encoder, fwe->transmit_chart);
     fakewire_dec_init(&fwe->decoder, fwe->receive_chart);
@@ -88,7 +84,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
     };
 
     while (true) {
-        if (!semaphore_take_try(&fwe->exchange_wake)) {
+        if (!task_doze_try()) {
             // flush encoder before we sleep
             fakewire_enc_flush(&fwe->encoder);
 
@@ -97,7 +93,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
 #ifdef DEBUG
                 debug_printf(TRACE, "Blocking in main exchange (timeout A).");
 #endif
-                if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
+                if (!task_doze_timed_abs(next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
                     debug_printf(TRACE, "Woke up main exchange loop (timeout A)");
@@ -112,7 +108,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
 #ifdef DEBUG
                 debug_printf(TRACE, "Blocking in main exchange (timeout B).");
 #endif
-                if (!semaphore_take_timed_abs(&fwe->exchange_wake, next_timeout)) {
+                if (!task_doze_timed_abs(next_timeout)) {
                     assert(clock_timestamp_monotonic() >= next_timeout);
 #ifdef DEBUG
                     debug_printf(TRACE, "Woke up main exchange loop (timeout B)");
@@ -125,7 +121,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
 #ifdef DEBUG
                 debug_printf(TRACE, "Blocking in main exchange (blocking).");
 #endif
-                semaphore_take(&fwe->exchange_wake);
+                task_doze();
             }
 #ifdef DEBUG
             debug_printf(TRACE, "Woke up main exchange loop");

@@ -30,7 +30,6 @@ typedef struct {
 struct {
     bool initialized;
 
-    semaphore_t         wakeup;
     multichart_server_t async_chart;
     uint32_t            async_dropped; // atomic
     multichart_server_t sync_chart;
@@ -53,18 +52,19 @@ enum {
     MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
+TASK_PROTO(telemetry_task);
+
 static void telemetry_mainloop_notify(void *opaque) {
     (void) opaque;
 
-    // wake up main loop; fine for this to fail, because that just means there's already a wakeup pending.
-    (void) semaphore_give(&telemetry.wakeup);
+    // wake up main loop
+    task_rouse(&telemetry_task);
 }
 
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry.initialized);
 
     // set up message paths
-    semaphore_init(&telemetry.wakeup);
     multichart_init_server(&telemetry.async_chart, sizeof(tlm_async_t), telemetry_mainloop_notify, NULL);
     multichart_init_server(&telemetry.sync_chart, sizeof(tlm_sync_t), telemetry_mainloop_notify, NULL);
 
@@ -211,7 +211,7 @@ static void telemetry_mainloop(void *opaque) {
                 multichart_reply_send(&telemetry.sync_chart, sync_elm);
             } else {
                 // no asynchronous telemetry AND no synchronous telemetry... time to sleep!
-                semaphore_take(&telemetry.wakeup);
+                task_doze();
             }
         }
     }

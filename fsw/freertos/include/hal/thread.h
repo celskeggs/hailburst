@@ -20,7 +20,9 @@ typedef SemaphoreHandle_t semaphore_t;
 extern TCB_t tasktable_start[];
 extern TCB_t tasktable_end[];
 
-// TODO: make the entrypoint parameter strongly typed like PROGRAM_INIT_PARAM
+#define TASK_PROTO(t_ident) \
+    extern TCB_t t_ident;
+
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
     static_assert(t_priority < configMAX_PRIORITIES, "invalid priority");         \
     StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
@@ -77,6 +79,19 @@ static inline void task_doze(void) {
     BaseType_t value;
     value = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     assert(value != 0);
+}
+
+// does not actually block
+static inline bool task_doze_try(void) {
+    return ulTaskNotifyTake(pdTRUE, 0) > 0;
+}
+
+static inline bool task_doze_timed(uint64_t nanoseconds) {
+    return ulTaskNotifyTake(pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
+}
+
+static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
+    return ulTaskNotifyTake(pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
 }
 
 // TODO: more efficient semaphore preallocation approach

@@ -29,9 +29,6 @@ __attribute__((noreturn)) void task_suspend(void) {
     }
 }
 
-static bool        task_restart_wake_initialized = false;
-static semaphore_t task_restart_wake;
-
 static void restart_task_mainloop(void) {
     for (;;) {
         for (thread_t thread = tasktable_start; thread < tasktable_end; thread++) {
@@ -40,9 +37,11 @@ static void restart_task_mainloop(void) {
                 thread_restart_other_task(thread);
             }
         }
-        semaphore_take(&task_restart_wake);
+        task_doze();
     }
 }
+
+TASK_REGISTER(task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
 
 __attribute__((noreturn)) void restart_current_task(void) {
     thread_t current_thread = task_get_current();
@@ -52,9 +51,7 @@ __attribute__((noreturn)) void restart_current_task(void) {
         // mark ourself as pending restart
         current_thread->mut->needs_restart = true;
         // wake up the restart task
-        if (atomic_load(task_restart_wake_initialized)) {
-            (void) semaphore_give(&task_restart_wake);
-        }
+        task_rouse(&task_restart_task);
         debugf(WARNING, "Suspending task to wait for restart.");
     } else {
         debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
@@ -62,15 +59,6 @@ __attribute__((noreturn)) void restart_current_task(void) {
     // wait forever for the restart task to run
     task_suspend();
 }
-
-TASK_REGISTER(task_restart_task, "restart-task", PRIORITY_REPAIR, restart_task_mainloop, NULL, NOT_RESTARTABLE);
-
-static void task_restart_init(void) {
-    semaphore_init(&task_restart_wake);
-    atomic_store(task_restart_wake_initialized, true);
-}
-
-PROGRAM_INIT(STAGE_READY, task_restart_init);
 
 struct reg_state {
     uint32_t r0;

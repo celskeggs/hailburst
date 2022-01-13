@@ -77,6 +77,9 @@ static inline void task_delay_abs(uint64_t deadline_ns) {
 
 extern void start_predef_threads(void);
 
+#define TASK_PROTO(t_ident) \
+    extern struct thread_st t_ident;
+
 // name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
 #define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
     __attribute__((section(".tasktable"))) struct thread_st t_ident = {           \
@@ -108,6 +111,19 @@ static inline void task_rouse(thread_t task) {
 
 static inline void task_doze(void) {
     semaphore_take(&task_get_current()->rouse);
+}
+
+// does not actually block
+static inline bool task_doze_try(void) {
+    return semaphore_take_try(&task_get_current()->rouse);
+}
+
+static inline bool task_doze_timed(uint64_t nanoseconds) {
+    return semaphore_take_timed(&task_get_current()->rouse, nanoseconds);
+}
+
+static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
+    return semaphore_take_timed_abs(&task_get_current()->rouse, deadline_ns);
 }
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

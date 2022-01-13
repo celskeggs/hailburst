@@ -11,7 +11,7 @@ typedef struct fw_exchange_st {
     fw_encoder_t encoder;
     fw_decoder_t decoder;
 
-    semaphore_t exchange_wake;
+    thread_t exchange_task;
 
     chart_t *transmit_chart; // client: exchange_thread, server: link driver, struct io_tx_ent
     chart_t *receive_chart;  // client: link driver, server: exchange_thread, struct io_rx_ent
@@ -33,16 +33,17 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
     CHART_SERVER_NOTIFY(e_ident ## _receive_chart, fakewire_exc_notify, &e_ident);       \
     FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                          \
                            e_ident ## _receive_chart, e_ident ## _transmit_chart);       \
+    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_SERVERS,                   \
+                  fakewire_exc_exchange_loop, &e_ident, RESTARTABLE);                    \
     fw_exchange_t e_ident = {                                                            \
         .label = (e_link_options).label,                                                 \
-        /* io_port, encoder, decoder, exchange_wake not initialized here */              \
+        /* io_port, encoder, decoder not initialized here */                             \
+        .exchange_task = &e_ident ## _task,                                              \
         .transmit_chart = &e_ident ## _transmit_chart,                                   \
         .receive_chart = &e_ident ## _receive_chart,                                     \
         .read_chart = &e_read_chart,                                                     \
         .write_chart = &e_write_chart,                                                   \
     };                                                                                   \
-    PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident);      \
-    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_SERVERS,                   \
-                  fakewire_exc_exchange_loop, &e_ident, RESTARTABLE)
+    PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident)
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */

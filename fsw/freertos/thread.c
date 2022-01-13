@@ -18,11 +18,10 @@ static void thread_idle_main(void) {
 
 TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, thread_idle_main, NULL, RESTARTABLE);
 
-void task_entrypoint(TCB_t * state) {
-
+void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
-        scrubber_cycle_wait(state == &idle_task);
+        scrubber_cycle_wait();
     }
 
     task_clear_crash();

@@ -99,7 +99,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
     return false;
 }
 
-void magnetometer_mainloop(magnetometer_t *mag) {
+void magnetometer_query_loop(magnetometer_t *mag) {
     assert(mag != NULL);
 
     for (;;) {
@@ -107,7 +107,7 @@ void magnetometer_mainloop(magnetometer_t *mag) {
         // wait for magnetometer power command
         while (!atomic_load_relaxed(mag->should_be_powered)) {
             debugf(DEBUG, "Waiting for magnetometer power command...");
-            semaphore_take(mag->flag_change);
+            task_doze();
         }
         debugf(DEBUG, "Turning on magnetometer power...");
 
@@ -124,7 +124,7 @@ void magnetometer_mainloop(magnetometer_t *mag) {
         while (atomic_load_relaxed(mag->should_be_powered)) {
             // wait 100ms and check to confirm we weren't cancelled during that time
             debugf(TRACE, "Waiting 100ms for next reading (monitoring flag).");
-            if (semaphore_take_timed_abs(mag->flag_change, reading_time)) {
+            if (task_doze_timed_abs(reading_time)) {
                 // need to recheck state... wake might be spurious.
                 debugf(TRACE, "Woken up; rechecking flag!");
                 continue;
@@ -169,7 +169,7 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(mag->readings, index);
 }
 
-void magnetometer_telemloop(magnetometer_t *mag) {
+void magnetometer_telem_loop(magnetometer_t *mag) {
     assert(mag != NULL);
 
     // runs every 5.5 seconds to meet requirements
@@ -198,6 +198,6 @@ void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     if (powered != mag->should_be_powered) {
         debugf(DEBUG, "Notifying mag_query_loop about new requested power state: %u.", powered);
         atomic_store_relaxed(mag->should_be_powered, powered);
-        semaphore_give(mag->flag_change);
+        task_rouse(mag->query_task);
     }
 }

@@ -5,9 +5,6 @@
 #include <fsw/debug.h>
 
 extern struct scrubber_task_data scrubber_data_1, scrubber_data_2;
-// singly-instanced because there is only one IDLE task
-bool        wake_inited;
-semaphore_t scrubber_idle_wake;
 
 static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     assert(scrubber != NULL);
@@ -16,13 +13,8 @@ static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     // waiting for an iteration, consider the 'start iteration' to be the one that's about to start.
     uint64_t start_iteration = (atomic_load_relaxed(scrubber->iteration) + 1) & ~1;
 
-    // force the scrubber to start a cycle NOW
-    if (atomic_load(scrubber->initialized)) {
-        // ignore duplicates, because that indicates a cycle has already been requested
-        (void) semaphore_give(&scrubber->wake);
-    } else {
-        // if not initialized yet, that's fine; the scrubber will immediately start a cycle when it does initialize.
-    }
+    // encourage the scrubber to start a cycle immediately
+    task_rouse(scrubber->scrubber_task);
 
     return start_iteration;
 }
@@ -31,19 +23,17 @@ static bool scrubber_done(struct scrubber_task_data *scrubber, uint64_t start_it
     return atomic_load_relaxed(scrubber->iteration) >= start_iteration + 2;
 }
 
-void scrubber_cycle_wait(bool is_idle) {
+void scrubber_cycle_wait(void) {
     uint64_t iteration_1 = start_scrub_wait(&scrubber_data_1);
     uint64_t iteration_2 = start_scrub_wait(&scrubber_data_2);
 
     int max_attempts = 200; // wait at most two seconds, regardless.
     // wait until the iteration ends.
     while (!scrubber_done(&scrubber_data_1, iteration_1) && !scrubber_done(&scrubber_data_2, iteration_2)) {
-        if (is_idle) {
-            // we initialize the scrubber before the IDLE task, so this is safe.
-            assert(wake_inited);
+        if (task_get_current() == &idle_task) {
             // need a dedicated wakeup for IDLE task recovery, because otherwise there is a period of time without any
-            // idle-priority task running. but we can't do this for everything, or the signals would clash.
-            semaphore_take(&scrubber_idle_wake);
+            // idle-priority task running. but we can't do this for everything, because that would be too many cases.
+            task_doze();
         } else {
             task_delay(10000000); // wait about 10 milliseconds and then recheck
         }
@@ -58,10 +48,6 @@ void scrubber_cycle_wait(bool is_idle) {
 
 void scrubber_set_kernel(void *kernel_elf_rom) {
     assert(kernel_elf_rom != NULL);
-
-    assert(!wake_inited);
-    semaphore_init(&scrubber_idle_wake);
-    atomic_store(wake_inited, true);
 
     assert(scrubber_data_1.kernel_elf_rom == NULL);
     scrubber_data_1.kernel_elf_rom = kernel_elf_rom;
