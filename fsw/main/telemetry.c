@@ -181,12 +181,18 @@ static void telemetry_mainloop(void) {
             packet.data_len     = async_elm->data_len;
             packet.data_bytes   = async_elm->data_bytes; // array->pointer
 
+            debugf(TRACE, "Transmitting async telemetry, timestamp=%u.%09u",
+                       (uint32_t) (packet.timestamp_ns / CLOCK_NS_PER_SEC),
+                       (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
+
             // transmit this packet
             comm_enc_encode(telemetry.comm_encoder, &packet);
 
             multichart_reply_send(&telemetry.async_chart, async_elm);
 
             watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
+
+            debugf(TRACE, "Transmitted async telemetry.");
         } else {
             // pull synchronous telemetry from wall
             tlm_sync_t *sync_elm = multichart_reply_start(&telemetry.sync_chart, &timestamp_ns_mono);
@@ -199,14 +205,22 @@ static void telemetry_mainloop(void) {
                 packet.data_len     = sync_elm->data_len;
                 packet.data_bytes   = sync_elm->data_bytes;
 
+                debugf(TRACE, "Transmitting synchronous telemetry, timestamp=%u.%09u",
+                       (uint32_t) (packet.timestamp_ns / CLOCK_NS_PER_SEC),
+                       (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
+
                 // transmit this packet
                 comm_enc_encode(telemetry.comm_encoder, &packet);
 
                 // let the synchronous sender know they can continue
                 multichart_reply_send(&telemetry.sync_chart, sync_elm);
+
+                debugf(TRACE, "Transmitted synchronous telemetry.");
             } else {
                 // no asynchronous telemetry AND no synchronous telemetry... time to sleep!
+                debugf(TRACE, "Telemetry loop dozing...");
                 task_doze();
+                debugf(TRACE, "Telemetry loop roused!");
             }
         }
     }

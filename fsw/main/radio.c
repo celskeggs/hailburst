@@ -507,8 +507,6 @@ static bool radio_downlink_service(radio_t *radio, size_t append_len) {
     }
     assert(state == TX_STATE_IDLE);
 
-    debugf(DEBUG, "Radio: finished transmitting %zu bytes.", append_len);
-
     return true;
 }
 
@@ -530,10 +528,12 @@ void radio_downlink_loop(radio_t *radio) {
         size_t grabbed = stream_read(radio->down_stream, radio->downlink_buf_local, max_len);
         assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= tx_region.size);
 
+        debugf(TRACE, "Radio downlink received %zu bytes for transmission.", grabbed);
         if (!radio_downlink_service(radio, grabbed)) {
             debugf(WARNING, "Radio: hit error in downlink loop; halting downlink thread.");
             break;
         }
+        debugf(TRACE, "Radio downlink completed transmitting %zu bytes.", grabbed);
 
         watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);
     }
