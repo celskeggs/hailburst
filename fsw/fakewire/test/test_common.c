@@ -51,11 +51,6 @@ int main(int argc, char *argv[]) {
     initialize_systems();
     start_predef_threads();
 
-    if (test_main() == 0) {
-        printf("Test passed!\n");
-        return 0;
-    } else {
-        printf("TEST FAILED\n");
-        return 1;
-    }
+    // exit just the main thread, because returning causes all threads to exit, and we want everything to keep running
+    pthread_exit(NULL);
 }

@@ -6,6 +6,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
@@ -46,11 +47,11 @@ struct reader_config {
     const char *name;
 
     chart_t    *read_chart;
-    semaphore_t wake;
 
     mutex_t out_mutex;
     struct packet_chain *chain_out;
-    semaphore_t complete;
+    bool complete_flag;
+    thread_t complete_notify;
 };
 
 static void exchange_reader(struct reader_config *rc) {
@@ -58,7 +59,7 @@ static void exchange_reader(struct reader_config *rc) {
     do {
         struct io_rx_ent *ent = chart_reply_start(rc->read_chart);
         if (ent == NULL) {
-            semaphore_take(&rc->wake);
+            task_doze();
             continue;
         }
 
@@ -85,19 +86,20 @@ static void exchange_reader(struct reader_config *rc) {
         chart_reply_send(rc->read_chart, 1);
     } while (last_packet_marker != 0);
 
-    semaphore_give(&rc->complete);
+    atomic_store(rc->complete_flag, true);
+    task_rouse(rc->complete_notify);
 }
 
 struct writer_config {
     const char *name;
 
-    semaphore_t wake;
     chart_t    *write_chart;
 
     struct packet_chain *chain_in;
 
     bool pass;
-    semaphore_t complete;
+    bool complete_flag;
+    thread_t complete_notify;
 };
 
 static void exchange_writer(struct writer_config *wc) {
@@ -117,7 +119,7 @@ static void exchange_writer(struct writer_config *wc) {
         entry->actual_length = chain->packet_len + 1;
         chart_request_send(wc->write_chart, 1);
         while (chart_request_avail(wc->write_chart) < chart_note_count(wc->write_chart)) {
-            semaphore_take(&wc->wake);
+            task_doze();
         }
         debugf(DEBUG, "[%8s] Completed write of packet with length %lu", wc->name, chain->packet_len);
 
@@ -125,25 +127,14 @@ static void exchange_writer(struct writer_config *wc) {
     }
 
     wc->pass = true;
-    semaphore_give(&wc->complete);
+    atomic_store(wc->complete_flag, true);
+    task_rouse(wc->complete_notify);
 }
 
 struct exchange_state {
     struct reader_config rc;
     struct writer_config wc;
 };
-
-static void exchange_state_notify_reader(struct exchange_state *est) {
-    assert(est != NULL);
-
-    (void) semaphore_give(&est->rc.wake);
-}
-
-static void exchange_state_notify_writer(struct exchange_state *est) {
-    assert(est != NULL);
-
-    (void) semaphore_give(&est->wc.wake);
-}
 
 static struct packet_chain *random_packet_chain(void) {
     int packet_count = rand() % 20 + 10;
@@ -231,14 +222,10 @@ PROGRAM_INIT(STAGE_RAW, prepare_test_fifos);
 
 static void exchange_controller_init(struct exchange_state *es) {
     mutex_init(&es->rc.out_mutex);
-    semaphore_init(&es->rc.wake);
-    semaphore_init(&es->rc.complete);
-    semaphore_init(&es->wc.wake);
-    semaphore_init(&es->wc.complete);
     es->wc.chain_in = random_packet_chain();
 }
 
-#define EXCHANGE_CONTROLLER(e_ident, e_flags)                                                                   \
+#define EXCHANGE_CONTROLLER(e_ident, e_flags, e_complete_task)                                                  \
     CHART_REGISTER(e_ident ## _read, io_rx_pad_size(4096), 4);                                                  \
     CHART_REGISTER(e_ident ## _write, io_rx_pad_size(4096), 4);                                                 \
     struct exchange_state e_ident = {                                                                           \
@@ -246,15 +233,17 @@ static void exchange_controller_init(struct exchange_state *es) {
             .name = #e_ident,                                                                                   \
             .chain_out = NULL,                                                                                  \
             .read_chart = &e_ident ## _read,                                                                    \
+            .complete_flag = false,                                                                             \
+            .complete_notify = &e_complete_task,                                                                \
         },                                                                                                      \
         .wc = {                                                                                                 \
             .name = #e_ident,                                                                                   \
             .write_chart = &e_ident ## _write,                                                                  \
             .pass = false,                                                                                      \
+            .complete_flag = false,                                                                             \
+            .complete_notify = &e_complete_task,                                                                \
         },                                                                                                      \
     };                                                                                                          \
-    CHART_SERVER_NOTIFY(e_ident ## _read, exchange_state_notify_reader, &e_ident);                              \
-    CHART_CLIENT_NOTIFY(e_ident ## _write, exchange_state_notify_writer, &e_ident);                             \
     PROGRAM_INIT_PARAM(STAGE_READY, exchange_controller_init, e_ident, &e_ident);                               \
     const fw_link_options_t e_ident ## _options = {                                                             \
         .label = #e_ident,                                                                                      \
@@ -263,9 +252,11 @@ static void exchange_controller_init(struct exchange_state *es) {
     };                                                                                                          \
     FAKEWIRE_EXCHANGE_REGISTER(e_ident ## _exchange, e_ident ## _options, e_ident ## _read, e_ident ## _write); \
     TASK_REGISTER(e_ident ## _reader_task, #e_ident "_reader", PRIORITY_INIT,                                   \
-                  exchange_reader, &e_ident.rc, NOT_RESTARTABLE);                                              \
+                  exchange_reader, &e_ident.rc, NOT_RESTARTABLE);                                               \
     TASK_REGISTER(e_ident ## _writer_task, #e_ident "_writer", PRIORITY_INIT,                                   \
-                  exchange_writer, &e_ident.wc, NOT_RESTARTABLE)
+                  exchange_writer, &e_ident.wc, NOT_RESTARTABLE);                                               \
+    CHART_SERVER_NOTIFY(e_ident ## _read, task_rouse, &e_ident ## _reader_task);                                \
+    CHART_CLIENT_NOTIFY(e_ident ## _write, task_rouse, &e_ident ## _writer_task)
 
 // return true/false for pass/fail
 static bool collect_status(struct exchange_state *est, struct packet_chain **chain_out, uint64_t deadline) {
@@ -274,11 +265,17 @@ static bool collect_status(struct exchange_state *est, struct packet_chain **cha
     bool pass = true;
 
     // wait up to five seconds
-    if (!semaphore_take_timed_abs(&est->rc.complete, deadline)) {
+    while (clock_timestamp_monotonic() < deadline) {
+        if (atomic_load(est->rc.complete_flag) && atomic_load(est->wc.complete_flag)) {
+            break;
+        }
+        (void) task_doze_timed_abs(deadline);
+    }
+    if (!atomic_load(est->rc.complete_flag)) {
         debugf(CRITICAL, "[%8s] exchange controller: reader not complete by 5 second deadline", est->rc.name);
         pass = false;
     }
-    if (!semaphore_take_timed_abs(&est->wc.complete, deadline)) {
+    if (!atomic_load(est->wc.complete_flag)) {
         debugf(CRITICAL, "[%8s] exchange controller: writer not complete by 5 second deadline", est->wc.name);
         pass = false;
     } else if (!est->wc.pass) {
@@ -298,10 +295,12 @@ static void init_random(void) {
 }
 PROGRAM_INIT(STAGE_RAW, init_random);
 
-EXCHANGE_CONTROLLER(ec_left, FW_FLAG_FIFO_PROD);
-EXCHANGE_CONTROLLER(ec_right, FW_FLAG_FIFO_CONS);
+TASK_PROTO(task_main);
 
-int test_main(void) {
+EXCHANGE_CONTROLLER(ec_left, FW_FLAG_FIFO_PROD, task_main);
+EXCHANGE_CONTROLLER(ec_right, FW_FLAG_FIFO_CONS, task_main);
+
+static void test_main(void) {
     uint64_t deadline = clock_timestamp_monotonic() + 5000000000;
 
     int code = 0;
@@ -333,5 +332,13 @@ int test_main(void) {
                packet_chain_len(ec_left.wc.chain_in));
     }
 
-    return code;
+    if (code != 0) {
+        printf("TEST FAILED\n");
+        exit(1);
+    } else {
+        printf("Test passed!\n");
+        exit(0);
+    }
 }
+
+TASK_REGISTER(task_main, "test_main", PRIORITY_INIT, test_main, NULL, NOT_RESTARTABLE);
