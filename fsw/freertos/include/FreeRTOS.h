@@ -85,10 +85,6 @@
     #error configMAX_PRIORITIES must be defined to be greater than or equal to 1.
 #endif
 
-#ifndef configUSE_16_BIT_TICKS
-    #error Missing definition:  configUSE_16_BIT_TICKS must be defined in FreeRTOSConfig.h as either 1 or 0.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
 #ifndef INCLUDE_vTaskDelete
     #define INCLUDE_vTaskDelete    0
 #endif
