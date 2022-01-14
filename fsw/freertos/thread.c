@@ -60,15 +60,3 @@ static void thread_registered_init(void) {
 }
 
 PROGRAM_INIT(STAGE_READY, thread_registered_init);
-
-void semaphore_init(semaphore_t *sema) {
-    assert(sema != NULL);
-    *sema = xSemaphoreCreateBinary();
-    assert(*sema != NULL);
-}
-
-void semaphore_destroy(semaphore_t *sema) {
-    assert(sema != NULL && *sema != NULL);
-    vSemaphoreDelete(*sema);
-    *sema = NULL;
-}

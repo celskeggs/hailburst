@@ -8,7 +8,6 @@
 struct scrubber_task_data {
     void *kernel_elf_rom;
     uint64_t iteration;
-    semaphore_t wake;
     thread_t scrubber_task;
 };
 

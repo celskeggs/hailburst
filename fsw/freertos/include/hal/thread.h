@@ -6,14 +6,13 @@
 #include <time.h>
 
 #include <FreeRTOS.h>
-#include <semphr.h>
+#include <task.h>
 
 #include <rtos/timer.h>
 #include <fsw/debug.h>
 #include <fsw/preprocessor.h>
 
 typedef TCB_t *thread_t;
-typedef SemaphoreHandle_t semaphore_t;
 
 // array containing all .tasktable entries produced in TASK_REGISTER
 // (this array is generated from fragments by the linker)
@@ -131,45 +130,6 @@ static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
 static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     assert(task == task_get_current());
     return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
-}
-
-// TODO: more efficient semaphore preallocation approach
-#define SEMAPHORE_REGISTER(s_ident) \
-    semaphore_t s_ident; \
-    PROGRAM_INIT_PARAM(STAGE_READY, semaphore_init, s_ident, &s_ident);
-
-// semaphores are created empty, such that an initial take will block
-extern void semaphore_init(semaphore_t *sema);
-extern void semaphore_destroy(semaphore_t *sema);
-
-static inline void semaphore_take(semaphore_t *sema) {
-    BaseType_t status;
-    assert(sema != NULL && *sema != NULL);
-    status = xSemaphoreTake(*sema, portMAX_DELAY);
-    assert(status == pdTRUE);
-}
-
-// returns true if taken, false if not available
-static inline bool semaphore_take_try(semaphore_t *sema) {
-    assert(sema != NULL && *sema != NULL);
-    return xSemaphoreTake(*sema, 0) == pdTRUE;
-}
-
-// returns true if taken, false if timed out
-static inline bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds) {
-    assert(sema != NULL && *sema != NULL);
-    return xSemaphoreTake(*sema, timer_ns_to_ticks(nanoseconds)) == pdTRUE;
-}
-
-// returns true if taken, false if timed out
-static inline bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns) {
-    assert(sema != NULL && *sema != NULL);
-    return xSemaphoreTake(*sema, timer_ticks_until_ns(deadline_ns)) == pdTRUE;
-}
-
-static inline bool semaphore_give(semaphore_t *sema) {
-    assert(sema != NULL && *sema != NULL);
-    return xSemaphoreGive(*sema) == pdTRUE;
 }
 
 #endif /* FSW_FREERTOS_HAL_THREAD_H */
