@@ -45,7 +45,6 @@ typedef struct {
     chart_index_t reply_ptr;   // writable only by server, wraps at 2 * note_count
 } chart_t;
 
-// static alternative to chart_init
 #define CHART_REGISTER(c_ident, c_note_size, c_note_count)                                                  \
     static_assert(c_note_size > 0 && c_note_size == (size_t) c_note_size, "positive note size");            \
     static_assert(c_note_count > 0 && c_note_count == (chart_index_t) c_note_count, "positive note count"); \
@@ -82,8 +81,6 @@ typedef struct {
     }                                                           \
     PROGRAM_INIT(STAGE_RAW, c_ident ## _register_client);
 
-// initializes a chart.
-void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count);
 // notify_server and notify_client should be fast and non-blocking procedures that let the appropriate party to the
 // chart know to check the chart again.
 void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param);

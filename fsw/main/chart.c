@@ -6,23 +6,6 @@
 #include <fsw/debug.h>
 #include <fsw/chart.h>
 
-void chart_init(chart_t *chart, size_t note_size, chart_index_t note_count) {
-    assert(chart != NULL && note_size > 0 && note_count > 0);
-
-    chart->notify_server = NULL;
-    chart->notify_server_param = NULL;
-    chart->notify_client = NULL;
-    chart->notify_client_param = NULL;
-
-    chart->note_size = note_size;
-    chart->note_count = note_count;
-    chart->note_storage = (uint8_t *) malloc(note_count * note_size);
-    assert(chart->note_storage != NULL);
-
-    chart->request_ptr = 0;
-    chart->reply_ptr = 0;
-}
-
 void chart_attach_server(chart_t *chart, void (*notify_server)(void *), void *param) {
     assert(chart != NULL && notify_server != NULL);
     assert(chart->notify_server == NULL && chart->notify_server_param == NULL);
