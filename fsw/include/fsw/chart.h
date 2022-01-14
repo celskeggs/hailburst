@@ -72,13 +72,13 @@ typedef struct {
 // TODO: find a way for these to not require PROGRAM_INIT
 #define CHART_SERVER_NOTIFY(c_ident, notify_server_cb, param)   \
     static void c_ident ## _register_server(void) {             \
-        chart_attach_server(&c_ident, PP_ERASE_TYPE(notify_server_cb, param), param); \
+        chart_attach_server(&c_ident, PP_ERASE_TYPE(notify_server_cb, param), (void*) (param)); \
     }                                                           \
     PROGRAM_INIT(STAGE_RAW, c_ident ## _register_server);
 
 #define CHART_CLIENT_NOTIFY(c_ident, notify_client_cb, param)   \
     static void c_ident ## _register_client(void) {             \
-        chart_attach_client(&c_ident, PP_ERASE_TYPE(notify_client_cb, param), param); \
+        chart_attach_client(&c_ident, PP_ERASE_TYPE(notify_client_cb, param), (void*) (param)); \
     }                                                           \
     PROGRAM_INIT(STAGE_RAW, c_ident ## _register_client);
 

@@ -189,10 +189,6 @@ void magnetometer_telem_loop(magnetometer_t *mag) {
     }
 }
 
-void magnetometer_drop_notification(void) {
-    // we're only using the chart as a datastructure, so no need for notifications.
-}
-
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
     assert(mag != NULL);
     if (powered != mag->should_be_powered) {

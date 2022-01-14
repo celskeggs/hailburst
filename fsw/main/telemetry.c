@@ -8,32 +8,9 @@
 #include <fsw/debug.h>
 #include <fsw/telemetry.h>
 
-enum {
-    TLM_MAX_ASYNC_CLIENT_BUFFERS = 128,
-    TLM_MAX_ASYNC_SIZE           = 16,
-    TLM_MAX_SYNC_BUFFERS         = 1,
-    TLM_MAX_SYNC_SIZE            = 64 * 1024,
-};
-
-typedef struct {
-    uint32_t telemetry_id;
-    uint32_t data_len;
-    uint8_t  data_bytes[TLM_MAX_ASYNC_SIZE];
-} tlm_async_t;
-
-typedef struct {
-    uint32_t telemetry_id;
-    uint32_t data_len;
-    uint8_t  data_bytes[TLM_MAX_SYNC_SIZE];
-} tlm_sync_t;
-
 struct {
-    bool initialized;
-
-    multichart_server_t async_chart;
-    uint32_t            async_dropped; // atomic
-    multichart_server_t sync_chart;
-
+    bool        initialized;
+    uint32_t    async_dropped; // atomic
     comm_enc_t *comm_encoder;
 } telemetry = {
     .initialized   = false,
@@ -54,19 +31,11 @@ enum {
 
 TASK_PROTO(telemetry_task);
 
-static void telemetry_mainloop_notify(void *opaque) {
-    (void) opaque;
-
-    // wake up main loop
-    task_rouse(&telemetry_task);
-}
+MULTICHART_SERVER_REGISTER(telemetry_async_chart, sizeof(tlm_async_t), task_rouse, &telemetry_task);
+MULTICHART_SERVER_REGISTER(telemetry_sync_chart, sizeof(tlm_sync_t), task_rouse, &telemetry_task);
 
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry.initialized);
-
-    // set up message paths
-    multichart_init_server(&telemetry.async_chart, sizeof(tlm_async_t), telemetry_mainloop_notify, NULL);
-    multichart_init_server(&telemetry.sync_chart, sizeof(tlm_sync_t), telemetry_mainloop_notify, NULL);
 
     telemetry.comm_encoder = encoder;
     comm_enc_set_task(encoder, &telemetry_task);
@@ -74,35 +43,9 @@ void telemetry_init(comm_enc_t *encoder) {
     telemetry.initialized = true;
 }
 
-static void tlm_async_notify(void *opaque) {
-    (void) opaque;
-    // no notification needs to be sent; asynchronous telemetry messages do not block
-}
-
-void tlm_async_init(tlm_async_endpoint_t *tep) {
-    assert(tep != NULL);
-    assert(telemetry.initialized);
-
-    multichart_init_client(&tep->client, &telemetry.async_chart, TLM_MAX_ASYNC_CLIENT_BUFFERS, tlm_async_notify, NULL);
-}
-
-static void tlm_sync_notify(void *opaque) {
-    tlm_sync_endpoint_t *tep = (tlm_sync_endpoint_t *) opaque;
-    assert(tep != NULL);
-
-    local_rouse(tep->client_task);
-}
-
-void tlm_sync_init_internal(tlm_sync_endpoint_t *tep) {
-    assert(tep != NULL);
-    assert(telemetry.initialized);
-
-    multichart_init_client(&tep->sync_client, &telemetry.sync_chart, 1, tlm_sync_notify, tep);
-}
-
 static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
     assert(tep != NULL);
-    tlm_async_t *async = multichart_request_start(&tep->client);
+    tlm_async_t *async = multichart_request_start(tep->client);
     if (async == NULL) {
         // can be relaxed because we don't care about previous writes being retired first
         atomic_fetch_add_relaxed(telemetry.async_dropped, 1);
@@ -113,13 +56,13 @@ static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
 static void telemetry_async_send(tlm_async_endpoint_t *tep, tlm_async_t *async) {
     assert(tep != NULL && async != NULL);
 
-    multichart_request_send(&tep->client, async);
+    multichart_request_send(tep->client, async);
 }
 
 static tlm_sync_t *telemetry_start_sync(tlm_sync_endpoint_t *tep) {
     assert(tep != NULL);
     for (;;) {
-        tlm_sync_t *sync = multichart_request_start(&tep->sync_client);
+        tlm_sync_t *sync = multichart_request_start(tep->sync_client);
         if (sync != NULL) {
             return sync;
         }
@@ -131,11 +74,11 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
     assert(telemetry.initialized);
 
     sync->data_len = data_len;
-    multichart_request_send(&tep->sync_client, sync);
+    multichart_request_send(tep->sync_client, sync);
 
     // wait for request to complete
-    assert(multichart_client_note_count(&tep->sync_client) == 1);
-    while (multichart_request_start(&tep->sync_client) == NULL) {
+    assert(multichart_client_note_count(tep->sync_client) == 1);
+    while (multichart_request_start(tep->sync_client) == NULL) {
         local_doze(tep->client_task);
     }
 }
@@ -173,7 +116,7 @@ static void telemetry_mainloop(void) {
 
         // pull telemetry from multichart
         uint64_t timestamp_ns_mono = 0;
-        tlm_async_t *async_elm = multichart_reply_start(&telemetry.async_chart, &timestamp_ns_mono);
+        tlm_async_t *async_elm = multichart_reply_start(&telemetry_async_chart, &timestamp_ns_mono);
         if (async_elm != NULL) {
             // convert async element to packet
             packet.cmd_tlm_id   = async_elm->telemetry_id;
@@ -188,14 +131,14 @@ static void telemetry_mainloop(void) {
             // transmit this packet
             comm_enc_encode(telemetry.comm_encoder, &packet);
 
-            multichart_reply_send(&telemetry.async_chart, async_elm);
+            multichart_reply_send(&telemetry_async_chart, async_elm);
 
             watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
 
             debugf(TRACE, "Transmitted async telemetry.");
         } else {
             // pull synchronous telemetry from wall
-            tlm_sync_t *sync_elm = multichart_reply_start(&telemetry.sync_chart, &timestamp_ns_mono);
+            tlm_sync_t *sync_elm = multichart_reply_start(&telemetry_sync_chart, &timestamp_ns_mono);
             if (sync_elm != NULL) {
                 assert(sync_elm->data_len <= TLM_MAX_SYNC_SIZE);
 
@@ -213,7 +156,7 @@ static void telemetry_mainloop(void) {
                 comm_enc_encode(telemetry.comm_encoder, &packet);
 
                 // let the synchronous sender know they can continue
-                multichart_reply_send(&telemetry.sync_chart, sync_elm);
+                multichart_reply_send(&telemetry_sync_chart, sync_elm);
 
                 debugf(TRACE, "Transmitted synchronous telemetry.");
             } else {
@@ -348,7 +291,7 @@ void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
     sync->telemetry_id = MAG_READINGS_ARRAY_TID;
     uint16_t *out = (uint16_t*) sync->data_bytes;
     size_t num_readings = *fetch_count;
-    assert(multichart_client_note_size(&tep->sync_client) == sizeof(tlm_sync_t));
+    assert(multichart_client_note_size(tep->sync_client) == sizeof(tlm_sync_t));
     static_assert(sizeof(tlm_sync_t) == TLM_MAX_SYNC_SIZE + offsetof(tlm_sync_t, data_bytes), "size validity");
     if (num_readings * 14 > TLM_MAX_SYNC_SIZE) {
         num_readings = TLM_MAX_SYNC_SIZE / 14;

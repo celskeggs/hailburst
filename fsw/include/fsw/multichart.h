@@ -8,11 +8,15 @@
  */
 
 #include <fsw/chart.h>
+#include <fsw/preprocessor.h>
+
+struct multichart_note_header {
+    uint64_t insertion_timestamp;
+};
 
 // immutable configuration (after setup)
 typedef struct multichart_client_st {
-    chart_t chart;
-    struct multichart_server_st *server;
+    chart_t *chart;
     struct multichart_client_st *next_client;
 } multichart_client_t;
 
@@ -26,10 +30,33 @@ typedef struct multichart_server_st {
     multichart_client_t *first_client;
 } multichart_server_t;
 
-void multichart_init_server(multichart_server_t *server, size_t note_size,
-                            void (*notify_server)(void *), void *param);
-void multichart_init_client(multichart_client_t *client, multichart_server_t *server, chart_index_t note_count,
-                            void (*notify_client)(void *), void *param);
+#define MULTICHART_SERVER_REGISTER(s_ident, s_note_size, s_notify_fn, s_notify_param) \
+    static_assert(s_note_size > 0, "must have positive note size");                   \
+    multichart_server_t s_ident = {                                                   \
+        .notify_server = PP_ERASE_TYPE(s_notify_fn, s_notify_param),                  \
+        .notify_server_param = (void *) (s_notify_param),                             \
+        .note_size = (s_note_size),                                                   \
+        .first_client = NULL, /* will be filled in later */                           \
+    }
+
+#define MULTICHART_CLIENT_REGISTER(c_ident, s_ident, s_note_size, c_note_count, c_notify_fn, c_notify_param) \
+    extern multichart_server_t s_ident;                                                                      \
+    static_assert(s_note_size > 0, "must have positive note size");                                          \
+    static_assert(c_note_count > 0, "must have positive number of notes");                                   \
+    CHART_REGISTER(c_ident ## _chart, s_note_size + sizeof(struct multichart_note_header), (c_note_count));  \
+    CHART_CLIENT_NOTIFY(c_ident ## _chart, c_notify_fn, c_notify_param);                                     \
+    multichart_client_t c_ident = {                                                                          \
+        .chart = &c_ident ## _chart,                                                                         \
+        /* next_client populated during init */                                                              \
+    };                                                                                                       \
+    static void c_ident ## _init(void) {                                                                     \
+        assert(s_note_size == s_ident.note_size);                                                            \
+        /* TODO: is this the best function to attach? or would it be better to notify indirectly? */         \
+        chart_attach_server(&c_ident ## _chart, s_ident.notify_server, s_ident.notify_server_param);         \
+        c_ident.next_client = s_ident.first_client;                                                          \
+        s_ident.first_client = &c_ident;                                                                     \
+    }                                                                                                        \
+    PROGRAM_INIT(STAGE_RAW, c_ident ## _init)
 
 static inline size_t multichart_server_note_size(multichart_server_t *server) {
     assert(server != NULL);
@@ -37,13 +64,13 @@ static inline size_t multichart_server_note_size(multichart_server_t *server) {
 }
 
 static inline size_t multichart_client_note_size(multichart_client_t *client) {
-    assert(client != NULL && client->server != NULL);
-    return client->server->note_size;
+    assert(client != NULL && client->chart != NULL);
+    return chart_note_size(client->chart) - sizeof(struct multichart_note_header);
 }
 
 static inline chart_index_t multichart_client_note_count(multichart_client_t *client) {
-    assert(client != NULL);
-    return chart_note_count(&client->chart);
+    assert(client != NULL && client->chart != NULL);
+    return chart_note_count(client->chart);
 }
 
 // if a request can be sent on any note, return a pointer to the note's memory, otherwise NULL.

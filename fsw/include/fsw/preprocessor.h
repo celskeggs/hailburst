@@ -1,6 +1,10 @@
 #ifndef FSW_PREPROCESSOR_H
 #define FSW_PREPROCESSOR_H
 
+static inline void ignore_callback(void) {
+    /* do nothing */
+}
+
 #define PP_CHECK_TYPE(expr, type) \
     __builtin_choose_expr( \
         __builtin_types_compatible_p(typeof(expr), type), \
