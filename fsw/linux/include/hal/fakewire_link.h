@@ -15,35 +15,29 @@ typedef struct {
 
     fw_link_options_t options;
 
-    semaphore_t *receive_wake;
-    semaphore_t *transmit_wake;
-    semaphore_t *fds_ready;
+    thread_t receive_task;
+    thread_t transmit_task;
 } fw_link_t;
 
 void fakewire_link_rx_loop(fw_link_t *fwl);
 void fakewire_link_tx_loop(fw_link_t *fwl);
-void fakewire_link_notify_rx_chart(fw_link_t *fwl);
-void fakewire_link_notify_tx_chart(fw_link_t *fwl);
 void fakewire_link_configure(fw_link_t *fwl);
 
 #define FAKEWIRE_LINK_REGISTER(l_ident, l_options, l_rx, l_tx)                                                        \
-    SEMAPHORE_REGISTER(l_ident ## _rxs);                                                                              \
-    SEMAPHORE_REGISTER(l_ident ## _txs);                                                                              \
-    SEMAPHORE_REGISTER(l_ident ## _frs);                                                                              \
+    extern fw_link_t l_ident;                                                                                         \
+    TASK_REGISTER(l_ident ## _cfg, "fw_config",  PRIORITY_INIT,  fakewire_link_configure, &l_ident, NOT_RESTARTABLE); \
+    TASK_REGISTER(l_ident ## _rxl, "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, &l_ident, NOT_RESTARTABLE); \
+    TASK_REGISTER(l_ident ## _txl, "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, &l_ident, NOT_RESTARTABLE); \
     fw_link_t l_ident = {                                                                                             \
         .fd_in = -1,                                                                                                  \
         .fd_out = -1,                                                                                                 \
         .rx_chart = &(l_rx),                                                                                          \
         .tx_chart = &(l_tx),                                                                                          \
         .options = (l_options),                                                                                       \
-        .receive_wake = &(l_ident ## _rxs),                                                                           \
-        .transmit_wake = &(l_ident ## _txs),                                                                          \
-        .fds_ready = &(l_ident ## _frs),                                                                              \
+        .receive_task = &(l_ident ## _rxl),                                                                           \
+        .transmit_task = &(l_ident ## _txl),                                                                          \
     };                                                                                                                \
-    CHART_CLIENT_NOTIFY(l_rx, fakewire_link_notify_rx_chart, &l_ident);                                               \
-    CHART_SERVER_NOTIFY(l_tx, fakewire_link_notify_tx_chart, &l_ident);                                               \
-    TASK_REGISTER(l_ident ## _cfg, "fw_config",  PRIORITY_INIT,  fakewire_link_configure, &l_ident, NOT_RESTARTABLE); \
-    TASK_REGISTER(l_ident ## _rxl, "fw_rx_loop", PRIORITY_SERVERS, fakewire_link_rx_loop, &l_ident, NOT_RESTARTABLE); \
-    TASK_REGISTER(l_ident ## _txl, "fw_tx_loop", PRIORITY_SERVERS, fakewire_link_tx_loop, &l_ident, NOT_RESTARTABLE)
+    CHART_CLIENT_NOTIFY(l_rx, task_rouse, &l_ident ## _rxl);                                                          \
+    CHART_SERVER_NOTIFY(l_tx, task_rouse, &l_ident ## _txl)
 
 #endif /* FSW_LINUX_HAL_FAKEWIRE_LINK_H */

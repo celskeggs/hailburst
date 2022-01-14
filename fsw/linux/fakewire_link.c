@@ -18,16 +18,15 @@
 void fakewire_link_rx_loop(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    // make sure we wait for fds to actually be populated
-    semaphore_take(fwl->fds_ready);
-    // then wake up again in case the other task is still waiting
-    (void) semaphore_give(fwl->fds_ready);
+    while (fwl->fd_in == -1 && fwl->fd_out == -1) {
+        task_doze();
+    }
 
     while (true) {
         struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
-            semaphore_take(fwl->receive_wake);
+            task_doze();
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -54,16 +53,15 @@ void fakewire_link_rx_loop(fw_link_t *fwl) {
 void fakewire_link_tx_loop(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    // make sure we wait for fds to actually be populated
-    semaphore_take(fwl->fds_ready);
-    // then wake up again in case the other task is still waiting
-    (void) semaphore_give(fwl->fds_ready);
+    while (fwl->fd_in == -1 && fwl->fd_out == -1) {
+        task_doze();
+    }
 
     while (true) {
         struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
         if (entry == NULL) {
             // wait for another entry to be available
-            semaphore_take(fwl->transmit_wake);
+            task_doze();
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -82,22 +80,6 @@ void fakewire_link_tx_loop(fw_link_t *fwl) {
 
         chart_reply_send(fwl->tx_chart, 1);
     }
-}
-
-void fakewire_link_notify_rx_chart(fw_link_t *fwl) {
-    assert(fwl != NULL);
-
-    // we don't worry about wakeups getting dropped.
-    // that just means a previous wakeup is still pending, which is just as good!
-    (void) semaphore_give(fwl->receive_wake);
-}
-
-void fakewire_link_notify_tx_chart(fw_link_t *fwl) {
-    assert(fwl != NULL);
-
-    // we don't worry about wakeups getting dropped.
-    // that just means a previous wakeup is still pending, which is just as good!
-    (void) semaphore_give(fwl->transmit_wake);
 }
 
 void fakewire_link_configure(fw_link_t *fwl) {
@@ -170,7 +152,8 @@ void fakewire_link_configure(fw_link_t *fwl) {
             abortf("Failed to set serial port attributes from '%s' for fakewire link.", opts.path);
         }
     }
-    assert(fwl->fd_in != 0 && fwl->fd_out != 0);
+    assert(fwl->fd_in > 0 && fwl->fd_out > 0);
 
-    (void) semaphore_give(fwl->fds_ready);
+    task_rouse(fwl->receive_task);
+    task_rouse(fwl->transmit_task);
 }
