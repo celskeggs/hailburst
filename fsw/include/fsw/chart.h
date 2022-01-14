@@ -49,7 +49,7 @@ typedef struct {
 #define CHART_REGISTER(c_ident, c_note_size, c_note_count)                                                  \
     static_assert(c_note_size > 0 && c_note_size == (size_t) c_note_size, "positive note size");            \
     static_assert(c_note_count > 0 && c_note_count == (chart_index_t) c_note_count, "positive note count"); \
-    static uint8_t c_ident ## _backing_array[c_note_size * c_note_count];                                   \
+    static uint8_t c_ident ## _backing_array[(c_note_size) * (c_note_count)];                               \
     chart_t c_ident = {                            \
         /* notifications populated later */        \
         .notify_server = NULL,                     \
