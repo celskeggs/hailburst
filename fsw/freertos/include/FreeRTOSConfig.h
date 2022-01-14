@@ -10,9 +10,7 @@
 #define configTICK_RATE_HZ                      1000
 #define configMAX_PRIORITIES                    6
 #define configMINIMAL_STACK_SIZE                512
-#define configUSE_TASK_NOTIFICATIONS            1
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
-#define configUSE_TIME_SLICING                  1
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
 #define configUSE_TASK_FPU_SUPPORT              2

@@ -618,10 +618,6 @@
     #define portDONT_DISCARD
 #endif
 
-#ifndef configUSE_TIME_SLICING
-    #define configUSE_TIME_SLICING    1
-#endif
-
 #ifndef configUSE_STATS_FORMATTING_FUNCTIONS
     #define configUSE_STATS_FORMATTING_FUNCTIONS    0
 #endif
@@ -648,10 +644,6 @@
 
 #ifndef configAPPLICATION_ALLOCATED_HEAP
     #define configAPPLICATION_ALLOCATED_HEAP    0
-#endif
-
-#ifndef configUSE_TASK_NOTIFICATIONS
-    #define configUSE_TASK_NOTIFICATIONS    1
 #endif
 
 #ifndef configTASK_NOTIFICATION_ARRAY_ENTRIES

@@ -77,10 +77,8 @@ typedef struct
     ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
     ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
 
-    #if ( configUSE_TASK_NOTIFICATIONS == 1 )
-        volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-        volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-    #endif
+    volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
+    volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
 } TCB_mut_t;
 
 // this is an immutable structure
@@ -629,9 +627,6 @@ const char * pcTaskGetName( TaskHandle_t xTaskToQuery );
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
  *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for these
- * functions to be available.
- *
  * Sends a direct to task notification to a task, with an optional value and
  * action.
  *
@@ -775,9 +770,6 @@ BaseType_t xTaskGenericNotify( TaskHandle_t xTaskToNotify,
  * @endcode
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
- *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for these
- * functions to be available.
  *
  * A version of xTaskNotifyIndexed() that can be used from an interrupt service
  * routine (ISR).
@@ -933,9 +925,6 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
  *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for this
- * function to be available.
- *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
  * configTASK_NOTIFICATION_ARRAY_ENTRIES sets the number of indexes in the
@@ -1046,9 +1035,6 @@ BaseType_t xTaskGenericNotifyWait( UBaseType_t uxIndexToWaitOn,
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for more details.
  *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for these
- * macros to be available.
- *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
  * configTASK_NOTIFICATION_ARRAY_ENTRIES sets the number of indexes in the
@@ -1122,9 +1108,6 @@ BaseType_t xTaskGenericNotifyWait( UBaseType_t uxIndexToWaitOn,
  * service routine (ISR).
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for more details.
- *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for this macro
- * to be available.
  *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
@@ -1210,9 +1193,6 @@ void vTaskGenericNotifyGiveFromISR( TaskHandle_t xTaskToNotify,
  * task's notification array in a manner similar to taking a counting semaphore.
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
- *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for this
- * function to be available.
  *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
@@ -1314,9 +1294,6 @@ uint32_t ulTaskGenericNotifyTake( UBaseType_t uxIndexToWaitOn,
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
  *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for these
- * functions to be available.
- *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
  * configTASK_NOTIFICATION_ARRAY_ENTRIES sets the number of indexes in the
@@ -1377,9 +1354,6 @@ BaseType_t xTaskGenericNotifyStateClear( TaskHandle_t xTask,
  * @endcode
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
- *
- * configUSE_TASK_NOTIFICATIONS must be undefined or defined as 1 for these
- * functions to be available.
  *
  * Each task has a private array of "notification values" (or 'notifications'),
  * each of which is a 32-bit unsigned integer (uint32_t).  The constant
