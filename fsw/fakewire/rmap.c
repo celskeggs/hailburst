@@ -17,7 +17,7 @@ enum {
 void rmap_notify_wake(rmap_t *rmap) {
     assert(rmap != NULL);
 
-    task_rouse(rmap->client_task);
+    local_rouse(rmap->client_task);
 }
 
 static void rmap_cancel_active_work(rmap_t *rmap) {
