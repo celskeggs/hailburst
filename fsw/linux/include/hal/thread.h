@@ -14,10 +14,6 @@
 #include <fsw/clock.h>
 #include <fsw/preprocessor.h>
 
-enum {
-    NS_PER_SEC = 1000 * 1000 * 1000,
-};
-
 #define THREAD_CHECK(x) (thread_check((x), #x))
 #define THREAD_CHECK_OK(x, fm) (thread_check_ok((x), #x, (fm)))
 

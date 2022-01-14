@@ -6,10 +6,10 @@
 #include <rtos/arm.h>
 
 enum {
-    TIMER_NS_PER_SEC = 1000000000,
+    CLOCK_NS_PER_SEC = 1000000000,
     TIMER_ASSUMED_CNTFRQ = 62500000,
 
-    CLOCK_PERIOD_NS = TIMER_NS_PER_SEC / TIMER_ASSUMED_CNTFRQ,
+    CLOCK_PERIOD_NS = CLOCK_NS_PER_SEC / TIMER_ASSUMED_CNTFRQ,
 };
 
 static inline uint64_t timer_now_ns(void) {

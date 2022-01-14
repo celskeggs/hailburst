@@ -10,7 +10,7 @@
 #include <rtos/timer_min.h>
 
 enum {
-    TICK_PERIOD_NS = TIMER_NS_PER_SEC / configTICK_RATE_HZ,
+    TICK_PERIOD_NS = CLOCK_NS_PER_SEC / configTICK_RATE_HZ,
     TICK_RATE_IN_CLOCK_UNITS = TICK_PERIOD_NS / CLOCK_PERIOD_NS,
 };
 

@@ -67,7 +67,7 @@ static void scrubber_mainloop(void) {
         debugf(DEBUG, "scrub cycle complete.");
 
         // scrub about once per second, or more often if requested. (don't care which.)
-        (void) task_doze_timed(TIMER_NS_PER_SEC);
+        (void) task_doze_timed(CLOCK_NS_PER_SEC);
     }
 }
 

@@ -10,7 +10,7 @@
 enum {
     WATCHDOG_BASE_ADDRESS = 0x090c0000,
 
-    WATCHDOG_ASPECT_MAX_AGE = TIMER_NS_PER_SEC,
+    WATCHDOG_ASPECT_MAX_AGE = CLOCK_NS_PER_SEC,
 };
 
 struct watchdog_mmio_region {
