@@ -318,24 +318,6 @@ void vPortFree( void * pv )
 }
 /*-----------------------------------------------------------*/
 
-size_t xPortGetFreeHeapSize( void )
-{
-    return xFreeBytesRemaining;
-}
-/*-----------------------------------------------------------*/
-
-size_t xPortGetMinimumEverFreeHeapSize( void )
-{
-    return xMinimumEverFreeBytesRemaining;
-}
-/*-----------------------------------------------------------*/
-
-void vPortInitialiseBlocks( void )
-{
-    /* This just exists to keep the linker quiet. */
-}
-/*-----------------------------------------------------------*/
-
 static void prvHeapInit( void )
 {
     BlockLink_t * pxFirstFreeBlock;
@@ -444,56 +426,4 @@ static void prvInsertBlockIntoFreeList( BlockLink_t * pxBlockToInsert )
     {
         mtCOVERAGE_TEST_MARKER();
     }
-}
-/*-----------------------------------------------------------*/
-
-void vPortGetHeapStats( HeapStats_t * pxHeapStats )
-{
-    BlockLink_t * pxBlock;
-    size_t xBlocks = 0, xMaxSize = 0, xMinSize = portMAX_DELAY; /* portMAX_DELAY used as a portable way of getting the maximum value. */
-
-    vTaskSuspendAll();
-    {
-        pxBlock = xStart.pxNextFreeBlock;
-
-        /* pxBlock will be NULL if the heap has not been initialised.  The heap
-         * is initialised automatically when the first allocation is made. */
-        if( pxBlock != NULL )
-        {
-            do
-            {
-                /* Increment the number of blocks and record the largest block seen
-                 * so far. */
-                xBlocks++;
-
-                if( pxBlock->xBlockSize > xMaxSize )
-                {
-                    xMaxSize = pxBlock->xBlockSize;
-                }
-
-                if( pxBlock->xBlockSize < xMinSize )
-                {
-                    xMinSize = pxBlock->xBlockSize;
-                }
-
-                /* Move to the next block in the chain until the last block is
-                 * reached. */
-                pxBlock = pxBlock->pxNextFreeBlock;
-            } while( pxBlock != pxEnd );
-        }
-    }
-    ( void ) xTaskResumeAll();
-
-    pxHeapStats->xSizeOfLargestFreeBlockInBytes = xMaxSize;
-    pxHeapStats->xSizeOfSmallestFreeBlockInBytes = xMinSize;
-    pxHeapStats->xNumberOfFreeBlocks = xBlocks;
-
-    taskENTER_CRITICAL();
-    {
-        pxHeapStats->xAvailableHeapSpaceInBytes = xFreeBytesRemaining;
-        pxHeapStats->xNumberOfSuccessfulAllocations = xNumberOfSuccessfulAllocations;
-        pxHeapStats->xNumberOfSuccessfulFrees = xNumberOfSuccessfulFrees;
-        pxHeapStats->xMinimumEverFreeBytesRemaining = xMinimumEverFreeBytesRemaining;
-    }
-    taskEXIT_CRITICAL();
 }

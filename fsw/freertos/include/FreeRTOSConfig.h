@@ -29,7 +29,6 @@ enum {
 #define configSUPPORT_DYNAMIC_ALLOCATION            1
 #define configTOTAL_HEAP_SIZE                       327680
 #define configAPPLICATION_ALLOCATED_HEAP            0
-#define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP   0
 
 /* Hook function related definitions. */
 #define configCHECK_FOR_STACK_OVERFLOW          2
