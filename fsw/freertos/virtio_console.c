@@ -17,9 +17,6 @@ enum {
     VIRTIO_CONSOLE_VQ_TRANSMIT = 1,
 
     VIRTIO_CONSOLE_VQ_CTRL_BASE = 2,
-
-    // max handled length of received console names
-    VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
 };
 
 enum {
@@ -57,13 +54,6 @@ struct virtio_console_config {
 };
 static_assert(sizeof(struct virtio_console_config) == 12, "wrong sizeof(struct virtio_console_config)");
 
-struct virtio_console_control {
-    uint32_t id;    /* Port number */
-    uint16_t event; /* The kind of control event */
-    uint16_t value; /* Extra information for the event */
-};
-static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
-
 void virtio_console_feature_select(uint64_t *features) {
     // check feature bits
     if (!(*features & VIRTIO_F_VERSION_1)) {
@@ -86,7 +76,7 @@ static void virtio_console_wake_control(void *opaque) {
 }
 
 static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_t id, uint16_t event, uint16_t value) {
-    struct io_tx_ent *entry = chart_request_start(&console->control_tx);
+    struct io_tx_ent *entry = chart_request_start(console->control_tx);
     // should never run out of spaces; we only ever send three, and there are four slots!
     assert(entry != NULL);
     entry->actual_length = sizeof(struct virtio_console_control);
@@ -95,7 +85,7 @@ static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_
         .event = event,
         .value = value,
     };
-    chart_request_send(&console->control_tx, 1);
+    chart_request_send(console->control_tx, 1);
 }
 
 static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
@@ -114,7 +104,7 @@ void virtio_console_control_loop(struct virtio_console *console) {
 
     for (;;) {
         // receive any requests on the receive queue
-        struct io_rx_ent *rx_entry = chart_reply_start(&console->control_rx);
+        struct io_rx_ent *rx_entry = chart_reply_start(console->control_rx);
         if (rx_entry == NULL) {
             task_doze();
             continue;
@@ -165,7 +155,7 @@ void virtio_console_control_loop(struct virtio_console *console) {
             debugf(CRITICAL, "Unhandled console control event: %u.", recv->event);
         }
 
-        chart_reply_send(&console->control_rx, 1);
+        chart_reply_send(console->control_rx, 1);
     }
 }
 
@@ -182,22 +172,17 @@ void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
 
     debugf(DEBUG, "Initialize control_rx queue.");
 
-    size_t rx_size = sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)
-                   + VIRTIO_CONSOLE_CTRL_RECV_MARGIN;
-    chart_init(&console->control_rx, rx_size, 4);
-    chart_attach_server(&console->control_rx, virtio_console_wake_control, console);
+    chart_attach_server(console->control_rx, virtio_console_wake_control, console);
 
     virtio_device_setup_queue(console->devptr, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE,
-                              QUEUE_INPUT, &console->control_rx);
+                              QUEUE_INPUT, console->control_rx);
 
     debugf(DEBUG, "Initialize control_tx queue.");
 
-    size_t tx_size = sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent);
-    chart_init(&console->control_tx, tx_size, 4);
-    chart_attach_client(&console->control_tx, virtio_console_wake_control, console);
+    chart_attach_client(console->control_tx, virtio_console_wake_control, console);
 
     virtio_device_setup_queue(console->devptr, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT,
-                              QUEUE_OUTPUT, &console->control_tx);
+                              QUEUE_OUTPUT, console->control_tx);
 
     debugf(DEBUG, "Initialize data queues.");
 

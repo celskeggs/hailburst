@@ -21,6 +21,9 @@ enum {
 
     // VIRTIO type for a console device
     VIRTIO_CONSOLE_ID = 3,
+
+    // max handled length of received console names
+    VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
 };
 
 typedef enum {
@@ -71,11 +74,18 @@ struct virtio_console {
     struct virtio_device *devptr;
 
     thread_t control_task;
-    chart_t  control_rx;
-    chart_t  control_tx;
+    chart_t *control_rx;
+    chart_t *control_tx;
 
     bool confirmed_port_present;
 };
+
+struct virtio_console_control {
+    uint32_t id;    /* Port number */
+    uint16_t event; /* The kind of control event */
+    uint16_t value; /* Extra information for the event */
+};
+static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct virtio_console_control)");
 
 void virtio_device_init_internal(struct virtio_device *device);
 void virtio_device_start_internal(struct virtio_device *device);
@@ -104,15 +114,19 @@ void virtio_console_control_loop(struct virtio_console *console);
 
 #define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id) \
     VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select); \
-    extern struct virtio_console v_ident;                                    \
-    TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,            \
-                  virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);   \
-    struct virtio_console v_ident = {                                        \
-        .initialized = false,                                                \
-        .devptr = &v_ident ## _device,                                       \
-        .control_task = &v_ident ## _task,                                   \
-        /* control_rx, and control_tx are initialized later */               \
-        .confirmed_port_present = false,                                     \
+    extern struct virtio_console v_ident;                                                                      \
+    TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,                                              \
+                  virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);                                     \
+    CHART_REGISTER(v_ident ## _crx, sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)           \
+                                        + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 4);                                 \
+    CHART_REGISTER(v_ident ## _ctx, sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent), 4);      \
+    struct virtio_console v_ident = {                                                                          \
+        .initialized = false,                                                                                  \
+        .devptr = &v_ident ## _device,                                                                         \
+        .control_task = &v_ident ## _task,                                                                     \
+        .control_rx = &v_ident ## _crx,                                                                        \
+        .control_tx = &v_ident ## _ctx,                                                                        \
+        .confirmed_port_present = false,                                                                       \
     }
 
 void *virtio_device_config_space(struct virtio_device *device);
