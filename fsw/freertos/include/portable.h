@@ -70,12 +70,6 @@ StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                      TCB_t * pxNewTCB );
 
 /*
- * Map to the memory management routines required for the port.
- */
-void * pvPortMalloc( size_t xSize );
-void vPortFree( void * pv );
-
-/*
  * Setup the hardware ready for the scheduler to take control.  This generally
  * sets up a tick interrupt and sets timers for the correct tick frequency.
  */

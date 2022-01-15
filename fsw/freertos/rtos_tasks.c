@@ -408,8 +408,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 mtCOVERAGE_TEST_MARKER();
             }
 
-            static_assert(configSUPPORT_STATIC_ALLOCATION == 1, "static allocation assumed by this refactoring");
-
             --uxCurrentNumberOfTasks;
 
             traceTASK_DELETE( pxTCB );
@@ -419,8 +417,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             prvResetNextTaskUnblockTime();
         }
         taskEXIT_CRITICAL();
-
-        static_assert(configSUPPORT_STATIC_ALLOCATION == 1, "static allocation assumed by this refactoring");
 
         /* Force a reschedule if it is the currently running task that has just
          * been deleted. */

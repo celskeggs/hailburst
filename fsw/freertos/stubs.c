@@ -14,14 +14,6 @@
 #include <fsw/init.h>
 #include <fsw/spacecraft.h>
 
-void *malloc(size_t size) {
-    return pvPortMalloc(size);
-}
-
-void free(void *ptr) {
-    vPortFree(ptr);
-}
-
 static void configure_floating_point(void) {
     // enable coprocessors for VFP
     arm_set_cpacr(arm_get_cpacr() | ARM_CPACR_CP10_FULL_ACCESS | ARM_CPACR_CP11_FULL_ACCESS);

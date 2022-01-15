@@ -430,14 +430,6 @@
     #define traceTIMER_COMMAND_RECEIVED( pxTimer, xMessageID, xMessageValue )
 #endif
 
-#ifndef traceMALLOC
-    #define traceMALLOC( pvAddress, uiSize )
-#endif
-
-#ifndef traceFREE
-    #define traceFREE( pvAddress, uiSize )
-#endif
-
 #ifndef traceEVENT_GROUP_CREATE
     #define traceEVENT_GROUP_CREATE( xEventGroup )
 #endif
@@ -574,10 +566,6 @@
     #define traceSTREAM_BUFFER_RECEIVE_FROM_ISR( xStreamBuffer, xReceivedLength )
 #endif
 
-#ifndef configUSE_MALLOC_FAILED_HOOK
-    #define configUSE_MALLOC_FAILED_HOOK    0
-#endif
-
 #ifndef portPRIVILEGE_BIT
     #define portPRIVILEGE_BIT    ( ( UBaseType_t ) 0x00 )
 #endif
@@ -658,16 +646,6 @@
     #define portTICK_TYPE_IS_ATOMIC    0
 #endif
 
-#ifndef configSUPPORT_STATIC_ALLOCATION
-    /* Defaults to 0 for backward compatibility. */
-    #define configSUPPORT_STATIC_ALLOCATION    0
-#endif
-
-#ifndef configSUPPORT_DYNAMIC_ALLOCATION
-    /* Defaults to 1 for backward compatibility. */
-    #define configSUPPORT_DYNAMIC_ALLOCATION    1
-#endif
-
 #ifndef configSTACK_DEPTH_TYPE
 
 /* Defaults to uint16_t for backward compatibility, but can be overridden
@@ -689,10 +667,6 @@
  * in FreeRTOSConfig.h if lengths will always be less than the number of bytes
  * in a size_t. */
     #define configMESSAGE_BUFFER_LENGTH_TYPE    size_t
-#endif
-
-#if ( ( configSUPPORT_STATIC_ALLOCATION == 0 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 0 ) )
-    #error configSUPPORT_STATIC_ALLOCATION and configSUPPORT_DYNAMIC_ALLOCATION cannot both be 0, but can both be 1.
 #endif
 
 #ifndef configINITIAL_TICK_COUNT
@@ -853,10 +827,6 @@ typedef struct xSTATIC_QUEUE
     StaticList_t xDummy3[ 2 ];
     UBaseType_t uxDummy4[ 3 ];
     uint8_t ucDummy5[ 2 ];
-
-    #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-        uint8_t ucDummy6;
-    #endif
 } StaticQueue_t;
 typedef StaticQueue_t StaticSemaphore_t;
 
@@ -878,10 +848,6 @@ typedef struct xSTATIC_EVENT_GROUP
 {
     TickType_t xDummy1;
     StaticList_t xDummy2;
-
-    #if ( ( configSUPPORT_STATIC_ALLOCATION == 1 ) && ( configSUPPORT_DYNAMIC_ALLOCATION == 1 ) )
-        uint8_t ucDummy4;
-    #endif
 } StaticEventGroup_t;
 
 /*
