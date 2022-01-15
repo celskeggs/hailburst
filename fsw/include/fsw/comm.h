@@ -8,6 +8,10 @@
 #include <hal/thread.h>
 #include <fsw/stream.h>
 
+enum {
+    COMM_SCRATCH_SIZE = 1024,
+};
+
 typedef struct {
     uint32_t       cmd_tlm_id;
     uint64_t       timestamp_ns;
@@ -17,7 +21,7 @@ typedef struct {
 
 typedef struct {
     stream_t *uplink;
-    uint8_t  *scratch_buffer;
+    uint8_t   scratch_buffer[COMM_SCRATCH_SIZE];
     size_t    resume_start;
     size_t    resume_end;
     uint32_t  err_count;
@@ -25,7 +29,7 @@ typedef struct {
 
 typedef struct {
     stream_t *downlink;
-    uint8_t  *scratch_buffer;
+    uint8_t   scratch_buffer[COMM_SCRATCH_SIZE];
 } comm_enc_t;
 
 void comm_dec_init(comm_dec_t *dec, stream_t *uplink);

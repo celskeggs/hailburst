@@ -5,7 +5,6 @@
 #include <fsw/comm.h>
 
 enum {
-    COMM_SCRATCH_SIZE   = 1024,
     COMM_CMD_MAGIC_NUM  = 0x73133C2C, // "tele-exec"
     COMM_TLM_MAGIC_NUM  = 0x7313DA7A, // "tele-data"
 
@@ -23,7 +22,6 @@ enum {
 void comm_dec_init(comm_dec_t *dec, stream_t *uplink) {
     assert(dec != NULL && uplink != NULL);
     dec->uplink = uplink;
-    dec->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
     dec->resume_start = dec->resume_end = 0;
     dec->err_count = 0;
 }
@@ -127,8 +125,6 @@ void comm_dec_decode(comm_dec_t *dec, comm_packet_t *out) {
 void comm_enc_init(comm_enc_t *enc, stream_t *downlink) {
     assert(enc != NULL && downlink != NULL);
     enc->downlink = downlink;
-    enc->scratch_buffer = malloc(COMM_SCRATCH_SIZE);
-    assert(enc->scratch_buffer != NULL);
 }
 
 void comm_enc_set_task(comm_enc_t *enc, thread_t thread) {
