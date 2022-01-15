@@ -8,6 +8,7 @@
 #include <task.h>
 
 #include <rtos/gic.h>
+#include <rtos/virtqueue.h>
 #include <hal/thread.h>
 #include <fsw/chart.h>
 #include <fsw/init.h>
@@ -24,7 +25,6 @@ enum {
 
     // max handled length of received console names
     VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
-    VIRTIO_CONSOLE_MAX_QUEUES       = 6, // this is all we need with the current hardcoded offsets
 };
 
 typedef enum {
@@ -71,11 +71,8 @@ struct virtio_device {
 };
 
 struct virtio_console {
-    bool initialized;
-
     struct virtio_device *devptr;
 
-    thread_t control_task;
     chart_t *control_rx;
     chart_t *control_tx;
 
@@ -113,36 +110,66 @@ void virtio_monitor_loop(struct virtio_device *device);
     PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
+// this may only be called before the scheduler starts
+void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index);
+
+#define VIRTIO_DEVICE_QUEUE_REGISTER(v_ident, v_queue_index, v_direction, v_chart, v_queue_num)                      \
+    static struct virtq_desc  v_ident ## _ ## v_queue_index ## _desc [v_queue_num] __attribute__((__aligned__(16))); \
+    static struct {                                                                                                  \
+        /* weird init syntax required due to flexible array member */                                                \
+        struct virtq_avail avail;                                                                                    \
+        uint16_t flex_ring[v_queue_num];                                                                             \
+    } v_ident ## _ ## v_queue_index ## _avail __attribute__((__aligned__(2)));                                       \
+    static struct {                                                                                                  \
+        /* weird init syntax required due to flexible array member */                                                \
+        struct virtq_used used;                                                                                      \
+        struct virtq_used_elem ring[v_queue_num];                                                                    \
+    } v_ident ## _ ## v_queue_index ## _used __attribute__((__aligned__(4)));                                        \
+    static void v_ident ## _ ## v_queue_index ## _init(void) {                                                       \
+        assert(v_ident.queues[v_queue_index].chart == NULL);                                                         \
+        assert(v_ident.initialized == true && v_ident.monitor_started == false);                                     \
+        assert((v_queue_index) < v_ident.num_queues);                                                                \
+        assert(chart_note_count(&v_chart) == (v_queue_num));                                                         \
+        v_ident.queues[v_queue_index].direction = (v_direction);                                                     \
+        v_ident.queues[v_queue_index].queue_num = (v_queue_num);                                                     \
+        v_ident.queues[v_queue_index].chart = &(v_chart);                                                            \
+        v_ident.queues[v_queue_index].desc  = v_ident ## _ ## v_queue_index ## _desc;                                \
+        v_ident.queues[v_queue_index].avail = &v_ident ## _ ## v_queue_index ## _avail.avail;                        \
+        v_ident.queues[v_queue_index].used  = &v_ident ## _ ## v_queue_index ## _used.used;                          \
+        virtio_device_setup_queue_internal(&v_ident, v_queue_index);                                                 \
+    }                                                                                                                \
+    PROGRAM_INIT(STAGE_READY, v_ident ## _ ## v_queue_index ## _init);
+
 void virtio_console_feature_select(uint64_t *features);
 void virtio_console_control_loop(struct virtio_console *console);
+void virtio_console_configure_internal(struct virtio_console *console);
 
-#define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id)                                                          \
+#define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id, v_data_rx, v_data_tx, v_rx_num, v_tx_num)                \
     VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select,  \
-                           VIRTIO_CONSOLE_MAX_QUEUES);                                                         \
+                           6 /* room for queues 2,3,4,5 needed later */);                                      \
     extern struct virtio_console v_ident;                                                                      \
     TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,                                              \
                   virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);                                     \
     CHART_REGISTER(v_ident ## _crx, sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)           \
                                         + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 4);                                 \
     CHART_REGISTER(v_ident ## _ctx, sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent), 4);      \
+    CHART_SERVER_NOTIFY(v_ident ## _crx, task_rouse, &v_ident ## _task);                                       \
+    CHART_CLIENT_NOTIFY(v_ident ## _ctx, task_rouse, &v_ident ## _task);                                       \
+    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 2, /* control + rx */ QUEUE_INPUT,  v_ident ## _crx, 4);  \
+    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 3, /* control + tx */ QUEUE_OUTPUT, v_ident ## _ctx, 4);  \
+    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 4, /* data[1] + rx */ QUEUE_INPUT,  v_data_rx, v_rx_num); \
+    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 5, /* data[1] + tx */ QUEUE_OUTPUT, v_data_tx, v_tx_num); \
     struct virtio_console v_ident = {                                                                          \
-        .initialized = false,                                                                                  \
         .devptr = &v_ident ## _device,                                                                         \
-        .control_task = &v_ident ## _task,                                                                     \
         .control_rx = &v_ident ## _crx,                                                                        \
         .control_tx = &v_ident ## _ctx,                                                                        \
         .confirmed_port_present = false,                                                                       \
-    }
+    };                                                                                                         \
+    PROGRAM_INIT_PARAM(STAGE_CRAFT, virtio_console_configure_internal, v_ident, &v_ident)
 
 void *virtio_device_config_space(struct virtio_device *device);
 
-// this may only be called before the scheduler starts
-void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction, chart_t *chart);
-
 // for a queue already set up using virtio_device_setup_queue, this function spuriously notifies the queue.
 void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t queue_index);
-
-// must be called on a console previously registered using VIRTIO_CONSOLE_REGISTER
-void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx);
 
 #endif /* FSW_FREERTOS_RTOS_VIRTIO_H */

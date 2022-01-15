@@ -5,6 +5,10 @@
 #include <fsw/chart.h>
 #include <fsw/fakewire/link.h>
 
+enum {
+    EXCHANGE_QUEUE_DEPTH = 16,
+};
+
 typedef struct fw_exchange_st {
     const char *label;
 
@@ -27,12 +31,13 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
     extern fw_exchange_t e_ident;                                                        \
     CHART_CLIENT_NOTIFY(e_read_chart, fakewire_exc_notify, &e_ident);                    \
     CHART_SERVER_NOTIFY(e_write_chart, fakewire_exc_notify, &e_ident);                   \
-    CHART_REGISTER(e_ident ## _transmit_chart, 1024, 16);                                \
+    CHART_REGISTER(e_ident ## _transmit_chart, 1024, EXCHANGE_QUEUE_DEPTH);              \
     CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, fakewire_exc_notify, &e_ident);      \
-    CHART_REGISTER(e_ident ## _receive_chart, 1024, 16);                                 \
+    CHART_REGISTER(e_ident ## _receive_chart, 1024, EXCHANGE_QUEUE_DEPTH);               \
     CHART_SERVER_NOTIFY(e_ident ## _receive_chart, fakewire_exc_notify, &e_ident);       \
     FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                          \
-                           e_ident ## _receive_chart, e_ident ## _transmit_chart);       \
+                           e_ident ## _receive_chart, e_ident ## _transmit_chart,        \
+                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                  \
     TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_SERVERS,                   \
                   fakewire_exc_exchange_loop, &e_ident, RESTARTABLE);                    \
     fw_exchange_t e_ident = {                                                            \

@@ -36,7 +36,7 @@ typedef struct {
             /* make sure that param pointer type matches the function argument, since we'll be throwing them away! */ \
             .init_fn = PP_ERASE_TYPE(callback, param), \
             .init_stage = stage, \
-            .init_param = param, \
+            .init_param = (void *) param, \
         }
 
 void initialize_systems(void);

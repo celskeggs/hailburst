@@ -4,7 +4,6 @@
 
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
-#include <rtos/virtqueue.h>
 #include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/debug.h>
@@ -69,12 +68,6 @@ void virtio_console_feature_select(uint64_t *features) {
     *features = VIRTIO_F_VERSION_1 | VIRTIO_CONSOLE_F_MULTIPORT;
 }
 
-static void virtio_console_wake_control(void *opaque) {
-    struct virtio_console *console = (struct virtio_console *) opaque;
-    assert(console != NULL);
-    task_rouse(console->control_task);
-}
-
 static void virtio_console_send_ctrl_msg(struct virtio_console *console, uint32_t id, uint16_t event, uint16_t value) {
     struct io_tx_ent *entry = chart_request_start(console->control_tx);
     // should never run out of spaces; we only ever send three, and there are four slots!
@@ -97,7 +90,7 @@ static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
 }
 
 void virtio_console_control_loop(struct virtio_console *console) {
-    assert(console != NULL && console->initialized);
+    assert(console != NULL);
 
     // request initialization
     virtio_console_send_ctrl_msg(console, 0xFFFFFFFF, VIRTIO_CONSOLE_DEVICE_READY, 1);
@@ -159,40 +152,11 @@ void virtio_console_control_loop(struct virtio_console *console) {
     }
 }
 
-void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart_t *data_tx) {
-    assert(!console->initialized && !console->confirmed_port_present);
-
+void virtio_console_configure_internal(struct virtio_console *console) {
     struct virtio_console_config *config =
             (struct virtio_console_config *) virtio_device_config_space(console->devptr);
 
     debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %d", config->max_nr_ports);
-
-    size_t base_queue = virtio_console_port_to_queue_index(VIRTIO_FAKEWIRE_PORT_INDEX);
-
     // TODO: should I really be treating 'num_queues' as public?
     assert(console->devptr->num_queues <= (config->max_nr_ports + 1) * 2);
-    assert(console->devptr->num_queues >= base_queue + 2);
-
-    debugf(DEBUG, "Initialize control_rx queue.");
-
-    chart_attach_server(console->control_rx, virtio_console_wake_control, console);
-
-    virtio_device_setup_queue(console->devptr, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_RECEIVE,
-                              QUEUE_INPUT, console->control_rx);
-
-    debugf(DEBUG, "Initialize control_tx queue.");
-
-    chart_attach_client(console->control_tx, virtio_console_wake_control, console);
-
-    virtio_device_setup_queue(console->devptr, VIRTIO_CONSOLE_VQ_CTRL_BASE + VIRTIO_CONSOLE_VQ_TRANSMIT,
-                              QUEUE_OUTPUT, console->control_tx);
-
-    debugf(DEBUG, "Initialize data queues.");
-
-    virtio_device_setup_queue(console->devptr, base_queue + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, data_rx);
-    virtio_device_setup_queue(console->devptr, base_queue + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, data_tx);
-
-    debugf(DEBUG, "Complete VIRTIO device setup.");
-
-    console->initialized = true;
 }

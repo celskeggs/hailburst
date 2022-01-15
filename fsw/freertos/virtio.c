@@ -4,7 +4,6 @@
 
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
-#include <rtos/virtqueue.h>
 #include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/clock.h>
@@ -65,21 +64,6 @@ struct virtio_mmio_registers {
     const volatile uint32_t config_generation;   // Configuration atomicity value (R)
 };
 static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struct virtio_mmio_registers)");
-
-static void *zalloc_aligned(size_t size, size_t align) {
-    assert(size > 0 && align > 0);
-    uint8_t *out = malloc(size + align - 1);
-    if (out == NULL) {
-        return NULL;
-    }
-    memset(out, 0, size + align - 1);
-    size_t misalignment = (size_t) out % align;
-    if (misalignment != 0) {
-        out += align - misalignment;
-    }
-    assert((uintptr_t) out % align == 0);
-    return out;
-}
 
 // TODO: go back through and add all the missing conversions from LE32 to CPU
 
@@ -237,16 +221,14 @@ static void virtio_device_chart_wakeup(void *opaque) {
     task_rouse(device->monitor_task);
 }
 
-void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_index, virtio_queue_dir_t direction,
-                               chart_t *chart) {
-    assert(device != NULL && chart != NULL);
-    assert(direction == QUEUE_INPUT || direction == QUEUE_OUTPUT);
-    assert(device->initialized == true && device->monitor_started == false);
-    assert(device->queues != NULL);
-    assert(queue_index < device->num_queues);
-
+void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index) {
     struct virtio_device_queue *queue = &device->queues[queue_index];
-    assert(queue->chart == NULL);
+
+    assert(queue->chart != NULL);
+    assert(queue->queue_num > 0);
+    assert(queue->desc != NULL);
+    assert(queue->avail != NULL);
+    assert(queue->used != NULL);
 
     device->mmio->queue_sel = queue_index;
     if (device->mmio->queue_ready != 0) {
@@ -254,10 +236,6 @@ void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
     }
     // inconsistency if we hit this: we already checked this condition during discovery!
     assert(device->mmio->queue_num_max != 0);
-
-    queue->direction = direction;
-    queue->queue_num = chart_note_count(chart);
-    assert(queue->queue_num > 0);
 
     if (queue->queue_num > device->mmio->queue_num_max) {
         abortf("VIRTIO device supports up to %u entries in a queue buffer, but sticky-chart contained %u.",
@@ -268,67 +246,57 @@ void virtio_device_setup_queue(struct virtio_device *device, uint32_t queue_inde
 
     queue->last_used_idx = 0;
 
-    queue->desc = zalloc_aligned(sizeof(struct virtq_desc) * queue->queue_num, 16);
-    assert(queue->desc != NULL);
-    queue->avail = zalloc_aligned(sizeof(struct virtq_avail) + sizeof(uint16_t) * queue->queue_num, 2);
-    assert(queue->avail != NULL);
-    queue->used = zalloc_aligned(sizeof(struct virtq_used) + sizeof(struct virtq_used_elem) * queue->queue_num, 4);
-    assert(queue->used != NULL);
-
     device->mmio->queue_desc   = (uint64_t) (uintptr_t) queue->desc;
     device->mmio->queue_driver = (uint64_t) (uintptr_t) queue->avail;
     device->mmio->queue_device = (uint64_t) (uintptr_t) queue->used;
 
     atomic_store(device->mmio->queue_ready, 1);
 
-    if (direction == QUEUE_INPUT) {
+    if (queue->direction == QUEUE_INPUT) {
         // make sure chart is in expected blank state
-        assert(chart_request_avail(chart) == chart_note_count(chart));
-        assert(chart_request_peek(chart, 0) == chart_get_note(chart, 0));
-        assert(chart_reply_avail(chart) == 0);
+        assert(chart_request_avail(queue->chart) == chart_note_count(queue->chart));
+        assert(chart_request_peek(queue->chart, 0) == chart_get_note(queue->chart, 0));
+        assert(chart_reply_avail(queue->chart) == 0);
 
-        chart_attach_client(chart, virtio_device_chart_wakeup, device);
-    } else if (direction == QUEUE_OUTPUT) {
-        chart_attach_server(chart, virtio_device_chart_wakeup, device);
+        chart_attach_client(queue->chart, virtio_device_chart_wakeup, device);
+    } else if (queue->direction == QUEUE_OUTPUT) {
+        chart_attach_server(queue->chart, virtio_device_chart_wakeup, device);
     } else {
-        abortf("Invalid queue direction: %u", direction);
+        abortf("Invalid queue direction: %u", queue->direction);
     }
 
     // configure descriptors to refer to chart memory directly
     for (uint32_t i = 0; i < queue->queue_num; i++) {
         uint8_t *data_ptr;
-        if (direction == QUEUE_INPUT) {
-            struct io_rx_ent *entry = chart_get_note(chart, i);
+        if (queue->direction == QUEUE_INPUT) {
+            struct io_rx_ent *entry = chart_get_note(queue->chart, i);
             data_ptr = &entry->data[0];
-            assert(chart_note_size(chart) > sizeof(*entry));
-        } else if (direction == QUEUE_OUTPUT) {
-            struct io_tx_ent *entry = chart_get_note(chart, i);
+            assert(chart_note_size(queue->chart) > sizeof(*entry));
+        } else if (queue->direction == QUEUE_OUTPUT) {
+            struct io_tx_ent *entry = chart_get_note(queue->chart, i);
             data_ptr = &entry->data[0];
-            assert(chart_note_size(chart) > sizeof(*entry));
+            assert(chart_note_size(queue->chart) > sizeof(*entry));
         } else {
-            abortf("Invalid queue direction: %u", direction);
+            abortf("Invalid queue direction: %u", queue->direction);
         }
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
             .addr  = (uint64_t) (uintptr_t) data_ptr,
-            .len   = direction == QUEUE_INPUT ? io_rx_size(chart) : 0,
-            .flags = direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
+            .len   = queue->direction == QUEUE_INPUT ? io_rx_size(queue->chart) : 0,
+            .flags = queue->direction == QUEUE_INPUT ? VIRTQ_DESC_F_WRITE : 0,
             .next  = 0xFFFF /* invalid index */,
         };
         // populate all of the avail ring entries to their corresponding descriptors.
         // we won't need to change these again.
         queue->avail->ring[i] = i;
     }
-    if (direction == QUEUE_INPUT) {
+    if (queue->direction == QUEUE_INPUT) {
         assert(queue->avail->idx == 0);
         atomic_store(queue->avail->idx, queue->queue_num);
         if (!atomic_load(queue->avail->flags)) {
             atomic_store_relaxed(device->mmio->queue_notify, queue_index);
         }
     }
-
-    // set chart ONLY if we succeed, because it's what marks the queue as being valid
-    queue->chart = chart;
 
     debugf(DEBUG, "VIRTIO queue %d now configured", queue_index);
 }
