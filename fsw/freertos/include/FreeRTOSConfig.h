@@ -8,15 +8,14 @@
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 // configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      1000
-#define configMAX_PRIORITIES                    6
+#define configMAX_PRIORITIES                    5
 #define configMINIMAL_STACK_SIZE                512
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
 enum {
-    PRIORITY_REPAIR  = 5, // only used for critical repair tasks!
-    PRIORITY_DRIVERS = 4,
+    PRIORITY_REPAIR  = 4, // only used for critical repair tasks!
     PRIORITY_SERVERS = 3,
     PRIORITY_WORKERS = 2,
     PRIORITY_INIT    = 1,
