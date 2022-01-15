@@ -29,7 +29,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
 
 #define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart) \
     extern fw_exchange_t e_ident;                                                        \
-    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_SERVERS,                   \
+    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_WORKERS,                   \
                   fakewire_exc_exchange_loop, &e_ident, RESTARTABLE);                    \
     CHART_CLIENT_NOTIFY(e_read_chart, task_rouse, &e_ident ## _task);                    \
     CHART_SERVER_NOTIFY(e_write_chart, task_rouse, &e_ident ## _task);                   \

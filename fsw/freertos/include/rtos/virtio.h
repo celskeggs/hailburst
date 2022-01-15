@@ -92,7 +92,7 @@ void virtio_monitor_loop(struct virtio_device *device);
 
 #define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select, v_max_queues)                    \
     extern struct virtio_device v_ident;                                                                             \
-    TASK_REGISTER(v_ident ## _task, "virtio-monitor", PRIORITY_SERVERS, virtio_monitor_loop, &v_ident, RESTARTABLE); \
+    TASK_REGISTER(v_ident ## _task, "virtio-monitor", PRIORITY_WORKERS, virtio_monitor_loop, &v_ident, RESTARTABLE); \
     struct virtio_device_queue v_ident ## _queues[v_max_queues];                                                     \
     struct virtio_device v_ident = {                                                                                 \
         .initialized = false,                                                                                        \

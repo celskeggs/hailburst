@@ -33,7 +33,7 @@ void switch_init_internal(switch_t *sw);
 
 #define SWITCH_REGISTER(v_ident)                       \
     extern switch_t v_ident;                                                                   \
-    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_SERVERS, switch_mainloop_internal, \
+    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_WORKERS, switch_mainloop_internal, \
                   &v_ident, RESTARTABLE);                                                      \
     switch_t v_ident = {                               \
         .ports_inbound = { NULL },                     \
