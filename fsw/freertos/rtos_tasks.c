@@ -409,13 +409,13 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                                 const TickType_t xTimeIncrement )
     {
         TickType_t xTimeToWake;
-        BaseType_t xAlreadyYielded, xShouldDelay = pdFALSE;
+        BaseType_t xShouldDelay = pdFALSE;
 
         configASSERT( pxPreviousWakeTime );
         configASSERT( ( xTimeIncrement > 0U ) );
         configASSERT( uxSchedulerSuspended == 0 );
 
-        vTaskSuspendAll();
+        taskENTER_CRITICAL();
         {
             /* Minor optimisation.  The tick count cannot change in this
              * block. */
@@ -459,14 +459,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 prvAddCurrentTaskToDelayedList( xTimeToWake - xConstTickCount, pdFALSE );
             }
         }
-        xAlreadyYielded = xTaskResumeAll();
+        taskEXIT_CRITICAL();
 
-        /* Force a reschedule if xTaskResumeAll has not already done so, we may
-         * have put ourselves to sleep. */
-        if( xAlreadyYielded == pdFALSE )
-        {
-            portYIELD_WITHIN_API();
-        }
+        /* Force a reschedule if we have not already done so, we may have put ourselves to sleep. */
+        portYIELD_WITHIN_API();
 
         return xShouldDelay;
     }
@@ -478,13 +474,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
     void vTaskDelay( const TickType_t xTicksToDelay )
     {
-        BaseType_t xAlreadyYielded = pdFALSE;
-
         /* A delay time of zero just forces a reschedule. */
         if( xTicksToDelay > ( TickType_t ) 0U )
         {
             configASSERT( uxSchedulerSuspended == 0 );
-            vTaskSuspendAll();
+            taskENTER_CRITICAL();
             {
                 traceTASK_DELAY();
 
@@ -497,15 +491,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                  * executing task. */
                 prvAddCurrentTaskToDelayedList( xTicksToDelay, pdFALSE );
             }
-            xAlreadyYielded = xTaskResumeAll();
+            taskEXIT_CRITICAL();
         }
 
-        /* Force a reschedule if xTaskResumeAll has not already done so, we may
-         * have put ourselves to sleep. */
-        if( xAlreadyYielded == pdFALSE )
-        {
-            portYIELD_WITHIN_API();
-        }
+        /* Force a reschedule if we have not already done so, we may have put ourselves to sleep. */
+        portYIELD_WITHIN_API();
     }
 
 #endif /* INCLUDE_vTaskDelay */
