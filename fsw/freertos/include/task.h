@@ -75,7 +75,6 @@ typedef struct
     bool needs_restart;
     bool hit_restart;
     ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
-    ListItem_t xEventListItem;                  /*< Used to reference a task from an event list. */
 
     volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
     volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
@@ -192,10 +191,7 @@ typedef enum
  */
 #define taskENABLE_INTERRUPTS()            portENABLE_INTERRUPTS()
 
-/* Definitions returned by xTaskGetSchedulerState().  taskSCHEDULER_SUSPENDED is
- * 0 to generate more optimal code when configASSERT() is defined as the constant
- * is used in assert() statements. */
-#define taskSCHEDULER_SUSPENDED      ( ( BaseType_t ) 0 )
+/* Definitions returned by xTaskGetSchedulerState(). */
 #define taskSCHEDULER_NOT_STARTED    ( ( BaseType_t ) 1 )
 #define taskSCHEDULER_RUNNING        ( ( BaseType_t ) 2 )
 
@@ -456,115 +452,6 @@ void vTaskSuspend( TaskHandle_t xTaskToSuspend );
  * \ingroup SchedulerControl
  */
 void vTaskStartScheduler( void );
-
-/**
- * task. h
- * @code{c}
- * void vTaskSuspendAll( void );
- * @endcode
- *
- * Suspends the scheduler without disabling interrupts.  Context switches will
- * not occur while the scheduler is suspended.
- *
- * After calling vTaskSuspendAll () the calling task will continue to execute
- * without risk of being swapped out until a call to xTaskResumeAll () has been
- * made.
- *
- * API functions that have the potential to cause a context switch (for example,
- * xTaskDelayUntil(), xQueueSend(), etc.) must not be called while the scheduler
- * is suspended.
- *
- * Example usage:
- * @code{c}
- * void vTask1( void * pvParameters )
- * {
- *   for( ;; )
- *   {
- *       // Task code goes here.
- *
- *       // ...
- *
- *       // At some point the task wants to perform a long operation during
- *       // which it does not want to get swapped out.  It cannot use
- *       // taskENTER_CRITICAL ()/taskEXIT_CRITICAL () as the length of the
- *       // operation may cause interrupts to be missed - including the
- *       // ticks.
- *
- *       // Prevent the real time kernel swapping out the task.
- *       vTaskSuspendAll ();
- *
- *       // Perform the operation here.  There is no need to use critical
- *       // sections as we have all the microcontroller processing time.
- *       // During this time interrupts will still operate and the kernel
- *       // tick count will be maintained.
- *
- *       // ...
- *
- *       // The operation is complete.  Restart the kernel.
- *       xTaskResumeAll ();
- *   }
- * }
- * @endcode
- * \defgroup vTaskSuspendAll vTaskSuspendAll
- * \ingroup SchedulerControl
- */
-void vTaskSuspendAll( void );
-
-/**
- * task. h
- * @code{c}
- * BaseType_t xTaskResumeAll( void );
- * @endcode
- *
- * Resumes scheduler activity after it was suspended by a call to
- * vTaskSuspendAll().
- *
- * xTaskResumeAll() only resumes the scheduler.  It does not unsuspend tasks
- * that were previously suspended by a call to vTaskSuspend().
- *
- * @return If resuming the scheduler caused a context switch then pdTRUE is
- *         returned, otherwise pdFALSE is returned.
- *
- * Example usage:
- * @code{c}
- * void vTask1( void * pvParameters )
- * {
- *   for( ;; )
- *   {
- *       // Task code goes here.
- *
- *       // ...
- *
- *       // At some point the task wants to perform a long operation during
- *       // which it does not want to get swapped out.  It cannot use
- *       // taskENTER_CRITICAL ()/taskEXIT_CRITICAL () as the length of the
- *       // operation may cause interrupts to be missed - including the
- *       // ticks.
- *
- *       // Prevent the real time kernel swapping out the task.
- *       vTaskSuspendAll ();
- *
- *       // Perform the operation here.  There is no need to use critical
- *       // sections as we have all the microcontroller processing time.
- *       // During this time interrupts will still operate and the real
- *       // time kernel tick count will be maintained.
- *
- *       // ...
- *
- *       // The operation is complete.  Restart the kernel.  We want to force
- *       // a context switch - but there is no point if resuming the scheduler
- *       // caused a context switch already.
- *       if( !xTaskResumeAll () )
- *       {
- *            taskYIELD ();
- *       }
- *   }
- * }
- * @endcode
- * \defgroup xTaskResumeAll xTaskResumeAll
- * \ingroup SchedulerControl
- */
-BaseType_t xTaskResumeAll( void );
 
 /*-----------------------------------------------------------
 * TASK UTILITIES
@@ -1446,8 +1333,7 @@ void vTaskSwitchContext( void );
 TaskHandle_t xTaskGetCurrentTaskHandle( void );
 
 /*
- * Returns the scheduler state as taskSCHEDULER_RUNNING,
- * taskSCHEDULER_NOT_STARTED or taskSCHEDULER_SUSPENDED.
+ * Returns the scheduler state as taskSCHEDULER_RUNNING, or taskSCHEDULER_NOT_STARTED.
  */
 BaseType_t xTaskGetSchedulerState( void );
 
