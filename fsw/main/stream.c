@@ -5,21 +5,6 @@
 #include <fsw/debug.h>
 #include <fsw/stream.h>
 
-void stream_init(stream_t *stream, size_t capacity) {
-    assert(stream != NULL);
-    stream->writer = NULL;
-    stream->reader = NULL;
-    // make sure this is a power of two
-    assert((capacity & (capacity - 1)) == 0);
-    // make sure at least one bit is free
-    assert((capacity << 1) != 0);
-
-    stream->memory = malloc(capacity);
-    assert(stream->memory != NULL);
-    stream->capacity = capacity;
-    stream->read_idx = stream->write_idx = 0;
-}
-
 void stream_set_writer(stream_t *stream, thread_t writer) {
     assert(stream != NULL && writer != NULL);
     if (stream->writer != NULL) {

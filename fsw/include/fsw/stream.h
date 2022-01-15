@@ -20,7 +20,19 @@ typedef struct {
     size_t   write_idx;
 } stream_t;
 
-void stream_init(stream_t *stream, size_t capacity);
+#define STREAM_REGISTER(s_ident, s_capacity)                                                    \
+    static_assert(((s_capacity) & ((s_capacity) - 1)) == 0, "capacity must be a power of two"); \
+    static_assert(((s_capacity) << 1) != 0, "capacity must leave at least one bit free");       \
+    static uint8_t s_ident ## _memory[s_capacity];                                              \
+    stream_t s_ident = {                                                                        \
+        .writer = NULL, /* to be populated later */                                             \
+        .reader = NULL, /* to be populated later */                                             \
+        .memory = s_ident ## _memory,                                                           \
+        .capacity = (s_capacity),                                                               \
+        .read_idx = 0,                                                                          \
+        .write_idx = 0,                                                                         \
+    }
+
 void stream_set_writer(stream_t *stream, thread_t writer);
 void stream_set_reader(stream_t *stream, thread_t reader);
 // may only be used by a single thread at a time

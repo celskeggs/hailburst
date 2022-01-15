@@ -100,9 +100,12 @@ FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_
 
 CLOCK_REGISTER(sc_clock, clock_routing, clock_rx, clock_tx);
 
+STREAM_REGISTER(sc_uplink_stream, UPLINK_STREAM_CAPACITY);
+STREAM_REGISTER(sc_downlink_stream, DOWNLINK_STREAM_CAPACITY);
+
 RADIO_REGISTER(sc_radio, radio_up_routing,   radio_up_rx,   radio_up_tx,   UPLINK_STREAM_CAPACITY,
                          radio_down_routing, radio_down_rx, radio_down_tx, DOWNLINK_STREAM_CAPACITY,
-                         sc.uplink_stream,   sc.downlink_stream);
+                         sc_uplink_stream,   sc_downlink_stream);
 
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
@@ -126,10 +129,8 @@ void spacecraft_init(void) {
     switch_add_port(&fce_vswitch, VPORT_LINK, &fce_rx_chart, &fce_tx_chart);
 
     debugf(INFO, "Initializing telecomm infrastructure...");
-    stream_init(&sc.uplink_stream, UPLINK_STREAM_CAPACITY);
-    stream_init(&sc.downlink_stream, DOWNLINK_STREAM_CAPACITY);
-    comm_dec_init(&sc.comm_decoder, &sc.uplink_stream);
-    comm_enc_init(&sc.comm_encoder, &sc.downlink_stream);
+    comm_dec_init(&sc.comm_decoder, &sc_uplink_stream);
+    comm_enc_init(&sc.comm_encoder, &sc_downlink_stream);
     telemetry_init(&sc.comm_encoder);
 
 #ifdef CLOCK_EXISTS

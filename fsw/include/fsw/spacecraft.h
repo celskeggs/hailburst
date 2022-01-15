@@ -12,8 +12,6 @@ typedef struct {
     radio_t        radio;
 
     // telecomm infrastructure
-    stream_t       uplink_stream;
-    stream_t       downlink_stream;
     comm_dec_t     comm_decoder;
     comm_enc_t     comm_encoder;
 } spacecraft_t;
