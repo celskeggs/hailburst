@@ -213,14 +213,6 @@ static void virtio_device_irq_callback(void *opaque_device) {
     portYIELD_FROM_ISR(was_woken);
 }
 
-static void virtio_device_chart_wakeup(void *opaque) {
-    struct virtio_device *device = (struct virtio_device *) opaque;
-    assert(device != NULL && device->initialized == true && device->monitor_task != NULL
-             && device->monitor_started == true);
-
-    task_rouse(device->monitor_task);
-}
-
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index) {
     struct virtio_device_queue *queue = &device->queues[queue_index];
 
@@ -258,9 +250,9 @@ void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t q
         assert(chart_request_peek(queue->chart, 0) == chart_get_note(queue->chart, 0));
         assert(chart_reply_avail(queue->chart) == 0);
 
-        chart_attach_client(queue->chart, virtio_device_chart_wakeup, device);
+        chart_attach_client(queue->chart, PP_ERASE_TYPE(task_rouse, device->monitor_task), (void*) device->monitor_task);
     } else if (queue->direction == QUEUE_OUTPUT) {
-        chart_attach_server(queue->chart, virtio_device_chart_wakeup, device);
+        chart_attach_server(queue->chart, PP_ERASE_TYPE(task_rouse, device->monitor_task), (void*) device->monitor_task);
     } else {
         abortf("Invalid queue direction: %u", queue->direction);
     }

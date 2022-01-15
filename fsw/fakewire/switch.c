@@ -109,14 +109,6 @@ void switch_mainloop_internal(switch_t *sw) {
     }
 }
 
-static void switch_notify_loop(void *opaque) {
-    assert(opaque != NULL);
-    switch_t *sw = (switch_t *) opaque;
-
-    // wake up the transfer loop
-    task_rouse(sw->switch_task);
-}
-
 void switch_add_port(switch_t *sw, uint8_t port_number, chart_t *inbound, chart_t *outbound) {
     assert(sw != NULL && inbound != NULL && outbound != NULL);
     assert(SWITCH_PORT_BASE <= port_number && port_number < SWITCH_PORT_BASE + SWITCH_PORTS);
@@ -126,8 +118,8 @@ void switch_add_port(switch_t *sw, uint8_t port_number, chart_t *inbound, chart_
     assert(sw->ports_inbound[port_number - SWITCH_PORT_BASE] == NULL);
     assert(sw->ports_outbound[port_number - SWITCH_PORT_BASE] == NULL);
 
-    chart_attach_server(inbound, switch_notify_loop, sw);
-    chart_attach_client(outbound, switch_notify_loop, sw);
+    chart_attach_server(inbound, PP_ERASE_TYPE(task_rouse, sw->switch_task), (void*) sw->switch_task);
+    chart_attach_client(outbound, PP_ERASE_TYPE(task_rouse, sw->switch_task), (void*) sw->switch_task);
 
     atomic_store(sw->ports_inbound[port_number - SWITCH_PORT_BASE], inbound);
     atomic_store(sw->ports_outbound[port_number - SWITCH_PORT_BASE], outbound);

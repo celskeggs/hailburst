@@ -14,12 +14,6 @@ enum {
     RMAP_RECEIVE_TIMEOUT_NS = 2 * 1000 * 1000,
 };
 
-void rmap_notify_wake(rmap_t *rmap) {
-    assert(rmap != NULL);
-
-    local_rouse(rmap->client_task);
-}
-
 static void rmap_cancel_active_work(rmap_t *rmap) {
     assert(rmap != NULL);
     if (rmap->current_routing != NULL) {

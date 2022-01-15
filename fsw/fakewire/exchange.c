@@ -12,12 +12,6 @@
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->label, ## __VA_ARGS__)
 
-void fakewire_exc_notify(fw_exchange_t *fwe) {
-    assert(fwe != NULL);
-
-    task_rouse(fwe->exchange_task);
-}
-
 void fakewire_exc_init_internal(fw_exchange_t *fwe) {
     assert(fwe != NULL);
 

@@ -61,8 +61,6 @@ typedef struct {
     const rmap_addr_t *current_routing;
 } rmap_t;
 
-void rmap_notify_wake(rmap_t *rmap);
-
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
 #define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit, r_client_task) \
@@ -73,8 +71,8 @@ void rmap_notify_wake(rmap_t *rmap);
         .rx_chart = &r_receive,                                                               \
         .tx_chart = &r_transmit,                                                              \
     };                                                                                        \
-    CHART_SERVER_NOTIFY(r_receive, rmap_notify_wake, &r_ident);                               \
-    CHART_CLIENT_NOTIFY(r_transmit, rmap_notify_wake, &r_ident)
+    CHART_SERVER_NOTIFY(r_receive, local_rouse, &r_client_task);                              \
+    CHART_CLIENT_NOTIFY(r_transmit, local_rouse, &r_client_task)
 
 // returns a pointer into which up to max_write_length bytes can be written.
 rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
