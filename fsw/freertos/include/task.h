@@ -1438,7 +1438,7 @@ BaseType_t xTaskIncrementTick( void );
  * Sets the pointer to the current TCB to the TCB of the highest priority task
  * that is ready to run.
  */
-portDONT_DISCARD void vTaskSwitchContext( void );
+void vTaskSwitchContext( void );
 
 /*
  * Return the handle of the calling task.

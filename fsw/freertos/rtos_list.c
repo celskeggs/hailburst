@@ -92,9 +92,6 @@ void vListInsertEnd( List_t * const pxList,
     pxNewListItem->pxNext = pxIndex;
     pxNewListItem->pxPrevious = pxIndex->pxPrevious;
 
-    /* Only used during decision coverage testing. */
-    mtCOVERAGE_TEST_DELAY();
-
     pxIndex->pxPrevious->pxNext = pxNewListItem;
     pxIndex->pxPrevious = pxNewListItem;
 
@@ -185,17 +182,10 @@ UBaseType_t uxListRemove( ListItem_t * const pxItemToRemove )
     pxItemToRemove->pxNext->pxPrevious = pxItemToRemove->pxPrevious;
     pxItemToRemove->pxPrevious->pxNext = pxItemToRemove->pxNext;
 
-    /* Only used during decision coverage testing. */
-    mtCOVERAGE_TEST_DELAY();
-
     /* Make sure the index is left pointing to a valid item. */
     if( pxList->pxIndex == pxItemToRemove )
     {
         pxList->pxIndex = pxItemToRemove->pxPrevious;
-    }
-    else
-    {
-        mtCOVERAGE_TEST_MARKER();
     }
 
     pxItemToRemove->pxContainer = NULL;

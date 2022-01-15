@@ -57,10 +57,6 @@ typedef unsigned long UBaseType_t;
 typedef uint32_t TickType_t;
 #define portMAX_DELAY ( TickType_t ) 0xffffffffUL
 
-/* 32-bit tick type on a 32-bit architecture, so reads of the tick count do
-not need to be guarded with a critical section. */
-#define portTICK_TYPE_IS_ATOMIC 1
-
 /*-----------------------------------------------------------*/
 
 /* Hardware specifics. */
@@ -123,7 +119,6 @@ by default. */
     nothing to prevent it being called accidentally. */
     #define vPortTaskUsesFPU()
 #endif
-#define portTASK_USES_FLOATING_POINT() vPortTaskUsesFPU()
 
 #define portLOWEST_INTERRUPT_PRIORITY ( ( ( uint32_t ) configUNIQUE_INTERRUPT_PRIORITIES ) - 1UL )
 #define portLOWEST_USABLE_INTERRUPT_PRIORITY ( portLOWEST_INTERRUPT_PRIORITY - 1UL )

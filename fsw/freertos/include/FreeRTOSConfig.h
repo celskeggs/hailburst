@@ -12,7 +12,6 @@
 #define configMINIMAL_STACK_SIZE                512
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 #define configSTACK_DEPTH_TYPE                  uint16_t
-#define configMESSAGE_BUFFER_LENGTH_TYPE        size_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
 enum {
@@ -26,10 +25,6 @@ enum {
 
 /* Hook function related definitions. */
 #define configCHECK_FOR_STACK_OVERFLOW          2
-#define configUSE_DAEMON_TASK_STARTUP_HOOK      0
-
-/* Run time and task stats gathering related definitions. */
-#define configUSE_STATS_FORMATTING_FUNCTIONS    0
 
 /* Interrupt nesting behaviour configuration. */
 // #define configKERNEL_INTERRUPT_PRIORITY         [dependent of processor]
