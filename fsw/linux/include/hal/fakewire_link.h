@@ -26,7 +26,7 @@ void fakewire_link_configure(fw_link_t *fwl);
 // l_rx_num and l_tx_num are only used on FreeRTOS
 #define FAKEWIRE_LINK_REGISTER(l_ident, l_options, l_rx, l_tx, l_rx_num, l_tx_num)                                    \
     extern fw_link_t l_ident;                                                                                         \
-    TASK_REGISTER(l_ident ## _cfg, "fw_config",  PRIORITY_INIT,  fakewire_link_configure, &l_ident, NOT_RESTARTABLE); \
+    TASK_REGISTER(l_ident ## _cfg, "fw_config", PRIORITY_WORKERS, fakewire_link_configure, &l_ident, NOT_RESTARTABLE); \
     TASK_REGISTER(l_ident ## _rxl, "fw_rx_loop", PRIORITY_WORKERS, fakewire_link_rx_loop, &l_ident, NOT_RESTARTABLE); \
     TASK_REGISTER(l_ident ## _txl, "fw_tx_loop", PRIORITY_WORKERS, fakewire_link_tx_loop, &l_ident, NOT_RESTARTABLE); \
     fw_link_t l_ident = {                                                                                             \

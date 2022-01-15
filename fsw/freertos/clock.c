@@ -12,4 +12,4 @@ static void clock_start_main(void) {
     // nothing left to do.
     task_suspend();
 }
-TASK_REGISTER(clock_start_task, "clock-start", PRIORITY_INIT, clock_start_main, NULL, NOT_RESTARTABLE);
+TASK_REGISTER(clock_start_task, "clock-start", PRIORITY_WORKERS, clock_start_main, NULL, NOT_RESTARTABLE);
