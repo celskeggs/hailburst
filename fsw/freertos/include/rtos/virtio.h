@@ -24,6 +24,7 @@ enum {
 
     // max handled length of received console names
     VIRTIO_CONSOLE_CTRL_RECV_MARGIN = 32,
+    VIRTIO_CONSOLE_MAX_QUEUES       = 6, // this is all we need with the current hardcoded offsets
 };
 
 typedef enum {
@@ -64,6 +65,7 @@ struct virtio_device {
     uint32_t irq;
     uint32_t expected_device_id;
 
+    uint32_t                    max_queues;
     uint32_t                    num_queues;
     struct virtio_device_queue *queues;
 };
@@ -91,29 +93,32 @@ void virtio_device_init_internal(struct virtio_device *device);
 void virtio_device_start_internal(struct virtio_device *device);
 void virtio_monitor_loop(struct virtio_device *device);
 
-#define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select) \
-    extern struct virtio_device v_ident;                       \
+#define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select, v_max_queues)                    \
+    extern struct virtio_device v_ident;                                                                             \
     TASK_REGISTER(v_ident ## _task, "virtio-monitor", PRIORITY_DRIVERS, virtio_monitor_loop, &v_ident, RESTARTABLE); \
-    struct virtio_device v_ident = {                           \
-        .initialized = false,                                  \
-        .monitor_started = false,                              \
-        .monitor_task = &v_ident ## _task,                     \
-        .mmio = (struct virtio_mmio_registers *)               \
+    struct virtio_device_queue v_ident ## _queues[v_max_queues];                                                     \
+    struct virtio_device v_ident = {                                                                                 \
+        .initialized = false,                                                                                        \
+        .monitor_started = false,                                                                                    \
+        .monitor_task = &v_ident ## _task,                                                                           \
+        .mmio = (struct virtio_mmio_registers *)                                                                     \
                     (VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * (v_region_id)),                         \
-        .feature_select_cb = (v_feature_select),               \
-        .irq = VIRTIO_MMIO_IRQS_BASE + (v_region_id),          \
-        .expected_device_id = (v_device_id),                   \
-        .num_queues = 0, /* to be populated */                 \
-        .queues = NULL, /* to be populated */                  \
-    };                                                         \
+        .feature_select_cb = (v_feature_select),                                                                     \
+        .irq = VIRTIO_MMIO_IRQS_BASE + (v_region_id),                                                                \
+        .expected_device_id = (v_device_id),                                                                         \
+        .max_queues = (v_max_queues),                                                                                \
+        .num_queues = 0, /* to be populated */                                                                       \
+        .queues = v_ident ## _queues, /* to be populated */                                                          \
+    };                                                                                                               \
     PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
 void virtio_console_feature_select(uint64_t *features);
 void virtio_console_control_loop(struct virtio_console *console);
 
-#define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id) \
-    VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select); \
+#define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id)                                                          \
+    VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select,  \
+                           VIRTIO_CONSOLE_MAX_QUEUES);                                                         \
     extern struct virtio_console v_ident;                                                                      \
     TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_INIT,                                              \
                   virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);                                     \

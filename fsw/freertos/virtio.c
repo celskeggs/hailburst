@@ -347,7 +347,7 @@ void virtio_device_force_notify_queue(struct virtio_device *device, uint32_t que
 
 // this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
 void virtio_device_init_internal(struct virtio_device *device) {
-    assert(device != NULL && device->initialized == false && device->num_queues == 0 && device->queues == NULL);
+    assert(device != NULL && device->initialized == false && device->num_queues == 0 && device->max_queues > 0);
     struct virtio_mmio_registers *mmio = device->mmio;
 
     debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", (uintptr_t) device->mmio, device->irq);
@@ -404,20 +404,19 @@ void virtio_device_init_internal(struct virtio_device *device) {
         if (device->mmio->queue_ready != 0) {
             abortf("VIRTIO device already had virtqueue %d initialized; failing.", queue_i);
         }
-        if (device->mmio->queue_num_max == 0) {
+        if (device->mmio->queue_num_max == 0 || queue_i >= device->max_queues) {
             device->num_queues = queue_i;
             break;
         }
     }
+
+    assert(device->num_queues <= device->max_queues);
 
     if (device->num_queues == 0) {
         abortf("VIRTIO device discovered to have 0 queues; failing.");
     }
 
     debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->num_queues);
-
-    device->queues = malloc(sizeof(struct virtio_device_queue) * device->num_queues);
-    assert(device->queues != NULL);
 
     // mark everything as uninitialized
     for (uint32_t vq = 0; vq < device->num_queues; vq++) {

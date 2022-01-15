@@ -167,8 +167,11 @@ void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
 
     debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %d", config->max_nr_ports);
 
+    size_t base_queue = virtio_console_port_to_queue_index(VIRTIO_FAKEWIRE_PORT_INDEX);
+
     // TODO: should I really be treating 'num_queues' as public?
-    assert(console->devptr->num_queues == (config->max_nr_ports + 1) * 2);
+    assert(console->devptr->num_queues <= (config->max_nr_ports + 1) * 2);
+    assert(console->devptr->num_queues >= base_queue + 2);
 
     debugf(DEBUG, "Initialize control_rx queue.");
 
@@ -186,7 +189,6 @@ void virtio_console_init(struct virtio_console *console, chart_t *data_rx, chart
 
     debugf(DEBUG, "Initialize data queues.");
 
-    size_t base_queue = virtio_console_port_to_queue_index(VIRTIO_FAKEWIRE_PORT_INDEX);
     virtio_device_setup_queue(console->devptr, base_queue + VIRTIO_CONSOLE_VQ_RECEIVE, QUEUE_INPUT, data_rx);
     virtio_device_setup_queue(console->devptr, base_queue + VIRTIO_CONSOLE_VQ_TRANSMIT, QUEUE_OUTPUT, data_tx);
 
