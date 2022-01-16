@@ -22,8 +22,7 @@ extern TCB_t tasktable_end[];
 #define TASK_PROTO(t_ident) \
     extern TCB_t t_ident;
 
-#define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
-    static_assert(t_priority < configMAX_PRIORITIES, "invalid priority");         \
+#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)             \
     StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
     TCB_mut_t t_ident ## _mutable = {                                             \
         .pxTopOfStack    = NULL,                                                  \
@@ -38,12 +37,10 @@ extern TCB_t tasktable_end[];
         .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
         .start_arg       = t_arg,                                                 \
         .restartable     = t_restartable,                                         \
-        .uxPriority      = t_priority,                                            \
+        .uxPriority      = PRIORITY_WORKERS,                                      \
         .pxStack         = t_ident ## _stack,                                     \
         .pcTaskName      = t_name,                                                \
     }
-
-// TODO: fix write to uxPriority
 
 static inline thread_t task_get_current(void) {
     TaskHandle_t handle = xTaskGetCurrentTaskHandle();

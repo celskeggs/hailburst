@@ -26,7 +26,7 @@ static void thread_idle_main(void) {
     }
 }
 
-TASK_REGISTER(idle_task, "IDLE", PRIORITY_WORKERS, thread_idle_main, NULL, RESTARTABLE);
+TASK_REGISTER(idle_task, "IDLE", thread_idle_main, NULL, RESTARTABLE);
 
 void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {

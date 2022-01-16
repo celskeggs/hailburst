@@ -71,7 +71,7 @@ static void scrubber_mainloop(void) {
     }
 }
 
-TASK_REGISTER(scrubber_task, "scrubber", PRIORITY_WORKERS, scrubber_mainloop, NULL, RESTARTABLE);
+TASK_REGISTER(scrubber_task, "scrubber", scrubber_mainloop, NULL, RESTARTABLE);
 
 struct scrubber_task_data scrubber_data_local = {
     .kernel_elf_rom = NULL,

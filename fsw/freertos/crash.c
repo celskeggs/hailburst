@@ -41,7 +41,7 @@ static void restart_task_mainloop(void) {
     }
 }
 
-TASK_REGISTER(task_restart_task, "restart-task", PRIORITY_WORKERS, restart_task_mainloop, NULL, NOT_RESTARTABLE);
+TASK_REGISTER(task_restart_task, "restart-task", restart_task_mainloop, NULL, NOT_RESTARTABLE);
 
 __attribute__((noreturn)) void restart_current_task(void) {
     thread_t current_thread = task_get_current();

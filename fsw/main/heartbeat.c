@@ -16,6 +16,6 @@ static void heartbeat_mainloop(void) {
     }
 }
 
-TASK_REGISTER(heartbeat_task, "heartbeat_loop", PRIORITY_WORKERS, heartbeat_mainloop, NULL, RESTARTABLE);
+TASK_REGISTER(heartbeat_task, "heartbeat_loop", heartbeat_mainloop, NULL, RESTARTABLE);
 
 CLOCK_DEPEND_ON_CALIBRATION(heartbeat_task);

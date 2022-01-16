@@ -92,7 +92,7 @@ void virtio_monitor_loop(struct virtio_device *device);
 
 #define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select, v_max_queues)                    \
     extern struct virtio_device v_ident;                                                                             \
-    TASK_REGISTER(v_ident ## _task, "virtio-monitor", PRIORITY_WORKERS, virtio_monitor_loop, &v_ident, RESTARTABLE); \
+    TASK_REGISTER(v_ident ## _task, "virtio-monitor", virtio_monitor_loop, &v_ident, RESTARTABLE);                   \
     struct virtio_device_queue v_ident ## _queues[v_max_queues];                                                     \
     struct virtio_device v_ident = {                                                                                 \
         .initialized = false,                                                                                        \
@@ -148,8 +148,7 @@ void virtio_console_configure_internal(struct virtio_console *console);
     VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select,  \
                            6 /* room for queues 2,3,4,5 needed later */);                                      \
     extern struct virtio_console v_ident;                                                                      \
-    TASK_REGISTER(v_ident ## _task, "serial-ctrl", PRIORITY_WORKERS,                                           \
-                  virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);                                     \
+    TASK_REGISTER(v_ident ## _task, "serial-ctrl", virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);    \
     CHART_REGISTER(v_ident ## _crx, sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)           \
                                         + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 4);                                 \
     CHART_REGISTER(v_ident ## _ctx, sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent), 4);      \

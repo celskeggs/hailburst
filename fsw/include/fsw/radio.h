@@ -53,10 +53,8 @@ void radio_downlink_loop(radio_t *radio);
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                  \
                     && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                          \
     extern radio_t r_ident;                                                                                       \
-    TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", PRIORITY_WORKERS,                                         \
-                  radio_uplink_loop, &r_ident, RESTARTABLE);                                                      \
-    TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", PRIORITY_WORKERS,                                     \
-                  radio_downlink_loop, &r_ident, RESTARTABLE);                                                    \
+    TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", radio_uplink_loop, &r_ident, RESTARTABLE);                \
+    TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", radio_downlink_loop, &r_ident, RESTARTABLE);          \
     RMAP_REGISTER(r_ident ## _up,   r_up_capacity,   REG_IO_BUFFER_SIZE,                                          \
                                     r_up_rx,   r_up_tx,   r_ident ## _up_task);                                   \
     RMAP_REGISTER(r_ident ## _down, REG_IO_BUFFER_SIZE, r_down_capacity,                                          \

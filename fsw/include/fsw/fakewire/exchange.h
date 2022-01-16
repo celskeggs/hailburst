@@ -27,28 +27,27 @@ void fakewire_exc_notify(fw_exchange_t *fwe);
 void fakewire_exc_init_internal(fw_exchange_t *fwe);
 void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
 
-#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart) \
-    extern fw_exchange_t e_ident;                                                        \
-    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", PRIORITY_WORKERS,                   \
-                  fakewire_exc_exchange_loop, &e_ident, RESTARTABLE);                    \
-    CHART_CLIENT_NOTIFY(e_read_chart, task_rouse, &e_ident ## _task);                    \
-    CHART_SERVER_NOTIFY(e_write_chart, task_rouse, &e_ident ## _task);                   \
-    CHART_REGISTER(e_ident ## _transmit_chart, 1024, EXCHANGE_QUEUE_DEPTH);              \
-    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, task_rouse, &e_ident ## _task);      \
-    CHART_REGISTER(e_ident ## _receive_chart, 1024, EXCHANGE_QUEUE_DEPTH);               \
-    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, task_rouse, &e_ident ## _task);       \
-    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                          \
-                           e_ident ## _receive_chart, e_ident ## _transmit_chart,        \
-                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                  \
-    fw_exchange_t e_ident = {                                                            \
-        .label = (e_link_options).label,                                                 \
-        /* io_port, encoder, decoder not initialized here */                             \
-        .exchange_task = &e_ident ## _task,                                              \
-        .transmit_chart = &e_ident ## _transmit_chart,                                   \
-        .receive_chart = &e_ident ## _receive_chart,                                     \
-        .read_chart = &e_read_chart,                                                     \
-        .write_chart = &e_write_chart,                                                   \
-    };                                                                                   \
+#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart)                 \
+    extern fw_exchange_t e_ident;                                                                        \
+    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", fakewire_exc_exchange_loop, &e_ident, RESTARTABLE); \
+    CHART_CLIENT_NOTIFY(e_read_chart, task_rouse, &e_ident ## _task);                                    \
+    CHART_SERVER_NOTIFY(e_write_chart, task_rouse, &e_ident ## _task);                                   \
+    CHART_REGISTER(e_ident ## _transmit_chart, 1024, EXCHANGE_QUEUE_DEPTH);                              \
+    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, task_rouse, &e_ident ## _task);                      \
+    CHART_REGISTER(e_ident ## _receive_chart, 1024, EXCHANGE_QUEUE_DEPTH);                               \
+    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, task_rouse, &e_ident ## _task);                       \
+    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                                          \
+                           e_ident ## _receive_chart, e_ident ## _transmit_chart,                        \
+                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                                  \
+    fw_exchange_t e_ident = {                                                                            \
+        .label = (e_link_options).label,                                                                 \
+        /* io_port, encoder, decoder not initialized here */                                             \
+        .exchange_task = &e_ident ## _task,                                                              \
+        .transmit_chart = &e_ident ## _transmit_chart,                                                   \
+        .receive_chart = &e_ident ## _receive_chart,                                                     \
+        .read_chart = &e_read_chart,                                                                     \
+        .write_chart = &e_write_chart,                                                                   \
+    };                                                                                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident)
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */

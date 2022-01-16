@@ -31,16 +31,15 @@ typedef struct {
 void switch_mainloop_internal(switch_t *sw);
 void switch_init_internal(switch_t *sw);
 
-#define SWITCH_REGISTER(v_ident)                       \
-    extern switch_t v_ident;                                                                   \
-    TASK_REGISTER(v_ident ## _task, "switch_loop", PRIORITY_WORKERS, switch_mainloop_internal, \
-                  &v_ident, RESTARTABLE);                                                      \
-    switch_t v_ident = {                               \
-        .ports_inbound = { NULL },                     \
-        .ports_outbound = { NULL },                    \
-        .routing_table = { 0 },                        \
-        .switch_task = &v_ident ## _task,              \
-    };
+#define SWITCH_REGISTER(v_ident)                                                                     \
+    extern switch_t v_ident;                                                                         \
+    TASK_REGISTER(v_ident ## _task, "switch_loop", switch_mainloop_internal, &v_ident, RESTARTABLE); \
+    switch_t v_ident = {                                                                             \
+        .ports_inbound = { NULL },                                                                   \
+        .ports_outbound = { NULL },                                                                  \
+        .routing_table = { 0 },                                                                      \
+        .switch_task = &v_ident ## _task,                                                            \
+    }
 
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.

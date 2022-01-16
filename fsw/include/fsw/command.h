@@ -10,7 +10,7 @@ void cmd_mainloop(spacecraft_t *sc);
 
 // may only be used once
 #define COMMAND_REGISTER(c_ident, c_spacecraft)                                                              \
-    TASK_REGISTER(c_ident ## _task, "cmd_loop", PRIORITY_WORKERS, cmd_mainloop, &c_spacecraft, RESTARTABLE); \
+    TASK_REGISTER(c_ident ## _task, "cmd_loop", cmd_mainloop, &c_spacecraft, RESTARTABLE);                   \
     static void c_ident ## _init(void) {                                                                     \
         comm_dec_set_task(&c_spacecraft.comm_decoder, &c_ident ## _task);                                    \
     }                                                                                                        \

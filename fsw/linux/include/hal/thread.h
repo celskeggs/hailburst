@@ -77,8 +77,8 @@ extern void start_predef_threads(void);
 #define TASK_PROTO(t_ident) \
     extern struct thread_st t_ident;
 
-// name, priority, and restartable go unused on POSIX; these are only used on FreeRTOS
-#define TASK_REGISTER(t_ident, t_name, t_priority, t_start, t_arg, t_restartable) \
+// name and restartable go unused on POSIX; these are only used on FreeRTOS
+#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable) \
     __attribute__((section(".tasktable"))) struct thread_st t_ident = {           \
         .start_routine = PP_ERASE_TYPE(t_start, t_arg), \
         .start_parameter = (t_arg), \
