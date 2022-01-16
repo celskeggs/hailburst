@@ -8,7 +8,6 @@
 #include <fsw/fakewire/exchange.h>
 
 //#define DEBUG
-//#define APIDEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->label, ## __VA_ARGS__)
 
@@ -391,6 +390,9 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                 write_entry = chart_reply_start(fwe->write_chart);
                 if (write_entry != NULL) {
                     assert(write_entry->actual_length > 0);
+#ifdef DEBUG
+                    debug_printf(TRACE, "Received packet (len=%u) to transmit.", write_entry->actual_length);
+#endif
                     write_offset = 0;
                     txmit_state = FW_TXMIT_HEADER;
                 } else {
@@ -425,6 +427,9 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                 assert(write_entry != NULL);
 
                 // respond to writer
+#ifdef DEBUG
+                debug_printf(TRACE, "Finished transmitting packet (len=%u).", write_entry->actual_length);
+#endif
                 chart_reply_send(fwe->write_chart, 1);
 
                 // reset our state

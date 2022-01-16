@@ -5,6 +5,8 @@
 #include <fsw/io.h>
 #include <fsw/fakewire/switch.h>
 
+// #define DEBUG
+
 // returns TRUE if packet is consumed.
 static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, struct io_rx_ent *entry,
                           chart_t **outbound_out) {
@@ -57,6 +59,8 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
 
         // alternatively, if this is the only packet, we can just wait until delivery is possible. if we get more
         // packets behind it, and still can't transmit it, then we'll drop it then.
+        debugf(TRACE, "Switch port %u: holding packet (len=%u) until port %u (address=%u) is free.",
+               port, entry->actual_length, outport, destination);
         return false;
     }
     entry_out->receive_timestamp = entry->receive_timestamp;
@@ -76,6 +80,8 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
     memcpy(entry_out->data, entry->data, entry_out->actual_length);
     // defer chart_request_send(outbound, 1) until chart_reply_send(inbound, 1) has completed. see later.
     *outbound_out = outbound;
+    debugf(TRACE, "Switch port %u: forwarding packet (len=%u) to destination port %u (address=%u).",
+           port, entry->actual_length, outport, destination);
     return true;
 }
 
@@ -85,7 +91,7 @@ void switch_mainloop_internal(switch_t *sw) {
     for (;;) {
         // attempt to perform transfer for each port
         struct io_rx_ent *entry;
-        bool made_progress = false;
+        unsigned int packets = 0;
         for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
             chart_t *inbound = atomic_load(sw->ports_inbound[port - SWITCH_PORT_BASE]);
             if (inbound != NULL && (entry = chart_reply_start(inbound)) != NULL) {
@@ -99,12 +105,20 @@ void switch_mainloop_internal(switch_t *sw) {
                     if (outbound) {
                         chart_request_send(outbound, 1);
                     }
-                    made_progress = true;
+                    packets++;
                 }
             }
         }
-        if (!made_progress) {
+        if (packets > 0) {
+            debugf(TRACE, "Switch routed %u packets; checking to see if there are any more.", packets);
+        } else {
+#ifdef DEBUG
+            debugf(TRACE, "Switch dozing; no packets to route right now.");
+#endif
             task_doze();
+#ifdef DEBUG
+            debugf(TRACE, "Switch roused!");
+#endif
         }
     }
 }

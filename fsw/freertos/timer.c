@@ -19,7 +19,7 @@ static void timer_callback(void *opaque) {
     uint64_t new_time = arm_get_cntp_cval() + TICK_RATE_IN_CLOCK_UNITS;
     arm_set_cntp_cval(new_time);
 #ifdef TASK_DEBUG
-    debugf(TRACE, "Tick hit at %" PRIu64 "; scheduled next tick for %" PRIu64, timer_now_ns(), new_time * CLOCK_PERIOD_NS);
+    //debugf(TRACE, "Tick hit at %" PRIu64 "; scheduled next tick for %" PRIu64, timer_now_ns(), new_time * CLOCK_PERIOD_NS);
 #endif
     // call tick handler
     FreeRTOS_Tick_Handler();
