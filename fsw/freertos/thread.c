@@ -10,13 +10,23 @@
 
 static void thread_idle_main(void) {
     while (1) {
-        // must have interrupts enabled for this to be safe
-        assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
-        asm volatile("WFI");
+        uint64_t now = timer_now_ns();
+        // give other tasks a chance to run
+        taskYIELD();
+        if (timer_now_ns() - now < (CLOCK_NS_PER_SEC / configTICK_RATE_HZ) / 10) {
+            // that was fast... probably means we're the only task! so let's sleep for a while.
+
+            // must have interrupts enabled for this to be safe
+            debugf(TRACE, "Sending system to sleep in IDLE task.");
+            assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
+            asm volatile("WFI");
+        } else {
+            // someone else might have something to do... let's yield
+        }
     }
 }
 
-TASK_REGISTER(idle_task, "IDLE", PRIORITY_IDLE, thread_idle_main, NULL, RESTARTABLE);
+TASK_REGISTER(idle_task, "IDLE", PRIORITY_WORKERS, thread_idle_main, NULL, RESTARTABLE);
 
 void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {

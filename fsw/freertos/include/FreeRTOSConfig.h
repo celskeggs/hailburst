@@ -8,15 +8,14 @@
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 // configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      10000
-#define configMAX_PRIORITIES                    2
+#define configMAX_PRIORITIES                    1
 #define configMINIMAL_STACK_SIZE                512
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
 enum {
-    PRIORITY_WORKERS = 1,
-    PRIORITY_IDLE    = 0,
+    PRIORITY_WORKERS = 0,
 };
 
 /* Hook function related definitions. */
