@@ -59,85 +59,6 @@
     #define tskSET_NEW_STACKS_TO_KNOWN_VALUE    0
 #endif
 
-#if ( configUSE_PORT_OPTIMISED_TASK_SELECTION == 0 )
-
-/* If configUSE_PORT_OPTIMISED_TASK_SELECTION is 0 then task selection is
- * performed in a generic way that is not optimised to any particular
- * microcontroller architecture. */
-
-/* uxTopReadyPriority holds the priority of the highest priority ready
- * state task. */
-    #define taskRECORD_READY_PRIORITY( uxPriority ) \
-    {                                               \
-        if( ( uxPriority ) > uxTopReadyPriority )   \
-        {                                           \
-            uxTopReadyPriority = ( uxPriority );    \
-        }                                           \
-    } /* taskRECORD_READY_PRIORITY */
-
-/*-----------------------------------------------------------*/
-
-    #define taskSELECT_HIGHEST_PRIORITY_TASK()                                \
-    {                                                                         \
-        UBaseType_t uxTopPriority = uxTopReadyPriority;                       \
-                                                                              \
-        /* Find the highest priority queue that contains ready tasks. */      \
-        while( listLIST_IS_EMPTY( &( pxReadyTasksLists[ uxTopPriority ] ) ) ) \
-        {                                                                     \
-            configASSERT( uxTopPriority );                                    \
-            --uxTopPriority;                                                  \
-        }                                                                     \
-                                                                              \
-        /* listGET_OWNER_OF_NEXT_ENTRY indexes through the list, so the tasks of \
-         * the  same priority get an equal share of the processor time. */                    \
-        listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) ); \
-        uxTopReadyPriority = uxTopPriority;                                                   \
-    } /* taskSELECT_HIGHEST_PRIORITY_TASK */
-
-/*-----------------------------------------------------------*/
-
-/* Define away taskRESET_READY_PRIORITY() and portRESET_READY_PRIORITY() as
- * they are only required when a port optimised method of task selection is
- * being used. */
-    #define taskRESET_READY_PRIORITY( uxPriority )
-    #define portRESET_READY_PRIORITY( uxPriority, uxTopReadyPriority )
-
-#else /* configUSE_PORT_OPTIMISED_TASK_SELECTION */
-
-/* If configUSE_PORT_OPTIMISED_TASK_SELECTION is 1 then task selection is
- * performed in a way that is tailored to the particular microcontroller
- * architecture being used. */
-
-/* A port optimised version is provided.  Call the port defined macros. */
-    #define taskRECORD_READY_PRIORITY( uxPriority )    portRECORD_READY_PRIORITY( uxPriority, uxTopReadyPriority )
-
-/*-----------------------------------------------------------*/
-
-    #define taskSELECT_HIGHEST_PRIORITY_TASK()                                                  \
-    {                                                                                           \
-        UBaseType_t uxTopPriority;                                                              \
-                                                                                                \
-        /* Find the highest priority list that contains ready tasks. */                         \
-        portGET_HIGHEST_PRIORITY( uxTopPriority, uxTopReadyPriority );                          \
-        configASSERT( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ uxTopPriority ] ) ) > 0 ); \
-        listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &( pxReadyTasksLists[ uxTopPriority ] ) );   \
-    } /* taskSELECT_HIGHEST_PRIORITY_TASK() */
-
-/*-----------------------------------------------------------*/
-
-/* A port optimised version is provided, call it only if the TCB being reset
- * is being referenced from a ready list.  If it is referenced from a delayed
- * or suspended list then it won't be in a ready list. */
-    #define taskRESET_READY_PRIORITY( uxPriority )                                                     \
-    {                                                                                                  \
-        if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ ( uxPriority ) ] ) ) == ( UBaseType_t ) 0 ) \
-        {                                                                                              \
-            portRESET_READY_PRIORITY( ( uxPriority ), ( uxTopReadyPriority ) );                        \
-        }                                                                                              \
-    }
-
-#endif /* configUSE_PORT_OPTIMISED_TASK_SELECTION */
-
 /*-----------------------------------------------------------*/
 
 /* pxDelayedTaskList and pxOverflowDelayedTaskList are switched when the tick
@@ -162,10 +83,9 @@
  * Place the task represented by pxTCB into the appropriate ready list for
  * the task.  It is inserted at the end of the list.
  */
-#define prvAddTaskToReadyList( pxTCB )                                                                      \
-    traceMOVED_TASK_TO_READY_STATE( pxTCB );                                                                \
-    taskRECORD_READY_PRIORITY( ( pxTCB )->uxPriority );                                                     \
-    listINSERT_END( &( pxReadyTasksLists[ ( pxTCB )->uxPriority ] ), &( ( pxTCB )->mut->xStateListItem ) ); \
+#define prvAddTaskToReadyList( pxTCB )                                            \
+    traceMOVED_TASK_TO_READY_STATE( pxTCB );                                      \
+    listINSERT_END( &( pxReadyTasksList ), &( ( pxTCB )->mut->xStateListItem ) ); \
     tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB )
 /*-----------------------------------------------------------*/
 
@@ -183,7 +103,7 @@ TCB_t * volatile pxCurrentTCB = NULL;
  * xDelayedTaskList1 and xDelayedTaskList2 could be moved to function scope but
  * doing so breaks some kernel aware debuggers and debuggers that rely on removing
  * the static qualifier. */
-static List_t pxReadyTasksLists[ configMAX_PRIORITIES ]; /*< Prioritised ready tasks. */
+static List_t pxReadyTasksList;                          /*< Ready tasks. */
 static List_t xDelayedTaskList1;                         /*< Delayed tasks. */
 static List_t xDelayedTaskList2;                         /*< Delayed tasks (two lists are used - one for delays that have overflowed the current tick count. */
 static List_t * volatile pxDelayedTaskList;              /*< Points to the delayed task list currently being used. */
@@ -198,7 +118,6 @@ static List_t * volatile pxOverflowDelayedTaskList;      /*< Points to the delay
 /* Other file private variables. --------------------------------*/
 static volatile UBaseType_t uxCurrentNumberOfTasks = ( UBaseType_t ) 0U;
 static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
-static volatile UBaseType_t uxTopReadyPriority = tskIDLE_PRIORITY;
 static volatile BaseType_t xSchedulerRunning = pdFALSE;
 static volatile BaseType_t xYieldPending = pdFALSE;
 static volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
@@ -257,9 +176,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
     /* Check the alignment of the calculated top of stack is correct. */
     configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
 
-    /* This is used as an array index so must ensure it's not too large. */
-    configASSERT( pxNewTCB->uxPriority < configMAX_PRIORITIES );
-
     vListInitialiseItem( &( pxNewTCB->mut->xStateListItem ) );
 
     /* Set the pxNewTCB as a link back from the ListItem_t.  This is so we can get
@@ -304,14 +220,10 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         else
         {
             /* If the scheduler is not already running, make this task the
-             * current task if it is the highest priority task to be created
-             * so far. */
+             * current task. */
             if( xSchedulerRunning == pdFALSE )
             {
-                if( pxCurrentTCB->uxPriority <= pxNewTCB->uxPriority )
-                {
-                    pxCurrentTCB = pxNewTCB;
-                }
+                pxCurrentTCB = pxNewTCB;
             }
         }
 
@@ -320,16 +232,6 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
         prvAddTaskToReadyList( pxNewTCB );
     }
     taskEXIT_CRITICAL();
-
-    if( xSchedulerRunning != pdFALSE )
-    {
-        /* If the created task is of a higher priority than the current task
-         * then it should run now. */
-        if( pxCurrentTCB->uxPriority < pxNewTCB->uxPriority )
-        {
-            taskYIELD_IF_USING_PREEMPTION();
-        }
-    }
 }
 /*-----------------------------------------------------------*/
 
@@ -346,10 +248,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
             pxTCB = prvGetTCBFromHandle( xTaskToDelete );
 
             /* Remove task from the ready/delayed list. */
-            if( uxListRemove( &( pxTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
-            {
-                taskRESET_READY_PRIORITY( pxTCB->uxPriority );
-            }
+            uxListRemove( &( pxTCB->mut->xStateListItem ) );
 
             --uxCurrentNumberOfTasks;
 
@@ -487,10 +386,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
 
             /* Remove task from the ready/delayed list and place in the
              * suspended list. */
-            if( uxListRemove( &( pxTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
-            {
-                taskRESET_READY_PRIORITY( pxTCB->uxPriority );
-            }
+            uxListRemove( &( pxTCB->mut->xStateListItem ) );
 
             vListInsertEnd( &xSuspendedTaskList, &( pxTCB->mut->xStateListItem ) );
 
@@ -535,8 +431,7 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
                 {
                     /* No other tasks are ready, so set pxCurrentTCB back to
                      * NULL so when the next task is created pxCurrentTCB will
-                     * be set to point to it no matter what its relative priority
-                     * is. */
+                     * be set to point to it. */
                     pxCurrentTCB = NULL;
                 }
                 else
@@ -668,21 +563,14 @@ BaseType_t xTaskIncrementTick( void )
                  * list. */
                 prvAddTaskToReadyList( pxTCB );
 
-                /* Preemption is on, but a context switch should
-                 * only be performed if the unblocked task has a
-                 * priority that is equal to or higher than the
-                 * currently executing task. */
-                if( pxTCB->uxPriority >= pxCurrentTCB->uxPriority )
-                {
-                    xSwitchRequired = pdTRUE;
-                }
+                /* Preemption is on, so a context switch should be performed. */
+                xSwitchRequired = pdTRUE;
             }
         }
     }
 
-    /* Tasks of equal priority to the currently running task will share
-     * processing time (time slice) if preemption is on. */
-    if( listCURRENT_LIST_LENGTH( &( pxReadyTasksLists[ pxCurrentTCB->uxPriority ] ) ) > ( UBaseType_t ) 1 )
+    /* Tasks will share processing time (time slice) if preemption is on. */
+    if( listCURRENT_LIST_LENGTH( &( pxReadyTasksList ) ) > ( UBaseType_t ) 1 )
     {
         xSwitchRequired = pdTRUE;
     }
@@ -704,21 +592,18 @@ void vTaskSwitchContext( void )
     /* Check for stack overflow, if configured. */
     taskCHECK_FOR_STACK_OVERFLOW();
 
-    /* Select a new task to run using either the generic C or port
-     * optimised asm code. */
-    taskSELECT_HIGHEST_PRIORITY_TASK(); /*lint !e9079 void * is used as this macro is used with timers and co-routines too.  Alignment is known to be fine as the type of the pointer stored and retrieved is the same. */
+    /* Select a new task to run. listGET_OWNER_OF_NEXT_ENTRY indexes
+     * through the list, so the tasks get an equal share of the
+     * processor time. */
+    listGET_OWNER_OF_NEXT_ENTRY( pxCurrentTCB, &pxReadyTasksList );
+
     traceTASK_SWITCHED_IN();
 }
 /*-----------------------------------------------------------*/
 
 static void prvInitialiseTaskLists( void )
 {
-    UBaseType_t uxPriority;
-
-    for( uxPriority = ( UBaseType_t ) 0U; uxPriority < ( UBaseType_t ) configMAX_PRIORITIES; uxPriority++ )
-    {
-        vListInitialise( &( pxReadyTasksLists[ uxPriority ] ) );
-    }
+    vListInitialise( &( pxReadyTasksList ) );
 
     vListInitialise( &xDelayedTaskList1 );
     vListInitialise( &xDelayedTaskList2 );
@@ -1004,13 +889,6 @@ BaseType_t xTaskGenericNotify( TaskHandle_t xTaskToNotify,
         {
             listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
             prvAddTaskToReadyList( pxTCB );
-
-            if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
-            {
-                /* The notified task has a priority above the currently
-                 * executing task so a yield is required. */
-                taskYIELD_IF_USING_PREEMPTION();
-            }
         }
     }
     taskEXIT_CRITICAL();
@@ -1024,8 +902,7 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
                                       UBaseType_t uxIndexToNotify,
                                       uint32_t ulValue,
                                       eNotifyAction eAction,
-                                      uint32_t * pulPreviousNotificationValue,
-                                      BaseType_t * pxHigherPriorityTaskWoken )
+                                      uint32_t * pulPreviousNotificationValue )
 {
     TCB_t * pxTCB;
     uint8_t ucOriginalNotifyState;
@@ -1116,21 +993,6 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
         {
             listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
             prvAddTaskToReadyList( pxTCB );
-
-            if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
-            {
-                /* The notified task has a priority above the currently
-                 * executing task so a yield is required. */
-                if( pxHigherPriorityTaskWoken != NULL )
-                {
-                    *pxHigherPriorityTaskWoken = pdTRUE;
-                }
-
-                /* Mark that a yield is pending in case the user is not
-                 * using the "xHigherPriorityTaskWoken" parameter to an ISR
-                 * safe FreeRTOS function. */
-                xYieldPending = pdTRUE;
-            }
         }
     }
     portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );
@@ -1141,8 +1003,7 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
 /*-----------------------------------------------------------*/
 
 void vTaskGenericNotifyGiveFromISR( TaskHandle_t xTaskToNotify,
-                                    UBaseType_t uxIndexToNotify,
-                                    BaseType_t * pxHigherPriorityTaskWoken )
+                                    UBaseType_t uxIndexToNotify )
 {
     TCB_t * pxTCB;
     uint8_t ucOriginalNotifyState;
@@ -1188,21 +1049,6 @@ void vTaskGenericNotifyGiveFromISR( TaskHandle_t xTaskToNotify,
         {
             listREMOVE_ITEM( &( pxTCB->mut->xStateListItem ) );
             prvAddTaskToReadyList( pxTCB );
-
-            if( pxTCB->uxPriority > pxCurrentTCB->uxPriority )
-            {
-                /* The notified task has a priority above the currently
-                 * executing task so a yield is required. */
-                if( pxHigherPriorityTaskWoken != NULL )
-                {
-                    *pxHigherPriorityTaskWoken = pdTRUE;
-                }
-
-                /* Mark that a yield is pending in case the user is not
-                 * using the "xHigherPriorityTaskWoken" parameter in an ISR
-                 * safe FreeRTOS function. */
-                xYieldPending = pdTRUE;
-            }
         }
     }
     portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );
@@ -1274,12 +1120,7 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
 
     /* Remove the task from the ready list before adding it to the blocked list
      * as the same list item is used for both lists. */
-    if( uxListRemove( &( pxCurrentTCB->mut->xStateListItem ) ) == ( UBaseType_t ) 0 )
-    {
-        /* The current task must be in a ready list, so there is no need to
-         * check, and the port reset macro can be called directly. */
-        portRESET_READY_PRIORITY( pxCurrentTCB->uxPriority, uxTopReadyPriority ); /*lint !e931 pxCurrentTCB cannot change as it is the calling task.  pxCurrentTCB->uxPriority and uxTopReadyPriority cannot change as called with scheduler suspended or in a critical section. */
-    }
+    uxListRemove( &( pxCurrentTCB->mut->xStateListItem ) );
 
     #if ( INCLUDE_vTaskSuspend == 1 )
         {

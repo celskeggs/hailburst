@@ -54,14 +54,6 @@
     #error Missing definition:  configMINIMAL_STACK_SIZE must be defined in FreeRTOSConfig.h.  configMINIMAL_STACK_SIZE defines the size (in words) of the stack allocated to the idle task.  Refer to the demo project provided for your port for a suitable value.
 #endif
 
-#ifndef configMAX_PRIORITIES
-    #error Missing definition:  configMAX_PRIORITIES must be defined in FreeRTOSConfig.h.  See the Configuration section of the FreeRTOS API documentation for details.
-#endif
-
-#if configMAX_PRIORITIES < 1
-    #error configMAX_PRIORITIES must be defined to be greater than or equal to 1.
-#endif
-
 #ifndef INCLUDE_vTaskDelete
     #define INCLUDE_vTaskDelete    0
 #endif
@@ -199,10 +191,6 @@
 
 #ifndef portASSERT_IF_INTERRUPT_PRIORITY_INVALID
     #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()
-#endif
-
-#ifndef configUSE_PORT_OPTIMISED_TASK_SELECTION
-    #define configUSE_PORT_OPTIMISED_TASK_SELECTION    0
 #endif
 
 #ifndef configTASK_NOTIFICATION_ARRAY_ENTRIES

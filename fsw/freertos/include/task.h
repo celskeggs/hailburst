@@ -88,7 +88,6 @@ typedef struct TCB_st
     void (* const start_routine)(void*);
     void * const start_arg;
     const restartable_t restartable;
-    const UBaseType_t uxPriority;               /*< The priority of the task.  0 is the lowest priority. */
     StackType_t * const pxStack;                /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
     const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 } const TCB_t;
@@ -123,13 +122,6 @@ typedef enum
     eSetValueWithOverwrite,   /* Set the task's notification value to a specific value even if the previous value has not yet been read by the task. */
     eSetValueWithoutOverwrite /* Set the task's notification value if the previous value has been read by the task. */
 } eNotifyAction;
-
-/**
- * Defines the priority used by the idle task.  This must not be modified.
- *
- * \ingroup TaskUtils
- */
-#define tskIDLE_PRIORITY    ( ( UBaseType_t ) 0U )
 
 /**
  * task. h
@@ -232,7 +224,7 @@ typedef enum
  * TaskHandle_t xHandle;
  *
  *   // Create the task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, tskIDLE_PRIORITY, &xHandle );
+ *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, &xHandle );
  *
  *   // Use the handle to delete the task.
  *   vTaskDelete( xHandle );
@@ -375,7 +367,7 @@ BaseType_t xTaskDelayUntil( TickType_t * const pxPreviousWakeTime,
  * See the configuration section for more information.
  *
  * Suspend any task.  When suspended a task will never get any microcontroller
- * processing time, no matter what its priority.
+ * processing time.
  *
  * Calls to vTaskSuspend are not accumulative -
  * i.e. calling vTaskSuspend () twice on the same task still only requires one
@@ -391,7 +383,7 @@ BaseType_t xTaskDelayUntil( TickType_t * const pxPreviousWakeTime,
  * TaskHandle_t xHandle;
  *
  *   // Create a task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, tskIDLE_PRIORITY, &xHandle );
+ *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, &xHandle );
  *
  *   // ...
  *
@@ -439,7 +431,7 @@ void vTaskSuspend( TaskHandle_t xTaskToSuspend );
  * void vAFunction( void )
  * {
  *   // Create at least one task before starting the kernel.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, tskIDLE_PRIORITY, NULL );
+ *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, NULL );
  *
  *   // Start the real time kernel with preemption.
  *   vTaskStartScheduler ();
@@ -652,8 +644,8 @@ BaseType_t xTaskGenericNotify( TaskHandle_t xTaskToNotify,
 /**
  * task. h
  * @code{c}
- * BaseType_t xTaskNotifyIndexedFromISR( TaskHandle_t xTaskToNotify, UBaseType_t uxIndexToNotify, uint32_t ulValue, eNotifyAction eAction, BaseType_t *pxHigherPriorityTaskWoken );
- * BaseType_t xTaskNotifyFromISR( TaskHandle_t xTaskToNotify, uint32_t ulValue, eNotifyAction eAction, BaseType_t *pxHigherPriorityTaskWoken );
+ * BaseType_t xTaskNotifyIndexedFromISR( TaskHandle_t xTaskToNotify, UBaseType_t uxIndexToNotify, uint32_t ulValue, eNotifyAction eAction );
+ * BaseType_t xTaskNotifyFromISR( TaskHandle_t xTaskToNotify, uint32_t ulValue, eNotifyAction eAction );
  * @endcode
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
@@ -744,15 +736,6 @@ BaseType_t xTaskGenericNotify( TaskHandle_t xTaskToNotify,
  * updated.  ulValue is not used and xTaskNotify() always returns pdPASS in
  * this case.
  *
- * @param pxHigherPriorityTaskWoken  xTaskNotifyFromISR() will set
- * *pxHigherPriorityTaskWoken to pdTRUE if sending the notification caused the
- * task to which the notification was sent to leave the Blocked state, and the
- * unblocked task has a priority higher than the currently running task.  If
- * xTaskNotifyFromISR() sets this value to pdTRUE then a context switch should
- * be requested before the interrupt is exited.  How a context switch is
- * requested from an ISR is dependent on the port - see the documentation page
- * for the port in use.
- *
  * @return Dependent on the value of eAction.  See the description of the
  * eAction parameter.
  *
@@ -763,18 +746,17 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
                                       UBaseType_t uxIndexToNotify,
                                       uint32_t ulValue,
                                       eNotifyAction eAction,
-                                      uint32_t * pulPreviousNotificationValue,
-                                      BaseType_t * pxHigherPriorityTaskWoken );
-#define xTaskNotifyFromISR( xTaskToNotify, ulValue, eAction, pxHigherPriorityTaskWoken ) \
-    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ), ( ulValue ), ( eAction ), NULL, ( pxHigherPriorityTaskWoken ) )
-#define xTaskNotifyIndexedFromISR( xTaskToNotify, uxIndexToNotify, ulValue, eAction, pxHigherPriorityTaskWoken ) \
-    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( uxIndexToNotify ), ( ulValue ), ( eAction ), NULL, ( pxHigherPriorityTaskWoken ) )
+                                      uint32_t * pulPreviousNotificationValue );
+#define xTaskNotifyFromISR( xTaskToNotify, ulValue, eAction ) \
+    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ), ( ulValue ), ( eAction ), NULL )
+#define xTaskNotifyIndexedFromISR( xTaskToNotify, uxIndexToNotify, ulValue, eAction ) \
+    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( uxIndexToNotify ), ( ulValue ), ( eAction ), NULL )
 
 /**
  * task. h
  * @code{c}
- * BaseType_t xTaskNotifyAndQueryIndexedFromISR( TaskHandle_t xTaskToNotify, UBaseType_t uxIndexToNotify, uint32_t ulValue, eNotifyAction eAction, uint32_t *pulPreviousNotificationValue, BaseType_t *pxHigherPriorityTaskWoken );
- * BaseType_t xTaskNotifyAndQueryFromISR( TaskHandle_t xTaskToNotify, uint32_t ulValue, eNotifyAction eAction, uint32_t *pulPreviousNotificationValue, BaseType_t *pxHigherPriorityTaskWoken );
+ * BaseType_t xTaskNotifyAndQueryIndexedFromISR( TaskHandle_t xTaskToNotify, UBaseType_t uxIndexToNotify, uint32_t ulValue, eNotifyAction eAction, uint32_t *pulPreviousNotificationValue );
+ * BaseType_t xTaskNotifyAndQueryFromISR( TaskHandle_t xTaskToNotify, uint32_t ulValue, eNotifyAction eAction, uint32_t *pulPreviousNotificationValue );
  * @endcode
  *
  * See https://www.FreeRTOS.org/RTOS-task-notifications.html for details.
@@ -794,10 +776,10 @@ BaseType_t xTaskGenericNotifyFromISR( TaskHandle_t xTaskToNotify,
  * \defgroup xTaskNotifyAndQueryIndexedFromISR xTaskNotifyAndQueryIndexedFromISR
  * \ingroup TaskNotifications
  */
-#define xTaskNotifyAndQueryIndexedFromISR( xTaskToNotify, uxIndexToNotify, ulValue, eAction, pulPreviousNotificationValue, pxHigherPriorityTaskWoken ) \
-    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( uxIndexToNotify ), ( ulValue ), ( eAction ), ( pulPreviousNotificationValue ), ( pxHigherPriorityTaskWoken ) )
-#define xTaskNotifyAndQueryFromISR( xTaskToNotify, ulValue, eAction, pulPreviousNotificationValue, pxHigherPriorityTaskWoken ) \
-    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ), ( ulValue ), ( eAction ), ( pulPreviousNotificationValue ), ( pxHigherPriorityTaskWoken ) )
+#define xTaskNotifyAndQueryIndexedFromISR( xTaskToNotify, uxIndexToNotify, ulValue, eAction, pulPreviousNotificationValue ) \
+    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( uxIndexToNotify ), ( ulValue ), ( eAction ), ( pulPreviousNotificationValue ) )
+#define xTaskNotifyAndQueryFromISR( xTaskToNotify, ulValue, eAction, pulPreviousNotificationValue ) \
+    xTaskGenericNotifyFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ), ( ulValue ), ( eAction ), ( pulPreviousNotificationValue ) )
 
 /**
  * task. h
@@ -987,8 +969,8 @@ BaseType_t xTaskGenericNotifyWait( UBaseType_t uxIndexToWaitOn,
 /**
  * task. h
  * @code{c}
- * void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskHandle, UBaseType_t uxIndexToNotify, BaseType_t *pxHigherPriorityTaskWoken );
- * void vTaskNotifyGiveFromISR( TaskHandle_t xTaskHandle, BaseType_t *pxHigherPriorityTaskWoken );
+ * void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskHandle, UBaseType_t uxIndexToNotify );
+ * void vTaskNotifyGiveFromISR( TaskHandle_t xTaskHandle );
  * @endcode
  *
  * A version of xTaskNotifyGiveIndexed() that can be called from an interrupt
@@ -1048,25 +1030,15 @@ BaseType_t xTaskGenericNotifyWait( UBaseType_t uxIndexToWaitOn,
  * xTaskNotifyGiveFromISR() does not have this parameter and always sends
  * notifications to index 0.
  *
- * @param pxHigherPriorityTaskWoken  vTaskNotifyGiveFromISR() will set
- * *pxHigherPriorityTaskWoken to pdTRUE if sending the notification caused the
- * task to which the notification was sent to leave the Blocked state, and the
- * unblocked task has a priority higher than the currently running task.  If
- * vTaskNotifyGiveFromISR() sets this value to pdTRUE then a context switch
- * should be requested before the interrupt is exited.  How a context switch is
- * requested from an ISR is dependent on the port - see the documentation page
- * for the port in use.
- *
  * \defgroup vTaskNotifyGiveIndexedFromISR vTaskNotifyGiveIndexedFromISR
  * \ingroup TaskNotifications
  */
 void vTaskGenericNotifyGiveFromISR( TaskHandle_t xTaskToNotify,
-                                    UBaseType_t uxIndexToNotify,
-                                    BaseType_t * pxHigherPriorityTaskWoken );
-#define vTaskNotifyGiveFromISR( xTaskToNotify, pxHigherPriorityTaskWoken ) \
-    vTaskGenericNotifyGiveFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ), ( pxHigherPriorityTaskWoken ) );
-#define vTaskNotifyGiveIndexedFromISR( xTaskToNotify, uxIndexToNotify, pxHigherPriorityTaskWoken ) \
-    vTaskGenericNotifyGiveFromISR( ( xTaskToNotify ), ( uxIndexToNotify ), ( pxHigherPriorityTaskWoken ) );
+                                    UBaseType_t uxIndexToNotify );
+#define vTaskNotifyGiveFromISR( xTaskToNotify ) \
+    vTaskGenericNotifyGiveFromISR( ( xTaskToNotify ), ( tskDEFAULT_INDEX_TO_NOTIFY ) );
+#define vTaskNotifyGiveIndexedFromISR( xTaskToNotify, uxIndexToNotify ) \
+    vTaskGenericNotifyGiveFromISR( ( xTaskToNotify ), ( uxIndexToNotify ) );
 
 /**
  * task. h
@@ -1312,8 +1284,7 @@ uint32_t ulTaskGenericNotifyValueClear( TaskHandle_t xTask,
  * required because either:
  *   + A task was removed from a blocked list because its timeout had expired,
  *     or
- *   + Time slicing is in use and there is a task of equal priority to the
- *     currently running task.
+ *   + Time slicing is in use and there is another task ready to run.
  */
 BaseType_t xTaskIncrementTick( void );
 
@@ -1322,7 +1293,7 @@ BaseType_t xTaskIncrementTick( void );
  * INTENDED FOR USE WHEN IMPLEMENTING A PORT OF THE SCHEDULER AND IS
  * AN INTERFACE WHICH IS FOR THE EXCLUSIVE USE OF THE SCHEDULER.
  *
- * Sets the pointer to the current TCB to the TCB of the highest priority task
+ * Sets the pointer to the current TCB to the TCB of the next task
  * that is ready to run.
  */
 void vTaskSwitchContext( void );

@@ -37,7 +37,6 @@ extern TCB_t tasktable_end[];
         .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
         .start_arg       = t_arg,                                                 \
         .restartable     = t_restartable,                                         \
-        .uxPriority      = PRIORITY_WORKERS,                                      \
         .pxStack         = t_ident ## _stack,                                     \
         .pcTaskName      = t_name,                                                \
     }
@@ -73,9 +72,9 @@ static inline void task_rouse(thread_t task) {
     assert(result == pdPASS);
 }
 
-static inline void task_rouse_from_isr(thread_t task, BaseType_t *was_woken) {
-    assert(task != NULL && was_woken != NULL);
-    vTaskNotifyGiveIndexedFromISR(task, NOTIFY_INDEX_TOP_LEVEL, was_woken);
+static inline void task_rouse_from_isr(thread_t task) {
+    assert(task != NULL);
+    vTaskNotifyGiveIndexedFromISR(task, NOTIFY_INDEX_TOP_LEVEL);
 }
 
 static inline void task_doze(void) {

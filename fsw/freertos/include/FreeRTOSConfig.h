@@ -5,25 +5,17 @@
 
 #include <fsw/debug.h> // for assert
 
-#define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 // configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
 #define configTICK_RATE_HZ                      10000
-#define configMAX_PRIORITIES                    1
 #define configMINIMAL_STACK_SIZE                512
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
-enum {
-    PRIORITY_WORKERS = 0,
-};
-
 /* Hook function related definitions. */
 #define configCHECK_FOR_STACK_OVERFLOW          2
 
 /* Interrupt nesting behaviour configuration. */
-// #define configKERNEL_INTERRUPT_PRIORITY         [dependent of processor]
-// #define configMAX_SYSCALL_INTERRUPT_PRIORITY    [dependent on processor and application]
 #define configINTERRUPT_CONTROLLER_BASE_ADDRESS         0x08000000
 #define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET 0x00010000
 // 256 external interrupts + 32 internal interrupts
@@ -50,10 +42,10 @@ extern void vConfigureTickInterrupt(void);
 
 // #define TASK_DEBUG
 
-extern void trace_task_switch(const char *task_name, unsigned int priority);
+extern void trace_task_switch(const char *task_name);
 
 #ifdef TASK_DEBUG
-#define traceTASK_SWITCHED_IN() trace_task_switch(pxCurrentTCB->pcTaskName, pxCurrentTCB->uxPriority)
+#define traceTASK_SWITCHED_IN() trace_task_switch(pxCurrentTCB->pcTaskName)
 #endif
 
 #endif /* FSW_FREERTOS_FREERTOS_CONFIG_H */

@@ -204,13 +204,12 @@ static void virtio_device_irq_callback(void *opaque_device) {
     assert(device != NULL && device->initialized == true && device->monitor_task != NULL
              && device->monitor_started == true);
 
-    BaseType_t was_woken = pdFALSE;
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
-        task_rouse_from_isr(device->monitor_task, &was_woken);
+        task_rouse_from_isr(device->monitor_task);
     }
     device->mmio->interrupt_ack = status;
-    portYIELD_FROM_ISR(was_woken);
+    portYIELD_FROM_ISR(pdFALSE); // TODO: can this be eliminated?
 }
 
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index) {
