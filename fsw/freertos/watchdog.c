@@ -122,7 +122,7 @@ static void watchdog_caretaker_loop(void *opaque) {
 
         // if we can't feed yet, wait until we can
         if (delay_until_earliest > 0) {
-            vTaskDelay(timer_ticks_until_ns(now_full + delay_until_earliest));
+            task_delay_abs(now_full + delay_until_earliest);
             // and recheck
             continue;
         }

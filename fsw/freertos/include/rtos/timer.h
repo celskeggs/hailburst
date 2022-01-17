@@ -17,16 +17,6 @@ enum {
 };
 static_assert(TICK_NS_DIVISOR * configTICK_RATE_HZ == CLOCK_NS_PER_SEC, "lossless calculation check");
 
-static inline TickType_t timer_ns_to_ticks(uint64_t nanoseconds) {
-    TickType_t ticks = nanoseconds / TICK_NS_DIVISOR;
-    if (ticks == 0 && nanoseconds > 0) {
-        ticks = 1;
-    } else if (ticks >= portMAX_DELAY) {
-        ticks = portMAX_DELAY - 1;
-    }
-    return ticks;
-}
-
 static inline TickType_t timer_ticks_until_ns(uint64_t nanoseconds_abs) {
     uint64_t now = timer_now_ns();
     if (now >= nanoseconds_abs) {

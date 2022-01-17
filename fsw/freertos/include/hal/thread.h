@@ -44,14 +44,14 @@ static inline thread_t task_get_current(void) {
 
 void task_suspend(void) __attribute__((noreturn));
 
-static inline void task_delay(uint64_t nanoseconds) {
-    vTaskDelay(timer_ns_to_ticks(nanoseconds));
+static inline void task_delay_abs(uint64_t deadline_ns) {
+    while (timer_now_ns() < deadline_ns) {
+        taskYIELD();
+    }
 }
 
-static inline void task_delay_abs(uint64_t deadline_ns) {
-    // TODO: should I use vTaskDelayUntil instead?
-    vTaskDelay(timer_ticks_until_ns(deadline_ns));
-    assert(timer_now_ns() >= deadline_ns);
+static inline void task_delay(uint64_t nanoseconds) {
+    task_delay_abs(timer_now_ns() + nanoseconds);
 }
 
 // top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
@@ -83,12 +83,12 @@ static inline bool task_doze_try(void) {
     return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, 0) > 0;
 }
 
-static inline bool task_doze_timed(uint64_t nanoseconds) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
-}
-
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
     return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+}
+
+static inline bool task_doze_timed(uint64_t nanoseconds) {
+    return task_doze_timed_abs(timer_now_ns() + nanoseconds);
 }
 
 // primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
@@ -113,14 +113,13 @@ static inline bool local_doze_try(thread_t task) {
     return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, 0) > 0;
 }
 
-static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
-    assert(task == task_get_current());
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ns_to_ticks(nanoseconds)) > 0;
-}
-
 static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     assert(task == task_get_current());
     return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+}
+
+static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
+    return local_doze_timed_abs(task, timer_now_ns() + nanoseconds);
 }
 
 #endif /* FSW_FREERTOS_HAL_THREAD_H */
