@@ -37,6 +37,8 @@
 #include "task.h"
 #include "stack_macros.h"
 
+#include <hal/atomic.h>
+
 /*
  * The value used to fill the stack of a task when the task is created.  This
  * is used purely for checking the high water mark for tasks.
@@ -91,8 +93,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
 
     /* Check the alignment of the calculated top of stack is correct. */
     configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
-
-    memset( ( void * ) &( pxNewTCB->mut->ulNotifiedValue[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ulNotifiedValue ) );
 
     /* Initialize the TCB stack to look as if the task was already running,
      * but had been interrupted by the scheduler.  The return address is set
@@ -288,80 +288,20 @@ void vTaskSwitchContext( void )
 #endif /* ( INCLUDE_xTaskGetSchedulerState == 1 ) */
 /*-----------------------------------------------------------*/
 
-uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait )
+bool ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait )
 {
-    uint32_t ulReturn;
-
     configASSERT( uxIndexToWait < configTASK_NOTIFICATION_ARRAY_ENTRIES );
 
-    taskENTER_CRITICAL();
-    {
-        ulReturn = pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ];
-
-        pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = 0UL;
-    }
-    taskEXIT_CRITICAL();
-
-    return ulReturn;
+    return atomic_fetch_and(pxCurrentTCB->mut->roused[uxIndexToWait], 0) != 0;
 }
 
 /*-----------------------------------------------------------*/
 
-BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
-                                   UBaseType_t uxIndexToNotify )
+void xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
+                             UBaseType_t uxIndexToNotify )
 {
-    TCB_t * pxTCB;
-    BaseType_t xReturn = pdPASS;
-
     configASSERT( uxIndexToNotify < configTASK_NOTIFICATION_ARRAY_ENTRIES );
     configASSERT( xTaskToNotify );
-    pxTCB = xTaskToNotify;
 
-    taskENTER_CRITICAL();
-    {
-        ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
-    }
-    taskEXIT_CRITICAL();
-
-    return xReturn;
-}
-
-/*-----------------------------------------------------------*/
-
-void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
-                                    UBaseType_t uxIndexToNotify )
-{
-    TCB_t * pxTCB;
-    UBaseType_t uxSavedInterruptStatus;
-
-    configASSERT( xTaskToNotify );
-    configASSERT( uxIndexToNotify < configTASK_NOTIFICATION_ARRAY_ENTRIES );
-
-    /* RTOS ports that support interrupt nesting have the concept of a
-     * maximum  system call (or maximum API call) interrupt priority.
-     * Interrupts that are  above the maximum system call priority are keep
-     * permanently enabled, even when the RTOS kernel is in a critical section,
-     * but cannot make any calls to FreeRTOS API functions.  If configASSERT()
-     * is defined in FreeRTOSConfig.h then
-     * portASSERT_IF_INTERRUPT_PRIORITY_INVALID() will result in an assertion
-     * failure if a FreeRTOS API function is called from an interrupt that has
-     * been assigned a priority above the configured maximum system call
-     * priority.  Only FreeRTOS functions that end in FromISR can be called
-     * from interrupts  that have been assigned a priority at or (logically)
-     * below the maximum system call interrupt priority.  FreeRTOS maintains a
-     * separate interrupt safe API to ensure interrupt entry is as fast and as
-     * simple as possible.  More information (albeit Cortex-M specific) is
-     * provided on the following link:
-     * https://www.FreeRTOS.org/RTOS-Cortex-M3-M4.html */
-    portASSERT_IF_INTERRUPT_PRIORITY_INVALID();
-
-    pxTCB = xTaskToNotify;
-
-    uxSavedInterruptStatus = portSET_INTERRUPT_MASK_FROM_ISR();
-    {
-        /* 'Giving' is equivalent to incrementing a count in a counting
-         * semaphore. */
-        ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
-    }
-    portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );
+    atomic_store(xTaskToNotify->mut->roused[uxIndexToNotify], 1);
 }

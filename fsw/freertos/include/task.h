@@ -73,7 +73,7 @@ typedef struct
     bool needs_restart;
     bool hit_restart;
 
-    volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
+    uint32_t roused[configTASK_NOTIFICATION_ARRAY_ENTRIES]; // 0 or 1
 } TCB_mut_t;
 
 // this is an immutable structure
@@ -257,13 +257,10 @@ TickType_t xTaskGetTickCount( void );
 
 #endif
 
-BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
-                                   UBaseType_t uxIndexToNotify );
+void xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
+                             UBaseType_t uxIndexToNotify );
 
-void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
-                                    UBaseType_t uxIndexToNotify );
-
-uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWaitOn );
+bool ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWaitOn );
 
 /*-----------------------------------------------------------
 * SCHEDULER INTERNALS AVAILABLE FOR PORTING PURPOSES

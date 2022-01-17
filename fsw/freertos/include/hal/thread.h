@@ -23,8 +23,7 @@ typedef TCB_t *thread_t;
         .pxTopOfStack    = NULL,                                                  \
         .needs_restart   = false,                                                 \
         .hit_restart     = false,                                                 \
-        /* no init for lists here */                                              \
-        .ulNotifiedValue = { 0 },                                                 \
+        .roused = { 0 },                                                          \
     };                                                                            \
     __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
         .mut             = &t_ident ## _mutable,                                  \
@@ -62,18 +61,12 @@ enum {
 
 static inline void task_rouse(thread_t task) {
     assert(task != NULL);
-    BaseType_t result = xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_TOP_LEVEL);
-    assert(result == pdPASS);
-}
-
-static inline void task_rouse_from_isr(thread_t task) {
-    assert(task != NULL);
-    vTaskNotifyGiveIndexedFromISR(task, NOTIFY_INDEX_TOP_LEVEL);
+    xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_TOP_LEVEL);
 }
 
 // does not block
 static inline bool task_doze_try(void) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL) > 0;
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL);
 }
 
 static inline void task_doze(void) {
@@ -100,12 +93,11 @@ static inline bool task_doze_timed(uint64_t nanoseconds) {
 
 static inline void local_rouse(thread_t task) {
     assert(task != NULL);
-    BaseType_t result = xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_LOCAL);
-    assert(result == pdPASS);
+    xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_LOCAL);
 }
 
 static inline bool local_doze_try_raw(void) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL) > 0;
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL);
 }
 
 // does not actually block

@@ -206,7 +206,7 @@ static void virtio_device_irq_callback(void *opaque_device) {
 
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
-        task_rouse_from_isr(device->monitor_task);
+        task_rouse(device->monitor_task);
     }
     device->mmio->interrupt_ack = status;
 }
