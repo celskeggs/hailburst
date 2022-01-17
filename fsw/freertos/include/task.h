@@ -463,21 +463,6 @@ void vTaskStartScheduler( void );
  */
 TickType_t xTaskGetTickCount( void );
 
-/**
- * task. h
- * @code{c}
- * const char *pcTaskGetName( TaskHandle_t xTaskToQuery );
- * @endcode
- *
- * @return The text (human readable) name of the task referenced by the handle
- * xTaskToQuery.  A task can query its own name by either passing in its own
- * handle, or by setting xTaskToQuery to NULL.
- *
- * \defgroup pcTaskGetName pcTaskGetName
- * \ingroup TaskUtils
- */
-const char * pcTaskGetName( TaskHandle_t xTaskToQuery );
-
 #if ( configCHECK_FOR_STACK_OVERFLOW > 0 )
 
 /**

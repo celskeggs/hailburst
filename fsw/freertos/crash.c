@@ -96,8 +96,8 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
         debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
     } else {
         TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
-        const char *name = pcTaskGetName(failed_task);
-        debugf(CRITICAL, "%s occurred in task '%s'", trap_name, name);
+        assert(failed_task != NULL);
+        debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
     }
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x CriticalNesting=%u InterruptNesting=%u",
            state->lr, spsr, ulCriticalNesting, ulPortInterruptNesting);
@@ -132,8 +132,7 @@ void task_abort_handler(unsigned int trap_mode) {
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
     assert(failed_task != NULL);
-    const char *name = pcTaskGetName(failed_task);
-    debugf(WARNING, "%s occurred in task '%s'", trap_name, name);
+    debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
 
     if (last_failed_task == failed_task) {
         // should be different, because we shouldn't hit any aborts past this point

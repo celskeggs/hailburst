@@ -410,18 +410,6 @@ TickType_t xTaskGetTickCount( void )
 }
 /*-----------------------------------------------------------*/
 
-const char * pcTaskGetName( TaskHandle_t xTaskToQuery ) /*lint !e971 Unqualified char types are allowed for strings and single characters only. */
-{
-    TCB_t * pxTCB;
-
-    /* If null is passed in here then the name of the calling task is being
-     * queried. */
-    pxTCB = prvGetTCBFromHandle( xTaskToQuery );
-    configASSERT( pxTCB );
-    return &( pxTCB->pcTaskName[ 0 ] );
-}
-/*-----------------------------------------------------------*/
-
 BaseType_t xTaskIncrementTick( void )
 {
     BaseType_t xSwitchRequired = pdFALSE;
