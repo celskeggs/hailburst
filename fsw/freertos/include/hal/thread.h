@@ -25,7 +25,6 @@ typedef TCB_t *thread_t;
         .hit_restart     = false,                                                 \
         /* no init for lists here */                                              \
         .ulNotifiedValue = { 0 },                                                 \
-        .ucNotifyState   = { 0 },                                                 \
     };                                                                            \
     __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
         .mut             = &t_ident ## _mutable,                                  \
@@ -72,19 +71,24 @@ static inline void task_rouse_from_isr(thread_t task) {
     vTaskNotifyGiveIndexedFromISR(task, NOTIFY_INDEX_TOP_LEVEL);
 }
 
-static inline void task_doze(void) {
-    BaseType_t value;
-    value = ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, portMAX_DELAY);
-    assert(value != 0);
+// does not block
+static inline bool task_doze_try(void) {
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL) > 0;
 }
 
-// does not actually block
-static inline bool task_doze_try(void) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, 0) > 0;
+static inline void task_doze(void) {
+    while (!task_doze_try()) {
+        taskYIELD();
+    }
 }
 
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+    bool roused = task_doze_try();
+    while (!roused && timer_now_ns() < deadline_ns) {
+        taskYIELD();
+        roused = task_doze_try();
+    }
+    return roused;
 }
 
 static inline bool task_doze_timed(uint64_t nanoseconds) {
@@ -100,22 +104,31 @@ static inline void local_rouse(thread_t task) {
     assert(result == pdPASS);
 }
 
-static inline void local_doze(thread_t task) {
-    assert(task == task_get_current());
-    BaseType_t value;
-    value = ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, portMAX_DELAY);
-    assert(value != 0);
+static inline bool local_doze_try_raw(void) {
+    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL) > 0;
 }
 
 // does not actually block
 static inline bool local_doze_try(thread_t task) {
     assert(task == task_get_current());
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, 0) > 0;
+    return local_doze_try_raw();
+}
+
+static inline void local_doze(thread_t task) {
+    assert(task == task_get_current());
+    while (!local_doze_try_raw()) {
+        taskYIELD();
+    }
 }
 
 static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     assert(task == task_get_current());
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL, pdTRUE, timer_ticks_until_ns(deadline_ns)) > 0;
+    bool roused = local_doze_try_raw();
+    while (!roused && timer_now_ns() < deadline_ns) {
+        taskYIELD();
+        roused = local_doze_try_raw();
+    }
+    return roused;
 }
 
 static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {

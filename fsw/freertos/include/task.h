@@ -62,9 +62,7 @@ typedef enum {
 
 typedef enum {
     TS_READY            = 0,
-    TS_DELAYED          = 1,
-    TS_DELAYED_OVERFLOW = 2,
-    TS_SUSPENDED        = 3,
+    TS_SUSPENDED        = 1,
 } task_state_t;
 
 /**
@@ -83,7 +81,6 @@ typedef struct
     TickType_t delay_deadline;
 
     volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
-    volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
 } TCB_mut_t;
 
 // this is an immutable structure
@@ -330,9 +327,7 @@ BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
 void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
                                     UBaseType_t uxIndexToNotify );
 
-uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWaitOn,
-                                  BaseType_t xClearCountOnExit,
-                                  TickType_t xTicksToWait );
+uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWaitOn );
 
 /*-----------------------------------------------------------
 * SCHEDULER INTERNALS AVAILABLE FOR PORTING PURPOSES

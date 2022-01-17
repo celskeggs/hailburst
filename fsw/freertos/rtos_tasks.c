@@ -37,11 +37,6 @@
 #include "task.h"
 #include "stack_macros.h"
 
-/* Values that can be assigned to the ucNotifyState member of the TCB. */
-#define taskNOT_WAITING_NOTIFICATION              ( ( uint8_t ) 0 ) /* Must be zero as it is the initialised value. */
-#define taskWAITING_NOTIFICATION                  ( ( uint8_t ) 1 )
-#define taskNOTIFICATION_RECEIVED                 ( ( uint8_t ) 2 )
-
 /*
  * The value used to fill the stack of a task when the task is created.  This
  * is used purely for checking the high water mark for tasks.
@@ -78,24 +73,6 @@ TCB_t * volatile pxCurrentTCB = NULL;
 static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
 static volatile BaseType_t xSchedulerRunning = pdFALSE;
 static volatile BaseType_t xYieldPending = pdFALSE;
-static volatile BaseType_t xNumOfOverflows = ( BaseType_t ) 0;
-static volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initialised to portMAX_DELAY before the scheduler starts. */
-
-/*-----------------------------------------------------------*/
-
-/* File private functions. --------------------------------*/
-
-/*
- * The currently executing task is entering the Blocked state.  Add the task to
- * either the current or the overflow delayed task list.
- */
-static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait );
-
-/*
- * Set xNextTaskUnblockTime to the time at which the next Blocked state task
- * will exit the Blocked state.
- */
-static void prvResetNextTaskUnblockTime( void );
 
 /*-----------------------------------------------------------*/
 
@@ -124,7 +101,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
     configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
 
     memset( ( void * ) &( pxNewTCB->mut->ulNotifiedValue[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ulNotifiedValue ) );
-    memset( ( void * ) &( pxNewTCB->mut->ucNotifyState[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ucNotifyState ) );
 
     /* Initialize the TCB stack to look as if the task was already running,
      * but had been interrupted by the scheduler.  The return address is set
@@ -168,10 +144,6 @@ void thread_restart_other_task(TCB_t *pxTCB) {
     pxTCB->mut->hit_restart = true;
     thread_start_internal(pxTCB);
 
-    /* Reset the next expected unblock time in case it referred to
-     * the task that has just been deleted. */
-    prvResetNextTaskUnblockTime();
-
     taskEXIT_CRITICAL();
 
     debugf(WARNING, "Completed restart for task '%s'", pxTCB->pcTaskName);
@@ -194,31 +166,8 @@ void thread_restart_other_task(TCB_t *pxTCB) {
             /* Remove task from the ready/delayed list and place in the
              * suspended list. */
             pxTCB->mut->task_state = TS_SUSPENDED;
-
-            BaseType_t x;
-
-            for( x = 0; x < configTASK_NOTIFICATION_ARRAY_ENTRIES; x++ )
-            {
-                if( pxTCB->mut->ucNotifyState[ x ] == taskWAITING_NOTIFICATION )
-                {
-                    /* The task was blocked to wait for a notification, but is
-                     * now suspended, so no notification was received. */
-                    pxTCB->mut->ucNotifyState[ x ] = taskNOT_WAITING_NOTIFICATION;
-                }
-            }
         }
         taskEXIT_CRITICAL();
-
-        if( xSchedulerRunning != pdFALSE )
-        {
-            /* Reset the next expected unblock time in case it referred to the
-             * task that is now in the Suspended state. */
-            taskENTER_CRITICAL();
-            {
-                prvResetNextTaskUnblockTime();
-            }
-            taskEXIT_CRITICAL();
-        }
 
         if( pxTCB == pxCurrentTCB )
         {
@@ -241,7 +190,6 @@ void vTaskStartScheduler( void )
      * starts to run. */
     portDISABLE_INTERRUPTS();
 
-    xNextTaskUnblockTime = portMAX_DELAY;
     xSchedulerRunning = pdTRUE;
     xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
 
@@ -286,55 +234,6 @@ BaseType_t xTaskIncrementTick( void )
     /* Increment the RTOS tick, switching the delayed and overflowed
      * delayed lists if it wraps to 0. */
     xTickCount = xConstTickCount;
-
-    if( xConstTickCount == ( TickType_t ) 0U ) /*lint !e774 'if' does not always evaluate to false as it is looking for an overflow. */
-    {
-        taskFOREACH( pxMoveTCB )
-        {
-            if (pxMoveTCB->mut->task_state == TS_DELAYED_OVERFLOW) {
-                pxMoveTCB->mut->task_state = TS_DELAYED;
-            } else if (pxMoveTCB->mut->task_state == TS_DELAYED) {
-                // TODO: is this necessary?
-                pxMoveTCB->mut->task_state = TS_DELAYED_OVERFLOW;
-            }
-        }
-        xNumOfOverflows++;
-        prvResetNextTaskUnblockTime();
-    }
-
-    /* See if this tick has made a timeout expire.  Tasks are stored in
-     * the  queue in the order of their wake time - meaning once one task
-     * has been found whose block time has not expired there is no need to
-     * look any further down the list. */
-    if( xConstTickCount >= xNextTaskUnblockTime )
-    {
-        /* If no tasks are delayed, then default to setting xNextTaskUnblockTime
-         * to the maximum possible value so it is extremely unlikely that the
-         * if( xTickCount >= xNextTaskUnblockTime ) test will pass next time. */
-        xNextTaskUnblockTime = portMAX_DELAY;
-
-        taskFOREACH( pxTCB )
-        {
-            if ( pxTCB->mut->task_state != TS_DELAYED )
-            {
-                /* Ignore all tasks not in DELAYED state */
-            }
-            else if ( xConstTickCount >= pxTCB->mut->delay_deadline )
-            {
-                /* Deadline has passed; place the unblocked task into the
-                 * ready state. */
-                pxTCB->mut->task_state = TS_READY;
-
-                /* Preemption is on, so a context switch should be performed. */
-                xSwitchRequired = pdTRUE;
-            }
-            else if ( xNextTaskUnblockTime > pxTCB->mut->delay_deadline )
-            {
-                /* Found a more proximate deadline for the next unblock time */
-                xNextTaskUnblockTime = pxTCB->mut->delay_deadline;
-            }
-        }
-    }
 
     if( xYieldPending != pdFALSE )
     {
@@ -391,28 +290,6 @@ void vTaskSwitchContext( void )
 }
 /*-----------------------------------------------------------*/
 
-static void prvResetNextTaskUnblockTime( void )
-{
-    /* If no tasks are delayed, then default to setting xNextTaskUnblockTime
-     * to the maximum possible value so it is extremely unlikely that the
-     * if( xTickCount >= xNextTaskUnblockTime ) test will pass next time. */
-    xNextTaskUnblockTime = portMAX_DELAY;
-
-    taskFOREACH( pxTCB )
-    {
-        if ( pxTCB->mut->task_state != TS_DELAYED )
-        {
-            /* Ignore all tasks not in DELAYED state */
-        }
-        else if ( xNextTaskUnblockTime > pxTCB->mut->delay_deadline )
-        {
-            /* Found a more proximate deadline for the next unblock time */
-            xNextTaskUnblockTime = pxTCB->mut->delay_deadline;
-        }
-    }
-}
-/*-----------------------------------------------------------*/
-
 #if ( INCLUDE_xTaskGetCurrentTaskHandle == 1 )
 
     TaskHandle_t xTaskGetCurrentTaskHandle( void )
@@ -451,9 +328,7 @@ static void prvResetNextTaskUnblockTime( void )
 #endif /* ( INCLUDE_xTaskGetSchedulerState == 1 ) */
 /*-----------------------------------------------------------*/
 
-uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
-                                  BaseType_t xClearCountOnExit,
-                                  TickType_t xTicksToWait )
+uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait )
 {
     uint32_t ulReturn;
 
@@ -461,53 +336,9 @@ uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
 
     taskENTER_CRITICAL();
     {
-        /* Only block if the notification count is not already non-zero. */
-        if( pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] == 0UL )
-        {
-            /* Mark this task as waiting for a notification. */
-            pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskWAITING_NOTIFICATION;
-
-            if( xTicksToWait > ( TickType_t ) 0 )
-            {
-                if( xTicksToWait == portMAX_DELAY )
-                {
-                    /* Add the task to the suspended task list instead of a delayed task
-                     * list to ensure it is not woken by a timing event.  It will block
-                     * indefinitely. */
-                    pxCurrentTCB->mut->task_state = TS_SUSPENDED;
-                }
-                else
-                {
-                    prvAddCurrentTaskToDelayedList( xTicksToWait );
-                }
-
-                /* All ports are written to allow a yield in a critical
-                 * section (some will yield immediately, others wait until the
-                 * critical section exits) - but it is not something that
-                 * application code should ever do. */
-                portYIELD();
-            }
-        }
-    }
-    taskEXIT_CRITICAL();
-
-    taskENTER_CRITICAL();
-    {
         ulReturn = pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ];
 
-        if( ulReturn != 0UL )
-        {
-            if( xClearCountOnExit != pdFALSE )
-            {
-                pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = 0UL;
-            }
-            else
-            {
-                pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = ulReturn - ( uint32_t ) 1;
-            }
-        }
-
-        pxCurrentTCB->mut->ucNotifyState[ uxIndexToWait ] = taskNOT_WAITING_NOTIFICATION;
+        pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ] = 0UL;
     }
     taskEXIT_CRITICAL();
 
@@ -521,7 +352,6 @@ BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
 {
     TCB_t * pxTCB;
     BaseType_t xReturn = pdPASS;
-    uint8_t ucOriginalNotifyState;
 
     configASSERT( uxIndexToNotify < configTASK_NOTIFICATION_ARRAY_ENTRIES );
     configASSERT( xTaskToNotify );
@@ -529,18 +359,7 @@ BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
 
     taskENTER_CRITICAL();
     {
-        ucOriginalNotifyState = pxTCB->mut->ucNotifyState[ uxIndexToNotify ];
-
-        pxTCB->mut->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
-
         ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
-
-        /* If the task is in the blocked state specifically to wait for a
-         * notification then unblock it now. */
-        if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
-        {
-            pxTCB->mut->task_state = TS_READY;
-        }
     }
     taskEXIT_CRITICAL();
 
@@ -553,7 +372,6 @@ void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
                                     UBaseType_t uxIndexToNotify )
 {
     TCB_t * pxTCB;
-    uint8_t ucOriginalNotifyState;
     UBaseType_t uxSavedInterruptStatus;
 
     configASSERT( xTaskToNotify );
@@ -581,55 +399,9 @@ void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
 
     uxSavedInterruptStatus = portSET_INTERRUPT_MASK_FROM_ISR();
     {
-        ucOriginalNotifyState = pxTCB->mut->ucNotifyState[ uxIndexToNotify ];
-        pxTCB->mut->ucNotifyState[ uxIndexToNotify ] = taskNOTIFICATION_RECEIVED;
-
         /* 'Giving' is equivalent to incrementing a count in a counting
          * semaphore. */
         ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
-
-        /* If the task is in the blocked state specifically to wait for a
-         * notification then unblock it now. */
-        if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
-        {
-            pxTCB->mut->task_state = TS_READY;
-        }
     }
     portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );
-}
-
-/*-----------------------------------------------------------*/
-
-static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait )
-{
-    TickType_t xTimeToWake;
-    const TickType_t xConstTickCount = xTickCount;
-
-    /* Calculate the time at which the task should be woken if the event
-     * does not occur.  This may overflow but this doesn't matter, the
-     * kernel will manage it correctly. */
-    xTimeToWake = xConstTickCount + xTicksToWait;
-
-    pxCurrentTCB->mut->delay_deadline = xTimeToWake;
-
-    if( xTimeToWake < xConstTickCount )
-    {
-        /* Wake time has overflowed.  Place this item in the overflow
-         * list. */
-        pxCurrentTCB->mut->task_state = TS_DELAYED_OVERFLOW;
-    }
-    else
-    {
-        /* The wake time has not overflowed, so the current block list
-         * is used. */
-        pxCurrentTCB->mut->task_state = TS_DELAYED;
-
-        /* If the task entering the blocked state was placed at the
-         * head of the list of blocked tasks then xNextTaskUnblockTime
-         * needs to be updated too. */
-        if( xTimeToWake < xNextTaskUnblockTime )
-        {
-            xNextTaskUnblockTime = xTimeToWake;
-        }
-    }
 }
