@@ -60,7 +60,6 @@ typedef uint32_t TickType_t;
 /*-----------------------------------------------------------*/
 
 /* Hardware specifics. */
-#define portTICK_PERIOD_MS          ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
 #define portBYTE_ALIGNMENT          8
 
 /*-----------------------------------------------------------*/

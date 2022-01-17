@@ -101,8 +101,7 @@ static volatile TickType_t xNextTaskUnblockTime = ( TickType_t ) 0U; /* Initiali
  * The currently executing task is entering the Blocked state.  Add the task to
  * either the current or the overflow delayed task list.
  */
-static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
-                                            const BaseType_t xCanBlockIndefinitely );
+static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait );
 
 /*
  * Set xNextTaskUnblockTime to the time at which the next Blocked state task
@@ -244,7 +243,7 @@ void thread_restart_other_task(TCB_t *pxTCB) {
 
                 /* prvAddCurrentTaskToDelayedList() needs the block time, not
                  * the time to wake, so subtract the current tick count. */
-                prvAddCurrentTaskToDelayedList( xTimeToWake - xConstTickCount, pdFALSE );
+                prvAddCurrentTaskToDelayedList( xTimeToWake - xConstTickCount );
             }
         }
         taskEXIT_CRITICAL();
@@ -276,7 +275,7 @@ void thread_restart_other_task(TCB_t *pxTCB) {
                  *
                  * This task cannot be in an event list as it is the currently
                  * executing task. */
-                prvAddCurrentTaskToDelayedList( xTicksToDelay, pdFALSE );
+                prvAddCurrentTaskToDelayedList( xTicksToDelay );
             }
             taskEXIT_CRITICAL();
         }
@@ -579,7 +578,18 @@ uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
 
             if( xTicksToWait > ( TickType_t ) 0 )
             {
-                prvAddCurrentTaskToDelayedList( xTicksToWait, pdTRUE );
+                if( xTicksToWait == portMAX_DELAY )
+                {
+                    /* Add the task to the suspended task list instead of a delayed task
+                     * list to ensure it is not woken by a timing event.  It will block
+                     * indefinitely. */
+                    pxCurrentTCB->mut->task_state = TS_SUSPENDED;
+                }
+                else
+                {
+                    prvAddCurrentTaskToDelayedList( xTicksToWait );
+                }
+
                 traceTASK_NOTIFY_TAKE_BLOCK( uxIndexToWait );
 
                 /* All ports are written to allow a yield in a critical
@@ -706,47 +716,36 @@ void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
 
 /*-----------------------------------------------------------*/
 
-static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
-                                            const BaseType_t xCanBlockIndefinitely )
+static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait )
 {
     TickType_t xTimeToWake;
     const TickType_t xConstTickCount = xTickCount;
 
-    if( ( xTicksToWait == portMAX_DELAY ) && ( xCanBlockIndefinitely != pdFALSE ) )
+    /* Calculate the time at which the task should be woken if the event
+     * does not occur.  This may overflow but this doesn't matter, the
+     * kernel will manage it correctly. */
+    xTimeToWake = xConstTickCount + xTicksToWait;
+
+    pxCurrentTCB->mut->delay_deadline = xTimeToWake;
+
+    if( xTimeToWake < xConstTickCount )
     {
-        /* Add the task to the suspended task list instead of a delayed task
-         * list to ensure it is not woken by a timing event.  It will block
-         * indefinitely. */
-        pxCurrentTCB->mut->task_state = TS_SUSPENDED;
+        /* Wake time has overflowed.  Place this item in the overflow
+         * list. */
+        pxCurrentTCB->mut->task_state = TS_DELAYED_OVERFLOW;
     }
     else
     {
-        /* Calculate the time at which the task should be woken if the event
-         * does not occur.  This may overflow but this doesn't matter, the
-         * kernel will manage it correctly. */
-        xTimeToWake = xConstTickCount + xTicksToWait;
+        /* The wake time has not overflowed, so the current block list
+         * is used. */
+        pxCurrentTCB->mut->task_state = TS_DELAYED;
 
-        pxCurrentTCB->mut->delay_deadline = xTimeToWake;
-
-        if( xTimeToWake < xConstTickCount )
+        /* If the task entering the blocked state was placed at the
+         * head of the list of blocked tasks then xNextTaskUnblockTime
+         * needs to be updated too. */
+        if( xTimeToWake < xNextTaskUnblockTime )
         {
-            /* Wake time has overflowed.  Place this item in the overflow
-             * list. */
-            pxCurrentTCB->mut->task_state = TS_DELAYED_OVERFLOW;
-        }
-        else
-        {
-            /* The wake time has not overflowed, so the current block list
-             * is used. */
-            pxCurrentTCB->mut->task_state = TS_DELAYED;
-
-            /* If the task entering the blocked state was placed at the
-             * head of the list of blocked tasks then xNextTaskUnblockTime
-             * needs to be updated too. */
-            if( xTimeToWake < xNextTaskUnblockTime )
-            {
-                xNextTaskUnblockTime = xTimeToWake;
-            }
+            xNextTaskUnblockTime = xTimeToWake;
         }
     }
 }
