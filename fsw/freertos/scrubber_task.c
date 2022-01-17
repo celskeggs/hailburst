@@ -61,8 +61,6 @@ static void scrubber_mainloop(void) {
         }
 
         atomic_store_relaxed(scrubber_data_local.iteration, scrubber_data_local.iteration + 1);
-        // just in case the idle task is dozing to wait for a scrub cycle
-        task_rouse(&idle_task);
 
         debugf(DEBUG, "scrub cycle complete.");
 

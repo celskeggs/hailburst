@@ -30,13 +30,7 @@ void scrubber_cycle_wait(void) {
     int max_attempts = 200; // wait at most two seconds, regardless.
     // wait until the iteration ends.
     while (!scrubber_done(&scrubber_data_1, iteration_1) && !scrubber_done(&scrubber_data_2, iteration_2)) {
-        if (task_get_current() == &idle_task) {
-            // need a dedicated wakeup for IDLE task recovery, because otherwise there is a period of time without any
-            // idle-priority task running. but we can't do this for everything, because that would be too many cases.
-            task_doze();
-        } else {
-            task_delay(10000000); // wait about 10 milliseconds and then recheck
-        }
+        taskYIELD();
         max_attempts -= 1;
         if (max_attempts <= 0) {
             // this whole thing is a heuristic, anyway. better to not sleep forever than to insist on a scrub cycle

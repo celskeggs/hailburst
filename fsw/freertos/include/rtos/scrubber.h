@@ -11,9 +11,6 @@ struct scrubber_task_data {
     thread_t scrubber_task;
 };
 
-// for scrubber->idle_task notifications
-extern TCB_t idle_task;
-
 void scrubber_set_kernel(void *kernel_elf_rom);
 // wait until the next (unstarted) scrubber cycle completes.
 void scrubber_cycle_wait(void);
