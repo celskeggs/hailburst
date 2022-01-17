@@ -213,30 +213,6 @@ void thread_restart_other_task( TCB_t * pxTCB );
 void vTaskStartScheduler( void );
 
 /*-----------------------------------------------------------
-* TASK UTILITIES
-*----------------------------------------------------------*/
-
-#if ( configCHECK_FOR_STACK_OVERFLOW > 0 )
-
-/**
- * task.h
- * @code{c}
- * void vApplicationStackOverflowHook( TaskHandle_t xTask, const char *pcTaskName);
- * @endcode
- *
- * The application stack overflow hook is called when a stack overflow is detected for a task.
- *
- * Details on stack overflow detection can be found here: https://www.FreeRTOS.org/Stacks-and-stack-overflow-checking.html
- *
- * @param xTask the task that just exceeded its stack boundaries.
- * @param pcTaskName A character string containing the name of the offending task.
- */
-    void vApplicationStackOverflowHook( TaskHandle_t xTask,
-                                        const char * pcTaskName );
-
-#endif
-
-/*-----------------------------------------------------------
 * SCHEDULER INTERNALS AVAILABLE FOR PORTING PURPOSES
 *----------------------------------------------------------*/
 

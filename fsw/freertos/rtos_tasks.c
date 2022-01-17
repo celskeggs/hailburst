@@ -35,26 +35,8 @@
 /* FreeRTOS includes. */
 #include "FreeRTOS.h"
 #include "task.h"
-#include "stack_macros.h"
 
 #include <hal/atomic.h>
-
-/*
- * The value used to fill the stack of a task when the task is created.  This
- * is used purely for checking the high water mark for tasks.
- */
-#define tskSTACK_FILL_BYTE                        ( 0xa5U )
-
-/* If any of the following are set then task stacks are filled with a known
- * value so the high water mark can be determined.  If none of the following are
- * set then don't fill the stack so there is no unnecessary dependency on memset. */
-#if ( ( configCHECK_FOR_STACK_OVERFLOW > 1 ) )
-    #define tskSET_NEW_STACKS_TO_KNOWN_VALUE    1
-#else
-    #define tskSET_NEW_STACKS_TO_KNOWN_VALUE    0
-#endif
-
-/*-----------------------------------------------------------*/
 
 #define taskFOREACH( pxTCB ) \
     for (TCB_t * pxTCB = tasktable_start; pxTCB < tasktable_end; pxTCB++)
@@ -76,14 +58,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
     assert(pxNewTCB != NULL);
 
     StackType_t * pxTopOfStack;
-
-    /* Avoid dependency on memset() if it is not required. */
-    #if ( tskSET_NEW_STACKS_TO_KNOWN_VALUE == 1 )
-        {
-            /* Fill the stack with a known value to assist debugging. */
-            ( void ) memset( pxNewTCB->pxStack, ( int ) tskSTACK_FILL_BYTE, RTOS_STACK_SIZE * sizeof( StackType_t ) );
-        }
-    #endif /* tskSET_NEW_STACKS_TO_KNOWN_VALUE */
 
     /* Calculate the top of stack address. */
     pxTopOfStack = &( pxNewTCB->pxStack[ RTOS_STACK_SIZE - ( uint32_t ) 1 ] );
@@ -154,8 +128,11 @@ void vTaskStartScheduler( void )
 
 void vTaskSwitchContext( void )
 {
-    /* Check for stack overflow, if configured. */
-    taskCHECK_FOR_STACK_OVERFLOW();
+    /* Is the currently saved stack pointer within the stack limit? */
+    if( pxCurrentTCB->mut->pxTopOfStack <= pxCurrentTCB->pxStack )
+    {
+        abortf("STACK OVERFLOW occurred in task '%s'", pxCurrentTCB->pcTaskName);
+    }
 
     /* Select the next task to run, round-robin-style */
     bool chooseNext = true;

@@ -149,12 +149,3 @@ void task_abort_handler(unsigned int trap_mode) {
     // to return all the way back to the interrupted task.
     restart_current_task();
 }
-
-void vApplicationStackOverflowHook(TaskHandle_t task, const char *pcTaskName) {
-    (void) task;
-
-    uint64_t now = timer_now_ns();
-
-    debugf(CRITICAL, "STACK OVERFLOW occurred in task '%s'", pcTaskName);
-    abortf("HALTING IN REACTION TO STACK OVERFLOW AT TIME=%" PRIu64, now);
-}

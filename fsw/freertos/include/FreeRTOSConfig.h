@@ -12,9 +12,6 @@
 #define configSTACK_DEPTH_TYPE                  uint16_t
 #define configUSE_TASK_FPU_SUPPORT              2
 
-/* Hook function related definitions. */
-#define configCHECK_FOR_STACK_OVERFLOW          2
-
 /* Interrupt nesting behaviour configuration. */
 #define configINTERRUPT_CONTROLLER_BASE_ADDRESS         0x08000000
 #define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET 0x00010000

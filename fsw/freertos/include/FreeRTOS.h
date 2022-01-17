@@ -101,10 +101,6 @@
     #define portPOINTER_SIZE_TYPE    uint32_t
 #endif
 
-#ifndef configCHECK_FOR_STACK_OVERFLOW
-    #define configCHECK_FOR_STACK_OVERFLOW    0
-#endif
-
 #ifndef portASSERT_IF_INTERRUPT_PRIORITY_INVALID
     #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()
 #endif
