@@ -109,10 +109,6 @@
     #define configCHECK_FOR_STACK_OVERFLOW    0
 #endif
 
-#ifndef portYIELD_WITHIN_API
-    #define portYIELD_WITHIN_API    portYIELD
-#endif
-
 #ifndef portASSERT_IF_INTERRUPT_PRIORITY_INVALID
     #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()
 #endif

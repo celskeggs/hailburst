@@ -37,8 +37,6 @@
 #include "task.h"
 #include "stack_macros.h"
 
-#define taskYIELD_IF_USING_PREEMPTION()    portYIELD_WITHIN_API()
-
 /* Values that can be assigned to the ucNotifyState member of the TCB. */
 #define taskNOT_WAITING_NOTIFICATION              ( ( uint8_t ) 0 ) /* Must be zero as it is the initialised value. */
 #define taskWAITING_NOTIFICATION                  ( ( uint8_t ) 1 )
@@ -237,7 +235,7 @@ void thread_restart_other_task(TCB_t *pxTCB) {
         taskEXIT_CRITICAL();
 
         /* Force a reschedule if we have not already done so, we may have put ourselves to sleep. */
-        portYIELD_WITHIN_API();
+        portYIELD();
 
         return xShouldDelay;
     }
@@ -267,7 +265,7 @@ void thread_restart_other_task(TCB_t *pxTCB) {
         }
 
         /* Force a reschedule if we have not already done so, we may have put ourselves to sleep. */
-        portYIELD_WITHIN_API();
+        portYIELD();
     }
 
 #endif /* INCLUDE_vTaskDelay */
@@ -319,7 +317,7 @@ void thread_restart_other_task(TCB_t *pxTCB) {
             assert(xSchedulerRunning == pdTRUE);
 
             /* The current task has just been suspended. */
-            portYIELD_WITHIN_API();
+            portYIELD();
         }
     }
 
@@ -579,7 +577,7 @@ uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
                  * section (some will yield immediately, others wait until the
                  * critical section exits) - but it is not something that
                  * application code should ever do. */
-                portYIELD_WITHIN_API();
+                portYIELD();
             }
         }
     }

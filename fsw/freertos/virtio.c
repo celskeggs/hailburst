@@ -209,7 +209,6 @@ static void virtio_device_irq_callback(void *opaque_device) {
         task_rouse_from_isr(device->monitor_task);
     }
     device->mmio->interrupt_ack = status;
-    portYIELD_FROM_ISR(pdFALSE); // TODO: can this be eliminated?
 }
 
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index) {
