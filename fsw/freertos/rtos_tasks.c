@@ -110,15 +110,11 @@ static void prvAddCurrentTaskToDelayedList( TickType_t xTicksToWait,
  */
 static void prvResetNextTaskUnblockTime( void );
 
-/*
- * Called after a new task has been created and initialised to place the task
- * under the control of the scheduler.
- */
-static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB );
-
 /*-----------------------------------------------------------*/
 
-// called from thread.c
+// This is only called in two different circumstances:
+//   1. During initialization, to set up tasks before the scheduler starts.
+//   2. When restarting a task, in a critical section.
 void thread_start_internal( TCB_t * pxNewTCB )
 {
     assert(pxNewTCB != NULL);
@@ -140,8 +136,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
     /* Check the alignment of the calculated top of stack is correct. */
     configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
 
-    assert(pxNewTCB->mut->task_state == TS_DELETED);
-
     memset( ( void * ) &( pxNewTCB->mut->ulNotifiedValue[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ulNotifiedValue ) );
     memset( ( void * ) &( pxNewTCB->mut->ucNotifyState[ 0 ] ), 0x00, sizeof( pxNewTCB->mut->ucNotifyState ) );
 
@@ -151,75 +145,51 @@ void thread_start_internal( TCB_t * pxNewTCB )
      * the top of stack variable is updated. */
     pxNewTCB->mut->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
 
-    prvAddNewTaskToReadyList(pxNewTCB);
-}
-/*-----------------------------------------------------------*/
-
-static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB )
-{
     /* Ensure interrupts don't access the task lists while the lists are being
      * updated. */
-    taskENTER_CRITICAL();
+    if( pxCurrentTCB == NULL )
     {
-        if( pxCurrentTCB == NULL )
+        /* There are no other tasks, or all the other tasks are in
+         * the suspended state - make this the current task. */
+        pxCurrentTCB = pxNewTCB;
+    }
+    else
+    {
+        /* If the scheduler is not already running, make this task the
+         * current task. */
+        if( xSchedulerRunning == pdFALSE )
         {
-            /* There are no other tasks, or all the other tasks are in
-             * the suspended state - make this the current task. */
             pxCurrentTCB = pxNewTCB;
         }
-        else
-        {
-            /* If the scheduler is not already running, make this task the
-             * current task. */
-            if( xSchedulerRunning == pdFALSE )
-            {
-                pxCurrentTCB = pxNewTCB;
-            }
-        }
-
-        traceTASK_CREATE( pxNewTCB );
-
-        prvAddTaskToReadyList( pxNewTCB );
     }
-    taskEXIT_CRITICAL();
+
+    prvAddTaskToReadyList( pxNewTCB );
 }
 /*-----------------------------------------------------------*/
 
-#if ( INCLUDE_vTaskDelete == 1 )
+void thread_restart_other_task(TCB_t *pxTCB) {
+    assert(pxTCB != NULL);
+    assert(pxTCB->restartable == RESTARTABLE);
+    assert(pxTCB != pxCurrentTCB);
 
-    void vTaskDelete( TaskHandle_t xTaskToDelete )
-    {
-        TCB_t * pxTCB;
+    debugf(WARNING, "Restarting task '%s'", pxTCB->pcTaskName);
 
-        taskENTER_CRITICAL();
-        {
-            /* If null is passed in here then it is the calling task that is
-             * being deleted. */
-            pxTCB = prvGetTCBFromHandle( xTaskToDelete );
+    // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
+    // the TaskHandle could refer to undefined memory.
+    taskENTER_CRITICAL();
 
-            /* Remove task from the ready/delayed list. */
-            pxTCB->mut->task_state = TS_DELETED;
+    pxTCB->mut->hit_restart = true;
+    thread_start_internal(pxTCB);
 
-            traceTASK_DELETE( pxTCB );
+    /* Reset the next expected unblock time in case it referred to
+     * the task that has just been deleted. */
+    prvResetNextTaskUnblockTime();
 
-            /* Reset the next expected unblock time in case it referred to
-             * the task that has just been deleted. */
-            prvResetNextTaskUnblockTime();
-        }
-        taskEXIT_CRITICAL();
+    taskEXIT_CRITICAL();
 
-        /* Force a reschedule if it is the currently running task that has just
-         * been deleted. */
-        if( xSchedulerRunning != pdFALSE )
-        {
-            if( pxTCB == pxCurrentTCB )
-            {
-                portYIELD_WITHIN_API();
-            }
-        }
-    }
+    debugf(WARNING, "Completed restart for task '%s'", pxTCB->pcTaskName);
+}
 
-#endif /* INCLUDE_vTaskDelete */
 /*-----------------------------------------------------------*/
 
 #if ( INCLUDE_xTaskDelayUntil == 1 )

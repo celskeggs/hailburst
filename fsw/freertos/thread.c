@@ -43,24 +43,6 @@ void task_entrypoint(TCB_t *state) {
 
 extern void thread_start_internal(thread_t state);
 
-void thread_restart_other_task(thread_t state) {
-    assert(state != NULL);
-    assert(state->restartable == RESTARTABLE);
-    assert(state != xTaskGetCurrentTaskHandle());
-
-    debugf(WARNING, "Restarting task '%s'", state->pcTaskName);
-
-    // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
-    // the TaskHandle could refer to undefined memory.
-    taskENTER_CRITICAL();
-    vTaskDelete(state);
-    state->mut->hit_restart = true;
-    thread_start_internal(state);
-    taskEXIT_CRITICAL();
-
-    debugf(WARNING, "Completed restart for task '%s'", state->pcTaskName);
-}
-
 static void thread_registered_init(void) {
     debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);
     for (thread_t task = tasktable_start; task < tasktable_end; task++) {

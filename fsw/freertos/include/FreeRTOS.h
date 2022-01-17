@@ -133,14 +133,6 @@
     #define tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB )
 #endif
 
-#ifndef traceTASK_CREATE
-    #define traceTASK_CREATE( pxNewTCB )
-#endif
-
-#ifndef traceTASK_DELETE
-    #define traceTASK_DELETE( pxTaskToDelete )
-#endif
-
 #ifndef traceTASK_DELAY_UNTIL
     #define traceTASK_DELAY_UNTIL( x )
 #endif

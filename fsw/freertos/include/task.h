@@ -61,11 +61,10 @@ typedef enum {
 } restartable_t;
 
 typedef enum {
-    TS_DELETED          = 0,
-    TS_READY            = 1,
-    TS_DELAYED          = 2,
-    TS_DELAYED_OVERFLOW = 3,
-    TS_SUSPENDED        = 4,
+    TS_READY            = 0,
+    TS_DELAYED          = 1,
+    TS_DELAYED_OVERFLOW = 2,
+    TS_SUSPENDED        = 3,
 } task_state_t;
 
 /**
@@ -193,48 +192,8 @@ typedef enum
 * TASK CREATION API
 *----------------------------------------------------------*/
 
-/**
- * task. h
- * @code{c}
- * void vTaskDelete( TaskHandle_t xTaskToDelete );
- * @endcode
- *
- * INCLUDE_vTaskDelete must be defined as 1 for this function to be available.
- * See the configuration section for more information.
- *
- * Remove a task from the RTOS real time kernel's management.  The task being
- * deleted will be removed from all ready, blocked, suspended and event lists.
- *
- * NOTE:  The idle task is responsible for freeing the kernel allocated
- * memory from tasks that have been deleted.  It is therefore important that
- * the idle task is not starved of microcontroller processing time if your
- * application makes any calls to vTaskDelete ().  Memory allocated by the
- * task code is not automatically freed, and should be freed before the task
- * is deleted.
- *
- * See the demo application file death.c for sample code that utilises
- * vTaskDelete ().
- *
- * @param xTaskToDelete The handle of the task to be deleted.  Passing NULL will
- * cause the calling task to be deleted.
- *
- * Example usage:
- * @code{c}
- * void vOtherFunction( void )
- * {
- * TaskHandle_t xHandle;
- *
- *   // Create the task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, &xHandle );
- *
- *   // Use the handle to delete the task.
- *   vTaskDelete( xHandle );
- * }
- * @endcode
- * \defgroup vTaskDelete vTaskDelete
- * \ingroup Tasks
- */
-void vTaskDelete( TaskHandle_t xTaskToDelete );
+void thread_start_internal( TCB_t * pxNewTCB );
+void thread_restart_other_task( TCB_t * pxTCB );
 
 /*-----------------------------------------------------------
 * TASK CONTROL API
