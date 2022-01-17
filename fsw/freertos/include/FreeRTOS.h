@@ -105,76 +105,8 @@
     #define portPOINTER_SIZE_TYPE    uint32_t
 #endif
 
-#ifndef traceTASK_SWITCHED_IN
-
-/* Called after a task has been selected to run.  pxCurrentTCB holds a pointer
- * to the task control block of the selected task. */
-    #define traceTASK_SWITCHED_IN()
-#endif
-
-#ifndef traceTASK_SWITCHED_OUT
-
-/* Called before a task has been selected to run.  pxCurrentTCB holds a pointer
- * to the task control block of the task being switched out. */
-    #define traceTASK_SWITCHED_OUT()
-#endif
-
 #ifndef configCHECK_FOR_STACK_OVERFLOW
     #define configCHECK_FOR_STACK_OVERFLOW    0
-#endif
-
-/* The following event macros are embedded in the kernel API calls. */
-
-#ifndef traceMOVED_TASK_TO_READY_STATE
-    #define traceMOVED_TASK_TO_READY_STATE( pxTCB )
-#endif
-
-#ifndef tracePOST_MOVED_TASK_TO_READY_STATE
-    #define tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB )
-#endif
-
-#ifndef traceTASK_DELAY_UNTIL
-    #define traceTASK_DELAY_UNTIL( x )
-#endif
-
-#ifndef traceTASK_DELAY
-    #define traceTASK_DELAY()
-#endif
-
-#ifndef traceTASK_SUSPEND
-    #define traceTASK_SUSPEND( pxTaskToSuspend )
-#endif
-
-#ifndef traceTASK_INCREMENT_TICK
-    #define traceTASK_INCREMENT_TICK( xTickCount )
-#endif
-
-#ifndef traceTASK_NOTIFY_TAKE_BLOCK
-    #define traceTASK_NOTIFY_TAKE_BLOCK( uxIndexToWait )
-#endif
-
-#ifndef traceTASK_NOTIFY_TAKE
-    #define traceTASK_NOTIFY_TAKE( uxIndexToWait )
-#endif
-
-#ifndef traceTASK_NOTIFY_WAIT_BLOCK
-    #define traceTASK_NOTIFY_WAIT_BLOCK( uxIndexToWait )
-#endif
-
-#ifndef traceTASK_NOTIFY_WAIT
-    #define traceTASK_NOTIFY_WAIT( uxIndexToWait )
-#endif
-
-#ifndef traceTASK_NOTIFY
-    #define traceTASK_NOTIFY( uxIndexToNotify )
-#endif
-
-#ifndef traceTASK_NOTIFY_FROM_ISR
-    #define traceTASK_NOTIFY_FROM_ISR( uxIndexToNotify )
-#endif
-
-#ifndef traceTASK_NOTIFY_GIVE_FROM_ISR
-    #define traceTASK_NOTIFY_GIVE_FROM_ISR( uxIndexToNotify )
 #endif
 
 #ifndef portYIELD_WITHIN_API

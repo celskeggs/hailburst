@@ -67,16 +67,6 @@
 /*-----------------------------------------------------------*/
 
 /*
- * Place the task represented by pxTCB into the appropriate ready list for
- * the task.  It is inserted at the end of the list.
- */
-#define prvAddTaskToReadyList( pxTCB )                                            \
-    traceMOVED_TASK_TO_READY_STATE( pxTCB );                                      \
-    pxTCB->mut->task_state = TS_READY;                                            \
-    tracePOST_MOVED_TASK_TO_READY_STATE( pxTCB )
-/*-----------------------------------------------------------*/
-
-/*
  * Several functions take a TaskHandle_t parameter that can optionally be NULL,
  * where NULL is used to indicate that the handle of the currently executing
  * task should be used in place of the parameter.  This macro simply checks to
@@ -162,7 +152,7 @@ void thread_start_internal( TCB_t * pxNewTCB )
         }
     }
 
-    prvAddTaskToReadyList( pxNewTCB );
+    pxNewTCB->mut->task_state = TS_READY;
 }
 /*-----------------------------------------------------------*/
 
@@ -239,8 +229,6 @@ void thread_restart_other_task(TCB_t *pxTCB) {
 
             if( xShouldDelay != pdFALSE )
             {
-                traceTASK_DELAY_UNTIL( xTimeToWake );
-
                 /* prvAddCurrentTaskToDelayedList() needs the block time, not
                  * the time to wake, so subtract the current tick count. */
                 prvAddCurrentTaskToDelayedList( xTimeToWake - xConstTickCount );
@@ -266,8 +254,6 @@ void thread_restart_other_task(TCB_t *pxTCB) {
         {
             taskENTER_CRITICAL();
             {
-                traceTASK_DELAY();
-
                 /* A task that is removed from the event list while the
                  * scheduler is suspended will not get placed in the ready
                  * list or removed from the blocked list until the scheduler
@@ -298,8 +284,6 @@ void thread_restart_other_task(TCB_t *pxTCB) {
             /* If null is passed in here then it is the running task that is
              * being suspended. */
             pxTCB = prvGetTCBFromHandle( xTaskToSuspend );
-
-            traceTASK_SUSPEND( pxTCB );
 
             /* Remove task from the ready/delayed list and place in the
              * suspended list. */
@@ -355,7 +339,9 @@ void vTaskStartScheduler( void )
     xSchedulerRunning = pdTRUE;
     xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
 
-    traceTASK_SWITCHED_IN();
+#ifdef TASK_DEBUG
+    trace_task_switch(pxCurrentTCB->pcTaskName);
+#endif
 
     /* Setting up the timer tick is hardware specific and thus in the
      * portable interface. */
@@ -386,7 +372,6 @@ BaseType_t xTaskIncrementTick( void )
     /* Called by the portable layer each time a tick interrupt occurs.
      * Increments the tick then checks to see if the new tick value will cause any
      * tasks to be unblocked. */
-    traceTASK_INCREMENT_TICK( xTickCount );
 
     /* Minor optimisation.  The tick count cannot change in this
      * block. */
@@ -432,7 +417,7 @@ BaseType_t xTaskIncrementTick( void )
             {
                 /* Deadline has passed; place the unblocked task into the
                  * ready state. */
-                prvAddTaskToReadyList( pxTCB );
+                pxTCB->mut->task_state = TS_READY;
 
                 /* Preemption is on, so a context switch should be performed. */
                 xSwitchRequired = pdTRUE;
@@ -470,8 +455,6 @@ BaseType_t xTaskIncrementTick( void )
 void vTaskSwitchContext( void )
 {
     xYieldPending = pdFALSE;
-    traceTASK_SWITCHED_OUT();
-
     /* Check for stack overflow, if configured. */
     taskCHECK_FOR_STACK_OVERFLOW();
 
@@ -496,7 +479,9 @@ void vTaskSwitchContext( void )
     assert(pxNextTCB != NULL);
     pxCurrentTCB = pxNextTCB;
 
-    traceTASK_SWITCHED_IN();
+#ifdef TASK_DEBUG
+    trace_task_switch(pxCurrentTCB->pcTaskName);
+#endif
 }
 /*-----------------------------------------------------------*/
 
@@ -590,8 +575,6 @@ uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
                     prvAddCurrentTaskToDelayedList( xTicksToWait );
                 }
 
-                traceTASK_NOTIFY_TAKE_BLOCK( uxIndexToWait );
-
                 /* All ports are written to allow a yield in a critical
                  * section (some will yield immediately, others wait until the
                  * critical section exits) - but it is not something that
@@ -604,7 +587,6 @@ uint32_t ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait,
 
     taskENTER_CRITICAL();
     {
-        traceTASK_NOTIFY_TAKE( uxIndexToWait );
         ulReturn = pxCurrentTCB->mut->ulNotifiedValue[ uxIndexToWait ];
 
         if( ulReturn != 0UL )
@@ -647,13 +629,11 @@ BaseType_t xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
 
         ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
 
-        traceTASK_NOTIFY( uxIndexToNotify );
-
         /* If the task is in the blocked state specifically to wait for a
          * notification then unblock it now. */
         if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
         {
-            prvAddTaskToReadyList( pxTCB );
+            pxTCB->mut->task_state = TS_READY;
         }
     }
     taskEXIT_CRITICAL();
@@ -702,13 +682,11 @@ void vTaskNotifyGiveIndexedFromISR( TaskHandle_t xTaskToNotify,
          * semaphore. */
         ( pxTCB->mut->ulNotifiedValue[ uxIndexToNotify ] )++;
 
-        traceTASK_NOTIFY_GIVE_FROM_ISR( uxIndexToNotify );
-
         /* If the task is in the blocked state specifically to wait for a
          * notification then unblock it now. */
         if( ucOriginalNotifyState == taskWAITING_NOTIFICATION )
         {
-            prvAddTaskToReadyList( pxTCB );
+            pxTCB->mut->task_state = TS_READY;
         }
     }
     portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedInterruptStatus );

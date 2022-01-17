@@ -44,8 +44,4 @@ extern void vConfigureTickInterrupt(void);
 
 extern void trace_task_switch(const char *task_name);
 
-#ifdef TASK_DEBUG
-#define traceTASK_SWITCHED_IN() trace_task_switch(pxCurrentTCB->pcTaskName)
-#endif
-
 #endif /* FSW_FREERTOS_FREERTOS_CONFIG_H */
