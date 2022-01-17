@@ -14,11 +14,6 @@
 
 typedef TCB_t *thread_t;
 
-// array containing all .tasktable entries produced in TASK_REGISTER
-// (this array is generated from fragments by the linker)
-extern TCB_t tasktable_start[];
-extern TCB_t tasktable_end[];
-
 #define TASK_PROTO(t_ident) \
     extern TCB_t t_ident;
 

@@ -62,6 +62,14 @@ typedef enum {
     RESTARTABLE,
 } restartable_t;
 
+typedef enum {
+    TS_DELETED          = 0,
+    TS_READY            = 1,
+    TS_DELAYED          = 2,
+    TS_DELAYED_OVERFLOW = 3,
+    TS_SUSPENDED        = 4,
+} task_state_t;
+
 /**
  * task. h
  *
@@ -74,7 +82,8 @@ typedef struct
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
     bool needs_restart;
     bool hit_restart;
-    ListItem_t xStateListItem;                  /*< The list that the state list item of a task is reference from denotes the state of that task (Ready, Blocked, Suspended ). */
+    task_state_t task_state;
+    TickType_t delay_deadline;
 
     volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
     volatile uint8_t ucNotifyState[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
@@ -92,6 +101,11 @@ typedef struct TCB_st
     const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 } const TCB_t;
 
+// array containing all .tasktable entries produced in TASK_REGISTER
+// (this array is generated from fragments by the linker)
+extern TCB_t tasktable_start[];
+extern TCB_t tasktable_end[];
+
 /*
  * Type by which tasks are referenced.  For example, a call to xTaskCreate
  * returns (via a pointer parameter) an TaskHandle_t variable that can then
@@ -101,17 +115,6 @@ typedef struct TCB_st
  * \ingroup Tasks
  */
 typedef TCB_t * TaskHandle_t;
-
-/* Task states returned by eTaskGetState. */
-typedef enum
-{
-    eRunning = 0, /* A task is querying the state of itself, so must be running. */
-    eReady,       /* The task being queried is in a ready or pending ready list. */
-    eBlocked,     /* The task being queried is in the Blocked state. */
-    eSuspended,   /* The task being queried is in the Suspended state, or is in the Blocked state with an infinite time out. */
-    eDeleted,     /* The task being queried has been deleted, but its TCB has not yet been freed. */
-    eInvalid      /* Used as an 'invalid state' value. */
-} eTaskState;
 
 /* Actions that can be performed when vTaskNotify() is called. */
 typedef enum
