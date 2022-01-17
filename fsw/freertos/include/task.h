@@ -36,8 +36,6 @@
     #error "include FreeRTOS.h must appear in source files before include task.h"
 #endif
 
-#include "list.h"
-
 /*-----------------------------------------------------------
 * MACROS AND DEFINITIONS
 *----------------------------------------------------------*/
