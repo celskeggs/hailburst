@@ -73,7 +73,9 @@ typedef struct
     bool needs_restart;
     bool hit_restart;
 
-    uint32_t roused[configTASK_NOTIFICATION_ARRAY_ENTRIES]; // 0 or 1
+    // these are just 0 or 1, but in a full uint32_t to help with atomicity
+    uint32_t roused_task;
+    uint32_t roused_local;
 } TCB_mut_t;
 
 // this is an immutable structure
@@ -102,16 +104,6 @@ extern TCB_t tasktable_end[];
  * \ingroup Tasks
  */
 typedef TCB_t * TaskHandle_t;
-
-/* Actions that can be performed when vTaskNotify() is called. */
-typedef enum
-{
-    eNoAction = 0,            /* Notify the task without updating its notify value. */
-    eSetBits,                 /* Set bits in the task's notification value. */
-    eIncrement,               /* Increment the task's notification value. */
-    eSetValueWithOverwrite,   /* Set the task's notification value to a specific value even if the previous value has not yet been read by the task. */
-    eSetValueWithoutOverwrite /* Set the task's notification value if the previous value has been read by the task. */
-} eNotifyAction;
 
 /**
  * task. h
@@ -224,19 +216,6 @@ void vTaskStartScheduler( void );
 * TASK UTILITIES
 *----------------------------------------------------------*/
 
-/**
- * task. h
- * @code{c}
- * TickType_t xTaskGetTickCount( void );
- * @endcode
- *
- * @return The count of ticks since vTaskStartScheduler was called.
- *
- * \defgroup xTaskGetTickCount xTaskGetTickCount
- * \ingroup TaskUtils
- */
-TickType_t xTaskGetTickCount( void );
-
 #if ( configCHECK_FOR_STACK_OVERFLOW > 0 )
 
 /**
@@ -257,30 +236,9 @@ TickType_t xTaskGetTickCount( void );
 
 #endif
 
-void xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
-                             UBaseType_t uxIndexToNotify );
-
-bool ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWaitOn );
-
 /*-----------------------------------------------------------
 * SCHEDULER INTERNALS AVAILABLE FOR PORTING PURPOSES
 *----------------------------------------------------------*/
-
-/*
- * THIS FUNCTION MUST NOT BE USED FROM APPLICATION CODE.  IT IS ONLY
- * INTENDED FOR USE WHEN IMPLEMENTING A PORT OF THE SCHEDULER AND IS
- * AN INTERFACE WHICH IS FOR THE EXCLUSIVE USE OF THE SCHEDULER.
- *
- * Called from the real time kernel tick (either preemptive or cooperative),
- * this increments the tick count and checks if any tasks that are blocked
- * for a finite period required removing from a blocked list and placing on
- * a ready list.  If a non-zero value is returned then a context switch is
- * required because either:
- *   + A task was removed from a blocked list because its timeout had expired,
- *     or
- *   + Time slicing is in use and there is another task ready to run.
- */
-BaseType_t xTaskIncrementTick( void );
 
 /*
  * THIS FUNCTION MUST NOT BE USED FROM APPLICATION CODE.  IT IS ONLY

@@ -64,9 +64,7 @@
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /* Other file private variables. --------------------------------*/
-static volatile TickType_t xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
 static volatile BaseType_t xSchedulerRunning = pdFALSE;
-static volatile BaseType_t xYieldPending = pdFALSE;
 
 /*-----------------------------------------------------------*/
 
@@ -99,24 +97,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
      * to the start of the task function. Once the stack has been initialised
      * the top of stack variable is updated. */
     pxNewTCB->mut->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
-
-    /* Ensure interrupts don't access the task lists while the lists are being
-     * updated. */
-    if( pxCurrentTCB == NULL )
-    {
-        /* There are no other tasks, or all the other tasks are in
-         * the suspended state - make this the current task. */
-        pxCurrentTCB = pxNewTCB;
-    }
-    else
-    {
-        /* If the scheduler is not already running, make this task the
-         * current task. */
-        if( xSchedulerRunning == pdFALSE )
-        {
-            pxCurrentTCB = pxNewTCB;
-        }
-    }
 }
 /*-----------------------------------------------------------*/
 
@@ -151,7 +131,15 @@ void vTaskStartScheduler( void )
     portDISABLE_INTERRUPTS();
 
     xSchedulerRunning = pdTRUE;
-    xTickCount = ( TickType_t ) configINITIAL_TICK_COUNT;
+
+    for (TCB_t *task = tasktable_start; task < tasktable_end; task++) {
+        thread_start_internal(task);
+    }
+    debugf(DEBUG, "Started %u pre-registered threads!", tasktable_end - tasktable_start);
+
+    // start executing first task
+    pxCurrentTCB = tasktable_start;
+    assert(pxCurrentTCB < tasktable_end);
 
 #ifdef TASK_DEBUG
     trace_task_switch(pxCurrentTCB->pcTaskName);
@@ -164,62 +152,8 @@ void vTaskStartScheduler( void )
 }
 /*-----------------------------------------------------------*/
 
-TickType_t xTaskGetTickCount( void )
-{
-    TickType_t xTicks;
-
-    /* Critical section required if running on a 16 bit processor. */
-    portTICK_TYPE_ENTER_CRITICAL();
-    {
-        xTicks = xTickCount;
-    }
-    portTICK_TYPE_EXIT_CRITICAL();
-
-    return xTicks;
-}
-/*-----------------------------------------------------------*/
-
-BaseType_t xTaskIncrementTick( void )
-{
-    BaseType_t xSwitchRequired = pdFALSE;
-
-    /* Called by the portable layer each time a tick interrupt occurs.
-     * Increments the tick then checks to see if the new tick value will cause any
-     * tasks to be unblocked. */
-
-    /* Minor optimisation.  The tick count cannot change in this
-     * block. */
-    const TickType_t xConstTickCount = xTickCount + ( TickType_t ) 1;
-
-    /* Increment the RTOS tick, switching the delayed and overflowed
-     * delayed lists if it wraps to 0. */
-    xTickCount = xConstTickCount;
-
-    if( xYieldPending != pdFALSE )
-    {
-        xSwitchRequired = pdTRUE;
-    }
-
-    /* Tasks will share processing time (time slice) if preemption is on. */
-    if ( !xSwitchRequired )
-    {
-        taskFOREACH( pxTCB )
-        {
-            if ( pxTCB != pxCurrentTCB )
-            {
-                xSwitchRequired = pdTRUE;
-                break;
-            }
-        }
-    }
-
-    return xSwitchRequired;
-}
-/*-----------------------------------------------------------*/
-
 void vTaskSwitchContext( void )
 {
-    xYieldPending = pdFALSE;
     /* Check for stack overflow, if configured. */
     taskCHECK_FOR_STACK_OVERFLOW();
 
@@ -286,22 +220,3 @@ void vTaskSwitchContext( void )
     }
 
 #endif /* ( INCLUDE_xTaskGetSchedulerState == 1 ) */
-/*-----------------------------------------------------------*/
-
-bool ulTaskNotifyTakeIndexed( UBaseType_t uxIndexToWait )
-{
-    configASSERT( uxIndexToWait < configTASK_NOTIFICATION_ARRAY_ENTRIES );
-
-    return atomic_fetch_and(pxCurrentTCB->mut->roused[uxIndexToWait], 0) != 0;
-}
-
-/*-----------------------------------------------------------*/
-
-void xTaskNotifyGiveIndexed( TaskHandle_t xTaskToNotify,
-                             UBaseType_t uxIndexToNotify )
-{
-    configASSERT( uxIndexToNotify < configTASK_NOTIFICATION_ARRAY_ENTRIES );
-    configASSERT( xTaskToNotify );
-
-    atomic_store(xTaskToNotify->mut->roused[uxIndexToNotify], 1);
-}

@@ -9,6 +9,7 @@
 #include <task.h>
 
 #include <rtos/timer.h>
+#include <hal/atomic.h>
 #include <fsw/debug.h>
 #include <fsw/preprocessor.h>
 
@@ -23,7 +24,8 @@ typedef TCB_t *thread_t;
         .pxTopOfStack    = NULL,                                                  \
         .needs_restart   = false,                                                 \
         .hit_restart     = false,                                                 \
-        .roused = { 0 },                                                          \
+        .roused_task     = 0,                                                     \
+        .roused_local    = 0,                                                     \
     };                                                                            \
     __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
         .mut             = &t_ident ## _mutable,                                  \
@@ -61,12 +63,12 @@ enum {
 
 static inline void task_rouse(thread_t task) {
     assert(task != NULL);
-    xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_TOP_LEVEL);
+    atomic_store(task->mut->roused_task, 1);
 }
 
 // does not block
 static inline bool task_doze_try(void) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_TOP_LEVEL);
+    return atomic_fetch_and(task_get_current()->mut->roused_task, 0) != 0;
 }
 
 static inline void task_doze(void) {
@@ -93,11 +95,11 @@ static inline bool task_doze_timed(uint64_t nanoseconds) {
 
 static inline void local_rouse(thread_t task) {
     assert(task != NULL);
-    xTaskNotifyGiveIndexed(task, NOTIFY_INDEX_LOCAL);
+    atomic_store(task->mut->roused_local, 1);
 }
 
 static inline bool local_doze_try_raw(void) {
-    return ulTaskNotifyTakeIndexed(NOTIFY_INDEX_LOCAL);
+    return atomic_fetch_and(task_get_current()->mut->roused_local, 0) != 0;
 }
 
 // does not actually block

@@ -411,11 +411,7 @@ void FreeRTOS_Tick_Handler( void )
                         "isb        \n" ::: "memory" );
     portCPU_IRQ_ENABLE();
 
-    /* Increment the RTOS tick. */
-    if( xTaskIncrementTick() != pdFALSE )
-    {
-        ulPortYieldRequired = pdTRUE;
-    }
+    ulPortYieldRequired = pdTRUE;
 
     /* Ensure all interrupt priorities are active again. */
     portCLEAR_INTERRUPT_MASK();

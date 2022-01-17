@@ -40,15 +40,3 @@ void task_entrypoint(TCB_t *state) {
 
     restartf("Task main loop unexpectedly returned.");
 }
-
-extern void thread_start_internal(thread_t state);
-
-static void thread_registered_init(void) {
-    debugf(DEBUG, "Starting %u pre-registered threads...", tasktable_end - tasktable_start);
-    for (thread_t task = tasktable_start; task < tasktable_end; task++) {
-        thread_start_internal(task);
-    }
-    debugf(DEBUG, "Pre-registered threads started!");
-}
-
-PROGRAM_INIT(STAGE_READY, thread_registered_init);
