@@ -32,7 +32,6 @@ extern void vConfigureTickInterrupt(void);
 
 /* Optional functions - most linkers will remove unused functions anyway. */
 #define INCLUDE_vTaskDelete                     1
-#define INCLUDE_vTaskSuspend                    1
 #define INCLUDE_xTaskDelayUntil                 0
 #define INCLUDE_vTaskDelay                      1
 #define INCLUDE_xTaskGetSchedulerState          1

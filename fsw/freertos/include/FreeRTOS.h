@@ -58,10 +58,6 @@
     #define INCLUDE_vTaskDelete    0
 #endif
 
-#ifndef INCLUDE_vTaskSuspend
-    #define INCLUDE_vTaskSuspend    0
-#endif
-
 #ifndef INCLUDE_xTaskDelayUntil
     #define INCLUDE_xTaskDelayUntil    0
 #endif

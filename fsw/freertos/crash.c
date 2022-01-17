@@ -20,12 +20,11 @@ void abort(void) {
 }
 
 __attribute__((noreturn)) void task_suspend(void) {
+    // this will indeed stop us in the middle of this abort handler... but that's fine! We don't actually need
+    // to return all the way back to the interrupted task; this stack will simply be thrown away.
+    debugf(DEBUG, "Suspending task.");
     for (;;) {
-        debugf(DEBUG, "Suspending task.");
-        // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
-        // to return all the way back to the interrupted task.
-        vTaskSuspend(NULL);
-        debugf(CRITICAL, "Suspended task unexpectedly woke up!");
+        taskYIELD();
     }
 }
 

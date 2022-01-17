@@ -59,14 +59,6 @@
 
 /*-----------------------------------------------------------*/
 
-/*
- * Several functions take a TaskHandle_t parameter that can optionally be NULL,
- * where NULL is used to indicate that the handle of the currently executing
- * task should be used in place of the parameter.  This macro simply checks to
- * see if the parameter is NULL and returns a pointer to the appropriate TCB.
- */
-#define prvGetTCBFromHandle( pxHandle )    ( ( ( pxHandle ) == NULL ) ? pxCurrentTCB : ( pxHandle ) )
-
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /* Other file private variables. --------------------------------*/
@@ -125,8 +117,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
             pxCurrentTCB = pxNewTCB;
         }
     }
-
-    pxNewTCB->mut->task_state = TS_READY;
 }
 /*-----------------------------------------------------------*/
 
@@ -149,36 +139,6 @@ void thread_restart_other_task(TCB_t *pxTCB) {
     debugf(WARNING, "Completed restart for task '%s'", pxTCB->pcTaskName);
 }
 
-/*-----------------------------------------------------------*/
-
-#if ( INCLUDE_vTaskSuspend == 1 )
-
-    void vTaskSuspend( TaskHandle_t xTaskToSuspend )
-    {
-        TCB_t * pxTCB;
-
-        taskENTER_CRITICAL();
-        {
-            /* If null is passed in here then it is the running task that is
-             * being suspended. */
-            pxTCB = prvGetTCBFromHandle( xTaskToSuspend );
-
-            /* Remove task from the ready/delayed list and place in the
-             * suspended list. */
-            pxTCB->mut->task_state = TS_SUSPENDED;
-        }
-        taskEXIT_CRITICAL();
-
-        if( pxTCB == pxCurrentTCB )
-        {
-            assert(xSchedulerRunning == pdTRUE);
-
-            /* The current task has just been suspended. */
-            portYIELD();
-        }
-    }
-
-#endif /* INCLUDE_vTaskSuspend */
 /*-----------------------------------------------------------*/
 
 void vTaskStartScheduler( void )
@@ -245,7 +205,7 @@ BaseType_t xTaskIncrementTick( void )
     {
         taskFOREACH( pxTCB )
         {
-            if ( pxTCB != pxCurrentTCB && pxTCB->mut->task_state == TS_READY )
+            if ( pxTCB != pxCurrentTCB )
             {
                 xSwitchRequired = pdTRUE;
                 break;
@@ -268,7 +228,7 @@ void vTaskSwitchContext( void )
     TCB_t * pxNextTCB = NULL;
     taskFOREACH ( pxTCB )
     {
-        if ( pxTCB->mut->task_state == TS_READY && chooseNext == true )
+        if ( chooseNext == true )
         {
             pxNextTCB = pxTCB;
             chooseNext = false;

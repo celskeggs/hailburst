@@ -60,11 +60,6 @@ typedef enum {
     RESTARTABLE,
 } restartable_t;
 
-typedef enum {
-    TS_READY            = 0,
-    TS_SUSPENDED        = 1,
-} task_state_t;
-
 /**
  * task. h
  *
@@ -77,8 +72,6 @@ typedef struct
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
     bool needs_restart;
     bool hit_restart;
-    task_state_t task_state;
-    TickType_t delay_deadline;
 
     volatile uint32_t ulNotifiedValue[ configTASK_NOTIFICATION_ARRAY_ENTRIES ];
 } TCB_mut_t;
@@ -191,63 +184,6 @@ typedef enum
 
 void thread_start_internal( TCB_t * pxNewTCB );
 void thread_restart_other_task( TCB_t * pxTCB );
-
-/*-----------------------------------------------------------
-* TASK CONTROL API
-*----------------------------------------------------------*/
-
-/**
- * task. h
- * @code{c}
- * void vTaskSuspend( TaskHandle_t xTaskToSuspend );
- * @endcode
- *
- * INCLUDE_vTaskSuspend must be defined as 1 for this function to be available.
- * See the configuration section for more information.
- *
- * Suspend any task.  When suspended a task will never get any microcontroller
- * processing time.
- *
- * Calls to vTaskSuspend are not accumulative -
- * i.e. calling vTaskSuspend () twice on the same task still only requires one
- * call to vTaskResume () to ready the suspended task.
- *
- * @param xTaskToSuspend Handle to the task being suspended.  Passing a NULL
- * handle will cause the calling task to be suspended.
- *
- * Example usage:
- * @code{c}
- * void vAFunction( void )
- * {
- * TaskHandle_t xHandle;
- *
- *   // Create a task, storing the handle.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, &xHandle );
- *
- *   // ...
- *
- *   // Use the handle to suspend the created task.
- *   vTaskSuspend( xHandle );
- *
- *   // ...
- *
- *   // The created task will not run during this period, unless
- *   // another task calls vTaskResume( xHandle ).
- *
- *   //...
- *
- *
- *   // Suspend ourselves.
- *   vTaskSuspend( NULL );
- *
- *   // We cannot get here unless another task calls vTaskResume
- *   // with our handle as the parameter.
- * }
- * @endcode
- * \defgroup vTaskSuspend vTaskSuspend
- * \ingroup TaskCtrl
- */
-void vTaskSuspend( TaskHandle_t xTaskToSuspend );
 
 /*-----------------------------------------------------------
 * SCHEDULER CONTROL
