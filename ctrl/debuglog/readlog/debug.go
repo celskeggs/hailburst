@@ -252,7 +252,7 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 		return nil, fmt.Errorf("invalid name: %q", sym.Name)
 	}
 	var metadata struct{ LogLevel, StableIdPtr, FormatPtr, FilenamePtr, LineNumber uint32 }
-	if err := f.ReadSymbolInto(sym, ".debugf_messages", &metadata); err != nil {
+	if err := f.ReadSymbolInto(sym, "debugf_messages", &metadata); err != nil {
 		return nil, err
 	}
 	level, err := ParseLogLevel(metadata.LogLevel)
@@ -261,7 +261,7 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 	}
 	var stableId string
 	if metadata.StableIdPtr != 0 {
-		stableId, err = f.ReadCStringFromAddress(metadata.StableIdPtr, "_msg_stable", ".debugf_messages")
+		stableId, err = f.ReadCStringFromAddress(metadata.StableIdPtr, "_msg_stable", "debugf_messages")
 		if err != nil {
 			return nil, err
 		}
@@ -269,11 +269,11 @@ func (f *DebugFile) DecodeMetadata(uid uint32) (*MessageMetadata, error) {
 			return nil, fmt.Errorf("invalid empty stable id")
 		}
 	}
-	fmtStr, err := f.ReadCStringFromAddress(metadata.FormatPtr, "_msg_format", ".debugf_messages")
+	fmtStr, err := f.ReadCStringFromAddress(metadata.FormatPtr, "_msg_format", "debugf_messages")
 	if err != nil {
 		return nil, err
 	}
-	filename, err := f.ReadCStringFromAddress(metadata.FilenamePtr, "_msg_filename", ".debugf_messages")
+	filename, err := f.ReadCStringFromAddress(metadata.FilenamePtr, "_msg_filename", "debugf_messages")
 	if err != nil {
 		return nil, err
 	}

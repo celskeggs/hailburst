@@ -165,7 +165,7 @@ def configure_freertos():
     stripped_kernel = rtos_env.Command(
         target='stripped-kernel',
         source=rtos_kernel,
-        action='$STRIP --strip-all --remove-section=.debugf_messages $SOURCE -o $TARGET',
+        action='$STRIP --strip-all --remove-section=debugf_messages $SOURCE -o $TARGET',
     )
 
     embedding = rtos_env.Command(

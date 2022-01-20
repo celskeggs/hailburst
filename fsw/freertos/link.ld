@@ -10,18 +10,18 @@ SECTIONS
 {
     . = 0x40000000;
     .text : { *(.text*) *(.rodata*) } :text
-    .initpoints : {
+    initpoints : {
         initpoints_start = .;
-        *(.initpoints);
+        *(initpoints);
         initpoints_end = .;
     } :text
-    .tasktable : {
+    tasktable : {
         tasktable_start = .;
-        *(.tasktable);
+        *(tasktable);
         tasktable_end = .;
     } :text
     .data : { *(.data*) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
     . = 0xF8000000;
-    .debugf_messages (INFO) : { *(.debugf_messages) }
+    debugf_messages (INFO) : { *(debugf_messages) }
 }

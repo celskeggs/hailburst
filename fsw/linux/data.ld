@@ -3,11 +3,11 @@ SECTIONS {
         *(.data*);
         . = ALIGN(16);
         tasktable_start = .;
-        *(.tasktable);
+        *(tasktable);
         tasktable_end = .;
         . = ALIGN(16);
         initpoints_start = .;
-        *(.initpoints);
+        *(initpoints);
         initpoints_end = .;
     }
 }

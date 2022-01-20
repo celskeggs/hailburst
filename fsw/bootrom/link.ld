@@ -11,5 +11,5 @@ SECTIONS
     . = 0x40000000;
     .bss : { *(.bss*) *(COMMON*) }
     . = 0xF0000000;
-    .debugf_messages (INFO) : { *(.debugf_messages) }
+    debugf_messages (INFO) : { *(debugf_messages) }
 }

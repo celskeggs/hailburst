@@ -27,7 +27,7 @@ typedef TCB_t *thread_t;
         .roused_task     = 0,                                                     \
         .roused_local    = 0,                                                     \
     };                                                                            \
-    __attribute__((section(".tasktable"))) TCB_t t_ident = {                      \
+    __attribute__((section("tasktable"))) TCB_t t_ident = {                       \
         .mut             = &t_ident ## _mutable,                                  \
         .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
         .start_arg       = t_arg,                                                 \

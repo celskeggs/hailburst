@@ -21,7 +21,7 @@ typedef struct {
 // not the same type!
 
 #define PROGRAM_INIT(stage, callback) \
-    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## callback = \
+    const __attribute__((section("initpoints"))) program_init _initpoint_ ## callback = \
         { \
             /* make sure that the function is the correct form before casting it */ \
             /* note that casting it will be fine, because it will just ignore the unexpected argument in r0 */ \
@@ -31,7 +31,7 @@ typedef struct {
         }
 
 #define PROGRAM_INIT_PARAM(stage, callback, ident, param) \
-    const __attribute__((section(".initpoints"))) program_init _initpoint_ ## callback ## _ ## ident = \
+    const __attribute__((section("initpoints"))) program_init _initpoint_ ## callback ## _ ## ident = \
         { \
             /* make sure that param pointer type matches the function argument, since we'll be throwing them away! */ \
             .init_fn = PP_ERASE_TYPE(callback, param), \

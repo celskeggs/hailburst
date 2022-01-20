@@ -145,16 +145,16 @@ def debugf_core(args, filename, line_num):
         raise MacroError("debugf format string indicates %d arguments, but %d passed" % (len(arg_types), len(args)))
     fragments = [
         '({',
-        'static __attribute__((section (".debugf_messages"))) const char _msg_format[] = (%s);' % format_raw,
-        'static __attribute__((section (".debugf_messages"))) const char _msg_filename[] = "%s";'
+        'static __attribute__((section ("debugf_messages"))) const char _msg_format[] = (%s);' % format_raw,
+        'static __attribute__((section ("debugf_messages"))) const char _msg_filename[] = "%s";'
             % filename.replace("\\", "\\\\").replace('"', '\\"'),
     ]
     if stable_id is not None:
         fragments += [
-            'static __attribute__((section (".debugf_messages"))) const char _msg_stable[] = "%s";' % stable_id,
+            'static __attribute__((section ("debugf_messages"))) const char _msg_stable[] = "%s";' % stable_id,
         ]
     fragments += [
-        'static __attribute__((section (".debugf_messages"))) const struct debugf_metadata _msg_metadata = {',
+        'static __attribute__((section ("debugf_messages"))) const struct debugf_metadata _msg_metadata = {',
         '.loglevel = (%s),' % loglevel,
     ]
     if stable_id is not None:

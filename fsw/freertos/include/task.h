@@ -90,7 +90,7 @@ typedef struct TCB_st
     const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 } const TCB_t;
 
-// array containing all .tasktable entries produced in TASK_REGISTER
+// array containing all tasktable entries produced in TASK_REGISTER
 // (this array is generated from fragments by the linker)
 extern TCB_t tasktable_start[];
 extern TCB_t tasktable_end[];
