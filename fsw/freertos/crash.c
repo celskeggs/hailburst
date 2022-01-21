@@ -85,7 +85,7 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
         debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
     } else {
-        TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
+        TaskHandle_t failed_task = task_get_current();
         assert(failed_task != NULL);
         debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
     }
@@ -111,7 +111,7 @@ static volatile TaskHandle_t last_failed_task = NULL;
 
 void task_clear_crash(void) {
     taskENTER_CRITICAL();
-    if (last_failed_task == xTaskGetCurrentTaskHandle()) {
+    if (last_failed_task == task_get_current()) {
         last_failed_task = NULL;
     }
     taskEXIT_CRITICAL();
@@ -120,7 +120,7 @@ void task_clear_crash(void) {
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(WARNING, "TASK %s", trap_name);
-    TaskHandle_t failed_task = xTaskGetCurrentTaskHandle();
+    TaskHandle_t failed_task = task_get_current();
     assert(failed_task != NULL);
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
 

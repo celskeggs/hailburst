@@ -105,6 +105,8 @@ extern TCB_t tasktable_end[];
  */
 typedef TCB_t * TaskHandle_t;
 
+extern TCB_t * volatile pxCurrentTCB;
+
 /**
  * task. h
  *
@@ -225,11 +227,6 @@ void vTaskStartScheduler( void );
  * that is ready to run.
  */
 void vTaskSwitchContext( void );
-
-/*
- * Return the handle of the calling task.
- */
-TaskHandle_t xTaskGetCurrentTaskHandle( void );
 
 /*
  * Returns the scheduler state as taskSCHEDULER_RUNNING, or taskSCHEDULER_NOT_STARTED.

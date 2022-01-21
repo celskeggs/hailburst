@@ -161,23 +161,6 @@ void vTaskSwitchContext( void )
 }
 /*-----------------------------------------------------------*/
 
-#if ( INCLUDE_xTaskGetCurrentTaskHandle == 1 )
-
-    TaskHandle_t xTaskGetCurrentTaskHandle( void )
-    {
-        TaskHandle_t xReturn;
-
-        /* A critical section is not required as this is not called from
-         * an interrupt and the current TCB will always be the same for any
-         * individual execution thread. */
-        xReturn = pxCurrentTCB;
-
-        return xReturn;
-    }
-
-#endif /* ( INCLUDE_xTaskGetCurrentTaskHandle == 1 ) */
-/*-----------------------------------------------------------*/
-
 #if ( INCLUDE_xTaskGetSchedulerState == 1 )
 
     BaseType_t xTaskGetSchedulerState( void )

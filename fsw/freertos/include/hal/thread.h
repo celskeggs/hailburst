@@ -37,7 +37,7 @@ typedef TCB_t *thread_t;
     }
 
 static inline thread_t task_get_current(void) {
-    TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+    TaskHandle_t handle = pxCurrentTCB;
     assert(handle != NULL);
     return handle;
 }
