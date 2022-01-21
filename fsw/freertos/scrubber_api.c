@@ -4,7 +4,8 @@
 #include <hal/thread.h>
 #include <fsw/debug.h>
 
-extern struct scrubber_task_data scrubber_data_1, scrubber_data_2;
+SCRUBBER_REGISTER(scrubber_1, "scrubber_1");
+SCRUBBER_REGISTER(scrubber_2, "scrubber_2");
 
 static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     assert(scrubber != NULL);
@@ -24,12 +25,12 @@ static bool scrubber_done(struct scrubber_task_data *scrubber, uint64_t start_it
 }
 
 void scrubber_cycle_wait(void) {
-    uint64_t iteration_1 = start_scrub_wait(&scrubber_data_1);
-    uint64_t iteration_2 = start_scrub_wait(&scrubber_data_2);
+    uint64_t iteration_1 = start_scrub_wait(&scrubber_1);
+    uint64_t iteration_2 = start_scrub_wait(&scrubber_2);
 
     int max_attempts = 200; // wait at most two seconds, regardless.
     // wait until the iteration ends.
-    while (!scrubber_done(&scrubber_data_1, iteration_1) && !scrubber_done(&scrubber_data_2, iteration_2)) {
+    while (!scrubber_done(&scrubber_1, iteration_1) && !scrubber_done(&scrubber_2, iteration_2)) {
         taskYIELD();
         max_attempts -= 1;
         if (max_attempts <= 0) {
@@ -43,8 +44,8 @@ void scrubber_cycle_wait(void) {
 void scrubber_set_kernel(void *kernel_elf_rom) {
     assert(kernel_elf_rom != NULL);
 
-    assert(scrubber_data_1.kernel_elf_rom == NULL);
-    scrubber_data_1.kernel_elf_rom = kernel_elf_rom;
-    assert(scrubber_data_2.kernel_elf_rom == NULL);
-    scrubber_data_2.kernel_elf_rom = kernel_elf_rom;
+    assert(scrubber_1.kernel_elf_rom == NULL);
+    scrubber_1.kernel_elf_rom = kernel_elf_rom;
+    assert(scrubber_2.kernel_elf_rom == NULL);
+    scrubber_2.kernel_elf_rom = kernel_elf_rom;
 }
