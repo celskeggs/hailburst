@@ -5,19 +5,10 @@
 
 #include <rtos/arm.h>
 #include <rtos/crash.h>
-#include <rtos/gic.h>
 #include <hal/atomic.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 #include <fsw/init.h>
-
-void abort(void) {
-    asm volatile("CPSID i");
-    shutdown_gic();
-    while (1) {
-        asm volatile("WFI");
-    }
-}
 
 __attribute__((noreturn)) void task_suspend(void) {
     // this will indeed stop us in the middle of this abort handler... but that's fine! We don't actually need
