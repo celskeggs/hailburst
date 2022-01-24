@@ -12,6 +12,8 @@ import (
 
 type ExchangeState uint8
 
+const DetailedDebug = false
+
 const (
 	StateInvalid = iota
 	StateConnecting
@@ -349,12 +351,18 @@ func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.Dat
 	component.BuildTwixt(ctx, []model.EventSource{lsink, ex.CondNotify}, func(io *component.TwixtIO) {
 		ex.CheckInvariants()
 		nextInterval := ctx.Now().Add(ex.HandshakePeriod())
+		if DetailedDebug {
+			ex.Debug("First handshake scheduled for: %v", nextInterval)
+		}
 		// requires that TxBusy is false
 		sendCtrlChar := func(ctrlChar codec.ControlChar, param uint32) {
 			ex.Transmit(io, lsink, concat(
 				codec.EncodeCtrlChar(ctrlChar, param),
 			))
 			nextInterval = ctx.Now().Add(ex.HandshakePeriod())
+			if DetailedDebug {
+				ex.Debug("Next handshake scheduled for: %v", nextInterval)
+			}
 		}
 		for {
 			for ex.TxBusy {
