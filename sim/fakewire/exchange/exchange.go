@@ -13,7 +13,7 @@ import (
 type ExchangeState uint8
 
 const (
-	MaxOutstandingTokens = 1
+	MaxOutstandingTokens = 10
 )
 
 const DetailedDebug = false

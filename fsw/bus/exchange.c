@@ -9,7 +9,7 @@
 #include <bus/exchange.h>
 
 enum {
-    MAX_OUTSTANDING_TOKENS = 1,
+    MAX_OUTSTANDING_TOKENS = 10,
 };
 
 //#define EXCHANGE_DEBUG
