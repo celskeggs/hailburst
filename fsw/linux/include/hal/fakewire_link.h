@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include <hal/thread.h>
-#include <fsw/fakewire/codec.h>
+#include <bus/codec.h>
 
 typedef struct {
     int fd_in;

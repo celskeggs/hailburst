@@ -7,14 +7,13 @@ import subprocess
 def build_common(env):
     env["CPPPATH"] += ["include/"]
     concurrency = env.Library("concurrency", ["main/chart.c", "main/init.c", "main/multichart.c", "main/stream.c"])
-    fakewire = env.Library("fakewire", ["fakewire/codec.c", "fakewire/exchange.c", "fakewire/rmap.c",
-                                        "fakewire/rmap_helpers.c", "fakewire/switch.c"])
+    bus = env.Library("bus", ["bus/codec.c", "bus/exchange.c", "bus/rmap.c", "bus/rmap_helpers.c", "bus/switch.c"])
     # note: we have to return the common source files here, rather than packaging them in a library, so that any
     # modules that have no references to them (like heartbeat) will still actually be linked.
     return [
         "main/command.c", "main/comm.c", "main/heartbeat.c", "main/magnetometer.c", "main/radio.c",
-        "main/spacecraft.c", "main/telemetry.c", fakewire, concurrency,
-    ], [fakewire, concurrency]
+        "main/spacecraft.c", "main/telemetry.c", bus, concurrency,
+    ], [bus, concurrency]
 
 
 # ============================= Linux =============================
@@ -32,7 +31,7 @@ def configure_linux():
         if inherit in os.environ:
             linux_env[inherit] = os.environ[inherit]
 
-    common_libs, just_fakewire = build_common(linux_env)
+    common_libs, just_bus = build_common(linux_env)
 
     linux_env["CPPPATH"] += ["linux/include/"]
 
@@ -41,8 +40,8 @@ def configure_linux():
     linux_env.Default(linux_app)
 
     linux_test = linux_env.Program("fakewire_exc_test",
-                                   LINUX_SRC + ["fakewire/test/fakewire_exc_test.c",
-                                                "fakewire/test/test_common.c"] + just_fakewire)
+                                   LINUX_SRC + ["bus/test/fakewire_exc_test.c",
+                                                "bus/test/test_common.c"] + just_bus)
     linux_env.Default(linux_test)
 
     linux_env.Alias("install",

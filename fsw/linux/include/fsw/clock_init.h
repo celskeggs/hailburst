@@ -2,8 +2,8 @@
 #define FSW_CLOCK_INIT_H
 
 #include <fsw/telemetry.h>
-#include <fsw/fakewire/rmap.h>
-#include <fsw/fakewire/switch.h>
+#include <bus/rmap.h>
+#include <bus/switch.h>
 
 #define CLOCK_EXISTS
 

@@ -4,9 +4,9 @@
 #include <stdbool.h>
 
 #include <hal/thread.h>
-#include <fsw/fakewire/rmap.h>
-#include <fsw/fakewire/switch.h>
 #include <fsw/telemetry.h>
+#include <bus/rmap.h>
+#include <bus/switch.h>
 
 enum {
     MAGNETOMETER_MAX_READINGS = 100,

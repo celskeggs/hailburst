@@ -3,7 +3,7 @@
 
 #include <hal/thread.h>
 #include <fsw/chart.h>
-#include <fsw/fakewire/link.h>
+#include <bus/link.h>
 
 enum {
     EXCHANGE_QUEUE_DEPTH = 16,

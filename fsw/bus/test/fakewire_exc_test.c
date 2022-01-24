@@ -11,7 +11,7 @@
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/init.h>
-#include <fsw/fakewire/exchange.h>
+#include <bus/exchange.h>
 
 #include "test_common.h"
 

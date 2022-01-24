@@ -3,7 +3,7 @@
 
 #include <rtos/virtio.h>
 #include <hal/thread.h>
-#include <fsw/fakewire/codec.h>
+#include <bus/codec.h>
 
 enum {
     FAKEWIRE_LINK_REGION = 31, /* fakewire serial port is attached to VIRTIO MMIO region 31 */

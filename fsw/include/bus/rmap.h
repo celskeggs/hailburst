@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 #include <hal/thread.h>
-#include <fsw/fakewire/switch.h>
+#include <bus/switch.h>
 
 enum {
     RMAP_MAX_PATH = 12,

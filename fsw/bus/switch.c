@@ -3,7 +3,7 @@
 #include <hal/atomic.h>
 #include <fsw/debug.h>
 #include <fsw/io.h>
-#include <fsw/fakewire/switch.h>
+#include <bus/switch.h>
 
 // #define DEBUG
 

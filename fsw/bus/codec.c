@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include <fsw/debug.h>
-#include <fsw/fakewire/codec.h>
+#include <bus/codec.h>
 
 //#define DEBUG
 

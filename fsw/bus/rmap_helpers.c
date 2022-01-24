@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <fsw/fakewire/rmap.h>
+#include <bus/rmap.h>
 
 static uint8_t rmap_crc_table[256] = {
     0x00, 0x91, 0xe3, 0x72, 0x07, 0x96, 0xe4, 0x75,

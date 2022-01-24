@@ -3,7 +3,7 @@
 #include <fsw/clock.h>
 #include <fsw/debug.h>
 #include <fsw/io.h>
-#include <fsw/fakewire/rmap.h>
+#include <bus/rmap.h>
 
 enum {
     PROTOCOL_RMAP = 0x01,

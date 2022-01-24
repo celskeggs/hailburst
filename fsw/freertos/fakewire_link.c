@@ -1,6 +1,6 @@
 #include <rtos/virtio.h>
 #include <fsw/debug.h>
-#include <fsw/fakewire/link.h>
+#include <bus/link.h>
 
 static bool fakewire_link_attached = false;
 

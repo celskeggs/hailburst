@@ -1,11 +1,11 @@
 #ifndef APP_SPACECRAFT_H
 #define APP_SPACECRAFT_H
 
-#include <fsw/fakewire/exchange.h>
-#include <fsw/fakewire/rmap.h>
 #include <fsw/comm.h>
 #include <fsw/magnetometer.h>
 #include <fsw/radio.h>
+#include <bus/exchange.h>
+#include <bus/rmap.h>
 
 typedef struct {
     // devices

@@ -2,7 +2,7 @@
 #define FSW_RADIO_H
 
 #include <fsw/stream.h>
-#include <fsw/fakewire/rmap.h>
+#include <bus/rmap.h>
 
 typedef enum {
     REG_MAGIC      = 0,

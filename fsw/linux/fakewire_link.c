@@ -9,7 +9,7 @@
 
 #include <fsw/clock.h>
 #include <fsw/debug.h>
-#include <fsw/fakewire/link.h>
+#include <bus/link.h>
 
 //#define DEBUG
 
