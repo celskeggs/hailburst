@@ -2,9 +2,22 @@
 import os
 import shutil
 import subprocess
+import sys
 
 N = 2000
 MAXPROC = 200
+
+if (len(sys.argv) > 3 or
+        (len(sys.argv) >= 2 and not sys.argv[1].isdigit()) or
+        (len(sys.argv) >= 3 and not sys.argv[2].isdigit())):
+    sys.exit("Usage: test.py <TRIALS> <MAXPROC>")
+
+if len(sys.argv) >= 2:
+    N = int(sys.argv[1])
+if len(sys.argv) >= 3:
+    MAXPROC = int(sys.argv[1])
+
+print("%d trials, %d processes" % (N, MAXPROC))
 
 processes = []
 failed = []
@@ -36,7 +49,7 @@ for i in range(N):
     while len(processes) >= MAXPROC:
         scan()
     with open(os.path.join(pdir, "out.log"), "w") as out:
-        proc = subprocess.Popen(["./build-linux/fakewire_exc_test", pdir], stdout=out, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(["./build-linux/exchange_test", pdir], stdout=out, stderr=subprocess.STDOUT)
     processes.append((pdir, proc))
 
 while len(processes) > 0:

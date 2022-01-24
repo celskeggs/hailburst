@@ -39,9 +39,8 @@ def configure_linux():
     linux_app = linux_env.Program("app", LINUX_SRC + ["linux/clock.c", "linux/entrypoint.c"] + common_libs)
     linux_env.Default(linux_app)
 
-    linux_test = linux_env.Program("fakewire_exc_test",
-                                   LINUX_SRC + ["bus/test/fakewire_exc_test.c",
-                                                "bus/test/test_common.c"] + just_bus)
+    linux_test = linux_env.Program("exchange_test",
+                                   LINUX_SRC + ["bus/test/exchange_test.c", "bus/test/test_common.c"] + just_bus)
     linux_env.Default(linux_test)
 
     linux_env.Alias("install",
@@ -51,7 +50,7 @@ def configure_linux():
 
 # ============================= FreeRTOS =============================
 def configure_freertos():
-    ROOT_DIR = os.path.abspath("../../..")
+    ROOT_DIR = "#/../.."
 
     COMMON_FLAGS = [
         "-ggdb",
@@ -145,16 +144,17 @@ def configure_freertos():
     ]
 
     # host program
-    GDB_BINUTILS = "../../../binutils-gdb"
+    GDB_BINUTILS = os.path.join(ROOT_DIR, "binutils-gdb")
     excise = Program("excise", ["toolchain/excise.c",
                                 GDB_BINUTILS + "/bfd/libbfd.a",
                                 GDB_BINUTILS + "/libiberty/libiberty.a"],
                      CPPPATH=[GDB_BINUTILS + "/bfd"], LIBS=["dl", "z"])
 
     rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC,
+                                   EXCISE=excise,
                                    LINK="python3 toolchain/linker.py --linker " + rtos_env["LINK"] +
                                         " --archiver " + rtos_env["AR"] + " --objcopy " + rtos_env["OBJCOPY"] +
-                                        " --replica-script freertos/replica.ld --excise " + os.path.abspath(str(excise[0])),
+                                        " --replica-script freertos/replica.ld --excise $EXCISE",
                                    LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "toolchain/linker.py")
     rtos_env.Depends(rtos_kernel, excise)
