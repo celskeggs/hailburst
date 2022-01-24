@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/csv"
 	"fmt"
+	"github.com/celskeggs/hailburst/sim/component"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/timesync"
@@ -62,7 +63,7 @@ func (cw *CSVWriter) writeInternal(vals ...interface{}) {
 
 const MagicNumber = 0x2C90BA11
 
-func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink) {
+func packetMain(ctx model.SimContext, source fwmodel.PacketSource, sink fwmodel.PacketSink, recorder *component.CSVByteRecorder) {
 	var lastMarkerSent uint32
 
 	cw, err := MakeCSVWriter("experiment-out.csv")

@@ -76,7 +76,7 @@ type CmdNotRecognized struct {
 }
 
 func (c *CmdNotRecognized) String() string {
-	return fmt.Sprintf("CmdNotRecognized(OT=%v, OC=0x%08x, Len=%u)",
+	return fmt.Sprintf("CmdNotRecognized(OT=%v, OC=0x%08x, Len=%d)",
 		model.FromNanosecondsIgnore(c.OriginalTimestamp), c.OriginalCommandId, c.Length)
 }
 
@@ -86,7 +86,7 @@ type TlmDropped struct {
 }
 
 func (c *TlmDropped) String() string {
-	return fmt.Sprintf("TlmDropped(Messages=%u)", c.MessagesLost)
+	return fmt.Sprintf("TlmDropped(Messages=%d)", c.MessagesLost)
 }
 
 type Pong struct {
