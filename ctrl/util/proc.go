@@ -13,6 +13,7 @@ import (
 type void struct{}
 
 type Processes struct {
+	Verbose        bool
 	cmds           []*exec.Cmd
 	waitChannels   []<-chan void
 	waitAnyChannel chan void
@@ -20,8 +21,9 @@ type Processes struct {
 	xtermIndex     int
 }
 
-func MakeProcesses() *Processes {
+func MakeProcesses(verbose bool) *Processes {
 	return &Processes{
+		Verbose:        verbose,
 		waitAnyChannel: make(chan void),
 	}
 }
@@ -68,7 +70,9 @@ func (p *Processes) LaunchHeadless(argv []string, logfile string, cwd string) (p
 		cmd.Stderr = os.Stderr
 	}
 
-	fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
+	if p.Verbose {
+		fmt.Printf("Running: %s with %v\n", cmd.Path, cmd.Args)
+	}
 	if err := cmd.Start(); err != nil {
 		log.Fatalf("Error launching command %v: %v", argv, err)
 	}

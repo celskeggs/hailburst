@@ -26,6 +26,7 @@ func main() {
 	options := trial.Options{
 		HailburstDir: ".",
 		RedirectLogs: true,
+		Verbose:      true,
 		Clean:        false,
 		Rebuild:      false,
 		Linux:        false,

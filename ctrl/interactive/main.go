@@ -10,7 +10,8 @@ import (
 
 func main() {
 	if util.HasArg("--help") {
-		fmt.Printf("Usage: ./ctrl.sh [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor]\n")
+		fmt.Printf(
+			"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor]\n")
 		return
 	}
 
@@ -19,6 +20,7 @@ func main() {
 		TrialDir:     "./trial-last",
 		GdbPort:      1234,
 		RedirectLogs: false,
+		Verbose:      util.HasArg("--verbose"),
 		Clean:        util.HasArg("--clean"),
 		Rebuild:      util.HasArg("--rebuild"),
 		Linux:        util.HasArg("--linux"),

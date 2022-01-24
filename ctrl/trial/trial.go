@@ -21,6 +21,7 @@ type Options struct {
 	TrialDir     string
 	GdbPort      uint
 	RedirectLogs bool
+	Verbose      bool
 	Clean        bool
 	Rebuild      bool
 	Linux        bool
@@ -407,7 +408,9 @@ func (opt Options) Launch() {
 
 	opt.Build()
 
-	log.Printf("Launching applications...")
+	if opt.Verbose {
+		log.Printf("Launching applications...")
+	}
 
 	opt.CleanTrialDir()
 
@@ -417,7 +420,7 @@ func (opt Options) Launch() {
 	}
 
 	// launch simulation
-	p := util.MakeProcesses()
+	p := util.MakeProcesses(opt.Verbose)
 	opt.StartSimulation(p)
 	opt.StartQEMU(p)
 	opt.StartGDB(p)

@@ -153,6 +153,7 @@ with tempfile.TemporaryDirectory() as tempdir:
                                   "--redefine-sym", "%s=%s" % (target, replica),
                                   target_path, replica_path])
             specials.append(replica_path)
+            print("Replicated object code for symbol: %s -> %s" % (target, replica))
 
         special_archive = os.path.join(tempdir, "special.a")
         rc = subprocess.call([archiver, "rc", special_archive] + specials)
