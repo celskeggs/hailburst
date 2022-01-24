@@ -169,9 +169,12 @@ void virtio_console_configure_internal(struct virtio_console *console);
     };                                                                                                         \
     PROGRAM_INIT_PARAM(STAGE_CRAFT, virtio_console_configure_internal, v_ident, &v_ident)
 
+// We have to schedule serial-ctrl before the virtio monitor, because while it isn't needed
+// during regular execution, it is on the critical path for activating the spacecraft bus.
+// The very first message it sends MUST go out immediately!
 #define VIRTIO_CONSOLE_SCHEDULE(v_ident)       \
-    VIRTIO_DEVICE_SCHEDULE(v_ident ## _device) \
-    TASK_SCHEDULE(v_ident ## _task)
+    TASK_SCHEDULE(v_ident ## _task)            \
+    VIRTIO_DEVICE_SCHEDULE(v_ident ## _device)
 
 void *virtio_device_config_space(struct virtio_device *device);
 

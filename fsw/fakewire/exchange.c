@@ -47,6 +47,12 @@ static uint64_t handshake_period(void) {
     return (rand() % (7 * ms)) + 3 * ms;
 }
 
+static void rand_init(void) {
+    // this does have to be deterministic for our simulations...
+    srand(1552);
+}
+PROGRAM_INIT(STAGE_RAW, rand_init);
+
 void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
     assert(fwe != NULL);
 
