@@ -8,6 +8,10 @@
 #include <fsw/init.h>
 #include <bus/exchange.h>
 
+enum {
+    MAX_OUTSTANDING_TOKENS = 1,
+};
+
 //#define EXCHANGE_DEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, fwe->label, ## __VA_ARGS__)
@@ -28,8 +32,7 @@ enum exchange_state {
 };
 
 enum receive_state {
-    FW_RECV_PREPARING = 0, // waiting for operating mode to be reached and for FCT to be sent
-    FW_RECV_LISTENING,     // waiting for Start-of-Packet character
+    FW_RECV_LISTENING = 0, // waiting for Start-of-Packet character
     FW_RECV_RECEIVING,     // receiving data body of packet
     FW_RECV_OVERFLOWED,    // received data too large for buffer; waiting for end before discarding
 };
@@ -57,7 +60,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
     assert(fwe != NULL);
 
     enum exchange_state exc_state   = FW_EXC_CONNECTING;
-    enum receive_state  recv_state  = FW_RECV_PREPARING;
+    enum receive_state  recv_state  = FW_RECV_LISTENING;
     enum transmit_state txmit_state = FW_TXMIT_IDLE;
 
     uint64_t next_timeout = clock_timestamp_monotonic() + handshake_period();
@@ -136,7 +139,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
 
         // check invariants
         assert(exc_state >= FW_EXC_CONNECTING && exc_state <= FW_EXC_OPERATING);
-        assertf(pkts_sent == fcts_rcvd || pkts_sent + 1 == fcts_rcvd,
+        assertf(pkts_sent <= fcts_rcvd && fcts_rcvd <= pkts_sent + MAX_OUTSTANDING_TOKENS,
                 "pkts_sent = %u, fcts_rcvd = %u", pkts_sent, fcts_rcvd);
 
         // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
@@ -204,15 +207,20 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                     // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
                     switch (symbol) {
                     case FWC_START_PACKET:
-                        if (fcts_sent != pkts_rcvd + 1) {
+                        if (fcts_sent <= pkts_rcvd) {
                             debug_printf(WARNING, "Received unauthorized start-of-packet "
                                          "(fcts_sent=%u, pkts_rcvd=%u); resetting.", fcts_sent, pkts_rcvd);
                             do_reset = true;
                         } else {
                             assert(recv_state == FW_RECV_LISTENING);
-                            assert(read_entry != NULL && read_entry->actual_length == 0);
-                            recv_state = FW_RECV_RECEIVING;
+
+                            assert(read_entry == NULL);
+                            read_entry = chart_request_start(fwe->read_chart);
+                            assert(read_entry != NULL);
+                            read_entry->actual_length = 0;
                             read_entry->receive_timestamp = rx_ent.receive_timestamp;
+
+                            recv_state = FW_RECV_RECEIVING;
                             pkts_rcvd += 1;
                             // reset receive buffer before proceeding
                             memset(read_entry->data, 0, io_rx_size(fwe->read_chart));
@@ -221,13 +229,13 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                     case FWC_END_PACKET:
                         if (recv_state == FW_RECV_OVERFLOWED) {
                             // discard state and get ready for another packet
-                            recv_state = FW_RECV_PREPARING;
+                            recv_state = FW_RECV_LISTENING;
                             read_entry = NULL;
                         } else if (recv_state == FW_RECV_RECEIVING) {
                             assert(read_entry != NULL);
                             // notify read task that data is ready to consume
                             chart_request_send(fwe->read_chart, 1);
-                            recv_state = FW_RECV_PREPARING;
+                            recv_state = FW_RECV_LISTENING;
                             read_entry = NULL;
                         } else {
                             debug_printf(WARNING, "Hit unexpected END_PACKET in receive state %d; resetting.",
@@ -238,7 +246,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                     case FWC_ERROR_PACKET:
                         if (recv_state == FW_RECV_OVERFLOWED || recv_state == FW_RECV_RECEIVING) {
                             // discard state and get ready for another packet
-                            recv_state = FW_RECV_PREPARING;
+                            recv_state = FW_RECV_LISTENING;
                             read_entry = NULL;
                         } else {
                             debug_printf(WARNING, "Hit unexpected ERROR_PACKET in receive state %d; resetting.",
@@ -247,21 +255,20 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                         }
                         break;
                     case FWC_FLOW_CONTROL:
-                        if (param == fcts_rcvd + 1) {
-                            // make sure this FCT matches our send state
-                            if (pkts_sent != fcts_rcvd) {
-                                debug_printf(WARNING, "Received incremented FCT(%u) when no packet had been sent "
-                                             "(%u, %u); resetting.", param, pkts_sent, fcts_rcvd);
-                                do_reset = true;
-                            } else {
-                                // received FCT; can send another packet
-                                fcts_rcvd = param;
-                            }
-                        } else if (param != fcts_rcvd) {
-                            // FCT number should always either stay the same or increment by one.
-                            debug_printf(WARNING, "Received unexpected FCT(%u) when last count was %u; resetting.",
+                        if (param < fcts_rcvd) {
+                            // FCT number should never decrease.
+                            debug_printf(WARNING, "Received abnormally low FCT(%u) when last count was %u; resetting.",
                                          param, fcts_rcvd);
                             do_reset = true;
+                        } else if (param > pkts_sent + MAX_OUTSTANDING_TOKENS) {
+                            // FCT number should never increase more than allowed.
+                            debug_printf(WARNING, "Received abnormally high FCT(%u) when maximum was %u and last "
+                                         "count was %u; resetting.",
+                                         param, pkts_sent + MAX_OUTSTANDING_TOKENS, fcts_rcvd);
+                            do_reset = true;
+                        } else {
+                            // received FCT; may be able to send more packets!
+                            fcts_rcvd = param;
                         }
                         break;
                     case FWC_KEEP_ALIVE:
@@ -314,7 +321,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
             if (do_reset) {
                 exc_state = FW_EXC_CONNECTING;
                 // unless we're busy, reset receive state
-                recv_state = FW_RECV_PREPARING;
+                recv_state = FW_RECV_LISTENING;
                 read_entry = NULL;
                 // if we're transmitting, make sure we start again from the beginning
                 if (txmit_state != FW_TXMIT_IDLE) {
@@ -329,21 +336,16 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
             }
         }
 
-        // we only need to check for starting reads once per iteration, because we are gated on decoded line data
-        if (read_entry == NULL) {
-            read_entry = chart_request_start(fwe->read_chart);
-            if (read_entry != NULL) {
-                read_entry->actual_length = 0;
-            }
+        uint32_t not_yet_received = chart_request_avail(fwe->read_chart) - (recv_state == FW_RECV_LISTENING ? 0 : 1);
+        if (not_yet_received > MAX_OUTSTANDING_TOKENS) {
+            not_yet_received = MAX_OUTSTANDING_TOKENS;
         }
-
-        if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_PREPARING && read_entry != NULL) {
-            assert(read_entry->actual_length == 0);
+        debug_printf(TRACE, "Not yet received: %u", not_yet_received);
+        if (exc_state == FW_EXC_OPERATING && pkts_rcvd + not_yet_received > fcts_sent) {
 #ifdef EXCHANGE_DEBUG
             debug_printf(TRACE, "Sending FCT.");
 #endif
-            fcts_sent += 1;
-            recv_state = FW_RECV_LISTENING;
+            fcts_sent = pkts_rcvd + not_yet_received;
             resend_fcts = true;
             resend_pkts = true;
 
@@ -414,7 +416,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                 }
             }
 
-            if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent + 1 == fcts_rcvd
+            if (exc_state == FW_EXC_OPERATING && txmit_state == FW_TXMIT_HEADER && pkts_sent < fcts_rcvd
                     && fakewire_enc_encode_ctrl(&fwe->encoder, FWC_START_PACKET, 0)) {
                 assert(write_entry != NULL && write_offset == 0);
 

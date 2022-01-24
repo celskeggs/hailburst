@@ -64,7 +64,7 @@ static void exchange_reader(struct reader_config *rc) {
         }
 
         assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(rc->read_chart));
-        debugf(DEBUG, "[%8s] Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
+        debugf(DEBUG, "[%8s] - Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
 
         last_packet_marker = ent->data[0];
         assert(last_packet_marker == 0 || last_packet_marker == 1);
@@ -109,7 +109,10 @@ static void exchange_writer(struct writer_config *wc) {
 
     while (chain) {
         assert(chain->packet_len <= io_rx_size(wc->write_chart) - 1);
-        struct io_rx_ent *entry = chart_request_start(wc->write_chart);
+        struct io_rx_ent *entry;
+        while ((entry = chart_request_start(wc->write_chart)) == NULL) {
+            task_doze();
+        }
         assert(entry != NULL);
 
         entry->data[0] = (chain->next != NULL); // whether or not this is the last packet
@@ -118,10 +121,7 @@ static void exchange_writer(struct writer_config *wc) {
         debugf(DEBUG, "[%8s] - Starting write of packet with length %lu", wc->name, chain->packet_len);
         entry->actual_length = chain->packet_len + 1;
         chart_request_send(wc->write_chart, 1);
-        while (chart_request_avail(wc->write_chart) < chart_note_count(wc->write_chart)) {
-            task_doze();
-        }
-        debugf(DEBUG, "[%8s] Completed write of packet with length %lu", wc->name, chain->packet_len);
+        debugf(DEBUG, "[%8s] - Dispatched write of packet with length %lu", wc->name, chain->packet_len);
 
         chain = chain->next;
     }
