@@ -53,6 +53,10 @@ void magnetometer_telem_loop(magnetometer_t *mag);
         .telemetry_sync = &m_ident ## _telemetry_sync,                                                  \
     };                                                                                                  \
 
+#define MAGNETOMETER_SCHEDULE(m_ident)                                                                  \
+    TASK_SCHEDULE(m_ident ## _query)                                                                    \
+    TASK_SCHEDULE(m_ident ## _telem)
+
 void magnetometer_set_powered(magnetometer_t *mag, bool powered);
 
 #endif /* FSW_MAGNETOMETER_H */

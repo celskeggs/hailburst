@@ -1,4 +1,3 @@
-#include <hal/thread.h>
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
 #include <fsw/telemetry.h>

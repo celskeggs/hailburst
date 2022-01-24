@@ -43,6 +43,7 @@
 
 /*-----------------------------------------------------------*/
 
+static uint32_t schedule_index = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /* Other file private variables. --------------------------------*/
@@ -95,6 +96,15 @@ void thread_restart_other_task(TCB_t *pxTCB) {
 
 /*-----------------------------------------------------------*/
 
+static void schedule_load( void )
+{
+    assert(schedule_index < task_scheduling_order_length);
+    pxCurrentTCB = task_scheduling_order[schedule_index];
+    assert(pxCurrentTCB != NULL && pxCurrentTCB >= tasktable_start && pxCurrentTCB < tasktable_end);
+}
+
+/*-----------------------------------------------------------*/
+
 void vTaskStartScheduler( void )
 {
     /* Interrupts are turned off here, to ensure a tick does not occur
@@ -106,14 +116,14 @@ void vTaskStartScheduler( void )
 
     xSchedulerRunning = pdTRUE;
 
-    for (TCB_t *task = tasktable_start; task < tasktable_end; task++) {
+    taskFOREACH(task) {
         thread_start_internal(task);
     }
     debugf(DEBUG, "Started %u pre-registered threads!", tasktable_end - tasktable_start);
 
     // start executing first task
-    pxCurrentTCB = tasktable_start;
-    assert(pxCurrentTCB < tasktable_end);
+    schedule_index = 0;
+    schedule_load();
 
 #ifdef TASK_DEBUG
     trace_task_switch(pxCurrentTCB->pcTaskName);
@@ -135,25 +145,8 @@ void vTaskSwitchContext( void )
     }
 
     /* Select the next task to run, round-robin-style */
-    bool chooseNext = true;
-    TCB_t * pxNextTCB = NULL;
-    taskFOREACH ( pxTCB )
-    {
-        if ( chooseNext == true )
-        {
-            pxNextTCB = pxTCB;
-            chooseNext = false;
-        }
-        if ( pxTCB == pxCurrentTCB )
-        {
-            chooseNext = true;
-        }
-    }
-
-    /* Ensure that there is a task to run */
-    /* TODO: is this correct? */
-    assert(pxNextTCB != NULL);
-    pxCurrentTCB = pxNextTCB;
+    schedule_index = (schedule_index + 1) % task_scheduling_order_length;
+    schedule_load();
 
 #ifdef TASK_DEBUG
     trace_task_switch(pxCurrentTCB->pcTaskName);

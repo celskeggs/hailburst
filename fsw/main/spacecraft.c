@@ -1,8 +1,10 @@
+#include <hal/system.h>
 #include <hal/watchdog.h>
 #include <fsw/clock.h>
 #include <fsw/clock_init.h>
 #include <fsw/command.h>
 #include <fsw/debug.h>
+#include <fsw/heartbeat.h>
 #include <fsw/spacecraft.h>
 #include <fsw/telemetry.h>
 
@@ -110,6 +112,20 @@ RADIO_REGISTER(sc_radio, radio_up_routing,   radio_up_rx,   radio_up_tx,   UPLIN
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
 COMMAND_REGISTER(sc_cmd, sc);
+
+TASK_SCHEDULING_ORDER(
+    FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
+    SWITCH_SCHEDULE(fce_vswitch)
+    RADIO_UP_SCHEDULE(sc_radio)
+    COMMAND_SCHEDULE(sc_cmd)
+    CLOCK_SCHEDULE(sc_clock)
+    MAGNETOMETER_SCHEDULE(sc_mag)
+    HEARTBEAT_SCHEDULE()
+    TELEMETRY_SCHEDULE()
+    RADIO_DOWN_SCHEDULE(sc_radio)
+    SWITCH_SCHEDULE(fce_vswitch)
+    SYSTEM_MAINTENANCE_SCHEDULE()
+);
 
 void spacecraft_init(void) {
     assert(!initialized);

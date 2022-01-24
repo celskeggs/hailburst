@@ -64,6 +64,11 @@ void telemetry_init(comm_enc_t *encoder);
         .sync_client = &t_ident ## _client,                                                  \
     }
 
+TASK_PROTO(telemetry_task);
+
+#define TELEMETRY_SCHEDULE()                                                                 \
+    TASK_SCHEDULE(telemetry_task)
+
 // actual telemetry calls
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id);
 void tlm_cmd_completed(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id,

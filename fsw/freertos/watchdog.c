@@ -2,8 +2,9 @@
 #include <stdint.h>
 
 #include <rtos/timer.h>
-#include <hal/watchdog.h>
+#include <hal/system.h>
 #include <hal/thread.h>
+#include <hal/watchdog.h>
 #include <fsw/debug.h>
 #include <fsw/init.h>
 

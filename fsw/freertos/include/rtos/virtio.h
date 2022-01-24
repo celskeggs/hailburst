@@ -110,6 +110,9 @@ void virtio_monitor_loop(struct virtio_device *device);
     PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
+#define VIRTIO_DEVICE_SCHEDULE(v_ident) \
+    TASK_SCHEDULE(v_ident ## _task)
+
 // this may only be called before the scheduler starts
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index);
 
@@ -165,6 +168,10 @@ void virtio_console_configure_internal(struct virtio_console *console);
         .confirmed_port_present = false,                                                                       \
     };                                                                                                         \
     PROGRAM_INIT_PARAM(STAGE_CRAFT, virtio_console_configure_internal, v_ident, &v_ident)
+
+#define VIRTIO_CONSOLE_SCHEDULE(v_ident)       \
+    VIRTIO_DEVICE_SCHEDULE(v_ident ## _device) \
+    TASK_SCHEDULE(v_ident ## _task)
 
 void *virtio_device_config_space(struct virtio_device *device);
 

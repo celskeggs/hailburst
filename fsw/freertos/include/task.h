@@ -95,6 +95,10 @@ typedef struct TCB_st
 extern TCB_t tasktable_start[];
 extern TCB_t tasktable_end[];
 
+// array containing the scheduling order for these tasks, defined statically using TASK_SCHEDULING_ORDER
+extern const TCB_t   *task_scheduling_order[];
+extern const uint32_t task_scheduling_order_length;
+
 /*
  * Type by which tasks are referenced.  For example, a call to xTaskCreate
  * returns (via a pointer parameter) an TaskHandle_t variable that can then

@@ -41,6 +41,9 @@ void switch_init_internal(switch_t *sw);
         .switch_task = &v_ident ## _task,                                                            \
     }
 
+#define SWITCH_SCHEDULE(v_ident)                                                                     \
+    TASK_SCHEDULE(v_ident ## _task)
+
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.
 // these charts must pass io_rx_ent entries REGARDLESS OF DIRECTION!

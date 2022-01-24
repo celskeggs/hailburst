@@ -84,6 +84,10 @@ extern void start_predef_threads(void);
         .start_parameter = (t_arg),                                    \
     }
 
+// ignore scheduling
+#define TASK_SCHEDULE(t_ident)     /* nothing */
+#define TASK_SCHEDULING_ORDER(...) /* nothing */
+
 #define SEMAPHORE_REGISTER(s_ident) \
     semaphore_t s_ident; \
     PROGRAM_INIT_PARAM(STAGE_RAW, semaphore_init, s_ident, &s_ident);

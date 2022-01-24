@@ -36,6 +36,16 @@ typedef TCB_t *thread_t;
         .pcTaskName      = t_name,                                                \
     }
 
+#define TASK_SCHEDULE(t_ident)                                                    \
+    &t_ident,
+
+#define TASK_SCHEDULING_ORDER(...)                                                \
+    const TCB_t *task_scheduling_order[] = {                                      \
+        __VA_ARGS__                                                               \
+    };                                                                            \
+    const uint32_t task_scheduling_order_length =                                 \
+        sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
+
 static inline thread_t task_get_current(void) {
     TaskHandle_t handle = pxCurrentTCB;
     assert(handle != NULL);

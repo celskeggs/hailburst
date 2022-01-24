@@ -6,6 +6,7 @@
 #include <rtos/arm.h>
 #include <rtos/crash.h>
 #include <hal/atomic.h>
+#include <hal/system.h>
 #include <hal/thread.h>
 #include <fsw/debug.h>
 #include <fsw/init.h>
