@@ -10,17 +10,17 @@ import (
 
 const (
 	RegMagic     int = 0
-	RegTxPtr         = 1
-	RegTxLen         = 2
-	RegTxState       = 3
-	RegRxPtr         = 4
-	RegRxLen         = 5
-	RegRxPtrAlt      = 6
-	RegRxLenAlt      = 7
-	RegRxState       = 8
-	RegErrCount      = 9
-	RegMemBase       = 10
-	RegMemSize       = 11
+	RegMemBase       = 1
+	RegMemSize       = 2
+	RegTxPtr         = 3
+	RegTxLen         = 4
+	RegTxState       = 5
+	RegRxPtr         = 6
+	RegRxLen         = 7
+	RegRxPtrAlt      = 8
+	RegRxLenAlt      = 9
+	RegRxState       = 10
+	RegErrCount      = 11
 	NumRegisters     = 12
 	RegBase          = 0x0000
 	MemBase          = 0x1000

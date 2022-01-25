@@ -169,20 +169,24 @@ static bool radio_write_register(radio_t *radio, radio_io_mode_t mode, radio_reg
 }
 
 static bool radio_initialize_common(radio_t *radio, radio_io_mode_t mode) {
-    uint32_t magic_num;
-    if (!radio_read_register(radio, mode, REG_MAGIC, &magic_num)) {
+    uint32_t config_data[3];
+    static_assert(REG_MAGIC + 1 == REG_MEM_BASE, "register layout assumptions");
+    static_assert(REG_MEM_BASE + 1 == REG_MEM_SIZE, "register layout assumptions");
+    if (!radio_read_registers(radio, mode, REG_MAGIC, REG_MEM_SIZE, config_data)) {
         return false;
     }
-    if (magic_num != RADIO_MAGIC) {
-        debugf(CRITICAL, "Radio: invalid magic number 0x%08x when 0x%08x was expected.", magic_num, RADIO_MAGIC);
+    if (config_data[0] != RADIO_MAGIC) {
+        debugf(CRITICAL, "Invalid magic number 0x%08x when 0x%08x was expected.", config_data[0], RADIO_MAGIC);
         return false;
     }
-    uint32_t mem_base, mem_size;
-    if (!radio_read_register(radio, mode, REG_MEM_BASE, &mem_base) ||
-            !radio_read_register(radio, mode, REG_MEM_SIZE, &mem_size)) {
+    if (config_data[1] != MEM_BASE_ADDR) {
+        debugf(CRITICAL, "Invalid base address 0x%08x when 0x%08x was expected.", config_data[1], MEM_BASE_ADDR);
         return false;
     }
-    assert(mem_base == MEM_BASE_ADDR && mem_size == MEM_SIZE);
+    if (config_data[2] != MEM_SIZE) {
+        debugf(CRITICAL, "Invalid memory size 0x%08x when 0x%08x was expected.", config_data[2], MEM_SIZE);
+        return false;
+    }
     return true;
 }
 
@@ -191,15 +195,11 @@ static bool radio_initialize_downlink(radio_t *radio) {
         return false;
     }
 
-    // disable transmission
-    if (!radio_write_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_STATE, TX_STATE_IDLE)) {
-        return false;
-    }
-
-    // clear remaining registers so that we have a known safe state to start from
-    uint32_t zeroes[] = { 0, 0 };
+    // disable transmission and zero pointer and length registers
+    uint32_t zeroes[] = { 0, 0, TX_STATE_IDLE };
     static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
-    if (!radio_write_registers(radio, IO_DOWNLINK_CONTEXT, REG_TX_PTR, REG_TX_LEN, zeroes)) {
+    static_assert(REG_TX_LEN + 1 == REG_TX_STATE, "register layout assumptions");
+    if (!radio_write_registers(radio, IO_DOWNLINK_CONTEXT, REG_TX_PTR, REG_TX_STATE, zeroes)) {
         return false;
     }
 

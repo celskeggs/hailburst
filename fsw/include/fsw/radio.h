@@ -6,17 +6,17 @@
 
 typedef enum {
     REG_MAGIC      = 0,
-    REG_TX_PTR     = 1,
-    REG_TX_LEN     = 2,
-    REG_TX_STATE   = 3,
-    REG_RX_PTR     = 4,
-    REG_RX_LEN     = 5,
-    REG_RX_PTR_ALT = 6,
-    REG_RX_LEN_ALT = 7,
-    REG_RX_STATE   = 8,
-    REG_ERR_COUNT  = 9,
-    REG_MEM_BASE   = 10,
-    REG_MEM_SIZE   = 11,
+    REG_MEM_BASE   = 1,
+    REG_MEM_SIZE   = 2,
+    REG_TX_PTR     = 3,
+    REG_TX_LEN     = 4,
+    REG_TX_STATE   = 5,
+    REG_RX_PTR     = 6,
+    REG_RX_LEN     = 7,
+    REG_RX_PTR_ALT = 8,
+    REG_RX_LEN_ALT = 9,
+    REG_RX_STATE   = 10,
+    REG_ERR_COUNT  = 11,
     NUM_REGISTERS  = 12,
 } radio_register_t;
 
