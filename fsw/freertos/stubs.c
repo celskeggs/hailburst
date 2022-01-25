@@ -35,7 +35,3 @@ void entrypoint(void *kernel_elf_rom) {
 
     abortf("Scheduler halted.");
 }
-
-void trace_task_switch(const char *task_name) {
-    debugf(TRACE, "FreeRTOS scheduling %15s", task_name);
-}

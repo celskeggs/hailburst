@@ -17,6 +17,6 @@ void cmd_mainloop(spacecraft_t *sc);
     PROGRAM_INIT(STAGE_CRAFT, c_ident ## _init);
 
 #define COMMAND_SCHEDULE(c_ident)                                                                            \
-    TASK_SCHEDULE(c_ident ## _task)
+    TASK_SCHEDULE(c_ident ## _task, 100)
 
 #endif /* FSW_CMD_H */

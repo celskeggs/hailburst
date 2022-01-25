@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 // for timer_now_ns() needed by debugf macro
-#include <rtos/timer_min.h>
+#include <rtos/timer.h>
 #include <fsw/loglevel.h>
 
 #ifndef __PYTHON_PREPROCESS__

@@ -62,13 +62,6 @@ typedef uint32_t TickType_t;
 /* Hardware specifics. */
 #define portBYTE_ALIGNMENT          8
 
-/*-----------------------------------------------------------*/
-
-/* Task utilities. */
-
-#define portYIELD() __asm volatile ( "SWI 0" ::: "memory" );
-
-
 /*-----------------------------------------------------------
  * Critical section control
  *----------------------------------------------------------*/
@@ -89,10 +82,6 @@ interrupts that have a priority below configMAX_API_CALL_INTERRUPT_PRIORITY. */
 #define portCLEAR_INTERRUPT_MASK_FROM_ISR(x)    vPortClearInterruptMask(x)
 
 /*-----------------------------------------------------------*/
-
-/* Prototype of the FreeRTOS tick handler.  This must be installed as the
-handler for whichever peripheral is used to generate the RTOS tick. */
-void FreeRTOS_Tick_Handler( void );
 
 /* If configUSE_TASK_FPU_SUPPORT is set to 1 (or left undefined) then tasks are
 created without an FPU context and must call vPortTaskUsesFPU() to give

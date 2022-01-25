@@ -111,7 +111,7 @@ void virtio_monitor_loop(struct virtio_device *device);
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
 
 #define VIRTIO_DEVICE_SCHEDULE(v_ident) \
-    TASK_SCHEDULE(v_ident ## _task)
+    TASK_SCHEDULE(v_ident ## _task, 100)
 
 // this may only be called before the scheduler starts
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index);
@@ -173,7 +173,7 @@ void virtio_console_configure_internal(struct virtio_console *console);
 // during regular execution, it is on the critical path for activating the spacecraft bus.
 // The very first message it sends MUST go out immediately!
 #define VIRTIO_CONSOLE_SCHEDULE(v_ident)       \
-    TASK_SCHEDULE(v_ident ## _task)            \
+    TASK_SCHEDULE(v_ident ## _task, 100)       \
     VIRTIO_DEVICE_SCHEDULE(v_ident ## _device)
 
 void *virtio_device_config_space(struct virtio_device *device);

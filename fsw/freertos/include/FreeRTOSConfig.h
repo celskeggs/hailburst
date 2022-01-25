@@ -5,8 +5,6 @@
 
 #include <fsw/debug.h> // for assert
 
-// configCPU_CLOCK_HZ and configSYSTICK_CLOCK_HZ are not needed for the GCC/ARM_CA9 port.
-#define configTICK_RATE_HZ                      10000
 #define configMINIMAL_STACK_SIZE                512
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES   2
 #define configSTACK_DEPTH_TYPE                  uint16_t
@@ -22,10 +20,6 @@
 /* Define to trap errors during development. */
 //#define configASSERT( ( x ) ) if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )
 #define configASSERT(x) assert(x)
-
-/* Tick interrupts */
-extern void vConfigureTickInterrupt(void);
-#define configSETUP_TICK_INTERRUPT() vConfigureTickInterrupt()
 
 /* Optional functions - most linkers will remove unused functions anyway. */
 #define INCLUDE_vTaskDelete                     1

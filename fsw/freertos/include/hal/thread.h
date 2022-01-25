@@ -36,11 +36,11 @@ typedef TCB_t *thread_t;
         .pcTaskName      = t_name,                                                \
     }
 
-#define TASK_SCHEDULE(t_ident)                                                    \
-    &t_ident,
+#define TASK_SCHEDULE(t_ident, t_micros)                                          \
+    { .task = &(t_ident), .nanos = (t_micros) * 1000 },
 
 #define TASK_SCHEDULING_ORDER(...)                                                \
-    const TCB_t *task_scheduling_order[] = {                                      \
+    const schedule_entry_t task_scheduling_order[] = {                            \
         __VA_ARGS__                                                               \
     };                                                                            \
     const uint32_t task_scheduling_order_length =                                 \
@@ -50,6 +50,11 @@ static inline thread_t task_get_current(void) {
     TaskHandle_t handle = pxCurrentTCB;
     assert(handle != NULL);
     return handle;
+}
+
+static inline void taskYIELD(void) {
+    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
+    asm volatile("WFI");
 }
 
 void task_suspend(void) __attribute__((noreturn));

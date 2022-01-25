@@ -36,7 +36,12 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include <rtos/gic.h>
 #include <hal/atomic.h>
+
+enum {
+    IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
+};
 
 #define taskFOREACH( pxTCB ) \
     for (TCB_t * pxTCB = tasktable_start; pxTCB < tasktable_end; pxTCB++)
@@ -96,14 +101,36 @@ void thread_restart_other_task(TCB_t *pxTCB) {
 
 /*-----------------------------------------------------------*/
 
-static void schedule_load( void )
+static inline void schedule_load(bool validate)
 {
     assert(schedule_index < task_scheduling_order_length);
-    pxCurrentTCB = task_scheduling_order[schedule_index];
+    schedule_entry_t sched = task_scheduling_order[schedule_index];
+    pxCurrentTCB = sched.task;
     assert(pxCurrentTCB != NULL && pxCurrentTCB >= tasktable_start && pxCurrentTCB < tasktable_end);
+
+    // update the next callback time to the next timing tick
+    uint64_t old_time = arm_get_cntp_cval();
+    uint64_t new_time = old_time + sched.nanos / CLOCK_PERIOD_NS;
+    arm_set_cntp_cval(new_time);
+
+    if (validate) {
+        uint64_t here = timer_now_ns();
+        // make sure we aren't drifting from the schedule
+        assert(old_time * CLOCK_PERIOD_NS <= here && here <= new_time * CLOCK_PERIOD_NS);
+    }
+
+#ifdef TASK_DEBUG
+    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, pxCurrentTCB->pcTaskName, new_time * CLOCK_PERIOD_NS);
+#endif
 }
 
 /*-----------------------------------------------------------*/
+
+static void unexpected_irq_callback(void *opaque)
+{
+    (void) opaque;
+    abortf("should not have gotten a callback on the timer IRQ");
+}
 
 void vTaskStartScheduler( void )
 {
@@ -121,18 +148,28 @@ void vTaskStartScheduler( void )
     }
     debugf(DEBUG, "Started %u pre-registered threads!", tasktable_end - tasktable_start);
 
+    /* Start the timer that generates the tick ISR. */
+    assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
+
+    // start scheduling at next millisecond boundary (yes, this means the first task might have a bit of extra
+    // time, but we can live with that)
+    uint64_t start_time_ns = timer_now_ns();
+    start_time_ns += CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
+    arm_set_cntp_cval(start_time_ns / CLOCK_PERIOD_NS);
+
+    // set the enable bit and don't set the mask bit
+    arm_set_cntp_ctl(ARM_TIMER_ENABLE);
+    // don't provide a real callback here, because it will never actually have to be called.
+    enable_irq(IRQ_PHYS_TIMER, unexpected_irq_callback, NULL);
+
     // start executing first task
     schedule_index = 0;
-    schedule_load();
-
-#ifdef TASK_DEBUG
-    trace_task_switch(pxCurrentTCB->pcTaskName);
-#endif
+    schedule_load(false);
 
     /* Setting up the timer tick is hardware specific and thus in the
      * portable interface. */
     xPortStartScheduler();
-    abortf("should never return from PortStartScheduler");
+    abortf("should never return from xPortStartScheduler");
 }
 /*-----------------------------------------------------------*/
 
@@ -146,11 +183,7 @@ void vTaskSwitchContext( void )
 
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
-    schedule_load();
-
-#ifdef TASK_DEBUG
-    trace_task_switch(pxCurrentTCB->pcTaskName);
-#endif
+    schedule_load(true);
 }
 /*-----------------------------------------------------------*/
 

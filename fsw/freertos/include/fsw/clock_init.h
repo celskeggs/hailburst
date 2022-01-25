@@ -9,7 +9,7 @@ TASK_PROTO(clock_start_task);
 #define CLOCK_REGISTER(c_ident, c_address, c_rx, c_tx)
 
 #define CLOCK_SCHEDULE(c_ident)     \
-    TASK_SCHEDULE(clock_start_task)
+    TASK_SCHEDULE(clock_start_task, 100)
 
 static inline void clock_wait_for_calibration(void) {
     /* do nothing; no calibration is required on FreeRTOS */

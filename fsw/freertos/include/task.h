@@ -95,9 +95,15 @@ typedef struct TCB_st
 extern TCB_t tasktable_start[];
 extern TCB_t tasktable_end[];
 
+typedef struct
+{
+    const TCB_t *task;
+    uint32_t nanos;
+} schedule_entry_t;
+
 // array containing the scheduling order for these tasks, defined statically using TASK_SCHEDULING_ORDER
-extern const TCB_t   *task_scheduling_order[];
-extern const uint32_t task_scheduling_order_length;
+extern const schedule_entry_t task_scheduling_order[];
+extern const uint32_t         task_scheduling_order_length;
 
 /*
  * Type by which tasks are referenced.  For example, a call to xTaskCreate
@@ -110,16 +116,6 @@ extern const uint32_t task_scheduling_order_length;
 typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
-
-/**
- * task. h
- *
- * Macro for forcing a context switch.
- *
- * \defgroup taskYIELD taskYIELD
- * \ingroup SchedulerControl
- */
-#define taskYIELD()                        portYIELD()
 
 /**
  * task. h

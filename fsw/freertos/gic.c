@@ -134,7 +134,7 @@ PROGRAM_INIT(STAGE_RAW, configure_gic);
 
 // entrypoint via FreeRTOS
 void vApplicationIRQHandler(uint32_t irq) {
-    asm volatile("CPSIE I");
+    asm volatile("CPSIE I"); // TODO: do I need dsb; isb?
     assertf(callbacks[irq] != NULL, "missing callback function for IRQ %u", irq);
     callbacks[irq](callback_params[irq]);
 }

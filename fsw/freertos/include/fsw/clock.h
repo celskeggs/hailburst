@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include <rtos/timer_min.h>
+#include <rtos/timer.h>
 
 static inline uint64_t clock_timestamp_monotonic(void) {
     return timer_now_ns();

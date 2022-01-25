@@ -37,6 +37,9 @@
     .set SVC_MODE, 0x13
     .set IRQ_MODE, 0x12
 
+    .set IRQ_PPI_BASE, 16 /* replicated from gic.h */
+    .set IRQ_PHYS_TIMER, IRQ_PPI_BASE + 14
+
     /* Hardware registers. */
     .extern ulICCIAR
     .extern ulICCEOIR
@@ -52,7 +55,6 @@
     .extern ulPortTaskHasFPUContext
 
     .global FreeRTOS_IRQ_Handler
-    .global FreeRTOS_SWI_Handler
     .global vPortRestoreTaskContext
 
 
@@ -145,7 +147,7 @@
 interrupt_vector_table:
     b .                         @ Reset
     b undef_insn_handler        @ Undefined Instruction
-    b supervisor_call_handler   @ Supervisor Call (SWI instruction)
+    b .                         @ Supervisor Call (SWI instruction)
     b prefetch_abort_handler    @ Prefetch Abort
     b data_abort_handler        @ Data Abort
     b .                         @ (unused)
@@ -188,13 +190,13 @@ _start:                               @ r0 is populated by the bootrom with the 
 /******************************************************************************
  * SVC handler is used to start the scheduler.
  *****************************************************************************/
-.align 4
-.type supervisor_call_handler, %function
-supervisor_call_handler:
-    /* Save the context of the current task and select a new task to run. */
-    SAVE_CONTEXT
-    BL      vTaskSwitchContext
-    RESTORE_CONTEXT
+@ .align 4
+@ .type supervisor_call_handler, %function
+@ supervisor_call_handler:
+@    /* Save the context of the current task and select a new task to run. */
+@    SAVE_CONTEXT
+@    BL      vTaskSwitchContext
+@    RESTORE_CONTEXT
 
     .data
 
@@ -314,6 +316,47 @@ interrupt_handler:
     LDR     r2, [r2]
     LDR     r0, [r2]
 
+    /* Check whether this is a timer interrupt */
+    CMP     r0, #IRQ_PHYS_TIMER
+    BNE     regular_device_irq
+
+    /****** TIMER INTERRUPT ******/
+
+    /* Write the value read from ICCIAR to ICCEOIR. */
+    LDR     r4, ulICCEOIRConst
+    LDR     r4, [r4]
+    STR     r0, [r4]
+
+    /* Restore the old nesting count. */
+    STR     r1, [r3]
+
+    /* Timer interrupts should never nest. */
+    CMP     r1, #0
+    BNE     abort
+
+    /* Restore used registers, LR-irq and SPSR before saving the context
+    to the task stack. */
+    POP     {r0-r4, r12}
+    CPS     #IRQ_MODE
+    POP     {LR}
+    MSR     SPSR_cxsf, LR
+    POP     {LR}
+    SAVE_CONTEXT
+
+    /* Call the function that selects the new task to execute.
+    vTaskSwitchContext() if vTaskSwitchContext() uses LDRD or STRD
+    instructions, or 8 byte aligned stack allocated data.  LR does not need
+    saving as a new LR will be loaded by RESTORE_CONTEXT anyway. */
+    BL      vTaskSwitchContext
+
+    /* Restore the context of, and branch to, the task selected to execute
+    next. */
+    RESTORE_CONTEXT
+
+    /****** DEVICE INTERRUPT ******/
+
+regular_device_irq:
+
     /* Ensure bit 2 of the stack pointer is clear.  r2 holds the bit 2 value for
     future use.  _RB_ Does this ever actually need to be done provided the start
     of the stack is 8-byte aligned? */
@@ -340,19 +383,6 @@ interrupt_handler:
     /* Restore the old nesting count. */
     STR     r1, [r3]
 
-    /* A context switch is never performed if the nesting count is not 0. */
-    CMP     r1, #0
-    BNE     exit_without_switch
-
-    /* Did the interrupt request a context switch?  r1 holds the address of
-    ulPortYieldRequired and r0 the value of ulPortYieldRequired for future
-    use. */
-    LDR     r1, =ulPortYieldRequired
-    LDR     r0, [r1]
-    CMP     r0, #0
-    BNE     switch_before_exit
-
-exit_without_switch:
     /* No context switch.  Restore used registers, LR_irq and SPSR before
     returning. */
     POP     {r0-r4, r12}
@@ -361,31 +391,6 @@ exit_without_switch:
     MSR     SPSR_cxsf, LR
     POP     {LR}
     MOVS    PC, LR
-
-switch_before_exit:
-    /* A context swtich is to be performed.  Clear the context switch pending
-    flag. */
-    MOV     r0, #0
-    STR     r0, [r1]
-
-    /* Restore used registers, LR-irq and SPSR before saving the context
-    to the task stack. */
-    POP     {r0-r4, r12}
-    CPS     #IRQ_MODE
-    POP     {LR}
-    MSR     SPSR_cxsf, LR
-    POP     {LR}
-    SAVE_CONTEXT
-
-    /* Call the function that selects the new task to execute.
-    vTaskSwitchContext() if vTaskSwitchContext() uses LDRD or STRD
-    instructions, or 8 byte aligned stack allocated data.  LR does not need
-    saving as a new LR will be loaded by RESTORE_CONTEXT anyway. */
-    BL      vTaskSwitchContext
-
-    /* Restore the context of, and branch to, the task selected to execute
-    next. */
-    RESTORE_CONTEXT
 
 
 ulICCIARConst: .word ulICCIAR

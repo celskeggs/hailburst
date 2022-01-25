@@ -3,7 +3,7 @@
 
 enum {
     IRQ_SGI_BASE = 0,  // software-generated interrupts
-    IRQ_PPI_BASE = 16, // private peripheral interrupt
+    IRQ_PPI_BASE = 16, // private peripheral interrupt (replicated in entrypoint.s)
     IRQ_SPI_BASE = 32, // shared peripheral interrupt
 };
 

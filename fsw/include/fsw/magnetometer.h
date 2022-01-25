@@ -54,8 +54,8 @@ void magnetometer_telem_loop(magnetometer_t *mag);
     };                                                                                                  \
 
 #define MAGNETOMETER_SCHEDULE(m_ident)                                                                  \
-    TASK_SCHEDULE(m_ident ## _query)                                                                    \
-    TASK_SCHEDULE(m_ident ## _telem)
+    TASK_SCHEDULE(m_ident ## _query, 100)                                                               \
+    TASK_SCHEDULE(m_ident ## _telem, 100)
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered);
 

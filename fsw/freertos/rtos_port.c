@@ -47,10 +47,6 @@
     #error configUNIQUE_INTERRUPT_PRIORITIES must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
 #endif
 
-#ifndef configSETUP_TICK_INTERRUPT
-    #error configSETUP_TICK_INTERRUPT() must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
-#endif /* configSETUP_TICK_INTERRUPT */
-
 #ifndef configMAX_API_CALL_INTERRUPT_PRIORITY
     #error configMAX_API_CALL_INTERRUPT_PRIORITY must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
 #endif
@@ -164,9 +160,6 @@ volatile uint32_t ulCriticalNesting = 9999UL;
 /* Saved as part of the task context.  If ulPortTaskHasFPUContext is non-zero then
 a floating point context must be saved and restored for the task. */
 volatile uint32_t ulPortTaskHasFPUContext = pdFALSE;
-
-/* Set to 1 to pend a context switch from an ISR. */
-volatile uint32_t ulPortYieldRequired = pdFALSE;
 
 /* Counts the interrupt nesting depth.  A context switch is only performed if
 if the nesting depth is 0. */
@@ -344,9 +337,6 @@ uint32_t ulAPSR;
             executing. */
             portCPU_IRQ_DISABLE();
 
-            /* Start the timer that generates the tick ISR. */
-            configSETUP_TICK_INTERRUPT();
-
             /* Start the first task executing. */
             vPortRestoreTaskContext();
         }
@@ -395,26 +385,6 @@ void vPortExitCritical( void )
             portCLEAR_INTERRUPT_MASK();
         }
     }
-}
-/*-----------------------------------------------------------*/
-
-void FreeRTOS_Tick_Handler( void )
-{
-    /* Set interrupt mask before altering scheduler structures.   The tick
-    handler runs at the lowest priority, so interrupts cannot already be masked,
-    so there is no need to save and restore the current mask value.  It is
-    necessary to turn off interrupts in the CPU itself while the ICCPMR is being
-    updated. */
-    portCPU_IRQ_DISABLE();
-    portICCPMR_PRIORITY_MASK_REGISTER = ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
-    __asm volatile (    "dsb        \n"
-                        "isb        \n" ::: "memory" );
-    portCPU_IRQ_ENABLE();
-
-    ulPortYieldRequired = pdTRUE;
-
-    /* Ensure all interrupt priorities are active again. */
-    portCLEAR_INTERRUPT_MASK();
 }
 /*-----------------------------------------------------------*/
 

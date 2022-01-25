@@ -6,6 +6,6 @@
 TASK_PROTO(heartbeat_task);
 
 #define HEARTBEAT_SCHEDULE()     \
-    TASK_SCHEDULE(heartbeat_task)
+    TASK_SCHEDULE(heartbeat_task, 100)
 
 #endif /* FSW_HEARTBEAT_H */

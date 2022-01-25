@@ -77,9 +77,9 @@ void radio_downlink_loop(radio_t *radio);
     PROGRAM_INIT(STAGE_CRAFT, r_ident ## _init)
 
 #define RADIO_UP_SCHEDULE(r_ident)                                                                                \
-    TASK_SCHEDULE(r_ident ## _up_task)
+    TASK_SCHEDULE(r_ident ## _up_task, 100)
 
 #define RADIO_DOWN_SCHEDULE(r_ident)                                                                              \
-    TASK_SCHEDULE(r_ident ## _down_task)
+    TASK_SCHEDULE(r_ident ## _down_task, 100)
 
 #endif /* FSW_RADIO_H */

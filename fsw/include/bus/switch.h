@@ -42,7 +42,7 @@ void switch_init_internal(switch_t *sw);
     }
 
 #define SWITCH_SCHEDULE(v_ident)                                                                     \
-    TASK_SCHEDULE(v_ident ## _task)
+    TASK_SCHEDULE(v_ident ## _task, 100)
 
 // inbound is for packets TO the switch; the switch acts as the server.
 // outbound is for packets FROM the switch; the switch acts as the client.
