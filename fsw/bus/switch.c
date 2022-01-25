@@ -110,7 +110,9 @@ void switch_mainloop_internal(switch_t *sw) {
             }
         }
         if (packets > 0) {
+#ifdef SWITCH_DEBUG
             debugf(TRACE, "Switch routed %u packets; checking to see if there are any more.", packets);
+#endif
         } else {
 #ifdef SWITCH_DEBUG
             debugf(TRACE, "Switch dozing; no packets to route right now.");

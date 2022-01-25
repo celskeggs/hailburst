@@ -107,8 +107,10 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                     resend_pkts = true;
 
                     next_timeout = clock_timestamp_monotonic() + handshake_period();
+#ifdef EXCHANGE_DEBUG
                     debug_printf(DEBUG, "Next timeout scheduled for %u.%09u",
                                  next_timeout / CLOCK_NS_PER_SEC, next_timeout % CLOCK_NS_PER_SEC);
+#endif
                 }
             } else if ((exc_state == FW_EXC_HANDSHAKING || exc_state == FW_EXC_CONNECTING) && !send_primary_handshake) {
                 // do a timed wait, so that we can send a fresh handshake when it's an appropriate time
@@ -340,7 +342,9 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
         if (not_yet_received > MAX_OUTSTANDING_TOKENS) {
             not_yet_received = MAX_OUTSTANDING_TOKENS;
         }
+#ifdef EXCHANGE_DEBUG
         debug_printf(TRACE, "Not yet received: %u", not_yet_received);
+#endif
         if (exc_state == FW_EXC_OPERATING && pkts_rcvd + not_yet_received > fcts_sent) {
 #ifdef EXCHANGE_DEBUG
             debug_printf(TRACE, "Sending FCT.");
