@@ -166,7 +166,7 @@ func (opt Options) GdbCmds() []string {
 		"set history remove-duplicates 1",
 	}
 	if opt.Run {
-		cmds = append(cmds, "stepvt 20s")
+		cmds = append(cmds, "stepvt 30s")
 	}
 	if opt.Irradiate {
 		if opt.RegisterMode {
