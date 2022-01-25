@@ -5,7 +5,7 @@
 #include <fsw/io.h>
 #include <bus/switch.h>
 
-// #define DEBUG
+//#define SWITCH_DEBUG
 
 // returns TRUE if packet is consumed.
 static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, struct io_rx_ent *entry,
@@ -112,11 +112,11 @@ void switch_mainloop_internal(switch_t *sw) {
         if (packets > 0) {
             debugf(TRACE, "Switch routed %u packets; checking to see if there are any more.", packets);
         } else {
-#ifdef DEBUG
+#ifdef SWITCH_DEBUG
             debugf(TRACE, "Switch dozing; no packets to route right now.");
 #endif
             task_doze();
-#ifdef DEBUG
+#ifdef SWITCH_DEBUG
             debugf(TRACE, "Switch roused!");
 #endif
         }

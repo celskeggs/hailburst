@@ -91,8 +91,8 @@ static bool initialized = false;
 static spacecraft_t sc;
 
 SWITCH_REGISTER(fce_vswitch);
-CHART_REGISTER(fce_tx_chart, 0x1100, 2);
-CHART_REGISTER(fce_rx_chart, 0x1100, 2);
+CHART_REGISTER(fce_tx_chart, 0x1100, 10);
+CHART_REGISTER(fce_rx_chart, 0x1100, 10);
 static const fw_link_options_t exchange_options = {
     .label = "bus",
     .path  = "/dev/vport0p1",
@@ -118,10 +118,10 @@ TASK_SCHEDULING_ORDER(
     SWITCH_SCHEDULE(fce_vswitch)
     RADIO_UP_SCHEDULE(sc_radio)
     COMMAND_SCHEDULE(sc_cmd)
-    CLOCK_SCHEDULE(sc_clock)
     MAGNETOMETER_SCHEDULE(sc_mag)
-    HEARTBEAT_SCHEDULE()
     TELEMETRY_SCHEDULE()
+    CLOCK_SCHEDULE(sc_clock)
+    HEARTBEAT_SCHEDULE()
     RADIO_DOWN_SCHEDULE(sc_radio)
     SWITCH_SCHEDULE(fce_vswitch)
     SYSTEM_MAINTENANCE_SCHEDULE()

@@ -50,9 +50,10 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
     };                                                                                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident)
 
-#define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)  \
-    TASK_SCHEDULE(e_ident ## _task, 100)     \
+#define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)     \
     FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port) \
-    TASK_SCHEDULE(e_ident ## _task, 100)
+    TASK_SCHEDULE(e_ident ## _task, 150)        \
+    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port) \
+    TASK_SCHEDULE(e_ident ## _task, 150)
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */

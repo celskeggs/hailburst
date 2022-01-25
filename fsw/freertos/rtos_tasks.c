@@ -29,6 +29,7 @@
  */
 
 /* Standard includes. */
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,6 +50,7 @@ enum {
 /*-----------------------------------------------------------*/
 
 static uint32_t schedule_index = 0;
+static uint64_t schedule_last = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /* Other file private variables. --------------------------------*/
@@ -109,19 +111,20 @@ static inline void schedule_load(bool validate)
     assert(pxCurrentTCB != NULL && pxCurrentTCB >= tasktable_start && pxCurrentTCB < tasktable_end);
 
     // update the next callback time to the next timing tick
-    uint64_t old_time = arm_get_cntp_cval();
-    uint64_t new_time = old_time + sched.nanos / CLOCK_PERIOD_NS;
-    arm_set_cntp_cval(new_time);
+    uint64_t new_time = schedule_last + sched.nanos;
+    arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
+
+#ifdef TASK_DEBUG
+    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, pxCurrentTCB->pcTaskName, new_time);
+#endif
 
     if (validate) {
         uint64_t here = timer_now_ns();
         // make sure we aren't drifting from the schedule
-        assert(old_time * CLOCK_PERIOD_NS <= here && here <= new_time * CLOCK_PERIOD_NS);
+        assert(schedule_last <= here && here <= new_time);
     }
 
-#ifdef TASK_DEBUG
-    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, pxCurrentTCB->pcTaskName, new_time * CLOCK_PERIOD_NS);
-#endif
+    schedule_last = new_time;
 }
 
 /*-----------------------------------------------------------*/
@@ -154,17 +157,16 @@ void vTaskStartScheduler( void )
     // start scheduling at next millisecond boundary (yes, this means the first task might have a bit of extra
     // time, but we can live with that)
     uint64_t start_time_ns = timer_now_ns();
-    start_time_ns += CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
-    arm_set_cntp_cval(start_time_ns / CLOCK_PERIOD_NS);
+    schedule_last = start_time_ns + CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
+
+    // start executing first task
+    schedule_index = 0;
+    schedule_load(false);
 
     // set the enable bit and don't set the mask bit
     arm_set_cntp_ctl(ARM_TIMER_ENABLE);
     // don't provide a real callback here, because it will never actually have to be called.
     enable_irq(IRQ_PHYS_TIMER, unexpected_irq_callback, NULL);
-
-    // start executing first task
-    schedule_index = 0;
-    schedule_load(false);
 
     /* Setting up the timer tick is hardware specific and thus in the
      * portable interface. */
