@@ -24,6 +24,7 @@ typedef TCB_t *thread_t;
         .pxTopOfStack    = NULL,                                                  \
         .needs_start     = true,                                                  \
         .hit_restart     = false,                                                 \
+        .recursive_exception = false,                                             \
         .roused_task     = 0,                                                     \
         .roused_local    = 0,                                                     \
     };                                                                            \

@@ -14,7 +14,8 @@ void task_entrypoint(TCB_t *state) {
         scrubber_cycle_wait();
     }
 
-    task_clear_crash();
+    /* clear crash flag */
+    state->mut->recursive_exception = false;
 
     state->start_routine(state->start_arg);
 

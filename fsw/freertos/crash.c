@@ -95,13 +95,6 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
 // defined in entrypoint.s
 extern volatile uint32_t trap_recursive_flag;
 
-static volatile TaskHandle_t last_failed_task = NULL;
-
-void task_clear_crash(void) {
-    TaskHandle_t current = task_get_current();
-    (void) atomic_comp_exchange_relaxed(last_failed_task, current, NULL);
-}
-
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(WARNING, "TASK %s", trap_name);
@@ -109,12 +102,12 @@ void task_abort_handler(unsigned int trap_mode) {
     assert(failed_task != NULL);
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
 
-    if (last_failed_task == failed_task) {
-        // should be different, because we shouldn't hit any aborts past this point
+    if (failed_task->mut->recursive_exception) {
+        // we shouldn't hit this exception twice in a row... but check!
         abortf("RECURSIVE ABORT; HALTING RTOS.");
     }
 
-    last_failed_task = failed_task;
+    failed_task->mut->recursive_exception = true;
     assert(trap_recursive_flag == 1);
     atomic_store(trap_recursive_flag, 0);
 
