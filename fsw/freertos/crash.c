@@ -63,7 +63,6 @@ static const char *trap_mode_names[3] = {
     "DATA ABORT",
 };
 
-extern volatile uint32_t ulCriticalNesting;
 extern volatile uint32_t ulPortInterruptNesting;
 
 void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_mode) {
@@ -78,8 +77,8 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
         assert(failed_task != NULL);
         debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
     }
-    debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x CriticalNesting=%u InterruptNesting=%u",
-           state->lr, spsr, ulCriticalNesting, ulPortInterruptNesting);
+    debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x InterruptNesting=%u",
+           state->lr, spsr, ulPortInterruptNesting);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",
            state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x",

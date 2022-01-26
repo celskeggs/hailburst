@@ -125,12 +125,12 @@ static void unexpected_irq_callback(void *opaque)
 
 void vTaskStartScheduler( void )
 {
-    /* Interrupts are turned off here, to ensure a tick does not occur
+    /* Interrupts are verified to be off here, to ensure a tick does not occur
      * before or during the call to xPortStartScheduler().  The stacks of
      * the created tasks contain a status word with interrupts switched on
      * so interrupts will automatically get re-enabled when the first task
      * starts to run. */
-    portDISABLE_INTERRUPTS();
+    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
     xSchedulerRunning = pdTRUE;
 

@@ -122,15 +122,6 @@ the CPU itself before modifying certain hardware registers. */
 #define portMAX_8_BIT_VALUE                         ( ( uint8_t ) 0xff )
 #define portBIT_0_SET                               ( ( uint8_t ) 0x01 )
 
-/* Let the user override the pre-loading of the initial LR with the address of
-prvTaskExitError() in case it messes up unwinding of the stack in the
-debugger. */
-#ifdef configTASK_RETURN_ADDRESS
-    #define portTASK_RETURN_ADDRESS configTASK_RETURN_ADDRESS
-#else
-    #define portTASK_RETURN_ADDRESS prvTaskExitError
-#endif
-
 /* The space on the stack required to hold the FPU registers.  This is 32 64-bit
 registers, plus a 32-bit status register. */
 #define portFPU_REGISTER_WORDS  ( ( 32 * 2 ) + 1 )
@@ -143,19 +134,7 @@ registers, plus a 32-bit status register. */
  */
 extern void vPortRestoreTaskContext( void );
 
-/*
- * Used to catch tasks that attempt to return from their implementing function.
- */
-static void prvTaskExitError( void );
-
 /*-----------------------------------------------------------*/
-
-/* A variable is used to keep track of the critical section nesting.  This
-variable has to be stored as part of the task context and must be initialised to
-a non zero value to ensure interrupts don't inadvertently become unmasked before
-the scheduler starts.  As it is stored as part of the task context it will
-automatically be set to 0 when the first task is started. */
-volatile uint32_t ulCriticalNesting = 9999UL;
 
 /* Saved as part of the task context.  If ulPortTaskHasFPUContext is non-zero then
 a floating point context must be saved and restored for the task. */
@@ -169,7 +148,6 @@ volatile uint32_t ulPortInterruptNesting = 0UL;
 __attribute__(( used )) const uint32_t ulICCIAR = portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS;
 __attribute__(( used )) const uint32_t ulICCEOIR = portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS;
 __attribute__(( used )) const uint32_t ulICCPMR = portICCPMR_PRIORITY_MASK_REGISTER_ADDRESS;
-__attribute__(( used )) const uint32_t ulMaxAPIPriorityMask = ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
 
 /*-----------------------------------------------------------*/
 
@@ -201,7 +179,7 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
     pxTopOfStack--;
 
     /* Next all the registers other than the stack pointer. */
-    *pxTopOfStack = ( StackType_t ) portTASK_RETURN_ADDRESS;    /* R14 */
+    *pxTopOfStack = ( StackType_t ) abort; /* R14 */
     pxTopOfStack--;
     *pxTopOfStack = ( StackType_t ) 0x12121212; /* R12 */
     pxTopOfStack--;
@@ -228,11 +206,6 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
     *pxTopOfStack = ( StackType_t ) 0x01010101; /* R1 */
     pxTopOfStack--;
     *pxTopOfStack = ( StackType_t ) pxNewTCB; /* R0 */
-    pxTopOfStack--;
-
-    /* The task will start with a critical nesting count of 0 as interrupts are
-    enabled. */
-    *pxTopOfStack = portNO_CRITICAL_NESTING;
 
     #if( configUSE_TASK_FPU_SUPPORT == 1 )
     {
@@ -260,20 +233,6 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
     #endif
 
     return pxTopOfStack;
-}
-/*-----------------------------------------------------------*/
-
-static void prvTaskExitError( void )
-{
-    /* A function that implements a task must not exit or attempt to return to
-    its caller as there is nothing to return to.  If a task wants to exit it
-    should instead call vTaskDelete( NULL ).
-
-    Artificially force an assert() to be triggered if configASSERT() is
-    defined, then stop here so application writers can catch the error. */
-    configASSERT( ulPortInterruptNesting == ~0UL );
-    portDISABLE_INTERRUPTS();
-    for( ;; );
 }
 /*-----------------------------------------------------------*/
 
@@ -346,48 +305,6 @@ uint32_t ulAPSR;
 }
 /*-----------------------------------------------------------*/
 
-void vPortEnterCritical( void )
-{
-    /* Mask interrupts up to the max syscall interrupt priority. */
-    ulPortSetInterruptMask();
-
-    /* Now interrupts are disabled ulCriticalNesting can be accessed
-    directly.  Increment ulCriticalNesting to keep a count of how many times
-    portENTER_CRITICAL() has been called. */
-    ulCriticalNesting++;
-
-    /* This is not the interrupt safe version of the enter critical function so
-    assert() if it is being called from an interrupt context.  Only API
-    functions that end in "FromISR" can be used in an interrupt.  Only assert if
-    the critical nesting count is 1 to protect against recursive calls if the
-    assert function also uses a critical section. */
-    if( ulCriticalNesting == 1 )
-    {
-        configASSERT( ulPortInterruptNesting == 0 );
-    }
-}
-/*-----------------------------------------------------------*/
-
-void vPortExitCritical( void )
-{
-    if( ulCriticalNesting > portNO_CRITICAL_NESTING )
-    {
-        /* Decrement the nesting count as the critical section is being
-        exited. */
-        ulCriticalNesting--;
-
-        /* If the nesting level has reached zero then all interrupt
-        priorities must be re-enabled. */
-        if( ulCriticalNesting == portNO_CRITICAL_NESTING )
-        {
-            /* Critical nesting has reached zero so all interrupt priorities
-            should be unmasked. */
-            portCLEAR_INTERRUPT_MASK();
-        }
-    }
-}
-/*-----------------------------------------------------------*/
-
 #if( configUSE_TASK_FPU_SUPPORT != 2 )
 
     void vPortTaskUsesFPU( void )
@@ -403,40 +320,6 @@ void vPortExitCritical( void )
     }
 
 #endif /* configUSE_TASK_FPU_SUPPORT */
-/*-----------------------------------------------------------*/
-
-void vPortClearInterruptMask( uint32_t ulNewMaskValue )
-{
-    if( ulNewMaskValue == pdFALSE )
-    {
-        portCLEAR_INTERRUPT_MASK();
-    }
-}
-/*-----------------------------------------------------------*/
-
-uint32_t ulPortSetInterruptMask( void )
-{
-uint32_t ulReturn;
-
-    /* Interrupt in the CPU must be turned off while the ICCPMR is being
-    updated. */
-    portCPU_IRQ_DISABLE();
-    if( portICCPMR_PRIORITY_MASK_REGISTER == ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) )
-    {
-        /* Interrupts were already masked. */
-        ulReturn = pdTRUE;
-    }
-    else
-    {
-        ulReturn = pdFALSE;
-        portICCPMR_PRIORITY_MASK_REGISTER = ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
-        __asm volatile (    "dsb        \n"
-                            "isb        \n" ::: "memory" );
-    }
-    portCPU_IRQ_ENABLE();
-
-    return ulReturn;
-}
 /*-----------------------------------------------------------*/
 
 #if( configASSERT_DEFINED == 1 )

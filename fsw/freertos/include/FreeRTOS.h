@@ -81,22 +81,6 @@
     #define configASSERT_DEFINED    1
 #endif
 
-#ifndef portMEMORY_BARRIER
-    #define portMEMORY_BARRIER()
-#endif
-
-#ifndef portSOFTWARE_BARRIER
-    #define portSOFTWARE_BARRIER()
-#endif
-
-#ifndef portSET_INTERRUPT_MASK_FROM_ISR
-    #define portSET_INTERRUPT_MASK_FROM_ISR()    0
-#endif
-
-#ifndef portCLEAR_INTERRUPT_MASK_FROM_ISR
-    #define portCLEAR_INTERRUPT_MASK_FROM_ISR( uxSavedStatusValue )    ( void ) uxSavedStatusValue
-#endif
-
 #ifndef portPOINTER_SIZE_TYPE
     #define portPOINTER_SIZE_TYPE    uint32_t
 #endif
@@ -119,17 +103,6 @@
  * in FreeRTOSConfig.h if uint16_t is too restrictive. */
     #define configSTACK_DEPTH_TYPE    uint16_t
 #endif
-
-#ifndef configINITIAL_TICK_COUNT
-    #define configINITIAL_TICK_COUNT    0
-#endif
-
-/* The tick type can be read atomically, so critical sections used when the
- * tick count is returned can be defined away. */
-#define portTICK_TYPE_ENTER_CRITICAL()
-#define portTICK_TYPE_EXIT_CRITICAL()
-#define portTICK_TYPE_SET_INTERRUPT_MASK_FROM_ISR()         0
-#define portTICK_TYPE_CLEAR_INTERRUPT_MASK_FROM_ISR( x )    ( void ) x
 
 /* Set configUSE_TASK_FPU_SUPPORT to 0 to omit floating point support even
  * if floating point hardware is otherwise supported by the FreeRTOS port in use.

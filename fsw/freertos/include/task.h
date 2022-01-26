@@ -40,19 +40,6 @@
 * MACROS AND DEFINITIONS
 *----------------------------------------------------------*/
 
-/* The direct to task notification feature used to have only a single notification
- * per task.  Now there is an array of notifications per task that is dimensioned by
- * configTASK_NOTIFICATION_ARRAY_ENTRIES.  For backward compatibility, any use of the
- * original direct to task notification defaults to using the first index in the
- * array. */
-#define tskDEFAULT_INDEX_TO_NOTIFY     ( 0 )
-
-/*
- * Defines the prototype to which the application task hook function must
- * conform.
- */
-typedef BaseType_t (* TaskHookFunction_t)( void * );
-
 #define RTOS_STACK_SIZE ( 1000 )
 
 typedef enum {
@@ -117,111 +104,15 @@ typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
 
-/**
- * task. h
- *
- * Macro to mark the start of a critical code region.  Preemptive context
- * switches cannot occur when in a critical region.
- *
- * NOTE: This may alter the stack (depending on the portable implementation)
- * so must be used with care!
- *
- * \defgroup taskENTER_CRITICAL taskENTER_CRITICAL
- * \ingroup SchedulerControl
- */
-#define taskENTER_CRITICAL()               portENTER_CRITICAL()
-#define taskENTER_CRITICAL_FROM_ISR()      portSET_INTERRUPT_MASK_FROM_ISR()
-
-/**
- * task. h
- *
- * Macro to mark the end of a critical code region.  Preemptive context
- * switches cannot occur when in a critical region.
- *
- * NOTE: This may alter the stack (depending on the portable implementation)
- * so must be used with care!
- *
- * \defgroup taskEXIT_CRITICAL taskEXIT_CRITICAL
- * \ingroup SchedulerControl
- */
-#define taskEXIT_CRITICAL()                portEXIT_CRITICAL()
-#define taskEXIT_CRITICAL_FROM_ISR( x )    portCLEAR_INTERRUPT_MASK_FROM_ISR( x )
-
-/**
- * task. h
- *
- * Macro to disable all maskable interrupts.
- *
- * \defgroup taskDISABLE_INTERRUPTS taskDISABLE_INTERRUPTS
- * \ingroup SchedulerControl
- */
-#define taskDISABLE_INTERRUPTS()           portDISABLE_INTERRUPTS()
-
-/**
- * task. h
- *
- * Macro to enable microcontroller interrupts.
- *
- * \defgroup taskENABLE_INTERRUPTS taskENABLE_INTERRUPTS
- * \ingroup SchedulerControl
- */
-#define taskENABLE_INTERRUPTS()            portENABLE_INTERRUPTS()
-
 /* Definitions returned by xTaskGetSchedulerState(). */
 #define taskSCHEDULER_NOT_STARTED    ( ( BaseType_t ) 1 )
 #define taskSCHEDULER_RUNNING        ( ( BaseType_t ) 2 )
 
-/*-----------------------------------------------------------
-* SCHEDULER CONTROL
-*----------------------------------------------------------*/
-
-/**
- * task. h
- * @code{c}
- * void vTaskStartScheduler( void );
- * @endcode
- *
- * Starts the real time kernel tick processing.  After calling the kernel
- * has control over which tasks are executed and when.
- *
- * See the demo application file main.c for an example of creating
- * tasks and starting the kernel.
- *
- * Example usage:
- * @code{c}
- * void vAFunction( void )
- * {
- *   // Create at least one task before starting the kernel.
- *   xTaskCreate( vTaskCode, "NAME", STACK_SIZE, NULL, NULL );
- *
- *   // Start the real time kernel with preemption.
- *   vTaskStartScheduler ();
- *
- *   // Will not get here unless a task calls vTaskEndScheduler ()
- * }
- * @endcode
- *
- * \defgroup vTaskStartScheduler vTaskStartScheduler
- * \ingroup SchedulerControl
- */
 void vTaskStartScheduler( void );
-
-/*-----------------------------------------------------------
-* SCHEDULER INTERNALS AVAILABLE FOR PORTING PURPOSES
-*----------------------------------------------------------*/
-
-/*
- * THIS FUNCTION MUST NOT BE USED FROM APPLICATION CODE.  IT IS ONLY
- * INTENDED FOR USE WHEN IMPLEMENTING A PORT OF THE SCHEDULER AND IS
- * AN INTERFACE WHICH IS FOR THE EXCLUSIVE USE OF THE SCHEDULER.
- *
- * Sets the pointer to the current TCB to the TCB of the next task
- * that is ready to run.
- */
 void vTaskSwitchContext( void );
 
 /*
- * Returns the scheduler state as taskSCHEDULER_RUNNING, or taskSCHEDULER_NOT_STARTED.
+ * Returns the scheduler state as taskSCHEDULER_RUNNING or taskSCHEDULER_NOT_STARTED.
  */
 BaseType_t xTaskGetSchedulerState( void );
 

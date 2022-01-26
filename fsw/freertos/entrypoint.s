@@ -46,7 +46,6 @@
     .extern ulICCPMR
 
     /* Variables and functions. */
-    .extern ulMaxAPIPriorityMask
     .extern _freertos_vector_table
     .extern pxCurrentTCB
     .extern vTaskSwitchContext
@@ -67,11 +66,6 @@
     SRSDB   sp!, #SYS_MODE
     CPS     #SYS_MODE
     PUSH    {R0-R12, R14}
-
-    /* Push the critical nesting count. */
-    LDR     R2, ulCriticalNestingConst
-    LDR     R1, [R2]
-    PUSH    {R1}
 
     /* Does the task have a floating point context that needs saving?  If
     ulPortTaskHasFPUContext is 0 then no. */
@@ -119,18 +113,10 @@
     VPOPNE  {D0-D15}
     VMSRNE  FPSCR, R0
 
-    /* Restore the critical section nesting depth. */
-    LDR     R0, ulCriticalNestingConst
-    POP     {R1}
-    STR     R1, [R0]
-
     /* Ensure the priority mask is correct for the critical nesting depth. */
     LDR     R2, ulICCPMRConst
     LDR     R2, [R2]
-    CMP     R1, #0
-    MOVEQ   R4, #255
-    LDRNE   R4, ulMaxAPIPriorityMaskConst
-    LDRNE   R4, [R4]
+    MOV     R4, #255
     STR     R4, [R2]
 
     /* Restore all system mode registers other than the SP (which is already
@@ -218,11 +204,6 @@ trap_recursive_flag:
     CMP     r14, #0
     ADD     r14, r14, #1
     STR     r14, [r12]
-
-    @ Check also if we're in a critical section, where we cannot be safely suspended or restarted
-    LDR     r14, ulCriticalNestingConst
-    LDR     r14, [r14]
-    CMPEQ   r14, #0
 
     @ And also check if we're in a nested interrupt, where we also cannot be safely suspended or restarted
     LDR     r14, ulPortInterruptNestingConst
@@ -397,9 +378,7 @@ ulICCIARConst: .word ulICCIAR
 ulICCEOIRConst: .word ulICCEOIR
 ulICCPMRConst: .word ulICCPMR
 pxCurrentTCBConst: .word pxCurrentTCB
-ulCriticalNestingConst: .word ulCriticalNesting
 ulPortTaskHasFPUContextConst: .word ulPortTaskHasFPUContext
-ulMaxAPIPriorityMaskConst: .word ulMaxAPIPriorityMask
 vApplicationIRQHandlerConst: .word vApplicationIRQHandler
 ulPortInterruptNestingConst: .word ulPortInterruptNesting
 

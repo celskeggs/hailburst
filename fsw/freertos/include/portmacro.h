@@ -62,25 +62,6 @@ typedef uint32_t TickType_t;
 /* Hardware specifics. */
 #define portBYTE_ALIGNMENT          8
 
-/*-----------------------------------------------------------
- * Critical section control
- *----------------------------------------------------------*/
-
-extern void vPortEnterCritical( void );
-extern void vPortExitCritical( void );
-extern uint32_t ulPortSetInterruptMask( void );
-extern void vPortClearInterruptMask( uint32_t ulNewMaskValue );
-extern void vPortInstallFreeRTOSVectorTable( void );
-
-/* These macros do not globally disable/enable interrupts.  They do mask off
-interrupts that have a priority below configMAX_API_CALL_INTERRUPT_PRIORITY. */
-#define portENTER_CRITICAL()        vPortEnterCritical();
-#define portEXIT_CRITICAL()         vPortExitCritical();
-#define portDISABLE_INTERRUPTS()    ulPortSetInterruptMask()
-#define portENABLE_INTERRUPTS()     vPortClearInterruptMask( 0 )
-#define portSET_INTERRUPT_MASK_FROM_ISR()       ulPortSetInterruptMask()
-#define portCLEAR_INTERRUPT_MASK_FROM_ISR(x)    vPortClearInterruptMask(x)
-
 /*-----------------------------------------------------------*/
 
 /* If configUSE_TASK_FPU_SUPPORT is set to 1 (or left undefined) then tasks are
@@ -143,7 +124,5 @@ number of bits implemented by the interrupt controller. */
 #define portICCPMR_PRIORITY_MASK_REGISTER_ADDRESS           ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCPMR_PRIORITY_MASK_OFFSET )
 #define portICCBPR_BINARY_POINT_REGISTER                    ( *( ( const volatile uint32_t * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCBPR_BINARY_POINT_OFFSET ) ) )
 #define portICCRPR_RUNNING_PRIORITY_REGISTER                ( *( ( const volatile uint32_t * ) ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCRPR_RUNNING_PRIORITY_OFFSET ) ) )
-
-#define portMEMORY_BARRIER() __asm volatile( "" ::: "memory" )
 
 #endif /* PORTMACRO_H */
