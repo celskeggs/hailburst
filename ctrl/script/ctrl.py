@@ -373,10 +373,13 @@ class ExecutableLayout:
                         else:
                             raise NotImplementedError("no support yet for parsing ELF segments besides R/X and R/W")
 
-    def random_instruction(self):
+    def code_region_size(self):
         total_size = sum(size for addr, size in self.code_regions)
         assert total_size > 0 and total_size % 4 == 0
-        offset = random.randint(0, (total_size // 4) - 1) * 4
+        return total_size // 4
+
+    def random_instruction(self):
+        offset = random.randint(0, self.code_region_size() - 1) * 4
         for addr, size in self.code_regions:
             if offset < size:
                 return addr + offset
@@ -496,6 +499,8 @@ def campaign(args):
         elif args[2] == "restart-later":
             is_restart = True
             layout = ExecutableLayout(gdb.objfiles())
+            region = layout.code_region_size()
+            print("Adjusted vulnerability:", region * mtbf / 1e9, "(MTTI in seconds per instruction)")
         elif args[2].startswith("reg") and args[2][3:4] in (":", ""):
             is_reg = True
             address = args[2][4:]
