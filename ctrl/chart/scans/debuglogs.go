@@ -154,11 +154,17 @@ func ScanDebugLog(path string, elfPaths []string) ([]*DebugLogScan, error) {
 		)
 		isInvalid = false
 	}
-	scansOut := make([]*DebugLogScan, len(levels))
+	scansOrdered := make([]*DebugLogScan, len(levels))
 	for i, level := range levels {
 		scan := levelScans[level]
 		if len(scan.Messages) > 0 {
-			scansOut[len(scansOut)-i-1] = scan
+			scansOrdered[len(scansOrdered)-i-1] = scan
+		}
+	}
+	var scansOut []*DebugLogScan
+	for _, scan := range scansOrdered {
+		if scan != nil {
+			scansOut = append(scansOut, scan)
 		}
 	}
 	for _, scan := range stableScans {
