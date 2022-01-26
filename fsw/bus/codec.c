@@ -165,7 +165,7 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
             assert(subdec.data_actual_len == 0);
             // if we receive another control character while still working on a parameter, report it as a codec error.
             assert(fakewire_is_parametrized(fwd->recv_current));
-            debugf(CRITICAL, "Encountered unexpected control character %s while decoding parameterized control "
+            debugf(WARNING, "Encountered unexpected control character %s while decoding parameterized control "
                    "character %s.", fakewire_codec_symbol(subdec.ctrl_out), fakewire_codec_symbol(fwd->recv_current));
             decoded->ctrl_out = FWC_CODEC_ERROR;
             decoded->ctrl_param = 0;

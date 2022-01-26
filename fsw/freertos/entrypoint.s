@@ -182,12 +182,24 @@ trap_recursive_flag:
     STR     r14, [r12]
 
     @ And also check if we're in a nested interrupt, where we also cannot be safely suspended or restarted
-    LDR     r14, ulPortInterruptNestingConst
-    LDR     r14, [r14]
+    LDREQ   r14, ulPortInterruptNestingConst
+    LDREQ   r14, [r14]
     CMPEQ   r14, #0
 
     @ If the trap is recursive, OR we're in a critical section, we'll jump to the emergency handler
+    @ (more cases below)
     MOV     r14, #\trapid
+    BNE     emergency_abort_handler
+
+    @ Next, check whether this particular task is recursively trapping.
+    LDR     r12, pxCurrentTCBConst  /* r12 = &pxCurrentTCB */
+    LDR     r12, [r12]              /* r12 = pxCurrentTCB */
+    CMP     r12, #0      @ If no task, make sure we go to the emergency abort handler!
+    BEQ     emergency_abort_handler
+    LDR     r12, [r12]              /* r12 = &pxCurrentTCB->mut */
+    ADD     r12, #4                 /* r12 = &pxCurrentTCB->mut->recursive_exception */
+    LDR     r12, [r12]              /* r12 = pxCurrentTCB->mut->recursive_exception */
+    CMP     r12, #0      @ If nonzero, then recursively trapping!
     BNE     emergency_abort_handler
 
     @ Otherwise, we're not recursive.
@@ -227,9 +239,9 @@ emergency_abort_handler:
 
     LDR    r12, =trap_recursive_flag
     LDR    r12, [r12]
-    CMP    r12, #1
+    CMP    r12, #2
 
-    BLEQ   exception_report   @ only try to report if this is our first time through... otherwise just abort directly
+    BLLE   exception_report   @ only try to report if this is our first/second time through... otherwise just abort directly
     BL     abort
     B      .
 

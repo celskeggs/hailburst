@@ -57,9 +57,9 @@ typedef enum {
 typedef struct
 {
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
+    bool recursive_exception;            /*< MUST BE THE SECOND MEMBER OF THE TCB STRUCT */
     bool needs_start;
     bool hit_restart;
-    bool recursive_exception;
 
     // these are just 0 or 1, but in a full uint32_t to help with atomicity
     uint32_t roused_task;

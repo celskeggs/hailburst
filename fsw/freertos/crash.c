@@ -65,19 +65,26 @@ static const char *trap_mode_names[3] = {
 
 extern volatile uint32_t ulPortInterruptNesting;
 
+// defined in entrypoint.s
+extern volatile uint32_t trap_recursive_flag;
+
 void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_mode) {
     uint64_t now = timer_now_ns();
 
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "%s", trap_name);
+    bool task_recursive = false;
     if (!scheduler_has_started()) {
         debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
     } else {
         TaskHandle_t failed_task = task_get_current();
         debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
+        task_recursive = failed_task->mut->recursive_exception;
     }
-    debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x InterruptNesting=%u",
-           state->lr, spsr, ulPortInterruptNesting);
+    debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x",
+           state->lr, spsr);
+    debugf(CRITICAL, "Possible causes: InterruptNesting=%u GlobalRecurse=%u TaskRecurse=%u",
+           ulPortInterruptNesting, trap_recursive_flag - 1, task_recursive);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",
            state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x",
@@ -91,20 +98,15 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     // returns to an abort() call
 }
 
-// defined in entrypoint.s
-extern volatile uint32_t trap_recursive_flag;
-
 void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = task_get_current();
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
+    // must be false because we checked it just a moment ago in the trap handler
+    assert(failed_task->mut->recursive_exception == false);
 
-    if (failed_task->mut->recursive_exception) {
-        // we shouldn't hit this exception twice in a row... but check!
-        abortf("RECURSIVE ABORT; HALTING RTOS.");
-    }
-
+    // make sure we don't clear the global recursive flag until we've safely set the task recursive flag
     failed_task->mut->recursive_exception = true;
     assert(trap_recursive_flag == 1);
     atomic_store(trap_recursive_flag, 0);
