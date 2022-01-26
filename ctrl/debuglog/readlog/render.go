@@ -168,10 +168,10 @@ func Filter(input <-chan Record, output chan<- Record, minLevel LogLevel, earlie
 			if record.Metadata.LogLevel > minLevel {
 				continue
 			}
-			if earliest.TimeExists() && record.Timestamp.Before(earliest) {
+			if earliest.TimeExists() && record.Timestamp.TimeExists() && record.Timestamp.Before(earliest) {
 				continue
 			}
-			if latest.TimeExists() && record.Timestamp.After(latest) {
+			if latest.TimeExists() && record.Timestamp.TimeExists() && record.Timestamp.After(latest) {
 				continue
 			}
 			output <- record
