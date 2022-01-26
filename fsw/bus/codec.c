@@ -138,8 +138,10 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
             fwd->recv_count = 0;
             fwd->recv_timestamp_ns = decoded->receive_timestamp;
         } else {
-            assertf(decoded->data_actual_len > 0 && decoded->data_actual_len <= decoded->data_max_len,
-                "data_actual_len=%zu, data_max_len=%zu", decoded->data_actual_len, decoded->data_max_len);
+            assertf(decoded->data_actual_len > 0 &&
+                        (decoded->data_out == NULL || decoded->data_actual_len <= decoded->data_max_len),
+                "data_actual_len=%zu, data_out=%p, data_max_len=%zu",
+                decoded->data_actual_len, decoded->data_out, decoded->data_max_len);
             // if we receive a sequence of bytes when not reading a parameter, return them directly.
             return true;
         }
