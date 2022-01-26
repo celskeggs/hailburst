@@ -152,9 +152,11 @@ def configure_freertos():
 
     rtos_kernel = rtos_env.Program("kernel", RTOS_SRC + common_libs + EXTERNAL_SRC,
                                    EXCISE=excise,
+                                   WORKDIR=Dir("kernel_workdir"),
                                    LINK="python3 toolchain/linker.py --linker " + rtos_env["LINK"] +
                                         " --archiver " + rtos_env["AR"] + " --objcopy " + rtos_env["OBJCOPY"] +
-                                        " --replica-script freertos/replica.ld --excise $EXCISE",
+                                        " --replica-script freertos/replica.ld --excise $EXCISE"
+                                        " --workdir $WORKDIR",
                                    LINKSCRIPT="freertos/link.ld")
     rtos_env.Depends(rtos_kernel, "toolchain/linker.py")
     rtos_env.Depends(rtos_kernel, excise)
