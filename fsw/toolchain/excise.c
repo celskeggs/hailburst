@@ -15,14 +15,17 @@
 static const char *excise_sections[] = {
     ".data",
     ".bss",
-    "COMMON",
     "initpoints",
     "tasktable",
     "replicas",
     NULL,
 };
 
-static bool excise_section(const char *name) {
+static bool excise_section(asection *sec) {
+    if (sec == bfd_com_section_ptr) {
+        return true;
+    }
+    const char *name = bfd_section_name(sec);
     for (const char **section = excise_sections; *section != NULL; section++) {
         if (strcmp(name, *section) == 0) {
             return true;
@@ -45,7 +48,7 @@ static void init_section(bfd *ib, asection *isec, void *opaque) {
     struct callback_context *ctx = (struct callback_context *) opaque;
     bfd *ob = ctx->ob;
 
-    if (excise_section(bfd_section_name(isec))) {
+    if (excise_section(isec)) {
         /* skip this section */
         return;
     }
@@ -92,7 +95,7 @@ static bool fix_symbols(bfd *ob, asymbol **input_symbols, size_t input_symbol_co
     size_t out = 0;
     for (size_t i = 0; i < max_in; i++) {
         asymbol *sym = input_symbols[i];
-        if (excise_section(bfd_section_name(sym->section))) {
+        if (excise_section(sym->section)) {
 #ifdef EXCISE_DEBUG
             printf("Undefining symbol: %s\n", sym->name);
 #endif
@@ -112,8 +115,8 @@ static bool fix_symbols(bfd *ob, asymbol **input_symbols, size_t input_symbol_co
     return true;
 }
 
-static asymbol **lookup_symbol(struct callback_context *ctx, asymbol *symbol, bool in_debug) {
-    if ((symbol->flags & BSF_LOCAL) && !in_debug) {
+static asymbol **lookup_symbol(struct callback_context *ctx, asymbol *symbol) {
+    if (symbol->flags & BSF_LOCAL) {
         if (!ctx->unsafe) {
             fprintf(stderr, "WARNING: unlikely to be able to reference replacement symbol %s\n", symbol->name);
         }
@@ -127,7 +130,7 @@ static asymbol **lookup_symbol(struct callback_context *ctx, asymbol *symbol, bo
     return NULL;
 }
 
-static asymbol **replace_symbol(struct callback_context *ctx, asymbol *symbol, bool in_debug) {
+static asymbol **replace_symbol(struct callback_context *ctx, asymbol *symbol) {
     /* section references will have been stripped, in which case we have to pivot to looking up what the  */
     /* first thing was in the input section, because that's probably what was meant.                      */
     if (symbol->flags & BSF_SECTION_SYM) {
@@ -139,11 +142,11 @@ static asymbol **replace_symbol(struct callback_context *ctx, asymbol *symbol, b
 #ifdef EXCISE_DEBUG
                 printf("Replacement selected for %s: %s\n", symbol->name, ctx->input_symbols[i]->name);
 #endif
-                return lookup_symbol(ctx, ctx->input_symbols[i], in_debug);
+                return lookup_symbol(ctx, ctx->input_symbols[i]);
             }
         }
     } else {
-        return lookup_symbol(ctx, symbol, in_debug);
+        return lookup_symbol(ctx, symbol);
     }
 }
 
@@ -152,12 +155,10 @@ static void copy_section(bfd *ib, asection *isec, void *opaque) {
     bfd *ob = ctx->ob;
     asection *osec = isec->output_section;
 
-    if (excise_section(bfd_section_name(isec))) {
+    if (excise_section(isec)) {
         /* skip this section */
         return;
     }
-
-    bool in_debug = strcmp(bfd_section_name(isec), ".debug_info") == 0;
 
     ssize_t relocation_bytes = bfd_get_reloc_upper_bound(ib, isec);
     if (relocation_bytes < 0) {
@@ -179,12 +180,12 @@ static void copy_section(bfd *ib, asection *isec, void *opaque) {
     }
     for (size_t i = 0; i < reloc_count; i++) {
         arelent *rl = relocs[i];
-        if (excise_section(bfd_section_name((*rl->sym_ptr_ptr)->section))) {
+        if (excise_section((*rl->sym_ptr_ptr)->section)) {
             const char *symname = (*rl->sym_ptr_ptr)->name;
 #ifdef EXCISE_DEBUG
             printf("Disrupted relocation for: %s\n", symname);
 #endif
-            asymbol **newsym = replace_symbol(ctx, *rl->sym_ptr_ptr, in_debug);
+            asymbol **newsym = replace_symbol(ctx, *rl->sym_ptr_ptr);
             if (newsym == NULL) {
 #ifdef EXCISE_DEBUG
                 fprintf(stderr, "Could not find symbol at all: %s\n", symname);
