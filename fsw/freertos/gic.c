@@ -119,7 +119,7 @@ static void configure_gic(void) {
     }
 
     // reset all GICC state
-    cpu->gicc_pmr  = 0; // mask all interrupt priorities
+    cpu->gicc_pmr  = 255; // unmask all interrupt priorities
     cpu->gicc_bpr  = 0; // enable interrupt preemption (as required by FreeRTOS)
     cpu->gicc_abpr = 0; // enable group 1 interrupt preemption
 

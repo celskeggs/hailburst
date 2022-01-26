@@ -43,7 +43,6 @@
     /* Hardware registers. */
     .extern ulICCIAR
     .extern ulICCEOIR
-    .extern ulICCPMR
 
     /* Variables and functions. */
     .extern _freertos_vector_table
@@ -112,12 +111,6 @@
     VPOPNE  {D16-D31}
     VPOPNE  {D0-D15}
     VMSRNE  FPSCR, R0
-
-    /* Ensure the priority mask is correct for the critical nesting depth. */
-    LDR     R2, ulICCPMRConst
-    LDR     R2, [R2]
-    MOV     R4, #255
-    STR     R4, [R2]
 
     /* Restore all system mode registers other than the SP (which is already
     being used). */
@@ -376,7 +369,6 @@ regular_device_irq:
 
 ulICCIARConst: .word ulICCIAR
 ulICCEOIRConst: .word ulICCEOIR
-ulICCPMRConst: .word ulICCPMR
 pxCurrentTCBConst: .word pxCurrentTCB
 ulPortTaskHasFPUContextConst: .word ulPortTaskHasFPUContext
 vApplicationIRQHandlerConst: .word vApplicationIRQHandler

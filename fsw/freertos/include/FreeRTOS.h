@@ -85,10 +85,6 @@
     #define portPOINTER_SIZE_TYPE    uint32_t
 #endif
 
-#ifndef portASSERT_IF_INTERRUPT_PRIORITY_INVALID
-    #define portASSERT_IF_INTERRUPT_PRIORITY_INVALID()
-#endif
-
 #ifndef configTASK_NOTIFICATION_ARRAY_ENTRIES
     #define configTASK_NOTIFICATION_ARRAY_ENTRIES    1
 #endif

@@ -43,35 +43,6 @@
     #error configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
 #endif
 
-#ifndef configUNIQUE_INTERRUPT_PRIORITIES
-    #error configUNIQUE_INTERRUPT_PRIORITIES must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
-#endif
-
-#ifndef configMAX_API_CALL_INTERRUPT_PRIORITY
-    #error configMAX_API_CALL_INTERRUPT_PRIORITY must be defined.  See https://www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html
-#endif
-
-#if configMAX_API_CALL_INTERRUPT_PRIORITY == 0
-    #error configMAX_API_CALL_INTERRUPT_PRIORITY must not be set to 0
-#endif
-
-#if configMAX_API_CALL_INTERRUPT_PRIORITY > configUNIQUE_INTERRUPT_PRIORITIES
-    #error configMAX_API_CALL_INTERRUPT_PRIORITY must be less than or equal to configUNIQUE_INTERRUPT_PRIORITIES as the lower the numeric priority value the higher the logical interrupt priority
-#endif
-
-/* In case security extensions are implemented. */
-#if configMAX_API_CALL_INTERRUPT_PRIORITY <= ( configUNIQUE_INTERRUPT_PRIORITIES / 2 )
-    #error configMAX_API_CALL_INTERRUPT_PRIORITY must be greater than ( configUNIQUE_INTERRUPT_PRIORITIES / 2 )
-#endif
-
-/* A critical section is exited when the critical section nesting count reaches
-this value. */
-#define portNO_CRITICAL_NESTING         ( ( uint32_t ) 0 )
-
-/* In all GICs 255 can be written to the priority mask register to unmask all
-(but the lowest) interrupt priority. */
-#define portUNMASK_VALUE                ( 0xFFUL )
-
 /* Tasks are not created with a floating point context, but can be given a
 floating point context after they have been created.  A variable is stored as
 part of the tasks context that holds portNO_FLOATING_POINT_CONTEXT if the task
@@ -81,11 +52,6 @@ context. */
 
 /* Constants required to setup the initial task context. */
 #define portINITIAL_SPSR                ( ( StackType_t ) 0x1f ) /* System mode, ARM mode, IRQ enabled FIQ enabled. */
-#define portINTERRUPT_ENABLE_BIT        ( 0x80UL )
-
-/* Used by portASSERT_IF_INTERRUPT_PRIORITY_INVALID() when ensuring the binary
-point is zero. */
-#define portBINARY_POINT_BITS           ( ( uint8_t ) 0x03 )
 
 /* Masks all bits in the APSR other than the mode bits. */
 #define portAPSR_MODE_BITS_MASK         ( 0x1F )
@@ -93,34 +59,6 @@ point is zero. */
 /* The value of the mode bits in the APSR when the CPU is executing in user
 mode. */
 #define portAPSR_USER_MODE              ( 0x10 )
-
-/* The critical section macros only mask interrupts up to an application
-determined priority level.  Sometimes it is necessary to turn interrupt off in
-the CPU itself before modifying certain hardware registers. */
-#define portCPU_IRQ_DISABLE()                                       \
-    __asm volatile ( "CPSID i" ::: "memory" );                      \
-    __asm volatile ( "DSB" );                                       \
-    __asm volatile ( "ISB" );
-
-#define portCPU_IRQ_ENABLE()                                        \
-    __asm volatile ( "CPSIE i" ::: "memory" );                      \
-    __asm volatile ( "DSB" );                                       \
-    __asm volatile ( "ISB" );
-
-
-/* Macro to unmask all interrupt priorities. */
-#define portCLEAR_INTERRUPT_MASK()                                  \
-{                                                                   \
-    portCPU_IRQ_DISABLE();                                          \
-    portICCPMR_PRIORITY_MASK_REGISTER = portUNMASK_VALUE;           \
-    __asm volatile (    "DSB        \n"                             \
-                        "ISB        \n" );                          \
-    portCPU_IRQ_ENABLE();                                           \
-}
-
-#define portINTERRUPT_PRIORITY_REGISTER_OFFSET      0x400UL
-#define portMAX_8_BIT_VALUE                         ( ( uint8_t ) 0xff )
-#define portBIT_0_SET                               ( ( uint8_t ) 0x01 )
 
 /* The space on the stack required to hold the FPU registers.  This is 32 64-bit
 registers, plus a 32-bit status register. */
@@ -147,7 +85,6 @@ volatile uint32_t ulPortInterruptNesting = 0UL;
 /* Used in the asm file. */
 __attribute__(( used )) const uint32_t ulICCIAR = portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS;
 __attribute__(( used )) const uint32_t ulICCEOIR = portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS;
-__attribute__(( used )) const uint32_t ulICCPMR = portICCPMR_PRIORITY_MASK_REGISTER_ADDRESS;
 
 /*-----------------------------------------------------------*/
 
@@ -238,42 +175,7 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
 
 BaseType_t xPortStartScheduler( void )
 {
-uint32_t ulAPSR;
-
-    #if( configASSERT_DEFINED == 1 )
-    {
-        volatile uint32_t ulOriginalPriority;
-        volatile uint8_t * const pucFirstUserPriorityRegister = ( volatile uint8_t * const ) ( configINTERRUPT_CONTROLLER_BASE_ADDRESS + portINTERRUPT_PRIORITY_REGISTER_OFFSET );
-        volatile uint8_t ucMaxPriorityValue;
-
-        /* Determine how many priority bits are implemented in the GIC.
-
-        Save the interrupt priority value that is about to be clobbered. */
-        ulOriginalPriority = *pucFirstUserPriorityRegister;
-
-        /* Determine the number of priority bits available.  First write to
-        all possible bits. */
-        *pucFirstUserPriorityRegister = portMAX_8_BIT_VALUE;
-
-        /* Read the value back to see how many bits stuck. */
-        ucMaxPriorityValue = *pucFirstUserPriorityRegister;
-
-        /* Shift to the least significant bits. */
-        while( ( ucMaxPriorityValue & portBIT_0_SET ) != portBIT_0_SET )
-        {
-            ucMaxPriorityValue >>= ( uint8_t ) 0x01;
-        }
-
-        /* Sanity check configUNIQUE_INTERRUPT_PRIORITIES matches the read
-        value. */
-        configASSERT( ucMaxPriorityValue == portLOWEST_INTERRUPT_PRIORITY );
-
-        /* Restore the clobbered interrupt priority register to its original
-        value. */
-        *pucFirstUserPriorityRegister = ulOriginalPriority;
-    }
-    #endif /* configASSERT_DEFINED */
-
+    uint32_t ulAPSR;
 
     /* Only continue if the CPU is not in User mode.  The CPU must be in a
     Privileged mode for the scheduler to start. */
@@ -283,22 +185,14 @@ uint32_t ulAPSR;
 
     if( ulAPSR != portAPSR_USER_MODE )
     {
-        /* Only continue if the binary point value is set to its lowest possible
-        setting.  See the comments in vPortValidateInterruptPriority() below for
-        more information. */
-        configASSERT( ( portICCBPR_BINARY_POINT_REGISTER & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE );
+        /* Interrupts are turned off in the CPU itself to ensure tick does
+        not execute while the scheduler is being started.  Interrupts are
+        automatically turned back on in the CPU when the first task starts
+        executing. */
+        assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
-        if( ( portICCBPR_BINARY_POINT_REGISTER & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE )
-        {
-            /* Interrupts are turned off in the CPU itself to ensure tick does
-            not execute while the scheduler is being started.  Interrupts are
-            automatically turned back on in the CPU when the first task starts
-            executing. */
-            portCPU_IRQ_DISABLE();
-
-            /* Start the first task executing. */
-            vPortRestoreTaskContext();
-        }
+        /* Start the first task executing. */
+        vPortRestoreTaskContext();
     }
 
     abortf("FreeRTOS scheduler failed");
@@ -320,40 +214,3 @@ uint32_t ulAPSR;
     }
 
 #endif /* configUSE_TASK_FPU_SUPPORT */
-/*-----------------------------------------------------------*/
-
-#if( configASSERT_DEFINED == 1 )
-
-    void vPortValidateInterruptPriority( void )
-    {
-        /* The following assertion will fail if a service routine (ISR) for
-        an interrupt that has been assigned a priority above
-        configMAX_SYSCALL_INTERRUPT_PRIORITY calls an ISR safe FreeRTOS API
-        function.  ISR safe FreeRTOS API functions must *only* be called
-        from interrupts that have been assigned a priority at or below
-        configMAX_SYSCALL_INTERRUPT_PRIORITY.
-
-        Numerically low interrupt priority numbers represent logically high
-        interrupt priorities, therefore the priority of the interrupt must
-        be set to a value equal to or numerically *higher* than
-        configMAX_SYSCALL_INTERRUPT_PRIORITY.
-
-        FreeRTOS maintains separate thread and ISR API functions to ensure
-        interrupt entry is as fast and simple as possible. */
-        configASSERT( portICCRPR_RUNNING_PRIORITY_REGISTER >= ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );
-
-        /* Priority grouping:  The interrupt controller (GIC) allows the bits
-        that define each interrupt's priority to be split between bits that
-        define the interrupt's pre-emption priority bits and bits that define
-        the interrupt's sub-priority.  For simplicity all bits must be defined
-        to be pre-emption priority bits.  The following assertion will fail if
-        this is not the case (if some bits represent a sub-priority).
-
-        The priority grouping is configured by the GIC's binary point register
-        (ICCBPR).  Writting 0 to ICCBPR will ensure it is set to its lowest
-        possible value (which may be above 0). */
-        configASSERT( ( portICCBPR_BINARY_POINT_REGISTER & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE );
-    }
-
-#endif /* configASSERT_DEFINED */
-/*-----------------------------------------------------------*/
