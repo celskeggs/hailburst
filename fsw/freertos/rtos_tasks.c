@@ -53,9 +53,6 @@ static uint32_t schedule_index = 0;
 static uint64_t schedule_last = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
-/* Other file private variables. --------------------------------*/
-static volatile BaseType_t xSchedulerRunning = pdFALSE;
-
 /*-----------------------------------------------------------*/
 
 // This is only called in two different circumstances:
@@ -132,7 +129,7 @@ void vTaskStartScheduler( void )
      * starts to run. */
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
-    xSchedulerRunning = pdTRUE;
+    assert(pxCurrentTCB == NULL);
 
     /* Start the timer that generates the tick ISR. */
     assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
@@ -169,21 +166,4 @@ void vTaskSwitchContext( void )
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
     schedule_load(true);
-}
-/*-----------------------------------------------------------*/
-
-BaseType_t xTaskGetSchedulerState( void )
-{
-    BaseType_t xReturn;
-
-    if( xSchedulerRunning == pdFALSE )
-    {
-        xReturn = taskSCHEDULER_NOT_STARTED;
-    }
-    else
-    {
-        xReturn = taskSCHEDULER_RUNNING;
-    }
-
-    return xReturn;
 }

@@ -57,6 +57,10 @@ typedef TCB_t *thread_t;
     const uint32_t task_scheduling_order_length =                                 \
         sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
 
+static inline bool scheduler_has_started(void) {
+    return pxCurrentTCB != NULL;
+}
+
 static inline thread_t task_get_current(void) {
     TaskHandle_t handle = pxCurrentTCB;
     assert(handle != NULL);

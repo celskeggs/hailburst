@@ -80,8 +80,8 @@ typedef struct TCB_st
 
 // array containing all tasktable entries produced in TASK_REGISTER
 // (this array is generated from fragments by the linker)
-extern TCB_t tasktable_start[];
-extern TCB_t tasktable_end[];
+extern const TCB_t tasktable_start[];
+extern const TCB_t tasktable_end[];
 
 typedef struct
 {
@@ -105,16 +105,7 @@ typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
 
-/* Definitions returned by xTaskGetSchedulerState(). */
-#define taskSCHEDULER_NOT_STARTED    ( ( BaseType_t ) 1 )
-#define taskSCHEDULER_RUNNING        ( ( BaseType_t ) 2 )
-
 void vTaskStartScheduler( void );
 void vTaskSwitchContext( void );
-
-/*
- * Returns the scheduler state as taskSCHEDULER_RUNNING or taskSCHEDULER_NOT_STARTED.
- */
-BaseType_t xTaskGetSchedulerState( void );
 
 #endif /* INC_TASK_H */

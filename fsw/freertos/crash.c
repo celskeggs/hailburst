@@ -70,11 +70,10 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
 
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "%s", trap_name);
-    if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
+    if (!scheduler_has_started()) {
         debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
     } else {
         TaskHandle_t failed_task = task_get_current();
-        assert(failed_task != NULL);
         debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
     }
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x InterruptNesting=%u",
@@ -99,7 +98,6 @@ void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = task_get_current();
-    assert(failed_task != NULL);
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
 
     if (failed_task->mut->recursive_exception) {
