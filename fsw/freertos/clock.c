@@ -4,11 +4,8 @@
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
-static void clock_start_main(void) {
+static void clock_start(void) {
     // no adjustment needed on FreeRTOS.
     tlm_clock_calibrated(&clock_telemetry, 0);
-
-    // nothing left to do.
-    task_suspend();
 }
-TASK_REGISTER(clock_start_task, "clock-start", clock_start_main, NULL, NOT_RESTARTABLE);
+PROGRAM_INIT(STAGE_CRAFT, clock_start);
