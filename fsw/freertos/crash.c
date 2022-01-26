@@ -15,6 +15,8 @@ __attribute__((noreturn)) void task_suspend(void) {
     // this will indeed stop us in the middle of this abort handler... but that's fine! We don't actually need
     // to return all the way back to the interrupted task; this stack will simply be thrown away.
     debugf(DEBUG, "Suspending task.");
+    // make sure interrupts are enabled before we use any WFI instructions
+    asm volatile("CPSIE i" ::: "memory");
     for (;;) {
         taskYIELD();
     }
