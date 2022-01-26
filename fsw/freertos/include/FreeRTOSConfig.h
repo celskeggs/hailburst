@@ -7,6 +7,8 @@
 
 // #define TASK_DEBUG
 
+#define VIVID_REPLICATE_TASK_CODE                       1
+
 /* Interrupt nesting behaviour configuration. */
 #define configINTERRUPT_CONTROLLER_BASE_ADDRESS         0x08000000
 #define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET 0x00010000
