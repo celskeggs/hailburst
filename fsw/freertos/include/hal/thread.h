@@ -8,6 +8,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include <rtos/replicate.h>
 #include <rtos/timer.h>
 #include <hal/atomic.h>
 #include <fsw/debug.h>
@@ -28,9 +29,10 @@ typedef TCB_t *thread_t;
         .roused_task     = 0,                                                     \
         .roused_local    = 0,                                                     \
     };                                                                            \
+    REPLICATE_OBJECT_CODE(t_start, t_ident ## _start_fn);                         \
     __attribute__((section("tasktable"))) TCB_t t_ident = {                       \
         .mut             = &t_ident ## _mutable,                                  \
-        .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
+        .start_routine   = PP_ERASE_TYPE(t_ident ## _start_fn, t_arg),            \
         .start_arg       = t_arg,                                                 \
         .restartable     = t_restartable,                                         \
         .pxStack         = t_ident ## _stack,                                     \

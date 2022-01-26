@@ -23,9 +23,9 @@ struct watchdog_mmio_region {
     uint32_t r_early_offset;      // read-only
 };
 
-static bool watchdog_initialized = false;
-static uint64_t watchdog_init_window_end;
-static volatile uint64_t watchdog_aspect_timestamps[WATCHDOG_ASPECT_NUM] = { 0 };
+bool watchdog_initialized = false;
+uint64_t watchdog_init_window_end;
+volatile uint64_t watchdog_aspect_timestamps[WATCHDOG_ASPECT_NUM] = { 0 };
 
 /************** BEGIN WATCHDOG FOOD PREPARATION CODE FROM QEMU IMPLEMENTATION **************/
 static uint32_t integer_power_truncated(uint32_t base, uint16_t power)
@@ -99,7 +99,7 @@ static bool watchdog_aspects_ok(void) {
     return ok;
 }
 
-static void watchdog_caretaker_loop(void *opaque) {
+void watchdog_caretaker_loop(void *opaque) {
     (void) opaque;
 
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;

@@ -83,7 +83,7 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
     }
 }
 
-static void telemetry_mainloop(void) {
+void telemetry_mainloop(void) {
     assert(telemetry.initialized == true);
     assert(telemetry.comm_encoder != NULL);
 

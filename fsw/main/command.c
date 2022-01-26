@@ -24,7 +24,7 @@ typedef struct {
     bool           parse_ok;
 } cmd_parser_t;
 
-static uint8_t zero[8] = {0};
+static const uint8_t zero[8] = {0};
 
 static const uint8_t *cmd_parser_consume(cmd_parser_t *parser, ssize_t n_bytes) {
     assert(n_bytes > 0 && n_bytes <= (ssize_t) sizeof(zero));
@@ -93,7 +93,7 @@ static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, tlm_async_endpoint_t
     return CMD_STATUS_OK;
 }
 
-static cmd_t commands[] = {
+static const cmd_t commands[] = {
     { .id = PING_CID,              .cmd = cmd_ping },
     { .id = MAG_SET_PWR_STATE_CID, .cmd = cmd_mag_set_pwr_state },
 };

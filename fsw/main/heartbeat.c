@@ -4,7 +4,7 @@
 
 TELEMETRY_ASYNC_REGISTER(heartbeat_telemetry);
 
-static void heartbeat_mainloop(void) {
+void heartbeat_mainloop(void) {
     clock_wait_for_calibration();
 
     // beat every 120 milliseconds (requirement is 150 milliseconds, so this is plenty fast)
