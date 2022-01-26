@@ -68,11 +68,11 @@ void thread_start_internal( TCB_t * pxNewTCB )
     StackType_t * pxTopOfStack;
 
     /* Calculate the top of stack address. */
-    pxTopOfStack = &( pxNewTCB->pxStack[ RTOS_STACK_SIZE - ( uint32_t ) 1 ] );
-    pxTopOfStack = ( StackType_t * ) ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack ) & ( ~( ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) ) ); /*lint !e923 !e9033 !e9078 MISRA exception.  Avoiding casts between pointers and integers is not practical.  Size differences accounted for using portPOINTER_SIZE_TYPE type.  Checked by assert(). */
+    pxTopOfStack = &(pxNewTCB->pxStack[RTOS_STACK_SIZE - (uint32_t) 1]);
+    pxTopOfStack = (StackType_t *) (((uintptr_t) pxTopOfStack) & (~((uintptr_t) portBYTE_ALIGNMENT_MASK)));
 
     /* Check the alignment of the calculated top of stack is correct. */
-    configASSERT( ( ( ( portPOINTER_SIZE_TYPE ) pxTopOfStack & ( portPOINTER_SIZE_TYPE ) portBYTE_ALIGNMENT_MASK ) == 0UL ) );
+    assert((((uintptr_t) pxTopOfStack & (uintptr_t) portBYTE_ALIGNMENT_MASK) == 0UL));
 
     /* Initialize the TCB stack to look as if the task was already running,
      * but had been interrupted by the scheduler.  The return address is set
@@ -172,22 +172,18 @@ void vTaskSwitchContext( void )
 }
 /*-----------------------------------------------------------*/
 
-#if ( INCLUDE_xTaskGetSchedulerState == 1 )
+BaseType_t xTaskGetSchedulerState( void )
+{
+    BaseType_t xReturn;
 
-    BaseType_t xTaskGetSchedulerState( void )
+    if( xSchedulerRunning == pdFALSE )
     {
-        BaseType_t xReturn;
-
-        if( xSchedulerRunning == pdFALSE )
-        {
-            xReturn = taskSCHEDULER_NOT_STARTED;
-        }
-        else
-        {
-            xReturn = taskSCHEDULER_RUNNING;
-        }
-
-        return xReturn;
+        xReturn = taskSCHEDULER_NOT_STARTED;
+    }
+    else
+    {
+        xReturn = taskSCHEDULER_RUNNING;
     }
 
-#endif /* ( INCLUDE_xTaskGetSchedulerState == 1 ) */
+    return xReturn;
+}

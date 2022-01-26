@@ -74,10 +74,6 @@ extern void vPortRestoreTaskContext( void );
 
 /*-----------------------------------------------------------*/
 
-/* Saved as part of the task context.  If ulPortTaskHasFPUContext is non-zero then
-a floating point context must be saved and restored for the task. */
-volatile uint32_t ulPortTaskHasFPUContext = pdFALSE;
-
 /* Counts the interrupt nesting depth.  A context switch is only performed if
 if the nesting depth is 0. */
 volatile uint32_t ulPortInterruptNesting = 0UL;
@@ -144,30 +140,10 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
     pxTopOfStack--;
     *pxTopOfStack = ( StackType_t ) pxNewTCB; /* R0 */
 
-    #if( configUSE_TASK_FPU_SUPPORT == 1 )
-    {
-        /* The task will start without a floating point context.  A task that
-        uses the floating point hardware must call vPortTaskUsesFPU() before
-        executing any floating point instructions. */
-        pxTopOfStack--;
-        *pxTopOfStack = portNO_FLOATING_POINT_CONTEXT;
-    }
-    #elif( configUSE_TASK_FPU_SUPPORT == 2 )
-    {
-        /* The task will start with a floating point context.  Leave enough
-        space for the registers - and ensure they are initialised to 0. */
-        pxTopOfStack -= portFPU_REGISTER_WORDS;
-        memset( pxTopOfStack, 0x00, portFPU_REGISTER_WORDS * sizeof( StackType_t ) );
-
-        pxTopOfStack--;
-        *pxTopOfStack = pdTRUE;
-        ulPortTaskHasFPUContext = pdTRUE;
-    }
-    #else
-    {
-        #error Invalid configUSE_TASK_FPU_SUPPORT setting - configUSE_TASK_FPU_SUPPORT must be set to 1, 2, or left undefined.
-    }
-    #endif
+    /* The task will start with a floating point context.  Leave enough
+    space for the registers - and ensure they are initialised to 0. */
+    pxTopOfStack -= portFPU_REGISTER_WORDS;
+    memset( pxTopOfStack, 0x00, portFPU_REGISTER_WORDS * sizeof( StackType_t ) );
 
     return pxTopOfStack;
 }
@@ -181,36 +157,16 @@ BaseType_t xPortStartScheduler( void )
     Privileged mode for the scheduler to start. */
     __asm volatile ( "MRS %0, APSR" : "=r" ( ulAPSR ) :: "memory" );
     ulAPSR &= portAPSR_MODE_BITS_MASK;
-    configASSERT( ulAPSR != portAPSR_USER_MODE );
+    assert(ulAPSR != portAPSR_USER_MODE);
 
-    if( ulAPSR != portAPSR_USER_MODE )
-    {
-        /* Interrupts are turned off in the CPU itself to ensure tick does
-        not execute while the scheduler is being started.  Interrupts are
-        automatically turned back on in the CPU when the first task starts
-        executing. */
-        assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
+    /* Interrupts are turned off in the CPU itself to ensure tick does
+    not execute while the scheduler is being started.  Interrupts are
+    automatically turned back on in the CPU when the first task starts
+    executing. */
+    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
-        /* Start the first task executing. */
-        vPortRestoreTaskContext();
-    }
+    /* Start the first task executing. */
+    vPortRestoreTaskContext();
 
     abortf("FreeRTOS scheduler failed");
 }
-/*-----------------------------------------------------------*/
-
-#if( configUSE_TASK_FPU_SUPPORT != 2 )
-
-    void vPortTaskUsesFPU( void )
-    {
-    uint32_t ulInitialFPSCR = 0;
-
-        /* A task is registering the fact that it needs an FPU context.  Set the
-        FPU flag (which is saved as part of the task context). */
-        ulPortTaskHasFPUContext = pdTRUE;
-
-        /* Initialise the floating point status register. */
-        __asm volatile ( "FMXR  FPSCR, %0" :: "r" (ulInitialFPSCR) : "memory" );
-    }
-
-#endif /* configUSE_TASK_FPU_SUPPORT */

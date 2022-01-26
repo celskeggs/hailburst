@@ -50,7 +50,6 @@
     .extern vTaskSwitchContext
     .extern vApplicationIRQHandler
     .extern ulPortInterruptNesting
-    .extern ulPortTaskHasFPUContext
 
     .global FreeRTOS_IRQ_Handler
     .global vPortRestoreTaskContext
@@ -66,20 +65,11 @@
     CPS     #SYS_MODE
     PUSH    {R0-R12, R14}
 
-    /* Does the task have a floating point context that needs saving?  If
-    ulPortTaskHasFPUContext is 0 then no. */
-    LDR     R2, ulPortTaskHasFPUContextConst
-    LDR     R3, [R2]
-    CMP     R3, #0
-
-    /* Save the floating point context, if any. */
-    FMRXNE  R1,  FPSCR
-    VPUSHNE {D0-D15}
-    VPUSHNE {D16-D31}
-    PUSHNE  {R1}
-
-    /* Save ulPortTaskHasFPUContext itself. */
-    PUSH    {R3}
+    /* Save the floating point context. */
+    FMRX    R1, FPSCR
+    VPUSH   {D0-D15}
+    VPUSH   {D16-D31}
+    PUSH    {R1}
 
     /* Save the stack pointer in the TCB. */
     LDR     R0, pxCurrentTCBConst   /* R0 = &pxCurrentTCB                   */
@@ -99,18 +89,11 @@
     LDR     R2, [R1]
     LDR     SP, [R2]
 
-    /* Is there a floating point context to restore?  If the restored
-    ulPortTaskHasFPUContext is zero then no. */
-    LDR     R0, ulPortTaskHasFPUContextConst
-    POP     {R1}
-    STR     R1, [R0]
-    CMP     R1, #0
-
-    /* Restore the floating point context, if any. */
-    POPNE   {R0}
-    VPOPNE  {D16-D31}
-    VPOPNE  {D0-D15}
-    VMSRNE  FPSCR, R0
+    /* Restore the floating point context. */
+    POP     {R0}
+    VPOP    {D16-D31}
+    VPOP    {D0-D15}
+    VMSR    FPSCR, R0
 
     /* Restore all system mode registers other than the SP (which is already
     being used). */
@@ -370,7 +353,6 @@ regular_device_irq:
 ulICCIARConst: .word ulICCIAR
 ulICCEOIRConst: .word ulICCEOIR
 pxCurrentTCBConst: .word pxCurrentTCB
-ulPortTaskHasFPUContextConst: .word ulPortTaskHasFPUContext
 vApplicationIRQHandlerConst: .word vApplicationIRQHandler
 ulPortInterruptNestingConst: .word ulPortInterruptNesting
 

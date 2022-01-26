@@ -51,19 +51,6 @@ typedef long BaseType_t;
 
 /*-----------------------------------------------------------*/
 
-/* If configUSE_TASK_FPU_SUPPORT is set to 1 (or left undefined) then tasks are
-created without an FPU context and must call vPortTaskUsesFPU() to give
-themselves an FPU context before using any FPU instructions.  If
-configUSE_TASK_FPU_SUPPORT is set to 2 then all tasks will have an FPU context
-by default. */
-#if( configUSE_TASK_FPU_SUPPORT != 2 )
-    void vPortTaskUsesFPU( void );
-#else
-    /* Each task has an FPU context already, so define this function away to
-    nothing to prevent it being called accidentally. */
-    #define vPortTaskUsesFPU()
-#endif
-
 /* Interrupt controller access addresses. */
 #define portICCPMR_PRIORITY_MASK_OFFSET                         ( 0x04 )
 #define portICCIAR_INTERRUPT_ACKNOWLEDGE_OFFSET                 ( 0x0C )
