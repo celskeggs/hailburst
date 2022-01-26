@@ -147,7 +147,7 @@ def main(tempdir):
             assert "/" not in target
             target_path = os.path.join(tempdir, "t_" + target + ".o")
             call_proc([linker, "--relocatable", "--fatal-warnings", "--unresolved-symbols=ignore-all",
-                       "-T", replica_script, "-u", target, "-o", target_path, safety_archive])
+                       "-T", replica_script, "--require-defined", target, "-o", target_path, safety_archive])
             partials[target] = target_path
 
         specials = []
