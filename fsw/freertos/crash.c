@@ -20,29 +20,15 @@ __attribute__((noreturn)) void task_suspend(void) {
     }
 }
 
-static void restart_task_mainloop(void) {
-    for (;;) {
-        for (thread_t thread = tasktable_start; thread < tasktable_end; thread++) {
-            if (thread->mut->needs_restart == true) {
-                thread->mut->needs_restart = false;
-                thread_restart_other_task(thread);
-            }
-        }
-        task_doze();
-    }
-}
-
-TASK_REGISTER(task_restart_task, "restart-task", restart_task_mainloop, NULL, NOT_RESTARTABLE);
-
 __attribute__((noreturn)) void restart_current_task(void) {
     thread_t current_thread = task_get_current();
     assert(current_thread != NULL);
 
     if (current_thread->restartable == RESTARTABLE) {
-        // mark ourself as pending restart
-        current_thread->mut->needs_restart = true;
-        // wake up the restart task
-        task_rouse(&task_restart_task);
+        // mark ourself as pending restart (handled by scheduler)
+        current_thread->mut->hit_restart = true;
+        current_thread->mut->needs_start = true;
+
         debugf(WARNING, "Suspending task to wait for restart.");
     } else {
         debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
@@ -111,11 +97,8 @@ extern volatile uint32_t trap_recursive_flag;
 static volatile TaskHandle_t last_failed_task = NULL;
 
 void task_clear_crash(void) {
-    taskENTER_CRITICAL();
-    if (last_failed_task == task_get_current()) {
-        last_failed_task = NULL;
-    }
-    taskEXIT_CRITICAL();
+    TaskHandle_t current = task_get_current();
+    (void) atomic_comp_exchange_relaxed(last_failed_task, current, NULL);
 }
 
 void task_abort_handler(unsigned int trap_mode) {
@@ -131,11 +114,8 @@ void task_abort_handler(unsigned int trap_mode) {
     }
 
     last_failed_task = failed_task;
-
-    portMEMORY_BARRIER(); // so that we commit our changes to last_failed_task before updating the recursive flag
-
     assert(trap_recursive_flag == 1);
-    trap_recursive_flag = 0;
+    atomic_store(trap_recursive_flag, 0);
 
     // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
     // to return all the way back to the interrupted task.

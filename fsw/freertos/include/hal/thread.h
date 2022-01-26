@@ -22,7 +22,7 @@ typedef TCB_t *thread_t;
     StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
     TCB_mut_t t_ident ## _mutable = {                                             \
         .pxTopOfStack    = NULL,                                                  \
-        .needs_restart   = false,                                                 \
+        .needs_start     = true,                                                  \
         .hit_restart     = false,                                                 \
         .roused_task     = 0,                                                     \
         .roused_local    = 0,                                                     \

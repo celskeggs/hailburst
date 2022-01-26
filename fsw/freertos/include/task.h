@@ -70,7 +70,7 @@ typedef enum {
 typedef struct
 {
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
-    bool needs_restart;
+    bool needs_start;
     bool hit_restart;
 
     // these are just 0 or 1, but in a full uint32_t to help with atomicity
@@ -170,14 +170,6 @@ extern TCB_t * volatile pxCurrentTCB;
 /* Definitions returned by xTaskGetSchedulerState(). */
 #define taskSCHEDULER_NOT_STARTED    ( ( BaseType_t ) 1 )
 #define taskSCHEDULER_RUNNING        ( ( BaseType_t ) 2 )
-
-
-/*-----------------------------------------------------------
-* TASK CREATION API
-*----------------------------------------------------------*/
-
-void thread_start_internal( TCB_t * pxNewTCB );
-void thread_restart_other_task( TCB_t * pxTCB );
 
 /*-----------------------------------------------------------
 * SCHEDULER CONTROL

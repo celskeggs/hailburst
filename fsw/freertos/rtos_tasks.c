@@ -82,27 +82,6 @@ void thread_start_internal( TCB_t * pxNewTCB )
 }
 /*-----------------------------------------------------------*/
 
-void thread_restart_other_task(TCB_t *pxTCB) {
-    assert(pxTCB != NULL);
-    assert(pxTCB->restartable == RESTARTABLE);
-    assert(pxTCB != pxCurrentTCB);
-
-    debugf(WARNING, "Restarting task '%s'", pxTCB->pcTaskName);
-
-    // this needs to be in a critical section so that there is no period of time in which other tasks could run AND
-    // the TaskHandle could refer to undefined memory.
-    taskENTER_CRITICAL();
-
-    pxTCB->mut->hit_restart = true;
-    thread_start_internal(pxTCB);
-
-    taskEXIT_CRITICAL();
-
-    debugf(WARNING, "Completed restart for task '%s'", pxTCB->pcTaskName);
-}
-
-/*-----------------------------------------------------------*/
-
 static inline void schedule_load(bool validate)
 {
     assert(schedule_index < task_scheduling_order_length);
@@ -115,7 +94,7 @@ static inline void schedule_load(bool validate)
     arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
 
 #ifdef TASK_DEBUG
-    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, pxCurrentTCB->pcTaskName, new_time);
+    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
 #endif
 
     if (validate) {
@@ -125,6 +104,15 @@ static inline void schedule_load(bool validate)
     }
 
     schedule_last = new_time;
+
+    // we put this here instead of in a separate task, because it has to have a critical section anyway,
+    // so it shouldn't be any more dangerous here than elsewhere.
+    if (sched.task->mut->needs_start == true) {
+        debugf(WARNING, "Starting or restarting task '%s'", sched.task->pcTaskName);
+
+        sched.task->mut->needs_start = false;
+        thread_start_internal(sched.task);
+    }
 }
 
 /*-----------------------------------------------------------*/
@@ -145,11 +133,6 @@ void vTaskStartScheduler( void )
     portDISABLE_INTERRUPTS();
 
     xSchedulerRunning = pdTRUE;
-
-    taskFOREACH(task) {
-        thread_start_internal(task);
-    }
-    debugf(DEBUG, "Started %u pre-registered threads!", tasktable_end - tasktable_start);
 
     /* Start the timer that generates the tick ISR. */
     assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
