@@ -77,7 +77,7 @@ void *chart_reply_start(chart_t *chart) {
 void chart_reply_send(chart_t *chart, chart_index_t count) {
     assert(chart != NULL);
     chart_index_t avail = chart_reply_avail(chart);
-    assertf(1 <= count && count <= avail, "count=%u, avail=%u", count, avail);
+    assertf(1 <= count && count <= avail, "self=%p, count=%u, avail=%u", chart, count, avail);
     // TODO: can this be relaxed, since it's limited to a single processor?
     atomic_store(chart->reply_ptr, chart->reply_ptr + count);
 

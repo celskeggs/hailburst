@@ -419,7 +419,7 @@ void radio_uplink_loop(radio_t *radio) {
 
     // (re)configure uplink side of radio
     if (!radio_initialize_uplink(radio)) {
-        debugf(CRITICAL, "Radio: could not identify device settings for uplink.");
+        debugf(WARNING, "Radio: could not identify device settings for uplink.");
         return;
     }
 
@@ -515,7 +515,7 @@ void radio_downlink_loop(radio_t *radio) {
 
     // (re)configure downlink side of radio
     if (!radio_initialize_downlink(radio)) {
-        debugf(CRITICAL, "Radio: could not identify device settings for downlink.");
+        debugf(WARNING, "Radio: could not identify device settings for downlink.");
         return;
     }
 

@@ -102,7 +102,8 @@ static void virtio_monitor(struct virtio_device *device, uint32_t queue_index, s
         // find the index of our matching ring buffer entry
         uint32_t index = (queue->last_used_idx + i) % queue->queue_num;
         // make sure the two match, so that we know we're using the right descriptor
-        assert(request == chart_get_note(queue->chart, index));
+        void *note = chart_get_note(queue->chart, index);
+        assertf(request == note, "request=%p, note=%p", request, note);
         // these should still match from the previous cycle, so we don't need to update anything.
         assert(queue->avail->ring[index] == index);
 
