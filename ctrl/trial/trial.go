@@ -160,7 +160,7 @@ func (opt Options) GdbCmds() []string {
 		"maintenance packet Qqemu.PhyMemMode:1",
 		"set pagination off",
 		"source " + path.Join(opt.HailburstDir, "ctrl/script/ctrl.py"),
-		"log_inject " + path.Join(opt.TrialDir, "./injections.csv"),
+		"log_inject " + path.Join(opt.TrialDir, "./injections.csv") + " " + path.Join(opt.TrialDir, "./inject.gdb"),
 		"set history filename " + path.Join(opt.HailburstDir, ".gdbhistory"),
 		"set history save on",
 		"set history remove-duplicates 1",
