@@ -1,0 +1,53 @@
+import os
+
+Import('build_modules')
+
+app_modules = [
+    'bus',
+    'flight',
+    'include',
+    'linux',
+    'linux/fly',
+    'synch',
+]
+
+test_modules = [
+    'bus',
+    'bus/test',
+    'include',
+    'linux',
+    'linux/test',
+    'synch',
+]
+
+env = Environment(
+    CCFLAGS=[
+        '-ggdb',
+        '-Wall', '-Wextra', '-Werror',
+        '-D_GNU_SOURCE', '-std=gnu11',
+        '-Dstatic_assert=_Static_assert',
+    ],
+    LIBS=[
+        'pthread',
+        'z',
+    ],
+    PREFIX=GetOption('prefix'),
+    CPPPATH=[],
+)
+
+inherited_env_vars = [
+    "AR", "AS", "LD", "NM", "CC", "CPP", "CXX", "RANLIB", "READELF", "STRIP", "OBJCOPY", "OBJDUMP",
+]
+
+for inherit in inherited_env_vars:
+    if inherit in os.environ:
+        env[inherit] = os.environ[inherit]
+
+linux_app = env.Program("app", build_modules(env, app_modules))
+env.Default(linux_app)
+env.Alias("install", [
+    env.Install('$PREFIX/usr/bin', linux_app),
+    env.Install('$PREFIX/etc/init.d', "linux/S80app"),
+])
+
+env.Default(env.Program("exchange_test", build_modules(env, test_modules)))

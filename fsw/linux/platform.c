@@ -1,5 +1,5 @@
+#include <hal/debug.h>
 #include <hal/thread.h>
-#include <fsw/debug.h>
 
 static bool initialized = false;
 

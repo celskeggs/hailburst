@@ -1,8 +1,8 @@
 #include <string.h>
 
 #include <hal/atomic.h>
-#include <fsw/debug.h>
-#include <fsw/io.h>
+#include <hal/debug.h>
+#include <synch/io.h>
 #include <bus/switch.h>
 
 //#define SWITCH_DEBUG

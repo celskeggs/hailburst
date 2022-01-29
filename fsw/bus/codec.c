@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fsw/debug.h>
+#include <hal/debug.h>
 #include <bus/codec.h>
 
 //#define DEBUG

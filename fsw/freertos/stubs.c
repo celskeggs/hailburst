@@ -10,9 +10,8 @@
 #include <rtos/gic.h>
 #include <rtos/scrubber.h>
 #include <rtos/timer.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
-#include <fsw/spacecraft.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 
 static void configure_floating_point(void) {
     // enable coprocessors for VFP

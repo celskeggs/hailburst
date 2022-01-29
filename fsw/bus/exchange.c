@@ -2,10 +2,10 @@
 #include <string.h>
 #include <time.h>
 
+#include <hal/clock.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/thread.h>
-#include <fsw/clock.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 #include <bus/exchange.h>
 
 enum {

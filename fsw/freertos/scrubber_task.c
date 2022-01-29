@@ -1,9 +1,9 @@
 #include <elf/elf.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/thread.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 
 enum {
     MEMORY_LOW = 0x40000000,

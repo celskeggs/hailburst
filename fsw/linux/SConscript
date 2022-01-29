@@ -1,0 +1,20 @@
+Import('env')
+
+env["CPPPATH"] += [
+    Dir("#/linux/include/"),
+]
+
+sources = [
+    "debug.c",
+    "fakewire_link.c",
+    "platform.c",
+    "semaphore.c",
+]
+
+objects = [env.Object(source) for source in sources]
+
+objects += [
+    "data.ld",
+]
+
+Return('objects')

@@ -2,7 +2,7 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
-#include <fsw/init.h>
+#include <hal/init.h>
 
 enum {
     GIC_DIST_ADDR = 0x08000000,

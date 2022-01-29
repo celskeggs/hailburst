@@ -1,0 +1,30 @@
+Import('env')
+
+env["CPPPATH"] += [
+    Dir("#/freertos/include/"),
+]
+
+env["FREERTOS_LINKSCRIPT"] = File('link.ld')
+env["REPLICA_SCRIPT"] = File('replica.ld')
+
+sources = [
+    "abort.c",
+    "clock.c",
+    "crash.c",
+    "entrypoint.s",
+    "fakewire_link.c",
+    "gic.c",
+    "rtos_port.c",
+    "rtos_tasks.c",
+    "scrubber_api.c",
+    "scrubber_task.c",
+    "stubs.c",
+    "thread.c",
+    "virtio.c",
+    "virtio_console.c",
+    "watchdog.c",
+]
+
+objects = [env.Object(source) for source in sources]
+
+Return('objects')

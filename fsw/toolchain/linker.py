@@ -16,8 +16,8 @@ archiver = None
 objcopy = None
 replica_script = None
 excise = None
-workdir = None
 passthrough = []
+output = None
 inputs = []
 
 argv = sys.argv[1:]
@@ -37,13 +37,14 @@ while argv:
     elif argv[0] == "--excise" and len(argv) > 1:
         excise = argv[1]
         argv = argv[2:]
-    elif argv[0] == "--workdir" and len(argv) > 1:
-        workdir = argv[1]
-        argv = argv[2:]
-    elif argv[0] in ["-o", "-T"] and len(argv) > 1:
+    elif argv[0] == "-o" and len(argv) > 1:
+        output = argv[1]
         passthrough += argv[0:2]
         argv = argv[2:]
-    elif argv[0] in ["--fatal-warnings"]:
+    elif argv[0] == "-T" and len(argv) > 1:
+        passthrough += argv[0:2]
+        argv = argv[2:]
+    elif argv[0] == "--fatal-warnings":
         passthrough.append(argv[0])
         argv = argv[1:]
     elif argv[0][0] == "-":
@@ -54,8 +55,8 @@ while argv:
         argv = argv[1:]
 
 
-if not linker or not archiver or not objcopy or not replica_script or not excise or not workdir:
-    sys.exit("Missing linker or archiver or objcopy or replica script or excise or workdir path")
+if not linker or not archiver or not objcopy or not replica_script or not excise or not output:
+    sys.exit("Missing linker or archiver or objcopy or replica script or excise or output path")
 
 
 def get_relocation_list(elf):
@@ -110,8 +111,10 @@ def call_proc(args, ok=(0,)):
     return rc
 
 
-def main(tempdir):
-    shutil.rmtree(tempdir)
+def main():
+    tempdir = output + "_workdir"
+    if os.path.isdir(tempdir):
+        shutil.rmtree(tempdir)
     os.mkdir(tempdir)
 
     linker_args = [linker] + passthrough
@@ -171,4 +174,4 @@ def main(tempdir):
 
 
 if __name__ == '__main__':
-    main(workdir)
+    main()

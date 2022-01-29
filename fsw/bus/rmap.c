@@ -1,8 +1,8 @@
 #include <string.h>
 
-#include <fsw/clock.h>
-#include <fsw/debug.h>
-#include <fsw/io.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
+#include <synch/io.h>
 #include <bus/rmap.h>
 
 enum {

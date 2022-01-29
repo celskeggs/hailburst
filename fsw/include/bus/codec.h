@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <fsw/chart.h>
-#include <fsw/io.h>
+#include <synch/chart.h>
+#include <synch/io.h>
 
 // THREAD SAFETY NOTE: none of this code is thread-safe.
 // You may free the memory used in any of these structures at any time, as long as the structure is not in use.

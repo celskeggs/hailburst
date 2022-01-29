@@ -1,6 +1,6 @@
-#include <fsw/clock.h>
-#include <fsw/clock_init.h>
-#include <fsw/telemetry.h>
+#include <hal/clock.h>
+#include <hal/clock_init.h>
+#include <flight/telemetry.h>
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 

@@ -11,8 +11,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <fsw/clock.h>
-#include <fsw/preprocessor.h>
+#include <hal/clock.h>
+#include <hal/preprocessor.h>
 
 #define THREAD_CHECK(x) (thread_check((x), #x))
 #define THREAD_CHECK_OK(x, fm) (thread_check_ok((x), #x, (fm)))

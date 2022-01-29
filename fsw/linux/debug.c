@@ -1,8 +1,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include <fsw/clock.h>
-#include <fsw/debug.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
 
 void debugf(loglevel_t level, const char* format, ...) {
     (void) level;

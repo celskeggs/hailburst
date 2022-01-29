@@ -3,7 +3,7 @@
 
 #include <string.h> // for memset, needed by port.c
 
-#include <fsw/debug.h> // for assert
+#include <hal/debug.h> // for assert
 
 // #define TASK_DEBUG
 

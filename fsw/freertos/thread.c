@@ -4,9 +4,9 @@
 #include <rtos/crash.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/thread.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 
 void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {

@@ -1,0 +1,9 @@
+Import('env')
+
+sources = [
+    "exchange_test.c",
+]
+
+objects = [env.Object(source) for source in sources]
+
+Return('objects')

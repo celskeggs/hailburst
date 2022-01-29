@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <hal/init.h>
 #include <hal/thread.h>
-#include <fsw/chart.h>
-#include <fsw/init.h>
+#include <synch/chart.h>
 
 enum {
     SWITCH_PORT_BASE  = 1,

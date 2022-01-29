@@ -7,8 +7,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <fsw/clock.h>
-#include <fsw/debug.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
 #include <bus/link.h>
 
 //#define DEBUG

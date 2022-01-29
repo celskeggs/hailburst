@@ -1,0 +1,20 @@
+Import('env')
+
+# host program
+GDB_BINUTILS = "#/../../binutils-gdb"
+
+excise_source = [
+    "excise.c",
+    GDB_BINUTILS + "/bfd/libbfd.a",
+    GDB_BINUTILS + "/libiberty/libiberty.a",
+]
+
+env["PYTHONPP"] = File('preprocessor.py')
+env["REPLICA_LINK_PY"] = File('linker.py')
+env["EXCISE"] = Program("excise", excise_source, CPPPATH=[GDB_BINUTILS + "/bfd"], LIBS=["dl", "z"])
+# TODO: can this be a list?
+env["REPLICA_LINK"] = (
+    "python3 $REPLICA_LINK_PY " +
+    "--archiver $AR --excise $EXCISE --objcopy $OBJCOPY --replica-script $REPLICA_SCRIPT " +
+    "--linker " + env["LINK"]  # make a copy of $LINK so that it can be replaced later
+)

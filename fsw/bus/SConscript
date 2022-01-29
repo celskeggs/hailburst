@@ -1,0 +1,13 @@
+Import('env')
+
+sources = [
+    "codec.c",
+    "exchange.c",
+    "rmap.c",
+    "rmap_helpers.c",
+    "switch.c",
+]
+
+libbus = env.Library("bus", sources)
+
+Return('libbus')

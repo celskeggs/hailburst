@@ -7,13 +7,29 @@
 #include <unistd.h>
 
 #include <hal/atomic.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/thread.h>
-#include <fsw/clock.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 #include <bus/exchange.h>
 
-#include "test_common.h"
+static void make_fifos(const char *prefix) {
+    char path_buf[strlen(prefix) + 20];
+
+    size_t actual = snprintf(path_buf, sizeof(path_buf), "./%s-p2c.pipe", prefix);
+    assert(actual < sizeof(path_buf)); // no overflow
+    if (mkfifo(path_buf, 0755) < 0) {
+        perror("mkfifo");
+        exit(1);
+    }
+
+    actual = snprintf(path_buf, sizeof(path_buf), "./%s-c2p.pipe", prefix);
+    assert(actual < sizeof(path_buf)); // no overflow
+    if (mkfifo(path_buf, 0755) < 0) {
+        perror("mkfifo");
+        exit(1);
+    }
+}
 
 struct packet_chain {
     uint8_t *packet_data;
@@ -216,7 +232,7 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
 }
 
 static void prepare_test_fifos(void) {
-    test_common_make_fifos("fwfifo");
+    make_fifos("fwfifo");
 }
 PROGRAM_INIT(STAGE_RAW, prepare_test_fifos);
 

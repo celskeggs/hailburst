@@ -1,0 +1,17 @@
+Import('env')
+
+sources = [
+    "comm.c",
+    "command.c",
+    "heartbeat.c",
+    "magnetometer.c",
+    "radio.c",
+    "spacecraft.c",
+    "telemetry.c",
+]
+
+# note: we have to return object files here, rather than packaging them in a library, so that any
+# modules that receive no references (like heartbeat) will still actually be linked.
+objects = [env.Object(source) for source in sources]
+
+Return('objects')

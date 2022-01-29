@@ -1,0 +1,22 @@
+Import('env')
+
+# embedded artistry's libc
+EALIBC_ROOT = "#/../../ealibc"
+
+env["CPPPATH"] += [
+    Dir(EALIBC_ROOT + "/include"),
+    Dir(EALIBC_ROOT + "/arch/arm/include"),
+]
+
+sources = [
+    "string/memset.c",
+    "string/memcpy.c",
+    "string/memmove.c",
+    "string/strlen.c",
+    "crt/exit.c",  # TODO: can I remove this?
+    "stdlib/rand.c",
+]
+
+ealibc = env.Library("ealibc", [EALIBC_ROOT + "/src/" + source for source in sources])
+
+Return('ealibc')

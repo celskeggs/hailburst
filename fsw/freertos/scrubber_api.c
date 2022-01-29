@@ -1,8 +1,8 @@
 #include <elf/elf.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
+#include <hal/debug.h>
 #include <hal/thread.h>
-#include <fsw/debug.h>
 
 SCRUBBER_REGISTER(scrubber_1, "scrubber_1");
 SCRUBBER_REGISTER(scrubber_2, "scrubber_2");

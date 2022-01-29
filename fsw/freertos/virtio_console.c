@@ -4,10 +4,10 @@
 
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
 #include <hal/thread.h>
-#include <fsw/clock.h>
-#include <fsw/debug.h>
-#include <fsw/io.h>
+#include <synch/io.h>
 
 enum {
     VIRTIO_FAKEWIRE_PORT_INDEX  = 1,

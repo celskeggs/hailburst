@@ -1,0 +1,15 @@
+Import('env')
+
+ZLIB_ROOT = "#/../../zlib-1.2.11"
+
+env["CPPPATH"] += [
+    Dir(ZLIB_ROOT),
+]
+
+sources = [
+    "crc32.c",
+]
+
+zlib = env.Library("zlib", [ZLIB_ROOT + "/" + source for source in sources])
+
+Return('zlib')

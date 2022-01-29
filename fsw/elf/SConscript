@@ -1,0 +1,9 @@
+Import('env')
+
+sources = [
+    "elf.c",
+]
+
+libelf = env.Library("elf", sources)
+
+Return('libelf')

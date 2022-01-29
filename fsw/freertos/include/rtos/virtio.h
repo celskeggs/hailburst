@@ -10,8 +10,8 @@
 #include <rtos/gic.h>
 #include <rtos/virtqueue.h>
 #include <hal/thread.h>
-#include <fsw/chart.h>
-#include <fsw/init.h>
+#include <hal/init.h>
+#include <synch/chart.h>
 
 enum {
     // configuration for the particular VIRTIO MMIO layout of the qemu-system-arm -M virt simulation board

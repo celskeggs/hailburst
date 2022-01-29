@@ -6,10 +6,10 @@
 #include <rtos/arm.h>
 #include <rtos/crash.h>
 #include <hal/atomic.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/system.h>
 #include <hal/thread.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 
 __attribute__((noreturn)) void task_suspend(void) {
     // this will indeed stop us in the middle of this abort handler... but that's fine! We don't actually need

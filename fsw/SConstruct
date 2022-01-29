@@ -8,5 +8,30 @@ AddOption(
     help='installation prefix',
 )
 
-SConscript(dirs='.', variant_dir='build-linux/', duplicate=False, exports={"platform": "linux"})
-SConscript(dirs='.', variant_dir='build-freertos/', duplicate=False, exports={"platform": "freertos"})
+
+def build_module(env, module):
+    assert type(module) == str
+    key = "MODULE_CACHE_" + module.replace("/", "__")
+    if key not in env:
+        env[key] = SConscript(dirs=["#/" + module], exports={'env': env}, must_exist=True, variant_dir="./" + module, duplicate=False) or []
+    return env[key]
+
+
+def build_modules(env, modules):
+    objects = []
+    archives = []
+    for file in Flatten([build_module(env, module) for module in modules]):
+        if str(file).endswith(".o") or str(file).endswith(".ld"):
+            objects.append(file)
+        elif str(file).endswith(".a"):
+            archives.append(file)
+        else:
+            raise RuntimeError("Cannot identify category of file: %s (%r)", file, file)
+    # use this order so that archives can actually be pulled in by objects
+    return objects + archives
+
+
+Export('build_modules')
+
+SConscript('linux/SPlatform', variant_dir='build-linux/', duplicate=False)
+SConscript('freertos/SPlatform', variant_dir='build-freertos/', duplicate=False)

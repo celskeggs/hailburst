@@ -2,11 +2,11 @@
 #include <stdint.h>
 
 #include <rtos/timer.h>
+#include <hal/debug.h>
+#include <hal/init.h>
 #include <hal/system.h>
 #include <hal/thread.h>
 #include <hal/watchdog.h>
-#include <fsw/debug.h>
-#include <fsw/init.h>
 
 enum {
     WATCHDOG_BASE_ADDRESS = 0x090c0000,

@@ -1,0 +1,10 @@
+Import('env')
+
+sources = [
+    "clock.c",
+    "entrypoint.c",
+]
+
+objects = [env.Object(source) for source in sources]
+
+Return('objects')

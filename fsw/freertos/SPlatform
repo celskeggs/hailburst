@@ -1,0 +1,132 @@
+import SCons.Defaults
+import SCons.Tool
+
+Import('build_modules')
+
+app_modules = [
+    # configuration must go first
+    'toolchain',
+
+    # code modules can come afterwards
+    'bus',
+    'elf',
+    'flight',
+    'freertos',
+    'freertos/debug',
+    'freertos/ealibc',
+    'freertos/libgcc',
+    'freertos/zlib',
+    'include',
+    'synch',
+    'toolchain',
+]
+
+bootrom_modules = [
+    'bootrom',
+    'elf',
+    'freertos/debug',
+    'freertos/ealibc',
+    'freertos/libgcc',
+    'include',
+]
+
+common_flags = [
+    "-ggdb",
+    "-mcpu=cortex-a15", "-mfpu=vfpv4", "-mfloat-abi=softfp",
+]
+
+env = Environment(
+    CC="arm-none-eabi-gcc",
+    AS="arm-none-eabi-gcc",
+    LINK="arm-none-eabi-ld",
+    OBJCOPY="arm-none-eabi-objcopy",
+    STRIP="arm-none-eabi-strip",
+    LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
+    CCFLAGS=common_flags + [
+        "-Wall", "-Wextra", "-Werror",
+        # because ealibc uses #pragma mark, and that causes trouble
+        "-Wno-unknown-pragmas",
+        "-nostdlib", "-nostdinc", "-ffreestanding",
+        "-std=gnu11",
+        "-D_BITSIZE=32", "-D__FREERTOS__",
+    ],
+    ASFLAGS=common_flags + [
+        "-c",
+        "-Wa,--fatal-warnings",
+    ],
+    CPPPATH=[],
+    PPSUFFIX=".iraw",
+    RWSUFFIX=".i",
+    PPCOM='$CC -o $TARGET -E $CFLAGS $CCFLAGS -D__PYTHON_PREPROCESS__ $_CCCOMCOM $SOURCES',
+    PPMODCOM='python3 $PYTHONPP $SOURCES $TARGET',
+    # eliminate $_CCCOMCOM here because it's used for preprocessor flags that are not needed here
+    OBJCOM='$CC -o $TARGET -c $CFLAGS $CCFLAGS $SOURCES',
+)
+
+env['BUILDERS']['PP'] = Builder(
+    action=Action("$PPCOM", "$PPCOMSTR"),
+    suffix='$PPSUFFIX',
+    src_suffix='.c',
+    source_scanner=SourceFileScanner,
+    single_source=1,
+)
+
+
+def plugin_dep_emitter(target, source, env):
+    env.Depends(target, "$PYTHONPP")
+    return target, source
+
+
+env['BUILDERS']['PPMOD'] = Builder(
+    action=Action("$PPMODCOM", "$PPMODCOMSTR"),
+    emitter=plugin_dep_emitter,
+    suffix='$RWSUFFIX',
+    src_suffix='$PPSUFFIX',
+    src_builder='PP',
+    single_source=1,
+)
+ObjAction = Action("$OBJCOM", "$OBJCOMSTR")
+ASAction = Action("$ASCOM", "$ASCOMSTR")
+CAction = Action("$CCCOM", "$CCCOMSTR")
+static_object_builder = Builder(
+    action={'$RWSUFFIX': ObjAction, '.s': ASAction, '.S': CAction},
+    emitter=SCons.Defaults.StaticObjectEmitter,
+    prefix='$OBJPREFIX',
+    suffix='$OBJSUFFIX',
+    src_suffix=['$RWSUFFIX', '.s', '.S'],
+    src_builder='PPMOD',
+    single_source=1,
+)
+env['BUILDERS']['Object'] = static_object_builder
+env['BUILDERS']['StaticObject'] = static_object_builder
+
+rtos_kernel = env.Program("kernel", build_modules(env, app_modules),
+                          LINK="$REPLICA_LINK", LINKSCRIPT="$FREERTOS_LINKSCRIPT")
+env.Depends(rtos_kernel, "$REPLICA_LINK_PY")
+env.Depends(rtos_kernel, "$EXCISE")
+env.Depends(rtos_kernel, "$FREERTOS_LINKSCRIPT")
+env.Depends(rtos_kernel, "$REPLICA_SCRIPT")
+env.Default(rtos_kernel)
+
+stripped_kernel = env.Command(
+    target='stripped-kernel',
+    source=rtos_kernel,
+    action='$STRIP --strip-all --remove-section=debugf_messages $SOURCE -o $TARGET',
+)
+
+embedding = env.Command(
+    target='embedded-kernel.o',
+    source=stripped_kernel,
+    action='$OBJCOPY -I binary -O elf32-littlearm -B arm --strip-all $SOURCE $TARGET',
+)
+
+rtos_bootrom_elf = env.Program("bootrom-elf", build_modules(env, bootrom_modules) + [embedding],
+                               LINKSCRIPT="$BOOTROM_LINKSCRIPT")
+env.Depends(rtos_bootrom_elf, "$BOOTROM_LINKSCRIPT")
+
+rtos_bootrom_bin = env.Command(
+    target='bootrom-bin',
+    source=rtos_bootrom_elf,
+    action='$OBJCOPY -I elf32-littlearm -O binary $SOURCE $TARGET',
+)
+env.Default(rtos_bootrom_bin)

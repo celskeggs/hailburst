@@ -11,8 +11,8 @@
 #include <rtos/replicate.h>
 #include <rtos/timer.h>
 #include <hal/atomic.h>
-#include <fsw/debug.h>
-#include <fsw/preprocessor.h>
+#include <hal/debug.h>
+#include <hal/preprocessor.h>
 
 typedef TCB_t *thread_t;
 

@@ -1,0 +1,7 @@
+import subprocess
+
+Import('env')
+
+libgcc = env.File(subprocess.check_output([env['CC'], "-print-libgcc-file-name"]).decode().strip())
+
+Return('libgcc')

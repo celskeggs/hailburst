@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fsw/clock.h>
-#include <fsw/debug.h>
+#include <hal/clock.h>
+#include <hal/debug.h>
 #include <hal/thread.h>
 
 // semaphores are created empty, such that an initial take will block

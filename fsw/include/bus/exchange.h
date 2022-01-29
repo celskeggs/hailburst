@@ -2,7 +2,7 @@
 #define FSW_FAKEWIRE_EXCHANGE_H
 
 #include <hal/thread.h>
-#include <fsw/chart.h>
+#include <synch/chart.h>
 #include <bus/link.h>
 
 enum {

@@ -1,0 +1,9 @@
+Import('env')
+
+sources = [
+    "debug.c",
+]
+
+libdebug = env.Library("debug", sources)
+
+Return('libdebug')

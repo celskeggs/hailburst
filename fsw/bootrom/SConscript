@@ -1,0 +1,12 @@
+Import('env')
+
+env['BOOTROM_LINKSCRIPT'] = File('link.ld')
+
+sources = [
+    "boot.c",
+    "start.s",
+]
+
+objects = [env.Object(source) for source in sources]
+
+Return('objects')
