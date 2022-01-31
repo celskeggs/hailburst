@@ -24,6 +24,8 @@ env = Environment(
     CCFLAGS=[
         '-ggdb',
         '-Wall', '-Wextra', '-Werror',
+        # because comparisons of constants defined using 'enum' otherwise might cause trouble
+        '-Wno-enum-compare',
         '-D_GNU_SOURCE', '-std=gnu11',
         '-Dstatic_assert=_Static_assert',
     ],

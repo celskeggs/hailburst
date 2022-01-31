@@ -46,6 +46,8 @@ env = Environment(
         "-Wall", "-Wextra", "-Werror",
         # because ealibc uses #pragma mark, and that causes trouble
         "-Wno-unknown-pragmas",
+        # because comparisons of constants defined using 'enum' otherwise might cause trouble
+        "-Wno-enum-compare",
         "-nostdlib", "-nostdinc", "-ffreestanding",
         "-std=gnu11",
         "-D_BITSIZE=32", "-D__FREERTOS__",

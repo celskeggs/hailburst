@@ -73,6 +73,7 @@ static const rmap_addr_t magnetometer_routing = {
     .dest_key = 102,
 };
 
+#ifdef CLOCK_EXISTS
 static const rmap_addr_t clock_routing = {
     .destination = {
         .path_bytes = NULL,
@@ -86,11 +87,22 @@ static const rmap_addr_t clock_routing = {
     },
     .dest_key = 103,
 };
+#endif
 
 static bool initialized = false;
 static spacecraft_t sc;
 
 SWITCH_REGISTER(fce_vswitch);
+// add physical routes
+SWITCH_ROUTE(fce_vswitch, PADDR_RADIO, VPORT_LINK, false);
+SWITCH_ROUTE(fce_vswitch, PADDR_MAG, VPORT_LINK, false);
+SWITCH_ROUTE(fce_vswitch, PADDR_CLOCK, VPORT_LINK, false);
+// add virtual routes
+SWITCH_ROUTE(fce_vswitch, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
+SWITCH_ROUTE(fce_vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
+SWITCH_ROUTE(fce_vswitch, VADDR_MAG, VPORT_MAG, false);
+SWITCH_ROUTE(fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
+
 CHART_REGISTER(fce_tx_chart, 0x1100, 10);
 CHART_REGISTER(fce_rx_chart, 0x1100, 10);
 static const fw_link_options_t exchange_options = {
@@ -113,6 +125,14 @@ MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
 
 COMMAND_REGISTER(sc_cmd, sc);
 
+SWITCH_PORT(fce_vswitch, VPORT_LINK, fce_rx_chart, fce_tx_chart);
+SWITCH_PORT(fce_vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
+SWITCH_PORT(fce_vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
+SWITCH_PORT(fce_vswitch, VPORT_MAG, sc_mag_tx, sc_mag_rx);
+#ifdef CLOCK_EXISTS
+SWITCH_PORT(fce_vswitch, VPORT_CLOCK, clock_tx, clock_rx);
+#endif /* CLOCK_EXISTS */
+
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
     SWITCH_SCHEDULE(fce_vswitch)
@@ -130,38 +150,10 @@ TASK_SCHEDULING_ORDER(
 void spacecraft_init(void) {
     assert(!initialized);
 
-    debugf(INFO, "Configuring virtual switch routes...");
-    // add physical routes
-    switch_add_route(&fce_vswitch, PADDR_RADIO, VPORT_LINK, false);
-    switch_add_route(&fce_vswitch, PADDR_MAG, VPORT_LINK, false);
-    switch_add_route(&fce_vswitch, PADDR_CLOCK, VPORT_LINK, false);
-    // add virtual routes
-    switch_add_route(&fce_vswitch, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
-    switch_add_route(&fce_vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
-    switch_add_route(&fce_vswitch, VADDR_MAG, VPORT_MAG, false);
-    switch_add_route(&fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
-
-    debugf(INFO, "Initializing link to spacecraft bus...");
-    switch_add_port(&fce_vswitch, VPORT_LINK, &fce_rx_chart, &fce_tx_chart);
-
     debugf(INFO, "Initializing telecomm infrastructure...");
     comm_dec_init(&sc.comm_decoder, &sc_uplink_stream);
     comm_enc_init(&sc.comm_encoder, &sc_downlink_stream);
     telemetry_init(&sc.comm_encoder);
-
-#ifdef CLOCK_EXISTS
-    debugf(INFO, "Initializing clock...");
-    switch_add_port(&fce_vswitch, VPORT_CLOCK, &clock_tx, &clock_rx);
-#else
-    (void) clock_routing;
-#endif /* CLOCK_EXISTS */
-
-    debugf(INFO, "Attaching radio...");
-    switch_add_port(&fce_vswitch, VPORT_RADIO_UP, &radio_up_tx, &radio_up_rx);
-    switch_add_port(&fce_vswitch, VPORT_RADIO_DOWN, &radio_down_tx, &radio_down_rx);
-
-    debugf(INFO, "Attaching magnetometer...");
-    switch_add_port(&fce_vswitch, VPORT_MAG, &sc_mag_tx, &sc_mag_rx);
 
     initialized = true;
 }

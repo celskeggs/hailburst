@@ -124,34 +124,3 @@ void switch_mainloop_internal(switch_t *sw) {
         }
     }
 }
-
-void switch_add_port(switch_t *sw, uint8_t port_number, chart_t *inbound, chart_t *outbound) {
-    assert(sw != NULL && inbound != NULL && outbound != NULL);
-    assert(SWITCH_PORT_BASE <= port_number && port_number < SWITCH_PORT_BASE + SWITCH_PORTS);
-    assert(io_rx_size(inbound) > 0);
-    assert(io_rx_size(outbound) > 0);
-
-    assert(sw->ports_inbound[port_number - SWITCH_PORT_BASE] == NULL);
-    assert(sw->ports_outbound[port_number - SWITCH_PORT_BASE] == NULL);
-
-    chart_attach_server(inbound, PP_ERASE_TYPE(task_rouse, sw->switch_task), (void*) sw->switch_task);
-    chart_attach_client(outbound, PP_ERASE_TYPE(task_rouse, sw->switch_task), (void*) sw->switch_task);
-
-    atomic_store(sw->ports_inbound[port_number - SWITCH_PORT_BASE], inbound);
-    atomic_store(sw->ports_outbound[port_number - SWITCH_PORT_BASE], outbound);
-}
-
-void switch_add_route(switch_t *sw, uint8_t logical_address, uint8_t port_number, bool address_pop) {
-    assert(sw != NULL);
-    assertf(SWITCH_ROUTE_BASE <= logical_address,
-            "route_base=%u, logical_address=%u", SWITCH_ROUTE_BASE, logical_address);
-    assert(SWITCH_PORT_BASE <= port_number && port_number <= SWITCH_PORT_BASE + SWITCH_PORTS);
-
-    assert(sw->routing_table[logical_address - SWITCH_ROUTE_BASE] == 0);
-    uint8_t route = port_number | SWITCH_ROUTE_FLAG_ENABLED;
-    if (address_pop) {
-        route |= SWITCH_ROUTE_FLAG_POP;
-    }
-    assert((route & SWITCH_ROUTE_PORT_MASK) == port_number);
-    sw->routing_table[logical_address - SWITCH_ROUTE_BASE] = route;
-}
