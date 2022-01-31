@@ -74,6 +74,10 @@ typedef struct {
     CHART_SERVER_NOTIFY(r_receive, local_rouse, &r_client_task);                              \
     CHART_CLIENT_NOTIFY(r_transmit, local_rouse, &r_client_task)
 
+#define RMAP_ON_SWITCH(r_ident, r_switch, r_switch_port, r_max_read, r_max_write, r_client_task)                      \
+    RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_ident ## _receive, r_ident ## _transmit, r_client_task);        \
+    SWITCH_PORT(r_switch, r_switch_port, r_ident ## _transmit, r_ident ## _receive)
+
 // returns a pointer into which up to max_write_length bytes can be written.
 rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
                                  uint8_t ext_addr, uint32_t main_addr, uint8_t **ptr_out);

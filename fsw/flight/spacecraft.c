@@ -103,35 +103,25 @@ SWITCH_ROUTE(fce_vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
 SWITCH_ROUTE(fce_vswitch, VADDR_MAG, VPORT_MAG, false);
 SWITCH_ROUTE(fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
 
-CHART_REGISTER(fce_tx_chart, 0x1100, 10);
-CHART_REGISTER(fce_rx_chart, 0x1100, 10);
 static const fw_link_options_t exchange_options = {
     .label = "bus",
     .path  = "/dev/vport0p1",
     .flags = FW_FLAG_VIRTIO,
 };
-FAKEWIRE_EXCHANGE_REGISTER(fce_fw_exchange, exchange_options, fce_rx_chart, fce_tx_chart);
+FAKEWIRE_EXCHANGE_ON_SWITCH(fce_fw_exchange, exchange_options, fce_vswitch, VPORT_LINK);
 
-CLOCK_REGISTER(sc_clock, clock_routing, clock_rx, clock_tx);
+CLOCK_REGISTER(sc_clock, clock_routing, fce_vswitch, VPORT_CLOCK);
 
 STREAM_REGISTER(sc_uplink_stream, UPLINK_STREAM_CAPACITY);
 STREAM_REGISTER(sc_downlink_stream, DOWNLINK_STREAM_CAPACITY);
 
-RADIO_REGISTER(sc_radio, radio_up_routing,   radio_up_rx,   radio_up_tx,   UPLINK_STREAM_CAPACITY,
-                         radio_down_routing, radio_down_rx, radio_down_tx, DOWNLINK_STREAM_CAPACITY,
-                         sc_uplink_stream,   sc_downlink_stream);
+RADIO_REGISTER(sc_radio, fce_vswitch,
+               radio_up_routing,   VPORT_RADIO_UP,   UPLINK_STREAM_CAPACITY,   sc_uplink_stream,
+               radio_down_routing, VPORT_RADIO_DOWN, DOWNLINK_STREAM_CAPACITY, sc_downlink_stream);
 
-MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, sc_mag_rx, sc_mag_tx);
+MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vswitch, VPORT_MAG);
 
 COMMAND_REGISTER(sc_cmd, sc);
-
-SWITCH_PORT(fce_vswitch, VPORT_LINK, fce_rx_chart, fce_tx_chart);
-SWITCH_PORT(fce_vswitch, VPORT_RADIO_UP, radio_up_tx, radio_up_rx);
-SWITCH_PORT(fce_vswitch, VPORT_RADIO_DOWN, radio_down_tx, radio_down_rx);
-SWITCH_PORT(fce_vswitch, VPORT_MAG, sc_mag_tx, sc_mag_rx);
-#ifdef CLOCK_EXISTS
-SWITCH_PORT(fce_vswitch, VPORT_CLOCK, clock_tx, clock_rx);
-#endif /* CLOCK_EXISTS */
 
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)

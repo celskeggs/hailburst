@@ -14,10 +14,10 @@ typedef struct {
 
 void clock_start_main(clock_device_t *clock);
 
-#define CLOCK_REGISTER(c_ident, c_address, c_rx, c_tx)                                                          \
+#define CLOCK_REGISTER(c_ident, c_address, c_switch, c_switch_port)                                             \
     extern clock_device_t c_ident;                                                                              \
     TASK_REGISTER(c_ident ## _task, "clock-start", clock_start_main, &c_ident, NOT_RESTARTABLE);                \
-    RMAP_REGISTER(c_ident ## _rmap, sizeof(uint64_t), 0, c_rx, c_tx, c_ident ## _task);                         \
+    RMAP_ON_SWITCH(c_ident ## _rmap, c_switch, c_switch_port, sizeof(uint64_t), 0, c_ident ## _task);           \
     clock_device_t c_ident = {                                                                                  \
         .rmap = &c_ident ## _rmap,                                                                              \
         .address = (c_address),                                                                                 \

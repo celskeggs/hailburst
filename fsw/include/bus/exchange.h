@@ -4,6 +4,7 @@
 #include <hal/thread.h>
 #include <synch/chart.h>
 #include <bus/link.h>
+#include <bus/switch.h>
 
 enum {
     EXCHANGE_QUEUE_DEPTH = 16,
@@ -49,6 +50,13 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
         .write_chart = &e_write_chart,                                                                   \
     };                                                                                                   \
     PROGRAM_INIT_PARAM(STAGE_READY, fakewire_exc_init_internal, e_ident, &e_ident)
+
+#define FAKEWIRE_EXCHANGE_ON_SWITCH(e_ident, e_link_options, e_switch, e_switch_port)                    \
+    CHART_REGISTER(e_ident ## _read_chart, 0x1100, 10);                                                  \
+    CHART_REGISTER(e_ident ## _write_chart, 0x1100, 10);                                                 \
+    FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options,                                                  \
+                               e_ident ## _read_chart, e_ident ## _write_chart);                         \
+    SWITCH_PORT(e_switch, e_switch_port, e_ident ## _read_chart, e_ident ## _write_chart)
 
 #define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)     \
     FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port) \

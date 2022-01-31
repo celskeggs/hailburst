@@ -3,6 +3,7 @@
 
 #include <synch/stream.h>
 #include <bus/rmap.h>
+#include <bus/switch.h>
 
 typedef enum {
     REG_MAGIC      = 0,
@@ -46,8 +47,9 @@ void radio_uplink_loop(radio_t *radio);
 void radio_downlink_loop(radio_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
-#define RADIO_REGISTER(r_ident, r_up_addr, r_up_rx, r_up_tx, r_up_capacity,                                       \
-                                r_down_addr, r_down_rx, r_down_tx, r_down_capacity, r_uplink, r_downlink)         \
+#define RADIO_REGISTER(r_ident,     r_switch,                                                                     \
+                       r_up_addr,   r_up_port,   r_up_capacity,   r_uplink,                                       \
+                       r_down_addr, r_down_port, r_down_capacity, r_downlink)                                     \
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity                                                    \
                     && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                            \
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                  \
@@ -55,10 +57,10 @@ void radio_downlink_loop(radio_t *radio);
     extern radio_t r_ident;                                                                                       \
     TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", radio_uplink_loop, &r_ident, RESTARTABLE);                \
     TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", radio_downlink_loop, &r_ident, RESTARTABLE);          \
-    RMAP_REGISTER(r_ident ## _up,   r_up_capacity,   REG_IO_BUFFER_SIZE,                                          \
-                                    r_up_rx,   r_up_tx,   r_ident ## _up_task);                                   \
-    RMAP_REGISTER(r_ident ## _down, REG_IO_BUFFER_SIZE, r_down_capacity,                                          \
-                                    r_down_rx, r_down_tx, r_ident ## _down_task);                                 \
+    RMAP_ON_SWITCH(r_ident ## _up,     r_switch,           r_up_port,                                             \
+                   r_up_capacity,      REG_IO_BUFFER_SIZE, r_ident ## _up_task);                                  \
+    RMAP_ON_SWITCH(r_ident ## _down,   r_switch,           r_down_port,                                           \
+                   REG_IO_BUFFER_SIZE, r_down_capacity,    r_ident ## _down_task);                                \
     radio_t r_ident = {                                                                                           \
         .rmap_up = &r_ident ## _up,                                                                               \
         .rmap_down = &r_ident ## _down,                                                                           \
