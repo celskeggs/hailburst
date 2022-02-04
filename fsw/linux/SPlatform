@@ -27,7 +27,7 @@ test_modules = [
 env = Environment(
     CCFLAGS=[
         '-ggdb',
-        '-fdiagnostics-color',
+        '-fdiagnostics-color', '-fmax-errors=1',
         '-Wall', '-Wextra', '-Werror',
         # because comparisons of constants defined using 'enum' otherwise might cause trouble
         '-Wno-enum-compare',

@@ -20,8 +20,8 @@ typedef TCB_t *thread_t;
     extern TCB_t t_ident;
 
 #define TASK_REGISTER_INNER(t_ident, t_name, t_start, t_arg, t_restartable)       \
-    StackType_t t_ident ## _stack[RTOS_STACK_SIZE];                               \
-    TCB_mut_t t_ident ## _mutable = {                                             \
+    StackType_t symbol_join(t_ident, stack)[RTOS_STACK_SIZE];                     \
+    TCB_mut_t symbol_join(t_ident, mutable) = {                                   \
         .pxTopOfStack    = NULL,                                                  \
         .needs_start     = true,                                                  \
         .hit_restart     = false,                                                 \
@@ -30,20 +30,20 @@ typedef TCB_t *thread_t;
         .roused_local    = 0,                                                     \
     };                                                                            \
     __attribute__((section("tasktable"))) TCB_t t_ident = {                       \
-        .mut             = &t_ident ## _mutable,                                  \
+        .mut             = &symbol_join(t_ident, mutable),                        \
         .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                         \
-        .start_arg       = t_arg,                                                 \
+        .start_arg       = (void *) t_arg,                                        \
         .restartable     = t_restartable,                                         \
-        .pxStack         = t_ident ## _stack,                                     \
+        .pxStack         = symbol_join(t_ident, stack),                           \
         .pcTaskName      = t_name,                                                \
     }
 
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
-#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                \
-    REPLICATE_OBJECT_CODE(t_start, t_ident ## _start_fn);                            \
-    TASK_REGISTER_INNER(t_ident, t_name, t_ident ## _start_fn, t_arg, t_restartable)
+#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                                                 \
+    REPLICATE_OBJECT_CODE(t_start, symbol_join(t_ident, start_fn));                                                   \
+    TASK_REGISTER_INNER(t_ident, t_name, symbol_join(t_ident, start_fn), t_arg, t_restartable)
 #else /* VIVID_REPLICATE_TASK_CODE == 0 */
-#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                \
+#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                                                 \
     TASK_REGISTER_INNER(t_ident, t_name, t_start, t_arg, t_restartable)
 #endif
 

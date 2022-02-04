@@ -5,6 +5,9 @@ static inline void ignore_callback(void) {
     /* do nothing */
 }
 
+#define PP_CONST_MAX(a, b)                                                                                            \
+    __builtin_choose_expr((a) > (b), (a), (b))
+
 #define PP_CHECK_TYPE(expr, type) \
     __builtin_choose_expr( \
         __builtin_types_compatible_p(typeof(expr), type), \

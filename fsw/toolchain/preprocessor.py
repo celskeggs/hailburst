@@ -338,11 +338,19 @@ def symbol_join(args, name_token):
     return [new_token("_".join(argument(arg) for arg in args), name_token)]
 
 
+def symbol_str(args, name_token):
+    if len(args) != 1:
+        raise MacroError("symbol_str takes exactly one argument")
+    symbol = argument(args[0])
+    return [new_token('"%s"' % symbol.replace('\\', '\\\\').replace('"', '\\"'), name_token)]
+
+
 def default_parser(rawlines):
     parser = Parser(rawlines)
     parser.add_macro("debugf_core", debugf_core)
     parser.add_macro("static_repeat", static_repeat)
     parser.add_macro("symbol_join", symbol_join)
+    parser.add_macro("symbol_str", symbol_str)
     return parser
 
 
