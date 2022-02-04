@@ -1,6 +1,3 @@
-import SCons.Defaults
-import SCons.Tool
-
 Import('build_modules')
 
 app_modules = [
@@ -18,10 +15,13 @@ app_modules = [
     'freertos/zlib',
     'include',
     'synch',
-    'toolchain',
 ]
 
 bootrom_modules = [
+    # configuration must go first
+    'toolchain',
+
+    # code modules can come afterwards
     'bootrom',
     'elf',
     'freertos/debug',
@@ -57,50 +57,8 @@ env = Environment(
         "-Wa,--fatal-warnings",
     ],
     CPPPATH=[],
-    PPSUFFIX=".iraw",
-    RWSUFFIX=".i",
-    PPCOM='$CC -o $TARGET -E $CFLAGS $CCFLAGS -D__PYTHON_PREPROCESS__ $_CCCOMCOM $SOURCES',
-    PPMODCOM='python3 $PYTHONPP $SOURCES $TARGET',
-    # eliminate $_CCCOMCOM here because it's used for preprocessor flags that are not needed here
-    OBJCOM='$CC -o $TARGET -c $CFLAGS $CCFLAGS $SOURCES',
 )
 
-env['BUILDERS']['PP'] = Builder(
-    action=Action("$PPCOM", "$PPCOMSTR"),
-    suffix='$PPSUFFIX',
-    src_suffix='.c',
-    source_scanner=SourceFileScanner,
-    single_source=1,
-)
-
-
-def plugin_dep_emitter(target, source, env):
-    env.Depends(target, "$PYTHONPP")
-    return target, source
-
-
-env['BUILDERS']['PPMOD'] = Builder(
-    action=Action("$PPMODCOM", "$PPMODCOMSTR"),
-    emitter=plugin_dep_emitter,
-    suffix='$RWSUFFIX',
-    src_suffix='$PPSUFFIX',
-    src_builder='PP',
-    single_source=1,
-)
-ObjAction = Action("$OBJCOM", "$OBJCOMSTR")
-ASAction = Action("$ASCOM", "$ASCOMSTR")
-CAction = Action("$CCCOM", "$CCCOMSTR")
-static_object_builder = Builder(
-    action={'$RWSUFFIX': ObjAction, '.s': ASAction, '.S': CAction},
-    emitter=SCons.Defaults.StaticObjectEmitter,
-    prefix='$OBJPREFIX',
-    suffix='$OBJSUFFIX',
-    src_suffix=['$RWSUFFIX', '.s', '.S'],
-    src_builder='PPMOD',
-    single_source=1,
-)
-env['BUILDERS']['Object'] = static_object_builder
-env['BUILDERS']['StaticObject'] = static_object_builder
 
 rtos_kernel = env.Program("kernel", build_modules(env, app_modules),
                           LINK="$REPLICA_LINK", LINKSCRIPT="$FREERTOS_LINKSCRIPT")

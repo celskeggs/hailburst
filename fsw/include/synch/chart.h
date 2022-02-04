@@ -26,6 +26,10 @@
 #include <hal/thread.h>
 #include <hal/preprocessor.h>
 
+#ifndef __PYTHON_PREPROCESS__
+#error Python preprocessor is required for vochart code to compile
+#endif
+
 typedef uint32_t chart_index_t;
 
 typedef struct {
@@ -45,23 +49,23 @@ typedef struct {
     chart_index_t reply_ptr;   // writable only by server, wraps at 2 * note_count
 } chart_t;
 
-#define CHART_REGISTER(c_ident, c_note_size, c_note_count)                                                  \
-    static_assert(c_note_size > 0 && c_note_size == (size_t) c_note_size, "positive note size");            \
-    static_assert(c_note_count > 0 && c_note_count == (chart_index_t) c_note_count, "positive note count"); \
-    uint8_t c_ident ## _backing_array[(c_note_size) * (c_note_count)];                                      \
-    chart_t c_ident = {                            \
-        /* notifications populated later */        \
-        .notify_server = NULL,                     \
-        .notify_server_param = NULL,               \
-        .notify_client = NULL,                     \
-        .notify_client_param = NULL,               \
-        /* static data */                          \
-        .note_size = (c_note_size),                \
-        .note_count = (c_note_count),              \
-        .note_storage = c_ident ## _backing_array, \
-        /* initial state */                        \
-        .request_ptr = 0,                          \
-        .reply_ptr = 0,                            \
+#define CHART_REGISTER(c_ident, c_note_size, c_note_count)                                                            \
+    static_assert(c_note_size > 0 && c_note_size == (size_t) c_note_size, "positive note size");                      \
+    static_assert(c_note_count > 0 && c_note_count == (chart_index_t) c_note_count, "positive note count");           \
+    uint8_t symbol_join(c_ident, backing_array)[(c_note_size) * (c_note_count)];                                      \
+    chart_t c_ident = {                                                                                               \
+        /* notifications populated later */                                                                           \
+        .notify_server = NULL,                                                                                        \
+        .notify_server_param = NULL,                                                                                  \
+        .notify_client = NULL,                                                                                        \
+        .notify_client_param = NULL,                                                                                  \
+        /* static data */                                                                                             \
+        .note_size = (c_note_size),                                                                                   \
+        .note_count = (c_note_count),                                                                                 \
+        .note_storage = symbol_join(c_ident, backing_array),                                                          \
+        /* initial state */                                                                                           \
+        .request_ptr = 0,                                                                                             \
+        .reply_ptr = 0,                                                                                               \
     }
 
 // ********** READ ME IF YOU HAVE A COMPILER ERROR **********
@@ -69,17 +73,17 @@ typedef struct {
 // INCORRECT! The pointer passed and the pointed provided as a parameter are not the same type!
 
 // TODO: find a way for these to not require PROGRAM_INIT
-#define CHART_SERVER_NOTIFY(c_ident, notify_server_cb, param)   \
-    static void c_ident ## _register_server(void) {             \
+#define CHART_SERVER_NOTIFY(c_ident, notify_server_cb, param)                                   \
+    static void symbol_join(c_ident, register_server)(void) {                                   \
         chart_attach_server(&c_ident, PP_ERASE_TYPE(notify_server_cb, param), (void*) (param)); \
-    }                                                           \
-    PROGRAM_INIT(STAGE_RAW, c_ident ## _register_server);
+    }                                                                                           \
+    PROGRAM_INIT(STAGE_RAW, symbol_join(c_ident, register_server));
 
-#define CHART_CLIENT_NOTIFY(c_ident, notify_client_cb, param)   \
-    static void c_ident ## _register_client(void) {             \
+#define CHART_CLIENT_NOTIFY(c_ident, notify_client_cb, param)                                   \
+    static void symbol_join(c_ident, register_client)(void) {                                   \
         chart_attach_client(&c_ident, PP_ERASE_TYPE(notify_client_cb, param), (void*) (param)); \
-    }                                                           \
-    PROGRAM_INIT(STAGE_RAW, c_ident ## _register_client);
+    }                                                                                           \
+    PROGRAM_INIT(STAGE_RAW, symbol_join(c_ident, register_client));
 
 // notify_server and notify_client should be fast and non-blocking procedures that let the appropriate party to the
 // chart know to check the chart again.

@@ -1,3 +1,4 @@
+import inspect
 import os
 import string
 import sys
@@ -5,6 +6,65 @@ import sys
 
 class MacroError(RuntimeError):
     pass
+
+
+class Token:
+    def __init__(self, token, filename, line, column):
+        assert type(token) == str and type(filename) == str and type(line) == int and type(column) == int
+        assert line >= 1 and column >= 1
+        self.token = token
+        self.filename = filename
+        self.line = line
+        self.column = column  # starting at 1 when the first character of the token is at the start of the line
+
+    def is_whitespace(self):
+        return self.token.isspace()
+
+    def match(self, *options):
+        return self.token in options
+
+    def ending_position(self):
+        # returns (line, column) of the very first character of the next token
+        if "\n" in self.token:
+            return self.line + self.token.count("\n"), len(self.token) - self.token.rindex('\n')
+        else:
+            return self.line, self.column + len(self.token)
+
+    def transition(self, last_token):
+        if last_token is not None and self.filename == last_token.filename:
+            last_line, last_column = last_token.ending_position()
+            if self.line == last_line and self.column >= last_column:
+                return " " * (self.column - last_column)
+            elif last_line < self.line <= last_line + 10:
+                return "\n" * (self.line - last_line) + " " * (self.column - 1)
+        assert '"\n\\' not in self.filename, "odd filename not handled"
+        newline = ('\n' if last_token is not None and not last_token.token.endswith('\n') else '')
+        return "%s# %d \"%s\"\n%s" % (newline, self.line, self.filename, " " * (self.column - 1))
+
+    def __repr__(self):
+        return "Token(%r, %r, %r, %r)" % (self.token, self.filename, self.line, self.column)
+
+
+def new_token(text, reference):
+    if type(reference) == list:
+        refitem = reference[0]
+        for token in reference:
+            if token.token.strip():
+                refitem = token
+                break
+        reference = refitem
+    return Token(text, reference.filename, reference.line, reference.column)
+
+
+def python_token(text):
+    # references the source code of this file directly
+    fi = inspect.getframeinfo(inspect.stack()[1][0])
+    # TODO: figure out how to fill in column
+    return Token(text, fi.filename, fi.lineno, 1)
+
+
+def argument(tokens):
+    return "".join(token.token for token in tokens).strip()
 
 
 ARG_CHAR = "unsigned char"
@@ -128,109 +188,171 @@ def validate_stable_id(stable_id):
     return stable_id
 
 
-def debugf_core(args, filename, line_num):
+def debugf_core(args, name_token):
     if len(args) < 3:
         raise MacroError("debugf requires at least two arguments")
-    loglevel, stable_id_raw, format_raw, args = args[0], args[1], args[2], args[3:]
-    if loglevel.strip() not in ("CRITICAL", "WARNING", "INFO", "DEBUG", "TRACE"):
-        raise MacroError("debugf requires a valid log level, not %r" % loglevel)
-    stable_id = decode_string(stable_id_raw)
+    loglevel_tokens, stable_id_tokens, format_raw_tokens, args = args[0], args[1], args[2], args[3:]
+    if argument(loglevel_tokens) not in ("CRITICAL", "WARNING", "INFO", "DEBUG", "TRACE"):
+        raise MacroError("debugf requires a valid log level, not %r" % argument(loglevel_tokens))
+    stable_id = decode_string(argument(stable_id_tokens))
     if not stable_id:
         stable_id = None
     elif not stable_id.isalnum():
         raise MacroError("debugf stable id is invalid: %r" % stable_id)
-    format = decode_string(format_raw)
+    format = decode_string(argument(format_raw_tokens))
     arg_types = parse_printf_format(format)
     if len(arg_types) != len(args):
         raise MacroError("debugf format string indicates %d arguments, but %d passed" % (len(arg_types), len(args)))
-    fragments = [
-        '({',
-        'static __attribute__((section ("debugf_messages"))) const char _msg_format[] = (%s);' % format_raw,
-        'static __attribute__((section ("debugf_messages"))) const char _msg_filename[] = "%s";'
-            % filename.replace("\\", "\\\\").replace('"', '\\"'),
+    tokens = [
+        python_token('({'),
+        python_token('static __attribute__((section ("debugf_messages"))) const char _msg_format[] = ('),
+    ]
+    tokens += format_raw_tokens
+    tokens += [
+        python_token(');'),
+        python_token('static __attribute__((section ("debugf_messages"))) const char _msg_filename[] = "%s";'
+                     % name_token.filename.replace("\\", "\\\\").replace('"', '\\"')),
     ]
     if stable_id is not None:
-        fragments += [
-            'static __attribute__((section ("debugf_messages"))) const char _msg_stable[] = "%s";' % stable_id,
+        tokens += [
+            python_token('static __attribute__((section ("debugf_messages"))) const char _msg_stable[] = '),
         ]
-    fragments += [
-        'static __attribute__((section ("debugf_messages"))) const struct debugf_metadata _msg_metadata = {',
-        '.loglevel = (%s),' % loglevel,
+        tokens += stable_id_tokens
+        tokens += [
+            python_token(';'),
+        ]
+    tokens += [
+        python_token('static __attribute__((section ("debugf_messages"))) const struct debugf_metadata '),
+        python_token('_msg_metadata = {'),
+        python_token('.loglevel = ('),
+    ]
+    tokens += loglevel_tokens
+    tokens += [
+        python_token('),')
     ]
     if stable_id is not None:
-        fragments += [
-            '.stable_id = _msg_stable,'
+        tokens += [
+            python_token('.stable_id = _msg_stable,')
         ]
     else:
-        fragments += [
-            '.stable_id = (void *) 0,',
+        tokens += [
+            python_token('.stable_id = (void *) 0,'),
         ]
-    fragments += [
-        '.format = _msg_format,',
-        '.filename = _msg_filename,',
-        '.line_number = %u,' % line_num,
-        '};',
-        "struct {",
-        "const struct debugf_metadata *metadata;",
-        "uint64_t timestamp;",
+    tokens += [
+        python_token('.format = _msg_format,'),
+        python_token('.filename = _msg_filename,'),
+        python_token('.line_number = %u,' % name_token.line),
+        python_token('};'),
+        python_token("struct {"),
+        python_token("const struct debugf_metadata *metadata;"),
+        python_token("uint64_t timestamp;"),
     ]
     for i, arg_type in enumerate(arg_types):
         if arg_type != ARG_STRING:
-            fragments.append("%s arg%d;" % (arg_type, i))
-    fragments += [
-        "} __attribute__((packed)) _msg_state = {",
-        ".metadata = &_msg_metadata,",
-        ".timestamp = timer_now_ns(),"
+            tokens += [
+                python_token("%s arg%d;" % (arg_type, i)),
+            ]
+    tokens += [
+        python_token("} __attribute__((packed)) _msg_state = {"),
+        python_token(".metadata = &_msg_metadata,"),
+        python_token(".timestamp = timer_now_ns(),"),
     ]
     for i, (arg_type, arg_expr) in enumerate(zip(arg_types, args)):
         if arg_type != ARG_STRING:
-            fragments += [".arg%d = (%s)," % (i, arg_expr)]
-    fragments += [
-        "};",
+            tokens += [
+                python_token(".arg%d = (" % i),
+            ]
+            tokens += arg_expr
+            tokens += [
+                python_token("),"),
+            ]
+    tokens += [
+        python_token("};"),
     ]
     for i, (arg_type, arg_expr) in enumerate(zip(arg_types, args)):
         if arg_type == ARG_STRING:
-            fragments += ["%s _msg_str%d = (%s);" % (arg_type, i, arg_expr)]
-    fragments += [
-        "const void *_msg_seqs[] = {",
-        "&_msg_state,",
+            tokens += [
+                python_token("%s _msg_str%d = (" % (arg_type, i)),
+            ]
+            tokens += arg_expr
+            tokens += [
+                python_token(");"),
+            ]
+    tokens += [
+        python_token("const void *_msg_seqs[] = {"),
+        python_token("&_msg_state,"),
     ]
     last_string_arg = None
     for i, arg_type in enumerate(arg_types):
         if arg_type == ARG_STRING:
-            fragments += ["_msg_str%d," % i]
+            tokens += [
+                python_token("_msg_str%d," % i),
+            ]
             last_string_arg = i
-    fragments += [
-        "};",
-        "size_t _msg_sizes[] = { sizeof(_msg_state),",
+    tokens += [
+        python_token("};"),
+        python_token("size_t _msg_sizes[] = { sizeof(_msg_state),"),
     ]
     num_seqs = 1
     for i, arg_type in enumerate(arg_types):
         if arg_type == ARG_STRING:
             # only need to include the final null terminator if we have more strings to encode
-            fragments += ["strlen(_msg_str%d) + %d," % (i, 0 if i == last_string_arg else 1)]
+            tokens += [
+                python_token("strlen(_msg_str%d) + %d," % (i, 0 if i == last_string_arg else 1)),
+            ]
             num_seqs += 1
-    fragments += [
-        "};",
-        "debugf_internal(_msg_seqs, _msg_sizes, %d);" % num_seqs,
-        '})',
+    tokens += [
+        python_token("};"),
+        python_token("debugf_internal(_msg_seqs, _msg_sizes, %d);" % num_seqs),
+        python_token('})'),
     ]
 
-    return " ".join(fragments)
+    return tokens
 
 
-def default_parser():
-    parser = Parser()
+def static_repeat(args, name_token):
+    if len(args) != 2:
+        raise MacroError("static_repeat requires exactly two arguments")
+    repeat_count_tokens = args[0]
+    repeat_count, variable_name = argument(repeat_count_tokens), argument(args[1])
+    if not repeat_count.isdigit():
+        raise MacroError("invalid repeat count %r" % repeat_count)
+    if not (variable_name.replace("_", "").isalnum() and variable_name[0].isalpha()):
+        raise MacroError("invalid variable name %r" % variable_name)
+
+    repeat_count = int(repeat_count)
+
+    def handle_body(body):
+        tokens = []
+        for r in range(repeat_count):
+            count_token = new_token(str(r), repeat_count_tokens)
+            tokens += [(count_token if token.match(variable_name) else token) for token in body]
+        return tokens
+
+    return handle_body
+
+
+def symbol_join(args, name_token):
+    if len(args) < 2:
+        raise MacroError("symbol_join requires at least two arguments")
+    return [new_token("_".join(argument(arg) for arg in args), name_token)]
+
+
+def default_parser(rawlines):
+    parser = Parser(rawlines)
     parser.add_macro("debugf_core", debugf_core)
+    parser.add_macro("static_repeat", static_repeat)
+    parser.add_macro("symbol_join", symbol_join)
     return parser
 
 
-def tokenize(line):
-    cur_string = None
+def tokenize(line, filename, line_number):
+    start_column = None
     in_escape = False
+    cur_string = None
     cur_token = None
     cur_spaces = None
-    for c in line:
+    for column, c in enumerate(line, 1):
         if cur_string is not None:
             cur_string += c
             if in_escape:
@@ -238,122 +360,229 @@ def tokenize(line):
             elif c == '\\':
                 in_escape = True
             elif c == '"':
-                yield cur_string
+                yield Token(cur_string, filename, line_number, start_column)
                 cur_string = None
         elif c in " \t\n":
             if cur_token is not None:
-                yield cur_token
+                yield Token(cur_token, filename, line_number, start_column)
                 cur_token = None
             if cur_spaces is None:
                 cur_spaces = c
+                start_column = column
             else:
                 cur_spaces += c
-        elif c in "(,.)":
+        elif c in "{(,.&*)}":
             if cur_token is not None:
-                yield cur_token
+                yield Token(cur_token, filename, line_number, start_column)
                 cur_token = None
             if cur_spaces is not None:
-                yield cur_spaces
+                yield Token(cur_spaces, filename, line_number, start_column)
                 cur_spaces = None
-            yield c
+            yield Token(c, filename, line_number, column)
         elif c == '"':
             if cur_token is not None:
-                yield cur_token
+                yield Token(cur_token, filename, line_number, start_column)
                 cur_token = None
             if cur_spaces is not None:
-                yield cur_spaces
+                yield Token(cur_spaces, filename, line_number, start_column)
                 cur_spaces = None
             cur_string = c
+            start_column = column
         else:
             if cur_spaces is not None:
-                yield cur_spaces
+                yield Token(cur_spaces, filename, line_number, start_column)
                 cur_spaces = None
             if cur_token is None:
                 cur_token = c
+                start_column = column
             else:
                 cur_token += c
     if cur_string is not None:
         raise RuntimeError("string did not finish by end of line")
     if cur_token is not None:
-        yield cur_token
+        yield Token(cur_token, filename, line_number, start_column)
     if cur_spaces is not None:
-        yield cur_spaces
+        yield Token(cur_spaces, filename, line_number, start_column)
 
 
 class MacroExpr:
-    def __init__(self, macro_func, filename, line_num):
+    def __init__(self, macro_func, name_token):
         self.macro_func = macro_func
-        self.filename = filename
-        self.line_num = line_num
+        self.name_token = name_token
         self.args = []
+
+    def allow_macro(self, macro):
+        return True
 
     def on_tokens(self, tokens):
         if not self.args:
             self.args.append([])
-        for token in tokens:
-            self.args[-1].append(token)
+        self.args[-1] += tokens
 
-    def on_comma(self):
+    def on_open_brace(self, token):
+        return False
+
+    def on_comma(self, token):
+        assert token.match(",")
         self.args.append([])
 
-    def execute(self):
-        return tokenize(self.macro_func(["".join(tokens) for tokens in self.args], self.filename, self.line_num))
+    def execute(self, token):
+        if not token.match(")"):
+            raise MacroError("Macro %r expected ')' but got %r" % (self.macro_func, token))
+        output = self.macro_func(self.args, self.name_token)
+        assert callable(output) or type(output) == list
+        if type(output) == list:
+            return output, False
+        elif callable(output):
+            # indicates brace continuation
+            return MacroBodyExpr(output), False
+        else:
+            raise RuntimeError("invalid output from macro function: %r" % output)
+
+    def __str__(self):
+        return "%r: %r" % (self.name_token, self.args)
+
+
+class MacroBodyExpr:
+    def __init__(self, macro_func):
+        self.macro_func = macro_func
+        self.has_open = False
+        self.body = []
+
+    def allow_macro(self, macro):
+        return not self.has_open
+
+    def on_tokens(self, tokens):
+        if not self.has_open and not all(token.is_whitespace() for token in tokens):
+            raise MacroError("Macro expected '{' but got %r" % tokens)
+        self.body += tokens
+
+    def on_open_brace(self, token):
+        if self.has_open:
+            return False
+        assert token.match("{")
+        self.has_open = True
+        return True
+
+    def on_comma(self, token):
+        assert token.match(",")
+        self.body.append(token)
+
+    def execute(self, token):
+        if not token.match("}"):
+            raise MacroError("Expected '}' but got %r" % token)
+        return self.macro_func(self.body), True
 
 
 class ParenExpr:
-    def __init__(self):
-        self.tokens = ["("]
+    def __init__(self, token):
+        assert token.match("(")
+        self.tokens = [token]
 
-    def execute(self):
-        self.tokens.append(")")
-        return self.tokens
+    def allow_macro(self, macro):
+        return True
 
-    def on_comma(self):
-        self.tokens.append(",")
+    def execute(self, token):
+        if not token.match(")"):
+            raise MacroError("Expected ')' but got %r" % token)
+        self.tokens.append(token)
+        return self.tokens, False
+
+    def on_open_brace(self, token):
+        return False
+
+    def on_comma(self, token):
+        assert token.match(",")
+        self.tokens.append(token)
 
     def on_tokens(self, tokens):
-        for token in tokens:
-            self.tokens.append(token)
+        self.tokens += tokens
+
+
+class BraceExpr:
+    def __init__(self, token):
+        assert token.match("{")
+        self.tokens = [token]
+
+    def allow_macro(self, macro):
+        return True
+
+    def execute(self, token):
+        if not token.match("}"):
+            raise MacroError("Expected '}' but got %r" % token)
+        self.tokens.append(token)
+        return self.tokens, False
+
+    def on_open_brace(self, token):
+        return False
+
+    def on_comma(self, token):
+        assert token.match(",")
+        self.tokens.append(token)
+
+    def on_tokens(self, tokens):
+        self.tokens += tokens
+
+    def __str__(self):
+        return "BraceExpression(%r)" % self.tokens
 
 
 class Parser:
-    def __init__(self):
+    def __init__(self, rawlines):
         self.macros = {}
         self.pending_macro = None
         self.stack = []
+        self.rawlines = rawlines
         self.source_file = None
         self.source_line = 0
+        self.last_token = None
+
+    def on_token(self, token):
+        if self.pending_macro is not None:
+            if token.match("("):
+                self.stack.append(MacroExpr(self.macros[self.pending_macro.token], self.pending_macro))
+                self.pending_macro = None
+                return
+            else:
+                yield self.pending_macro
+                self.pending_macro = None
+        if token.token in self.macros and all(entry.allow_macro(token.token) for entry in self.stack):
+            self.pending_macro = token
+            return
+        if not self.stack:
+            # not processing any macros... just write each token out directly
+            yield token
+            return
+        if token.match("}", ")"):
+            generated, reinterpret = self.stack.pop().execute(token)
+            if hasattr(generated, "execute"):
+                self.stack.append(generated)
+            elif reinterpret:
+                for generated_token in generated:
+                    for output_token in self.on_token(generated_token):
+                        yield output_token
+            elif self.stack:
+                self.stack[-1].on_tokens(generated)
+            else:
+                for token in generated:
+                    yield token
+        elif token.match("("):
+            self.stack.append(ParenExpr(token))
+        elif token.match("{"):
+            if not self.stack[-1].on_open_brace(token):
+                self.stack.append(BraceExpr(token))
+        elif token.match(","):
+            self.stack[-1].on_comma(token)
+        else:
+            self.stack[-1].on_tokens([token])
 
     def on_tokens(self, tokens):
+        last = None
         for token in tokens:
-            if self.pending_macro is not None:
-                if token == "(":
-                    self.stack.append(MacroExpr(self.macros[self.pending_macro], self.source_file, self.source_line))
-                    self.pending_macro = None
-                    continue
-                else:
-                    yield self.pending_macro
-                    self.pending_macro = None
-            if token in self.macros:
-                self.pending_macro = token
-                continue
-            if not self.stack:
-                # not processing any macros... just write each token out directly
-                yield token
-                continue
-            if token == ")":
-                generated = self.stack.pop().execute()
-                if self.stack:
-                    self.stack[-1].on_tokens(generated)
-                else:
-                    for token in generated:
-                        yield token
-            elif token == "(":
-                self.stack.append(ParenExpr())
-            elif token == ",":
-                self.stack[-1].on_comma()
-            else:
-                self.stack[-1].on_tokens([token])
+            assert last is None or token.transition(last) == ""
+            last = token
+            for output_token in self.on_token(token):
+                yield output_token
 
     def add_macro(self, name, func):
         assert name not in self.macros
@@ -374,6 +603,11 @@ class Parser:
                             print("---> %s" % line.rstrip('\n'), file=sys.stderr)
                             print("At %s:%d" % (self.source_file, self.source_line), file=sys.stderr)
                             sys.exit(1)
+                    if self.stack:
+                        print("Cannot finish preprocessing: %d unterminated macros" % len(self.stack), file=sys.stderr)
+                        for macro in self.stack:
+                            print(" ", macro, file=sys.stderr)
+                        sys.exit(1)
                 ok = True
             finally:
                 if not ok and os.path.exists(oname):
@@ -381,17 +615,32 @@ class Parser:
 
     def translate_line(self, line):
         if line.startswith('#'):
+            if self.rawlines:
+                self.source_line += 1
+                return ""
             parts = line.split(" ")
             if len(parts) >= 3 and parts[0] == '#' and parts[1].isdigit() and parts[2].startswith('"'):
                 self.source_file = decode_string(parts[2])
                 self.source_line = int(parts[1]) - 1
-            return line
+            return ""
         self.source_line += 1
-        return "".join(self.on_tokens(tokenize(line))).rstrip("\n") + "\n"
+        if not line.strip():
+            # line will be reintroduced later if required
+            return ""
+        fragments = []
+        tokens = tokenize(line, self.source_file, self.source_line)
+        # process and generate output
+        for token in self.on_tokens(tokens):
+            fragments.append(token.transition(self.last_token))
+            fragments.append(token.token)
+            self.last_token = token
+        return "".join(fragments)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: %s <input> <output>" % sys.argv[0], file=sys.stderr)
+    is_rawlines = sys.argv[1:2] == ["--rawlines"]
+    if len(sys.argv) != (3 + is_rawlines):
+        print("Usage: %s [--rawlines] <input> <output>" % sys.argv[0], file=sys.stderr)
+        print("Add --rawlines to reference input file as source rather than original source.", file=sys.stderr)
         sys.exit(1)
-    default_parser().translate(sys.argv[1], sys.argv[2])
+    default_parser(is_rawlines).translate(sys.argv[1 + is_rawlines], sys.argv[2 + is_rawlines])

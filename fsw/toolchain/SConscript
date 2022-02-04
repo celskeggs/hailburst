@@ -1,3 +1,8 @@
+import os
+
+import SCons.Defaults
+import SCons.Tool
+
 Import('env')
 
 # host program
@@ -10,6 +15,53 @@ excise_source = [
 ]
 
 env["PYTHONPP"] = File('preprocessor.py')
+env["PPSUFFIX"] = ".iraw"
+env["RWSUFFIX"] = ".i"
+env["PPCOM"] = '$CC -o $TARGET -E $CFLAGS $CCFLAGS -D__PYTHON_PREPROCESS__ $_CCCOMCOM $SOURCES'
+env["PYTHONPPFLAGS"] = []
+if os.getenv("PP_RAWLINES"):
+    env["PYTHONPPFLAGS"] += ["--rawlines"]
+env["PPMODCOM"] = 'python3 $PYTHONPP $PYTHONPPFLAGS $SOURCES $TARGET'
+# eliminate $_CCCOMCOM here because it's used for preprocessor flags that are not needed here
+env["OBJCOM"] = '$CC -o $TARGET -c $CFLAGS $CCFLAGS $SOURCES'
+
+env['BUILDERS']['PP'] = Builder(
+    action=Action("$PPCOM", "$PPCOMSTR"),
+    suffix='$PPSUFFIX',
+    src_suffix='.c',
+    source_scanner=SourceFileScanner,
+    single_source=1,
+)
+
+
+def plugin_dep_emitter(target, source, env):
+    env.Depends(target, "$PYTHONPP")
+    return target, source
+
+
+env['BUILDERS']['PPMOD'] = Builder(
+    action=Action("$PPMODCOM", "$PPMODCOMSTR"),
+    emitter=plugin_dep_emitter,
+    suffix='$RWSUFFIX',
+    src_suffix='$PPSUFFIX',
+    src_builder='PP',
+    single_source=1,
+)
+ObjAction = Action("$OBJCOM", "$OBJCOMSTR")
+ASAction = Action("$ASCOM", "$ASCOMSTR")
+CAction = Action("$CCCOM", "$CCCOMSTR")
+static_object_builder = Builder(
+    action={'$RWSUFFIX': ObjAction, '.s': ASAction, '.S': CAction},
+    emitter=SCons.Defaults.StaticObjectEmitter,
+    prefix='$OBJPREFIX',
+    suffix='$OBJSUFFIX',
+    src_suffix=['$RWSUFFIX', '.s', '.S'],
+    src_builder='PPMOD',
+    single_source=1,
+)
+env['BUILDERS']['Object'] = static_object_builder
+env['BUILDERS']['StaticObject'] = static_object_builder
+
 env["REPLICA_LINK_PY"] = File('linker.py')
 env["EXCISE"] = Program("excise", excise_source, CPPPATH=[GDB_BINUTILS + "/bfd"], LIBS=["dl", "z"])
 # TODO: can this be a list?

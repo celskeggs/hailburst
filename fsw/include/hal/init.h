@@ -3,6 +3,10 @@
 
 #include <hal/preprocessor.h>
 
+#ifndef __PYTHON_PREPROCESS__
+#error Python preprocessor is required for this init code to compile
+#endif
+
 typedef struct {
     // these stages are defined to make sense for FreeRTOS, because there are more constraints there.
     enum init_stage {
@@ -21,7 +25,7 @@ typedef struct {
 // not the same type!
 
 #define PROGRAM_INIT(stage, callback) \
-    const __attribute__((section("initpoints"))) program_init _initpoint_ ## callback = \
+    const __attribute__((section("initpoints"))) program_init symbol_join(_initpoint, callback) = \
         { \
             /* make sure that the function is the correct form before casting it */ \
             /* note that casting it will be fine, because it will just ignore the unexpected argument in r0 */ \
@@ -31,7 +35,7 @@ typedef struct {
         }
 
 #define PROGRAM_INIT_PARAM(stage, callback, ident, param) \
-    const __attribute__((section("initpoints"))) program_init _initpoint_ ## callback ## _ ## ident = \
+    const __attribute__((section("initpoints"))) program_init symbol_join(_initpoint, callback, ident) = \
         { \
             /* make sure that param pointer type matches the function argument, since we'll be throwing them away! */ \
             .init_fn = PP_ERASE_TYPE(callback, param), \

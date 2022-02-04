@@ -3,6 +3,10 @@ import os
 Import('build_modules')
 
 app_modules = [
+    # configuration must go first
+    'toolchain',
+
+    # code modules can come afterwards
     'bus',
     'flight',
     'include',
@@ -23,6 +27,7 @@ test_modules = [
 env = Environment(
     CCFLAGS=[
         '-ggdb',
+        '-fdiagnostics-color',
         '-Wall', '-Wextra', '-Werror',
         # because comparisons of constants defined using 'enum' otherwise might cause trouble
         '-Wno-enum-compare',
