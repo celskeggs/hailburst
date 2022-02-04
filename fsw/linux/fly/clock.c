@@ -46,7 +46,6 @@ static bool clock_read_register(clock_device_t *device, uint32_t reg, void *outp
 }
 
 void clock_wait_for_calibration(void) {
-    assert(clock != NULL);
     while (!atomic_load(clock_calibrated)) {
         debugf(DEBUG, "Stuck waiting for clock calibration before telemetry can be timestamped.");
         local_doze(clock_cal_notify_task);
