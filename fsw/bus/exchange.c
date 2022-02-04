@@ -150,10 +150,10 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
             bool do_reset = false;
 
             if (exc_state == FW_EXC_OPERATING && recv_state == FW_RECV_RECEIVING
-                    && read_entry->actual_length < io_rx_size_vc(fwe->read_chart)) {
+                    && read_entry->actual_length < io_rx_size(fwe->read_chart)) {
                 assert(read_entry != NULL);
                 rx_ent.data_out     = read_entry->data + read_entry->actual_length;
-                rx_ent.data_max_len = io_rx_size_vc(fwe->read_chart) - read_entry->actual_length;
+                rx_ent.data_max_len = io_rx_size(fwe->read_chart) - read_entry->actual_length;
             } else {
                 // tell decoder to discard data and just tell us the number of bytes
                 rx_ent.data_out     = NULL;
@@ -217,7 +217,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                             assert(recv_state == FW_RECV_LISTENING);
 
                             assert(read_entry == NULL);
-                            read_entry = vochart_request_start(fwe->read_chart);
+                            read_entry = chart_request_start(fwe->read_chart);
                             assert(read_entry != NULL);
                             read_entry->actual_length = 0;
                             read_entry->receive_timestamp = rx_ent.receive_timestamp;
@@ -225,7 +225,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                             recv_state = FW_RECV_RECEIVING;
                             pkts_rcvd += 1;
                             // reset receive buffer before proceeding
-                            memset(read_entry->data, 0, io_rx_size_vc(fwe->read_chart));
+                            memset(read_entry->data, 0, io_rx_size(fwe->read_chart));
                         }
                         break;
                     case FWC_END_PACKET:
@@ -236,7 +236,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                         } else if (recv_state == FW_RECV_RECEIVING) {
                             assert(read_entry != NULL);
                             // notify read task that data is ready to consume
-                            vochart_request_send(fwe->read_chart);
+                            chart_request_send(fwe->read_chart, 1);
                             recv_state = FW_RECV_LISTENING;
                             read_entry = NULL;
                         } else {
@@ -304,19 +304,19 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
                     debug_printf(WARNING, "Received at least %zu unexpected data characters during "
                                  "state (exc=%d, recv=%d); resetting.", rx_ent.data_actual_len, exc_state, recv_state);
                     do_reset = true;
-                } else if (read_entry->actual_length >= io_rx_size_vc(fwe->read_chart)) {
+                } else if (read_entry->actual_length >= io_rx_size(fwe->read_chart)) {
                     assert(rx_ent.data_out == NULL);
                     debug_printf(WARNING, "Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
-                                 io_rx_size_vc(fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
+                                 io_rx_size(fwe->read_chart), read_entry->actual_length, rx_ent.data_actual_len);
                     recv_state = FW_RECV_OVERFLOWED;
                 } else {
                     assert(rx_ent.data_out != NULL);
-                    assert(read_entry->actual_length + rx_ent.data_actual_len <= io_rx_size_vc(fwe->read_chart));
+                    assert(read_entry->actual_length + rx_ent.data_actual_len <= io_rx_size(fwe->read_chart));
 #ifdef EXCHANGE_DEBUG
                     debug_printf(TRACE, "Received %zu regular data bytes.", rx_ent.data_actual_len);
 #endif
                     read_entry->actual_length += rx_ent.data_actual_len;
-                    assert(read_entry->actual_length <= io_rx_size_vc(fwe->read_chart));
+                    assert(read_entry->actual_length <= io_rx_size(fwe->read_chart));
                 }
             }
 
@@ -338,7 +338,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
             }
         }
 
-        uint32_t not_yet_received = vochart_request_avail(fwe->read_chart) - (recv_state == FW_RECV_LISTENING ? 0 : 1);
+        uint32_t not_yet_received = chart_request_avail(fwe->read_chart) - (recv_state == FW_RECV_LISTENING ? 0 : 1);
         if (not_yet_received > MAX_OUTSTANDING_TOKENS) {
             not_yet_received = MAX_OUTSTANDING_TOKENS;
         }
@@ -406,7 +406,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
         do {
             if (txmit_state == FW_TXMIT_IDLE) {
                 assert(write_entry == NULL);
-                write_entry = vochart_reply_start(fwe->write_chart);
+                write_entry = chart_reply_start(fwe->write_chart);
                 if (write_entry != NULL) {
                     assert(write_entry->actual_length > 0);
 #ifdef EXCHANGE_DEBUG
@@ -449,7 +449,7 @@ void fakewire_exc_exchange_loop(fw_exchange_t *fwe) {
 #ifdef EXCHANGE_DEBUG
                 debug_printf(TRACE, "Finished transmitting packet (len=%u).", write_entry->actual_length);
 #endif
-                vochart_reply_send(fwe->write_chart);
+                chart_reply_send(fwe->write_chart, 1);
 
                 // reset our state
                 txmit_state = FW_TXMIT_IDLE;

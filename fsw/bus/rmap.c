@@ -23,7 +23,7 @@ static void rmap_cancel_active_work(rmap_t *rmap) {
         rmap->current_routing = NULL;
     }
     if (rmap->lingering_read) {
-        vochart_reply_send(rmap->rx_chart);
+        chart_reply_send(rmap->rx_chart, 1);
         rmap->lingering_read = false;
     }
 }
@@ -42,7 +42,7 @@ rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr);
 
-    struct io_rx_ent *entry = vochart_request_start(rmap->tx_chart);
+    struct io_rx_ent *entry = chart_request_start(rmap->tx_chart);
     if (entry == NULL) {
         // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
         // first packet if there's a second packet waiting behind it!
@@ -53,7 +53,7 @@ rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_
         return RS_TRANSMIT_BLOCKED;
     }
     uint8_t *out = entry->data;
-    memset(out, 0, io_rx_size_vc(rmap->tx_chart));
+    memset(out, 0, io_rx_size(rmap->tx_chart));
     // and then start writing output bytes according to the write command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
@@ -101,13 +101,14 @@ rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_
 static bool rmap_transmit_pending(rmap_t *rmap) {
     assert(rmap != NULL);
     // once all packets have been forwarded by the virtual switch, avail will equal count
-    return vochart_request_avail(rmap->tx_chart) < vochart_client_note_count(rmap->tx_chart);
+    return chart_request_avail(rmap->tx_chart) < chart_note_count(rmap->tx_chart);
 }
 
 static void rmap_drop_packets(rmap_t *rmap) {
-    while (vochart_reply_avail(rmap->rx_chart) > 0) {
-        debugf(WARNING, "Dropping packet because no request was in progress.");
-        vochart_reply_send(rmap->rx_chart);
+    chart_index_t packets;
+    while ((packets = chart_reply_avail(rmap->rx_chart)) > 0) {
+        debugf(WARNING, "Dropping %u packets because no request was in progress.", packets);
+        chart_reply_send(rmap->rx_chart, packets);
     }
 }
 
@@ -175,8 +176,8 @@ static bool rmap_pull_write_reply(rmap_t *rmap, struct write_reply *out) {
     assert(rmap != NULL && out != NULL);
 
     struct io_rx_ent *ent;
-    while (!out->received && (ent = vochart_reply_start(rmap->rx_chart)) != NULL) {
-        assert(ent->actual_length <= io_rx_size_vs(rmap->rx_chart));
+    while (!out->received && (ent = chart_reply_start(rmap->rx_chart)) != NULL) {
+        assert(ent->actual_length <= io_rx_size(rmap->rx_chart));
         assert(ent->receive_timestamp > 0);
 
         if (rmap_validate_write_reply(rmap, ent->data, ent->actual_length, out)) {
@@ -185,7 +186,7 @@ static bool rmap_pull_write_reply(rmap_t *rmap, struct write_reply *out) {
             out->received = true;
         }
 
-        vochart_reply_send(rmap->rx_chart);
+        chart_reply_send(rmap->rx_chart, 1);
     }
     return out->received;
 }
@@ -197,9 +198,9 @@ rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_
     assert(routing != NULL);
     assert(rmap->body_pointer != NULL);
     assert(!rmap->lingering_read);
-    assert(data_length <= io_rx_size_vc(rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
+    assert(data_length <= io_rx_size(rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
 
-    struct io_rx_ent *entry = vochart_request_start(rmap->tx_chart);
+    struct io_rx_ent *entry = chart_request_start(rmap->tx_chart);
     assert(entry != NULL);
     // make sure the pointer is coherent
     assert(rmap->body_pointer >= entry->data + 16 && rmap->body_pointer <= entry->data + 16 + RMAP_MAX_PATH * 2);
@@ -215,7 +216,7 @@ rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_
 
     // compute final length
     entry->actual_length = &rmap->body_pointer[data_length + 1] - entry->data;
-    assert(entry->actual_length <= io_rx_size_vc(rmap->tx_chart));
+    assert(entry->actual_length <= io_rx_size(rmap->tx_chart));
     // clear receive timestamp, because it doesn't matter for outbound packets
     entry->receive_timestamp = 0;
 
@@ -224,7 +225,7 @@ rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_
     rmap_drop_packets(rmap);
 
     // now transmit!
-    vochart_request_send(rmap->tx_chart);
+    chart_request_send(rmap->tx_chart, 1);
 
     struct write_reply write_reply = { .received = false };
 
@@ -307,7 +308,7 @@ rmap_status_t rmap_write_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_fl
                                uint64_t *ack_timestamp_out) {
     rmap_status_t status;
 
-    assert(length <= io_rx_size_vc(rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
+    assert(length <= io_rx_size(rmap->tx_chart) - SCRATCH_MARGIN_WRITE);
 
     uint8_t *ptr_write = NULL;
     status = rmap_write_prepare(rmap, routing, flags, ext_addr, main_addr, &ptr_write);
@@ -411,8 +412,8 @@ static bool rmap_pull_read_reply(rmap_t *rmap, const rmap_addr_t *routing, struc
     }
 
     struct io_rx_ent *ent;
-    while ((ent = vochart_reply_start(rmap->rx_chart)) != NULL) {
-        assert(ent->actual_length <= io_rx_size_vs(rmap->rx_chart));
+    while ((ent = chart_reply_start(rmap->rx_chart)) != NULL) {
+        assert(ent->actual_length <= io_rx_size(rmap->rx_chart));
         assert(ent->receive_timestamp > 0);
 
         if (rmap_validate_read_reply(rmap, ent->data, ent->actual_length, routing, out)) {
@@ -421,7 +422,7 @@ static bool rmap_pull_read_reply(rmap_t *rmap, const rmap_addr_t *routing, struc
             return true;
         }
 
-        vochart_reply_send(rmap->rx_chart);
+        chart_reply_send(rmap->rx_chart, 1);
     }
     return false;
 }
@@ -435,7 +436,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
     // make sure that the receive chart has enough space to buffer this much data in scratch memory when receiving
     uint32_t max_data_length = *length;
     assert(0 < max_data_length && max_data_length <= RMAP_MAX_DATA_LEN);
-    assert(max_data_length + SCRATCH_MARGIN_READ <= io_rx_size_vs(rmap->rx_chart));
+    assert(max_data_length + SCRATCH_MARGIN_READ <= io_rx_size(rmap->rx_chart));
 
     // clear up anything ongoing
     rmap_cancel_active_work(rmap);
@@ -444,7 +445,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, max_data_length);
 
-    struct io_rx_ent *entry = vochart_request_start(rmap->tx_chart);
+    struct io_rx_ent *entry = chart_request_start(rmap->tx_chart);
     if (entry == NULL) {
         // indicates that the entire outgoing queue is full... this is very odd, because the switch should drop the
         // first packet if there's a second packet waiting behind it!
@@ -456,7 +457,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
         return RS_TRANSMIT_BLOCKED;
     }
     uint8_t *out = entry->data;
-    memset(out, 0, io_rx_size_vc(rmap->tx_chart));
+    memset(out, 0, io_rx_size(rmap->tx_chart));
     // now start writing output bytes according to the read command format
     if (routing->destination.num_path_bytes > 0) {
         assert(routing->destination.num_path_bytes <= RMAP_MAX_PATH);
@@ -503,7 +504,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
     rmap_drop_packets(rmap);
 
     // now transmit!
-    vochart_request_send(rmap->tx_chart);
+    chart_request_send(rmap->tx_chart, 1);
 
     struct read_reply read_reply = { .received = false };
 
