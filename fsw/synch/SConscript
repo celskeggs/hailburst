@@ -2,6 +2,7 @@ Import('env')
 
 sources = [
     "chart.c",
+    "duct.c",
     "init.c",
     "multichart.c",
     "stream.c",

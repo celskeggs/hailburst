@@ -59,8 +59,8 @@ bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns) {
     assert(sema != NULL);
     struct timespec deadline_ts;
 
-    // this is possible because clock_timestamp_monotonic() uses CLOCK_MONOTONIC_RAW,
-    // and we set our condition variable to CLOCK_MONOTONIC_RAW as well above.
+    // this is possible because clock_timestamp_monotonic() uses CLOCK_MONOTONIC,
+    // and we set our condition variable to CLOCK_MONOTONIC as well above.
     deadline_ts.tv_sec  = deadline_ns / CLOCK_NS_PER_SEC;
     deadline_ts.tv_nsec = deadline_ns % CLOCK_NS_PER_SEC;
 
