@@ -50,8 +50,8 @@ typedef enum {
 
 typedef struct {
     thread_t client_task;
-    chart_t *rx_chart;
-    chart_t *tx_chart;
+    vochart_server_t *rx_chart;
+    vochart_client_t *tx_chart;
 
     uint8_t *body_pointer;
     bool     lingering_read;
@@ -63,20 +63,25 @@ typedef struct {
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
-#define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit, r_client_task) \
-    CHART_REGISTER(r_receive, io_rx_pad_size(SCRATCH_MARGIN_READ + r_max_read), 2);           \
-    CHART_REGISTER(r_transmit, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2);        \
-    rmap_t r_ident = {                                                                        \
-        .client_task = &r_client_task,                                                        \
-        .rx_chart = &r_receive,                                                               \
-        .tx_chart = &r_transmit,                                                              \
-    };                                                                                        \
-    CHART_SERVER_NOTIFY(r_receive, local_rouse, &r_client_task);                              \
-    CHART_CLIENT_NOTIFY(r_transmit, local_rouse, &r_client_task)
+#define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit, r_client_task, r_replicas)             \
+    VOCHART_REGISTER(r_receive,  r_replicas, 1, io_rx_pad_size(SCRATCH_MARGIN_READ  + r_max_read),  2);               \
+    VOCHART_REGISTER(r_transmit, 1, r_replicas, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2);               \
+    VOCHART_SERVER(r_receive,  0, r_replicas, io_rx_pad_size(SCRATCH_MARGIN_READ  + r_max_read), 2,                   \
+                   local_rouse, &r_client_task);                                                                      \
+    VOCHART_CLIENT(r_transmit, 0, r_replicas, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2,                  \
+                   local_rouse, &r_client_task);                                                                      \
+    rmap_t r_ident = {                                                                                                \
+        .client_task = &r_client_task,                                                                                \
+        .rx_chart = VOCHART_SERVER_PTR(r_receive, 0),                                                                 \
+        .tx_chart = VOCHART_CLIENT_PTR(r_transmit, 0),                                                                \
+    }
 
 #define RMAP_ON_SWITCH(r_ident, r_switch, r_switch_port, r_max_read, r_max_write, r_client_task)                      \
-    RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_ident ## _receive, r_ident ## _transmit, r_client_task);        \
-    SWITCH_PORT(r_switch, r_switch_port, r_ident ## _transmit, r_ident ## _receive)
+    RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_ident ## _receive, r_ident ## _transmit,                        \
+                  r_client_task, SWITCH_REPLICAS);                                                                    \
+    SWITCH_PORT(r_switch, r_switch_port, r_ident ## _transmit, r_ident ## _receive,                                   \
+                io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), io_rx_pad_size(SCRATCH_MARGIN_READ + r_max_read), \
+                2)
 
 // returns a pointer into which up to max_write_length bytes can be written.
 rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
