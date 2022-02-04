@@ -14,6 +14,17 @@ excise_source = [
     GDB_BINUTILS + "/libiberty/libiberty.a",
 ]
 
+env["OBJCOMSTR"] = "[${PLATFORM} - COMPILE] ${SOURCE}"
+env["LINKCOMSTR"] = "[${PLATFORM} -    LINK] ${TARGET}"
+env["PPCOMSTR"] = "[${PLATFORM} - PREPROC] ${SOURCE}"
+env["PPMODCOMSTR"] = "[${PLATFORM} -  MACROS] ${SOURCE}"
+env["ARCOMSTR"] = "[${PLATFORM} - ARCHIVE] ${TARGET}"
+env["RANLIBCOMSTR"] = "[${PLATFORM} -  RANLIB] ${TARGET}"
+env["ASCOMSTR"] = "[${PLATFORM} - ASSEMBL] ${SOURCE}"
+env["STRIPCOMSTR"] = "[${PLATFORM} -   STRIP] ${SOURCE}"
+env["BIN2OBJCOMSTR"] = "[${PLATFORM} - BIN2OBJ] ${SOURCE}"
+env["OBJ2BINCOMSTR"] = "[${PLATFORM} - OBJ2BIN] ${SOURCE}"
+
 env["PYTHONPP"] = File('preprocessor.py')
 env["PPSUFFIX"] = ".iraw"
 env["RWSUFFIX"] = ".i"
@@ -62,11 +73,13 @@ static_object_builder = Builder(
 env['BUILDERS']['Object'] = static_object_builder
 env['BUILDERS']['StaticObject'] = static_object_builder
 
+host_env = Environment(CCCOMSTR="[ HOST - COMPILE] ${SOURCE}", LINKCOMSTR="[ HOST -    LINK] ${TARGET}")
+
 env["REPLICA_LINK_PY"] = File('linker.py')
-env["EXCISE"] = Program("excise", excise_source, CPPPATH=[GDB_BINUTILS + "/bfd"], LIBS=["dl", "z"])
+env["EXCISE"] = host_env.Program("excise", excise_source, CPPPATH=[GDB_BINUTILS + "/bfd"], LIBS=["dl", "z"])
 # TODO: can this be a list?
 env["REPLICA_LINK"] = (
-    "python3 $REPLICA_LINK_PY " +
-    "--archiver $AR --excise $EXCISE --objcopy $OBJCOPY --replica-script $REPLICA_SCRIPT " +
-    "--linker " + env["LINK"]  # make a copy of $LINK so that it can be replaced later
+        "python3 $REPLICA_LINK_PY " +
+        "--archiver $AR --excise $EXCISE --objcopy $OBJCOPY --replica-script $REPLICA_SCRIPT " +
+        "--linker " + env["LINK"]  # make a copy of $LINK so that it can be replaced later
 )

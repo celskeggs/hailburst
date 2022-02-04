@@ -57,6 +57,7 @@ env = Environment(
         "-Wa,--fatal-warnings",
     ],
     CPPPATH=[],
+    PLATFORM="VIVID",
 )
 
 
@@ -71,13 +72,13 @@ env.Default(rtos_kernel)
 stripped_kernel = env.Command(
     target='stripped-kernel',
     source=rtos_kernel,
-    action='$STRIP --strip-all --remove-section=debugf_messages $SOURCE -o $TARGET',
+    action=Action('$STRIP --strip-all --remove-section=debugf_messages $SOURCE -o $TARGET', cmdstr="$STRIPCOMSTR"),
 )
 
 embedding = env.Command(
     target='embedded-kernel.o',
     source=stripped_kernel,
-    action='$OBJCOPY -I binary -O elf32-littlearm -B arm --strip-all $SOURCE $TARGET',
+    action=Action('$OBJCOPY -I binary -O elf32-littlearm -B arm --strip-all $SOURCE $TARGET', cmdstr="$BIN2OBJCOMSTR"),
 )
 
 rtos_bootrom_elf = env.Program("bootrom-elf", build_modules(env, bootrom_modules) + [embedding],
@@ -87,6 +88,6 @@ env.Depends(rtos_bootrom_elf, "$BOOTROM_LINKSCRIPT")
 rtos_bootrom_bin = env.Command(
     target='bootrom-bin',
     source=rtos_bootrom_elf,
-    action='$OBJCOPY -I elf32-littlearm -O binary $SOURCE $TARGET',
+    action=Action('$OBJCOPY -I elf32-littlearm -O binary $SOURCE $TARGET', cmdstr="$OBJ2BINCOMSTR"),
 )
 env.Default(rtos_bootrom_bin)

@@ -40,6 +40,7 @@ env = Environment(
     ],
     PREFIX=GetOption('prefix'),
     CPPPATH=[],
+    PLATFORM="LINUX",
 )
 
 inherited_env_vars = [
