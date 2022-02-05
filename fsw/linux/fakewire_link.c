@@ -18,7 +18,7 @@
 void fakewire_link_rx_loop(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    while (fwl->fd_in == -1 && fwl->fd_out == -1) {
+    while (fwl->fd_in == -1 || fwl->fd_out == -1) {
         task_doze();
     }
 
@@ -53,7 +53,7 @@ void fakewire_link_rx_loop(fw_link_t *fwl) {
 void fakewire_link_tx_loop(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    while (fwl->fd_in == -1 && fwl->fd_out == -1) {
+    while (fwl->fd_in == -1 || fwl->fd_out == -1) {
         task_doze();
     }
 

@@ -147,7 +147,7 @@ static void exchange_writer(struct writer_config *wc) {
     task_rouse(wc->complete_notify);
 }
 
-struct exchange_state {
+struct exchange_config {
     struct reader_config rc;
     struct writer_config wc;
 };
@@ -236,7 +236,7 @@ static void prepare_test_fifos(void) {
 }
 PROGRAM_INIT(STAGE_RAW, prepare_test_fifos);
 
-static void exchange_controller_init(struct exchange_state *es) {
+static void exchange_controller_init(struct exchange_config *es) {
     mutex_init(&es->rc.out_mutex);
     es->wc.chain_in = random_packet_chain();
 }
@@ -244,7 +244,7 @@ static void exchange_controller_init(struct exchange_state *es) {
 #define EXCHANGE_CONTROLLER(e_ident, e_flags, e_complete_task)                                                  \
     CHART_REGISTER(e_ident ## _read, io_rx_pad_size(4096), 4);                                                  \
     CHART_REGISTER(e_ident ## _write, io_rx_pad_size(4096), 4);                                                 \
-    struct exchange_state e_ident = {                                                                           \
+    struct exchange_config e_ident = {                                                                          \
         .rc = {                                                                                                 \
             .name = #e_ident,                                                                                   \
             .chain_out = NULL,                                                                                  \
@@ -273,7 +273,7 @@ static void exchange_controller_init(struct exchange_state *es) {
     CHART_CLIENT_NOTIFY(e_ident ## _write, task_rouse, &e_ident ## _writer_task)
 
 // return true/false for pass/fail
-static bool collect_status(struct exchange_state *est, struct packet_chain **chain_out, uint64_t deadline) {
+static bool collect_status(struct exchange_config *est, struct packet_chain **chain_out, uint64_t deadline) {
     assert(est != NULL && chain_out != NULL);
 
     bool pass = true;
