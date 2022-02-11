@@ -40,7 +40,7 @@ typedef struct {
     const size_t            message_size;
     uint8_t * const         message_buffer;
     duct_flow_index * const flow_status; // DUCT_MISSING_FLOW if not sent; otherwise [0, max_flow] based on msgs.
-    eplock_t                mutex;
+    eplock_t * const        mutex;
     uint8_t                 flow_current; // scratch variable for current holder of mutex
 } duct_t;
 
@@ -65,6 +65,7 @@ typedef struct {
     duct_flow_index symbol_join(d_ident, flow_statuses)[(d_sender_replicas) * (d_receiver_replicas)] = {              \
         [0 ... ((d_sender_replicas) * (d_receiver_replicas) - 1)] = DUCT_MISSING_FLOW,                                \
     };                                                                                                                \
+    EPLOCK_REGISTER(symbol_join(d_ident, mutex));                                                                     \
     duct_t d_ident = {                                                                                                \
         .sender_replicas = (d_sender_replicas),                                                                       \
         .receiver_replicas = (d_receiver_replicas),                                                                   \
@@ -72,7 +73,7 @@ typedef struct {
         .message_size = (d_message_size),                                                                             \
         .message_buffer = symbol_join(d_ident, buf),                                                                  \
         .flow_status = symbol_join(d_ident, flow_statuses),                                                           \
-        .mutex = EPLOCK_INIT,                                                                                         \
+        .mutex = &symbol_join(d_ident, mutex),                                                                        \
         .flow_current = DUCT_MISSING_FLOW,                                                                            \
     }
 

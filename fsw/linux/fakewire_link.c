@@ -75,7 +75,7 @@ void fakewire_link_tx_loop(fw_link_t *fwl) {
             debug_printf(TRACE, "Finished writing %zd bytes to file descriptor.", actual);
 #endif
         } else {
-            debug_printf(CRITICAL, "Write failed: %zd bytes instead of %zu bytes", actual, entry->actual_length);
+            debug_printf(CRITICAL, "Write failed: %zd bytes instead of %u bytes", actual, entry->actual_length);
         }
 
         chart_reply_send(fwl->tx_chart, 1);

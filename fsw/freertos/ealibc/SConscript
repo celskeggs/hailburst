@@ -10,6 +10,7 @@ env["CPPPATH"] += [
 
 sources = [
     "string/memset.c",
+    "string/memcmp.c",
     "string/memcpy.c",
     "string/memmove.c",
     "string/strlen.c",

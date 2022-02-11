@@ -80,7 +80,7 @@ static void exchange_reader(struct reader_config *rc) {
         }
 
         assert(ent->actual_length > 0 && ent->actual_length <= io_rx_size(rc->read_chart));
-        debugf(DEBUG, "[%8s] - Completed read of packet with length %ld", rc->name, ent->actual_length - 1);
+        debugf(DEBUG, "[%8s] - Completed read of packet with length %d", rc->name, ent->actual_length - 1);
 
         last_packet_marker = ent->data[0];
         assert(last_packet_marker == 0 || last_packet_marker == 1);

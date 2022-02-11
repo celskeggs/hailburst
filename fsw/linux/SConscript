@@ -5,7 +5,7 @@ env["CPPPATH"] += [
 ]
 
 sources = [
-    "debug.c",
+    "eplock.c",
     "fakewire_link.c",
     "platform.c",
     "semaphore.c",

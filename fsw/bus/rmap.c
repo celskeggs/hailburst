@@ -123,22 +123,22 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, s
     assert(rmap != NULL && in != NULL && out != NULL);
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
-        debugf(WARNING, "Dropped truncated packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated packet (len=%zu).", count);
         return false;
     }
     if (in[1] != PROTOCOL_RMAP) {
-        debugf(WARNING, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        debugf(WARNING, "Dropped non-RMAP packet (len=%zu, proto=%u).", count, in[1]);
         return false;
     }
     // validate that this is the correct type of RMAP packet
     uint8_t flags = in[2];
     if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_WRITE)) != (RF_ACKNOWLEDGE | RF_WRITE)) {
-        debugf(WARNING, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending write.", count, flags);
+        debugf(WARNING, "Dropped RMAP packet (len=%zu) with invalid flags 0x%02x when pending write.", count, flags);
         return false;
     }
     // validate header integrity (length, CRC)
     if (count != 8) {
-        debugf(WARNING, "Dropped packet exceeding RMAP write reply length (len=%u).", count);
+        debugf(WARNING, "Dropped packet exceeding RMAP write reply length (len=%zu).", count);
         return false;
     }
     uint8_t computed_crc = rmap_crc8(in, 7);
@@ -338,22 +338,22 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count, co
     assert(rmap != NULL && in != NULL && routing != NULL && out != NULL);
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
-        debugf(WARNING, "Dropped truncated packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated packet (len=%zu).", count);
         return false;
     }
     if (in[1] != PROTOCOL_RMAP) {
-        debugf(WARNING, "Dropped non-RMAP packet (len=%u, proto=%u).", count, in[1]);
+        debugf(WARNING, "Dropped non-RMAP packet (len=%zu, proto=%u).", count, in[1]);
         return false;
     }
     // validate that this is the correct type of RMAP packet
     uint8_t flags = in[2];
     if ((flags & (RF_RESERVED | RF_COMMAND | RF_ACKNOWLEDGE | RF_VERIFY | RF_WRITE)) != RF_ACKNOWLEDGE) {
-        debugf(WARNING, "Dropped RMAP packet (len=%u) with invalid flags 0x%02x when pending read.", count, flags);
+        debugf(WARNING, "Dropped RMAP packet (len=%zu) with invalid flags 0x%02x when pending read.", count, flags);
         return false;
     }
     // validate header integrity (length, CRC)
     if (count < 13) {
-        debugf(WARNING, "Dropped truncated RMAP read reply packet (len=%u).", count);
+        debugf(WARNING, "Dropped truncated RMAP read reply packet (len=%zu).", count);
         return false;
     }
     uint8_t computed_crc = rmap_crc8(in, 11);
@@ -369,7 +369,7 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count, co
     // second, validate full length and data CRC after parsing data length.
     uint32_t data_length = (in[8] << 16) | (in[9] << 8) | in[10];
     if (count != 13 + data_length) {
-        debugf(WARNING, "Dropped RMAP read reply with mismatched data length field (found=%u, expected=%u).",
+        debugf(WARNING, "Dropped RMAP read reply with mismatched data length field (found=%u, expected=%zu).",
                data_length, count - 13);
         return false;
     }
@@ -441,7 +441,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
     // clear up anything ongoing
     rmap_cancel_active_work(rmap);
 
-    debugf(TRACE, "RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x REQLEN=%zu",
+    debugf(TRACE, "RMAP  READ START: DEST=%u SRC=%u KEY=%u FLAGS=%x ADDR=0x%02x_%08x REQLEN=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
            flags, ext_addr, main_addr, max_data_length);
 

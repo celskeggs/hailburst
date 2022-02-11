@@ -1,3 +1,4 @@
+import hashlib
 import inspect
 import os
 import string
@@ -345,12 +346,26 @@ def symbol_str(args, name_token):
     return [new_token('"%s"' % symbol.replace('\\', '\\\\').replace('"', '\\"'), name_token)]
 
 
+def anonymous_symbol(args, name_token, counter):
+    if len(args) != 1:
+        raise MacroError("anonymous_symbol takes exactly one argument")
+    variable_name = argument(args[0])
+    if not (variable_name.replace("_", "").isalnum() and variable_name[0].isalpha()):
+        raise MacroError("invalid variable name %r" % variable_name)
+
+    uniq = counter[0].source_hash + str(counter[1]).encode()
+    replacement = new_token("_anon_" + hashlib.sha256(uniq).hexdigest()[:8], args[0])
+    return lambda body: [(replacement if token.match(variable_name) else token) for token in body]
+
+
 def default_parser(rawlines):
     parser = Parser(rawlines)
     parser.add_macro("debugf_core", debugf_core)
     parser.add_macro("static_repeat", static_repeat)
     parser.add_macro("symbol_join", symbol_join)
     parser.add_macro("symbol_str", symbol_str)
+    mutable = [parser, 0]
+    parser.add_macro("anonymous_symbol", lambda args, name_token: anonymous_symbol(args, name_token, mutable))
     return parser
 
 
@@ -543,6 +558,7 @@ class Parser:
         self.rawlines = rawlines
         self.source_file = None
         self.source_line = 0
+        self.source_hash = None
         self.last_token = None
 
     def on_token(self, token):
@@ -603,6 +619,7 @@ class Parser:
                 with open(oname, "w") as output:
                     self.source_file = iname
                     self.source_line = 0
+                    self.source_hash = hashlib.sha256(iname.encode()).digest()
                     for line in input:
                         try:
                             output.write(self.translate_line(line))

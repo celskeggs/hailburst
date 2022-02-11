@@ -1,4 +1,5 @@
 #include <hal/debug.h>
+#include <hal/eplock.h>
 #include <hal/thread.h>
 
 static bool initialized = false;
@@ -18,7 +19,7 @@ static void *thread_entry_wrapper(void *param) {
     // save a pointer to our own thread structure
     THREAD_CHECK(pthread_setspecific(task_current_key, thread));
 
-    assert(thread->start_routine != NULL);
+    assertf(thread->start_routine != NULL, "no start routine for thread %s", thread->name);
     thread->start_routine(thread->start_parameter);
     return NULL;
 }
@@ -33,6 +34,7 @@ void start_predef_threads(void) {
     // set up key for task_get_current
     THREAD_CHECK(pthread_key_create(&task_current_key, NULL));
 
+    epsync_register();
     debugf(DEBUG, "Preparing rouse semaphores for %u predefined threads...",
                     (uint32_t) (tasktable_end - tasktable_start));
     for (thread_t task = tasktable_start; task < tasktable_end; task++) {

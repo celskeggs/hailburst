@@ -2,11 +2,16 @@
 #define FSW_LINUX_FSW_DEBUG_H
 
 #include <assert.h>
+#include <stdio.h>
 
 #include <hal/loglevel.h>
 
-void debugf(loglevel_t level, const char *format, ...);
+#define TIMEFMT "%3.9f"
+#define TIMEARG(x) ((x) / 1000000000.0)
 
+/* note: should not use TIMEARG like this in general; the argument must not be a function call on FreeRTOS */
+#define debugf(level, fmt, ...)                                                                                       \
+        ({ printf("[" TIMEFMT "] " fmt "\n", TIMEARG(clock_timestamp()), ## __VA_ARGS__); fflush(stdout); })
 #define debugf_stable(level, stable_id, fmt, ...) debugf(level, fmt, ## __VA_ARGS)
 
 // generic but messier implementation

@@ -17,7 +17,10 @@ typedef struct {
     thread_t holder;
 } eplock_t;
 
-#define EPLOCK_INIT     ((eplock_t) { .holder = NULL })
+#define EPLOCK_REGISTER(e_ident)                                                                                      \
+    eplock_t e_ident = { .holder = NULL }
+
+#define EPSYNC_ENABLE(e_task) /* allocate nothing on FreeRTOS */
 
 static inline void eplock_acquire(eplock_t *lock) {
     assert(lock != NULL);
@@ -57,7 +60,7 @@ static inline bool eplock_held(eplock_t *lock) {
     return current_task == atomic_load_relaxed(lock->holder);
 }
 
-static inline void eplock_wait_next_epoch(void) {
+static inline void epsync_wait_next_epoch(void) {
     taskYIELD();
 }
 

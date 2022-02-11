@@ -8,7 +8,10 @@
 
 #include <hal/atomic.h>
 #include <hal/clock.h>
+#include <hal/debug.h>
 #include <hal/thread.h>
+
+#define EPLOCK_DEBUG false
 
 typedef struct {
     mutex_t        mutex;
@@ -18,23 +21,28 @@ typedef struct {
     uint32_t hold_marker;
 } eplock_t;
 
+typedef struct {
+    thread_t task;
+} epsync_t;
+
+void epsync_register(void);
+void eplock_init(eplock_t *lock);
+void epsync_enable(thread_t task);
+
 #define EPLOCK_REGISTER(e_ident)                                                                                      \
     eplock_t e_ident = { .holder = NULL, .hold_marker = 0 };                                                          \
-    static void e_ident ## _init(void) {                                                                              \
-        mutex_init(&e_ident.mutex);                                                                                   \
-        pthread_condattr_t attr;                                                                                      \
-        THREAD_CHECK(pthread_condattr_init(&attr));                                                                   \
-        THREAD_CHECK(pthread_condattr_setclock(&attr, CLOCK_MONOTONIC));                                              \
-        THREAD_CHECK(pthread_cond_init(&e_ident.cond, &attr));                                                        \
-        THREAD_CHECK(pthread_condattr_destroy(&attr));                                                                \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_RAW, e_ident ## _init);
+    PROGRAM_INIT_PARAM(STAGE_RAW, eplock_init, e_ident, &e_ident)
+
+#define EPSYNC_ENABLE(e_task)                                                                                         \
+    PROGRAM_INIT_PARAM(STAGE_RAW, epsync_enable, e_task, &e_task)
 
 static inline void eplock_acquire(eplock_t *lock) {
     assert(lock != NULL);
+    thread_t task = task_get_current();
+    if (EPLOCK_DEBUG) { debugf(TRACE, "eplock %p - acquire (task=%s)", lock, task->name); }
     mutex_lock(&lock->mutex);
     assert(lock->holder == NULL);
-    atomic_store_relaxed(lock->holder, task_get_current());
+    atomic_store_relaxed(lock->holder, task);
     assert(lock->holder != NULL);
 }
 
@@ -47,7 +55,12 @@ static inline void eplock_acquire(eplock_t *lock) {
 //  if false is returned.)
 static inline bool eplock_wait_ready(eplock_t *lock, uint64_t deadline_ns) {
     assert(lock != NULL);
-    assert(lock->holder == task_get_current());
+    thread_t task = task_get_current();
+    if (EPLOCK_DEBUG) {
+        debugf(TRACE, "eplock %p - wait ready (task=%s, deadline=" TIMEFMT ")",
+        lock, task->name, TIMEARG(deadline_ns));
+    }
+    assert(lock->holder == task);
     atomic_store_relaxed(lock->holder, NULL);
 
     uint32_t base_hold_marker = lock->hold_marker;
@@ -71,16 +84,21 @@ static inline bool eplock_wait_ready(eplock_t *lock, uint64_t deadline_ns) {
     }
 
     assert(lock->holder == NULL);
-    atomic_store_relaxed(lock->holder, task_get_current());
+    atomic_store_relaxed(lock->holder, task);
     assert(lock->holder != NULL);
-    return lock->hold_marker != base_hold_marker;
+    bool woken = (lock->hold_marker != base_hold_marker);
+    if (EPLOCK_DEBUG) { debugf(TRACE, "eplock %p - wait complete (task=%s, woken=%u)", lock, task->name, woken); }
+    return woken;
 }
 
 static inline void eplock_release(eplock_t *lock) {
     assert(lock != NULL);
-    assert(lock->holder == task_get_current());
+    thread_t task = task_get_current();
+    if (EPLOCK_DEBUG) { debugf(TRACE, "eplock %p - release (task=%s)", lock, task->name); }
+    assert(lock->holder == task);
     atomic_store_relaxed(lock->holder, NULL);
     lock->hold_marker += 1;
+    pthread_cond_broadcast(&lock->cond);
     mutex_unlock(&lock->mutex);
 }
 
@@ -91,9 +109,6 @@ static inline bool eplock_held(eplock_t *lock) {
     return atomic_load_relaxed(lock->holder) == task_get_current();
 }
 
-static inline void eplock_wait_next_epoch(void) {
-    /* approximate implementation */
-    usleep(1000);
-}
+void epsync_wait_next_epoch(void);
 
 #endif /* FSW_FREERTOS_HAL_EPLOCK_H */

@@ -14,6 +14,9 @@ extern void debugf_core(loglevel_t level, const char *stable_id, const char *for
 
 #endif
 
+#define TIMEFMT "%u.%09u"
+#define TIMEARG(x) (uint32_t) ((x) / CLOCK_NS_PER_SEC), (uint32_t) ((x) % CLOCK_NS_PER_SEC)
+
 #define debugf(level, fmt, ...)                   debugf_core(level, "",         fmt, ## __VA_ARGS__)
 #define debugf_stable(level, stable_id, fmt, ...) debugf_core(level, #stable_id, fmt, ## __VA_ARGS__)
 

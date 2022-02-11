@@ -6,15 +6,16 @@
 void duct_send_prepare(duct_t *duct, uint8_t sender_id) {
     assert(duct != NULL);
     assert(sender_id < duct->sender_replicas);
-    eplock_acquire(&duct->mutex); /* hold lock until we commit */
+    eplock_acquire(duct->mutex); /* hold lock until we commit */
 
     /* ensure that all previously-sent flows have been consumed */
     for (uint8_t receiver_id = 0; receiver_id < duct->receiver_replicas; receiver_id++) {
         uint64_t deadline_ns = clock_timestamp_monotonic() + CLOCK_NS_PER_MS * 2;
         while (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] != DUCT_MISSING_FLOW) {
             /* keep rechecking until eplock_wait_ready times out (instantly on FreeRTOS) */
-            if (!eplock_wait_ready(&duct->mutex, deadline_ns)) {
-                abortf("Temporal ordering broken: previous duct party did not act on schedule.");
+            if (!eplock_wait_ready(duct->mutex, deadline_ns)) {
+                abortf("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
+                       task_get_name(task_get_current()));
             }
         }
     }
@@ -27,7 +28,7 @@ void duct_send_prepare(duct_t *duct, uint8_t sender_id) {
 bool duct_send_allowed(duct_t *duct, uint8_t sender_id) {
     assert(duct != NULL);
     assert(sender_id < duct->sender_replicas);
-    assert(eplock_held(&duct->mutex));
+    assert(eplock_held(duct->mutex));
 
     assert(duct->flow_current <= duct->max_flow);
     return duct->flow_current < duct->max_flow;
@@ -37,7 +38,7 @@ bool duct_send_allowed(duct_t *duct, uint8_t sender_id) {
 void duct_send_message(duct_t *duct, uint8_t sender_id, void *message, size_t size, uint64_t timestamp) {
     assert(duct != NULL);
     assert(sender_id < duct->sender_replicas);
-    assert(eplock_held(&duct->mutex));
+    assert(eplock_held(duct->mutex));
     assert(message != NULL && size >= 1 && size <= duct->message_size);
 
     assert(duct->flow_current < duct->max_flow);
@@ -55,7 +56,7 @@ void duct_send_message(duct_t *duct, uint8_t sender_id, void *message, size_t si
 void duct_send_commit(duct_t *duct, uint8_t sender_id) {
     assert(duct != NULL);
     assert(sender_id < duct->sender_replicas);
-    assert(eplock_held(&duct->mutex));
+    assert(eplock_held(duct->mutex));
 
     assert(duct->flow_current <= duct->max_flow);
 
@@ -68,21 +69,23 @@ void duct_send_commit(duct_t *duct, uint8_t sender_id) {
     /* clear scratch variable */
     duct->flow_current = DUCT_MISSING_FLOW;
 
-    eplock_release(&duct->mutex);
+    eplock_release(duct->mutex);
 }
 
 void duct_receive_prepare(duct_t *duct, uint8_t receiver_id) {
     assert(duct != NULL);
     assert(receiver_id < duct->receiver_replicas);
-    eplock_acquire(&duct->mutex); /* hold lock until we commit */
+    eplock_acquire(duct->mutex); /* hold lock until we commit */
 
     /* ensure that all senders have transmitted flows for us */
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
-        uint64_t deadline_ns = clock_timestamp_monotonic() + CLOCK_NS_PER_MS * 2;
+        /* the exact deadline doesn't matter; it's only used for task alignment on Linux */
+        uint64_t deadline_ns = clock_timestamp_monotonic() + CLOCK_NS_PER_SEC;
         while (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] == DUCT_MISSING_FLOW) {
             /* keep rechecking until eplock_wait_ready times out (instantly on FreeRTOS) */
-            if (!eplock_wait_ready(&duct->mutex, deadline_ns)) {
-                abortf("Temporal ordering broken: previous duct party did not act on schedule.");
+            if (!eplock_wait_ready(duct->mutex, deadline_ns)) {
+                abortf("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
+                       task_get_name(task_get_current()));
             }
         }
         assert(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] <= duct->max_flow);
@@ -96,7 +99,7 @@ void duct_receive_prepare(duct_t *duct, uint8_t receiver_id) {
 size_t duct_receive_message(duct_t *duct, uint8_t receiver_id, void *message_out, uint64_t *timestamp_out) {
     assert(duct != NULL);
     assert(receiver_id < duct->receiver_replicas);
-    assert(eplock_held(&duct->mutex));
+    assert(eplock_held(duct->mutex));
 
     assert(duct->flow_current <= duct->max_flow);
     if (duct->flow_current == duct->max_flow) {
@@ -127,7 +130,13 @@ size_t duct_receive_message(duct_t *duct, uint8_t receiver_id, void *message_out
     size_t first_size = first_message->size;
     uint64_t first_timestamp = first_message->timestamp;
     assert(first_size >= 1 && first_size <= duct->message_size);
-    memcpy(message_out, first_message->body, first_size);
+    void *message_ref;
+    if (message_out != NULL) {
+        memcpy(message_out, first_message->body, first_size);
+        message_ref = message_out;
+    } else {
+        message_ref = first_message->body;
+    }
 
     /* ensure the other messages match */
     for (uint8_t sender_id = 1; sender_id < duct->sender_replicas; sender_id++) {
@@ -135,7 +144,7 @@ size_t duct_receive_message(duct_t *duct, uint8_t receiver_id, void *message_out
         assert(next_message != NULL);
         assert(next_message->size == first_size);
         assert(next_message->timestamp == first_timestamp);
-        assert(0 == memcmp(message_out, next_message->body, first_size));
+        assert(0 == memcmp(message_ref, next_message->body, first_size));
     }
 
     if (timestamp_out) {
@@ -151,18 +160,20 @@ size_t duct_receive_message(duct_t *duct, uint8_t receiver_id, void *message_out
 void duct_receive_commit(duct_t *duct, uint8_t receiver_id) {
     assert(duct != NULL);
     assert(receiver_id < duct->receiver_replicas);
-    assert(eplock_held(&duct->mutex));
+    assert(eplock_held(duct->mutex));
 
     assert(duct->flow_current <= duct->max_flow);
 
     /* ensure that counts match actual number processed, and mark everything as consumed. */
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
-        assert(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] == duct->flow_current);
-        duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] = DUCT_MISSING_FLOW;
+        uint32_t index = sender_id * duct->receiver_replicas + receiver_id;
+        assertf(duct->flow_status[index] == duct->flow_current,
+                "flow_status=%u, flow_current=%u", duct->flow_status[index], duct->flow_current);
+        duct->flow_status[index] = DUCT_MISSING_FLOW;
     }
 
     /* clear scratch variable */
     duct->flow_current = DUCT_MISSING_FLOW;
 
-    eplock_release(&duct->mutex);
+    eplock_release(duct->mutex);
 }

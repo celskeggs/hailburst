@@ -67,6 +67,11 @@ static inline thread_t task_get_current(void) {
     return handle;
 }
 
+static inline const char *task_get_name(thread_t task) {
+    assert(task != NULL);
+    return task->pcTaskName;
+}
+
 static inline void taskYIELD(void) {
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
     asm volatile("WFI");

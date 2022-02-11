@@ -27,14 +27,21 @@ typedef struct {
 } semaphore_t;
 
 typedef struct thread_st {
+    const char *name;
     void (*start_routine)(void *);
     void *start_parameter;
     pthread_t thread;
     semaphore_t top_rouse;
     semaphore_t local_rouse;
+    bool epsync_enabled;
 } __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 
 thread_t task_get_current(void);
+
+static inline const char *task_get_name(thread_t task) {
+    assert(task != NULL);
+    return task->name;
+}
 
 static inline void thread_check(int fail, const char *note) {
     if (fail != 0) {
@@ -77,11 +84,13 @@ extern void start_predef_threads(void);
 #define TASK_PROTO(t_ident) \
     extern struct thread_st t_ident;
 
-// name and restartable go unused on POSIX; these are only used on FreeRTOS
+// 'restartable' goes unused on POSIX; it is only used on FreeRTOS
 #define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                                                 \
-    __attribute__((section("tasktable"))) struct thread_st t_ident = {                                                \
+    __attribute__((section("tasktable"))) __attribute__((__aligned__(16))) struct thread_st t_ident = {               \
+        .name = (t_name),                                                                                             \
         .start_routine = PP_ERASE_TYPE(t_start, t_arg),                                                               \
         .start_parameter = (void *) (t_arg),                                                                          \
+        .epsync_enabled = false,                                                                                      \
     }
 
 // ignore scheduling

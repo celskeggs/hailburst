@@ -10,11 +10,13 @@ app_modules = [
     'flight',
     'freertos',
     'freertos/debug',
-    'freertos/ealibc',
     'freertos/libgcc',
     'freertos/zlib',
     'include',
     'synch',
+
+    # ealibc last so that it is pulled in wherever needed
+    'freertos/ealibc',
 ]
 
 bootrom_modules = [
@@ -25,9 +27,11 @@ bootrom_modules = [
     'bootrom',
     'elf',
     'freertos/debug',
-    'freertos/ealibc',
     'freertos/libgcc',
     'include',
+
+    # ealibc last so that it is pulled in wherever needed
+    'freertos/ealibc',
 ]
 
 common_flags = [

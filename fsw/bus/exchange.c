@@ -92,8 +92,7 @@ static void exchange_instance_doze(exchange_instance_t *exc) {
             exc->send_primary_handshake = true;
 
             exc->next_timeout = clock_timestamp_monotonic() + handshake_period();
-            debug_printf(DEBUG, "Next handshake scheduled for %u.%09u",
-                         exc->next_timeout / CLOCK_NS_PER_SEC, exc->next_timeout % CLOCK_NS_PER_SEC);
+            debug_printf(DEBUG, "Next handshake scheduled for " TIMEFMT, TIMEARG(exc->next_timeout));
         }
     } else {
         task_doze();
@@ -269,7 +268,7 @@ static void exchange_instance_receive_data_chars(exchange_instance_t *exc, uint8
         exchange_instance_reset(exc);
     } else if (exc->read_entry->actual_length >= io_rx_size(exc->conf->read_chart)) {
         assert(data_in == NULL);
-        debug_printf(WARNING, "Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
+        debug_printf(WARNING, "Packet exceeded buffer size %u (at least %u + %zu bytes); discarding.",
                      io_rx_size(exc->conf->read_chart), exc->read_entry->actual_length, data_len);
         exc->recv_state = FW_RECV_OVERFLOWED;
     } else {
@@ -465,8 +464,7 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
     fakewire_enc_init(&exc->encoder, conf->transmit_chart);
     fakewire_dec_init(&exc->decoder, conf->receive_chart);
 
-    debug_printf(DEBUG, "First handshake scheduled for %u.%09u",
-                 first_timeout / CLOCK_NS_PER_SEC, first_timeout % CLOCK_NS_PER_SEC);
+    debug_printf(DEBUG, "First handshake scheduled for " TIMEFMT, TIMEARG(first_timeout));
 
     while (true) {
         exchange_instance_doze(exc);
