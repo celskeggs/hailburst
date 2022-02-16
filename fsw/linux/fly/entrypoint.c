@@ -14,8 +14,5 @@ int main(int argc, char *argv[]) {
     debugf(CRITICAL, "Initializing...");
 
     initialize_systems();
-    start_predef_threads();
-
-    // exit just the main thread, because returning causes all threads to exit, and we want everything to keep running
-    pthread_exit(NULL);
+    enter_scheduler();
 }

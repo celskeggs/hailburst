@@ -41,4 +41,9 @@ void fakewire_link_configure(fw_link_t *fwl);
     CHART_CLIENT_NOTIFY(l_rx, task_rouse, &l_ident ## _rxl);                                                          \
     CHART_SERVER_NOTIFY(l_tx, task_rouse, &l_ident ## _txl)
 
+#define FAKEWIRE_LINK_SCHEDULE(l_ident)                                                                               \
+    TASK_SCHEDULE(l_ident ## _cfg, 100)                                                                               \
+    TASK_SCHEDULE(l_ident ## _rxl, 100)                                                                               \
+    TASK_SCHEDULE(l_ident ## _txl, 100)
+
 #endif /* FSW_LINUX_HAL_FAKEWIRE_LINK_H */

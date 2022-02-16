@@ -10,6 +10,7 @@
 #include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/init.h>
+#include <hal/system.h>
 #include <hal/thread.h>
 #include <bus/exchange.h>
 
@@ -272,18 +273,21 @@ static void exchange_controller_init(struct exchange_config *es) {
     CHART_SERVER_NOTIFY(e_ident ## _read, task_rouse, &e_ident ## _reader_task);                                \
     CHART_CLIENT_NOTIFY(e_ident ## _write, task_rouse, &e_ident ## _writer_task)
 
+#define EXCHANGE_CONTROLLER_SCHEDULE(e_ident)                                                                         \
+    TASK_SCHEDULE(e_ident ## _writer_task, 100)                                                                       \
+    FAKEWIRE_EXCHANGE_SCHEDULE(e_ident ## _exchange)                                                                  \
+    TASK_SCHEDULE(e_ident ## _reader_task, 100)
+
 // return true/false for pass/fail
-static bool collect_status(struct exchange_config *est, struct packet_chain **chain_out, uint64_t deadline) {
+static bool collect_status(struct exchange_config *est, struct packet_chain **chain_out, uint32_t yields) {
     assert(est != NULL && chain_out != NULL);
 
     bool pass = true;
 
-    // wait up to five seconds
-    while (clock_timestamp_monotonic() < deadline) {
-        if (atomic_load(est->rc.complete_flag) && atomic_load(est->wc.complete_flag)) {
-            break;
-        }
-        (void) task_doze_timed_abs(deadline);
+    // wait up to ~five seconds (adjusted for actual number of cycles)
+    while (yields > 0 && (!atomic_load(est->rc.complete_flag) || !atomic_load(est->wc.complete_flag))) {
+        task_yield();
+        yields--;
     }
     if (!atomic_load(est->rc.complete_flag)) {
         debugf(CRITICAL, "[%8s] exchange controller: reader not complete by 5 second deadline", est->rc.name);
@@ -314,18 +318,23 @@ TASK_PROTO(task_main);
 EXCHANGE_CONTROLLER(ec_left, FW_FLAG_FIFO_PROD, task_main);
 EXCHANGE_CONTROLLER(ec_right, FW_FLAG_FIFO_CONS, task_main);
 
-static void test_main(void) {
-    uint64_t deadline = clock_timestamp_monotonic() + 5000000000;
+TASK_SCHEDULING_ORDER(
+    EXCHANGE_CONTROLLER_SCHEDULE(ec_left)
+    EXCHANGE_CONTROLLER_SCHEDULE(ec_right)
+    TASK_SCHEDULE(task_main, 100)
+    SYSTEM_MAINTENANCE_SCHEDULE()
+);
 
+static void test_main(void) {
     int code = 0;
     struct packet_chain *left_out = NULL;
     struct packet_chain *right_out = NULL;
     debugf(INFO, "Waiting for test to complete...");
-    if (!collect_status(&ec_left, &left_out, deadline)) {
+    if (!collect_status(&ec_left, &left_out, 5000)) {
         debugf(CRITICAL, "Left controller failed");
         code = -1;
     }
-    if (!collect_status(&ec_right, &right_out, deadline)) {
+    if (!collect_status(&ec_right, &right_out, 5000)) {
         debugf(CRITICAL, "Right controller failed");
         code = -1;
     }

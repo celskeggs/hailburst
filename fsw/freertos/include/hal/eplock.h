@@ -60,8 +60,4 @@ static inline bool eplock_held(eplock_t *lock) {
     return current_task == atomic_load_relaxed(lock->holder);
 }
 
-static inline void epsync_wait_next_epoch(void) {
-    taskYIELD();
-}
-
 #endif /* FSW_FREERTOS_HAL_EPLOCK_H */

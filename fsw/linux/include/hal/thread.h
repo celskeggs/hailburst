@@ -11,6 +11,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <hal/atomic.h>
 #include <hal/clock.h>
 #include <hal/preprocessor.h>
 
@@ -31,12 +32,15 @@ typedef struct thread_st {
     void (*start_routine)(void *);
     void *start_parameter;
     pthread_t thread;
-    semaphore_t top_rouse;
-    semaphore_t local_rouse;
-    bool epsync_enabled;
+    bool top_rouse;
+    bool local_rouse;
+    bool scheduler_independent; // used during IO waits
 } __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 
 thread_t task_get_current(void);
+void task_yield(void);
+void task_become_independent(void);
+void task_become_dependent(void);
 
 static inline const char *task_get_name(thread_t task) {
     assert(task != NULL);
@@ -61,16 +65,14 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
     }
 }
 
-static inline void task_delay(uint64_t nanoseconds) {
-    usleep((nanoseconds + 999) / 1000);
+static inline void task_delay_abs(uint64_t deadline_ns) {
+    while (clock_timestamp_monotonic() < deadline_ns) {
+        task_yield();
+    }
 }
 
-static inline void task_delay_abs(uint64_t deadline_ns) {
-    int64_t remain = deadline_ns - clock_timestamp_monotonic();
-    if (remain > 0) {
-        task_delay(remain);
-    }
-    assert(clock_timestamp_monotonic() >= deadline_ns);
+static inline void task_delay(uint64_t nanoseconds) {
+    task_delay_abs(clock_timestamp_monotonic() + nanoseconds);
 }
 
 #define mutex_init(x)     THREAD_CHECK(pthread_mutex_init((x), NULL))
@@ -79,7 +81,7 @@ static inline void task_delay_abs(uint64_t deadline_ns) {
 #define mutex_lock_try(x) THREAD_CHECK_OK(pthread_mutex_trylock(x), EBUSY)
 #define mutex_unlock(x)   THREAD_CHECK(pthread_mutex_unlock(x))
 
-extern void start_predef_threads(void);
+extern void enter_scheduler(void);
 
 #define TASK_PROTO(t_ident) \
     extern struct thread_st t_ident;
@@ -90,12 +92,26 @@ extern void start_predef_threads(void);
         .name = (t_name),                                                                                             \
         .start_routine = PP_ERASE_TYPE(t_start, t_arg),                                                               \
         .start_parameter = (void *) (t_arg),                                                                          \
-        .epsync_enabled = false,                                                                                      \
+        .scheduler_independent = false,                                                                               \
     }
 
-// ignore scheduling
-#define TASK_SCHEDULE(t_ident)     /* nothing */
-#define TASK_SCHEDULING_ORDER(...) /* nothing */
+typedef struct {
+    thread_t task;
+    uint32_t nanos;
+} schedule_entry_t;
+
+extern const schedule_entry_t task_scheduling_order[];
+extern const uint32_t         task_scheduling_order_length;
+
+#define TASK_SCHEDULE(t_ident, t_micros)                                          \
+    { .task = &(t_ident), .nanos = (t_micros) * 1000 },
+
+#define TASK_SCHEDULING_ORDER(...)                                                \
+    const schedule_entry_t task_scheduling_order[] = {                            \
+        __VA_ARGS__                                                               \
+    };                                                                            \
+    const uint32_t task_scheduling_order_length =                                 \
+        sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
 
 #define SEMAPHORE_REGISTER(s_ident) \
     semaphore_t s_ident; \
@@ -118,24 +134,41 @@ bool semaphore_give(semaphore_t *sema);
 
 static inline void task_rouse(thread_t task) {
     assert(task != NULL);
-    (void) semaphore_give(&task->top_rouse);
+    atomic_store(task->top_rouse, true);
 }
 
 static inline void task_doze(void) {
-    semaphore_take(&task_get_current()->top_rouse);
+    thread_t task = task_get_current();
+    while (!atomic_load(task->top_rouse)) {
+        task_yield();
+    }
+    atomic_store_relaxed(task->top_rouse, false);
 }
 
 // does not actually block
 static inline bool task_doze_try(void) {
-    return semaphore_take_try(&task_get_current()->top_rouse);
-}
-
-static inline bool task_doze_timed(uint64_t nanoseconds) {
-    return semaphore_take_timed(&task_get_current()->top_rouse, nanoseconds);
+    thread_t task = task_get_current();
+    if (!atomic_load(task->top_rouse)) {
+        return false;
+    }
+    atomic_store_relaxed(task->top_rouse, false);
+    return true;
 }
 
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
-    return semaphore_take_timed_abs(&task_get_current()->top_rouse, deadline_ns);
+    thread_t task = task_get_current();
+    while (!atomic_load(task->top_rouse)) {
+        if (clock_timestamp_monotonic() > deadline_ns) {
+            return false;
+        }
+        task_yield();
+    }
+    atomic_store_relaxed(task->top_rouse, false);
+    return true;
+}
+
+static inline bool task_doze_timed(uint64_t nanoseconds) {
+    return task_doze_timed_abs(clock_timestamp_monotonic() + nanoseconds);
 }
 
 // primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
@@ -143,28 +176,40 @@ static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
 
 static inline void local_rouse(thread_t task) {
     assert(task != NULL);
-    (void) semaphore_give(&task->local_rouse);
+    atomic_store(task->local_rouse, true);
 }
 
 static inline void local_doze(thread_t task) {
-    assert(task == task_get_current());
-    semaphore_take(&task_get_current()->local_rouse);
+    while (!atomic_load(task->local_rouse)) {
+        task_yield();
+    }
+    atomic_store_relaxed(task->local_rouse, false);
 }
 
 // does not actually block
 static inline bool local_doze_try(thread_t task) {
     assert(task == task_get_current());
-    return semaphore_take_try(&task_get_current()->local_rouse);
-}
-
-static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
-    assert(task == task_get_current());
-    return semaphore_take_timed(&task_get_current()->local_rouse, nanoseconds);
+    if (!atomic_load(task->local_rouse)) {
+        return false;
+    }
+    atomic_store_relaxed(task->local_rouse, false);
+    return true;
 }
 
 static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     assert(task == task_get_current());
-    return semaphore_take_timed_abs(&task_get_current()->local_rouse, deadline_ns);
+    while (!atomic_load(task->local_rouse)) {
+        if (clock_timestamp_monotonic() > deadline_ns) {
+            return false;
+        }
+        task_yield();
+    }
+    atomic_store_relaxed(task->local_rouse, false);
+    return true;
+}
+
+static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
+    return local_doze_timed_abs(task, clock_timestamp_monotonic() + nanoseconds);
 }
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

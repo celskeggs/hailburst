@@ -23,6 +23,10 @@ void clock_start_main(clock_device_t *clock);
         .address = (c_address),                                                                                 \
     }
 
+// no task needed on FreeRTOS
+#define CLOCK_SCHEDULE(c_ident)                                                                                       \
+    TASK_SCHEDULE(c_ident ## _task, 100)
+
 void clock_wait_for_calibration(void);
 
 extern const thread_t clock_cal_notify_task;

@@ -25,16 +25,11 @@ typedef struct {
     thread_t task;
 } epsync_t;
 
-void epsync_register(void);
 void eplock_init(eplock_t *lock);
-void epsync_enable(thread_t task);
 
 #define EPLOCK_REGISTER(e_ident)                                                                                      \
     eplock_t e_ident = { .holder = NULL, .hold_marker = 0 };                                                          \
     PROGRAM_INIT_PARAM(STAGE_RAW, eplock_init, e_ident, &e_ident)
-
-#define EPSYNC_ENABLE(e_task)                                                                                         \
-    PROGRAM_INIT_PARAM(STAGE_RAW, epsync_enable, e_task, &e_task)
 
 static inline void eplock_acquire(eplock_t *lock) {
     assert(lock != NULL);

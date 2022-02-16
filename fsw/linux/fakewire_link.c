@@ -22,11 +22,14 @@ void fakewire_link_rx_loop(fw_link_t *fwl) {
         task_doze();
     }
 
+    task_become_independent();
     while (true) {
         struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
+            task_become_dependent();
             // wait for another entry to be available
             task_doze();
+            task_become_independent();
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -57,11 +60,14 @@ void fakewire_link_tx_loop(fw_link_t *fwl) {
         task_doze();
     }
 
+    task_become_independent();
     while (true) {
         struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
         if (entry == NULL) {
+            task_become_dependent();
             // wait for another entry to be available
             task_doze();
+            task_become_independent();
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -85,6 +91,8 @@ void fakewire_link_tx_loop(fw_link_t *fwl) {
 void fakewire_link_configure(fw_link_t *fwl) {
     assert(fwl != NULL);
     fw_link_options_t opts = fwl->options;
+
+    task_become_independent();
 
     // let's open the file descriptors for our I/O backend of choice
     // we have to do this in a separate thread, because it can block in the case of pipe connections
@@ -153,6 +161,8 @@ void fakewire_link_configure(fw_link_t *fwl) {
         }
     }
     assert(fwl->fd_in > 0 && fwl->fd_out > 0);
+
+    task_become_dependent();
 
     task_rouse(fwl->receive_task);
     task_rouse(fwl->transmit_task);

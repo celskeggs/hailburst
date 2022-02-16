@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     }
 
     initialize_systems();
-    start_predef_threads();
+    enter_scheduler();
 
     // exit just the main thread, because returning causes all threads to exit, and we want everything to keep running
     pthread_exit(NULL);

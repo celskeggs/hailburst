@@ -77,6 +77,10 @@ static inline void taskYIELD(void) {
     asm volatile("WFI");
 }
 
+static inline void task_yield(void) {
+    taskYIELD();
+}
+
 void task_suspend(void) __attribute__((noreturn));
 
 static inline void task_delay_abs(uint64_t deadline_ns) {
