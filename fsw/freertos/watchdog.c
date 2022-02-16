@@ -155,7 +155,7 @@ static void watchdog_init(void) {
 
 PROGRAM_INIT(STAGE_RAW, watchdog_init);
 
-TASK_REGISTER(watchdog_task, "watchdog", watchdog_caretaker_loop, NULL, RESTARTABLE);
+TASK_REGISTER(watchdog_task, watchdog_caretaker_loop, NULL, RESTARTABLE);
 
 void watchdog_force_reset(void) {
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;

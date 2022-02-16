@@ -169,7 +169,7 @@ void telemetry_mainloop(void) {
     }
 }
 
-TASK_REGISTER(telemetry_task, "tlm_mainloop", telemetry_mainloop, NULL, RESTARTABLE);
+TASK_REGISTER(telemetry_task, telemetry_mainloop, NULL, RESTARTABLE);
 
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id) {
     debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",

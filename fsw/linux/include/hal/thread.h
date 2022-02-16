@@ -87,9 +87,9 @@ extern void enter_scheduler(void);
     extern struct thread_st t_ident;
 
 // 'restartable' goes unused on POSIX; it is only used on FreeRTOS
-#define TASK_REGISTER(t_ident, t_name, t_start, t_arg, t_restartable)                                                 \
+#define TASK_REGISTER(t_ident, t_start, t_arg, t_restartable)                                                         \
     __attribute__((section("tasktable"))) __attribute__((__aligned__(16))) struct thread_st t_ident = {               \
-        .name = (t_name),                                                                                             \
+        .name = (#t_ident),                                                                                           \
         .start_routine = PP_ERASE_TYPE(t_start, t_arg),                                                               \
         .start_parameter = (void *) (t_arg),                                                                          \
         .scheduler_independent = false,                                                                               \

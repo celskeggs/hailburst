@@ -13,13 +13,13 @@ struct scrubber_task_data {
 
 void scrubber_mainloop(struct scrubber_task_data *local);
 
-#define SCRUBBER_REGISTER(s_ident, s_name)                                             \
-    extern struct scrubber_task_data s_ident;                                          \
-    TASK_REGISTER(s_ident ## _task, s_name, scrubber_mainloop, &s_ident, RESTARTABLE); \
-    struct scrubber_task_data s_ident = {                                              \
-        .kernel_elf_rom = NULL,                                                        \
-        .iteration      = 0,                                                           \
-        .scrubber_task  = &s_ident ## _task,                                           \
+#define SCRUBBER_REGISTER(s_ident)                                                                                    \
+    extern struct scrubber_task_data s_ident;                                                                         \
+    TASK_REGISTER(s_ident ## _task, scrubber_mainloop, &s_ident, RESTARTABLE);                                        \
+    struct scrubber_task_data s_ident = {                                                                             \
+        .kernel_elf_rom = NULL,                                                                                       \
+        .iteration      = 0,                                                                                          \
+        .scrubber_task  = &s_ident ## _task,                                                                          \
     }
 
 void scrubber_set_kernel(void *kernel_elf_rom);

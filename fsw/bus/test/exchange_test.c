@@ -249,8 +249,8 @@ static void exchange_controller_init(struct exchange_config *es) {
         .flags = e_flags,                                                                                       \
     };                                                                                                          \
     FAKEWIRE_EXCHANGE_REGISTER(e_ident ## _exchange, e_ident ## _options, e_ident ## _read, e_ident ## _write); \
-    TASK_REGISTER(e_ident ## _reader_task, #e_ident "_reader", exchange_reader, &e_ident.rc, NOT_RESTARTABLE);  \
-    TASK_REGISTER(e_ident ## _writer_task, #e_ident "_writer", exchange_writer, &e_ident.wc, NOT_RESTARTABLE);  \
+    TASK_REGISTER(e_ident ## _reader_task, exchange_reader, &e_ident.rc, NOT_RESTARTABLE);                      \
+    TASK_REGISTER(e_ident ## _writer_task, exchange_writer, &e_ident.wc, NOT_RESTARTABLE);                      \
     CHART_SERVER_NOTIFY(e_ident ## _read, task_rouse, &e_ident ## _reader_task);                                \
     CHART_CLIENT_NOTIFY(e_ident ## _write, task_rouse, &e_ident ## _writer_task)
 
@@ -345,4 +345,4 @@ static void test_main(void) {
     }
 }
 
-TASK_REGISTER(task_main, "test_main", test_main, NULL, NOT_RESTARTABLE);
+TASK_REGISTER(task_main, test_main, NULL, NOT_RESTARTABLE);

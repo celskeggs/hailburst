@@ -47,41 +47,41 @@ void radio_uplink_loop(radio_t *radio);
 void radio_downlink_loop(radio_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
-#define RADIO_REGISTER(r_ident,     r_switch,                                                                     \
-                       r_up_addr,   r_up_port,   r_up_capacity,   r_uplink,                                       \
-                       r_down_addr, r_down_port, r_down_capacity, r_downlink)                                     \
-    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity                                                    \
-                    && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                            \
-    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                  \
-                    && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                          \
-    extern radio_t r_ident;                                                                                       \
-    TASK_REGISTER(r_ident ## _up_task, "radio_up_loop", radio_uplink_loop, &r_ident, RESTARTABLE);                \
-    TASK_REGISTER(r_ident ## _down_task, "radio_down_loop", radio_downlink_loop, &r_ident, RESTARTABLE);          \
-    RMAP_ON_SWITCH(r_ident ## _up,     r_switch,           r_up_port,                                             \
-                   r_up_capacity,      REG_IO_BUFFER_SIZE, r_ident ## _up_task);                                  \
-    RMAP_ON_SWITCH(r_ident ## _down,   r_switch,           r_down_port,                                           \
-                   REG_IO_BUFFER_SIZE, r_down_capacity,    r_ident ## _down_task);                                \
-    radio_t r_ident = {                                                                                           \
-        .rmap_up = &r_ident ## _up,                                                                               \
-        .rmap_down = &r_ident ## _down,                                                                           \
-        .address_up = (r_up_addr),                                                                                \
-        .address_down = (r_down_addr),                                                                            \
-        .bytes_extracted = 0,                                                                                     \
-        .up_stream = &r_uplink,                                                                                   \
-        .down_stream = &r_downlink,                                                                               \
-        .uplink_buf_local = { 0 },                                                                                \
-        .downlink_buf_local = { 0 },                                                                              \
-    };                                                                                                            \
-    static void r_ident ## _init(void) {                                                                          \
-        stream_set_writer(&r_uplink, &r_ident ## _up_task);                                                       \
-        stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                   \
-    }                                                                                                             \
+#define RADIO_REGISTER(r_ident,     r_switch,                                                                         \
+                       r_up_addr,   r_up_port,   r_up_capacity,   r_uplink,                                           \
+                       r_down_addr, r_down_port, r_down_capacity, r_downlink)                                         \
+    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity                                                        \
+                    && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                                \
+    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                      \
+                    && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                              \
+    extern radio_t r_ident;                                                                                           \
+    TASK_REGISTER(r_ident ## _up_task, radio_uplink_loop, &r_ident, RESTARTABLE);                                     \
+    TASK_REGISTER(r_ident ## _down_task, radio_downlink_loop, &r_ident, RESTARTABLE);                                 \
+    RMAP_ON_SWITCH(r_ident ## _up,     r_switch,           r_up_port,                                                 \
+                   r_up_capacity,      REG_IO_BUFFER_SIZE, r_ident ## _up_task);                                      \
+    RMAP_ON_SWITCH(r_ident ## _down,   r_switch,           r_down_port,                                               \
+                   REG_IO_BUFFER_SIZE, r_down_capacity,    r_ident ## _down_task);                                    \
+    radio_t r_ident = {                                                                                               \
+        .rmap_up = &r_ident ## _up,                                                                                   \
+        .rmap_down = &r_ident ## _down,                                                                               \
+        .address_up = (r_up_addr),                                                                                    \
+        .address_down = (r_down_addr),                                                                                \
+        .bytes_extracted = 0,                                                                                         \
+        .up_stream = &r_uplink,                                                                                       \
+        .down_stream = &r_downlink,                                                                                   \
+        .uplink_buf_local = { 0 },                                                                                    \
+        .downlink_buf_local = { 0 },                                                                                  \
+    };                                                                                                                \
+    static void r_ident ## _init(void) {                                                                              \
+        stream_set_writer(&r_uplink, &r_ident ## _up_task);                                                           \
+        stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                       \
+    }                                                                                                                 \
     PROGRAM_INIT(STAGE_CRAFT, r_ident ## _init)
 
-#define RADIO_UP_SCHEDULE(r_ident)                                                                                \
+#define RADIO_UP_SCHEDULE(r_ident)                                                                                    \
     TASK_SCHEDULE(r_ident ## _up_task, 150)
 
-#define RADIO_DOWN_SCHEDULE(r_ident)                                                                              \
+#define RADIO_DOWN_SCHEDULE(r_ident)                                                                                  \
     TASK_SCHEDULE(r_ident ## _down_task, 150)
 
 #endif /* FSW_RADIO_H */

@@ -4,8 +4,8 @@
 #include <hal/debug.h>
 #include <hal/thread.h>
 
-SCRUBBER_REGISTER(scrubber_1, "scrubber_1");
-SCRUBBER_REGISTER(scrubber_2, "scrubber_2");
+SCRUBBER_REGISTER(scrubber_1);
+SCRUBBER_REGISTER(scrubber_2);
 
 static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     assert(scrubber != NULL);

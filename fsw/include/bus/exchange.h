@@ -79,40 +79,40 @@ void fakewire_exc_notify(fw_exchange_t *fwe);
 void fakewire_exc_init_internal(fw_exchange_t *fwe);
 void fakewire_exc_exchange_loop(fw_exchange_t *fwe);
 
-#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart)                 \
-    extern fw_exchange_t e_ident;                                                                        \
-    TASK_REGISTER(e_ident ## _task, "fw_exc_thread", fakewire_exc_exchange_loop, &e_ident, RESTARTABLE); \
-    CHART_CLIENT_NOTIFY(e_read_chart, task_rouse, &e_ident ## _task);                                    \
-    CHART_SERVER_NOTIFY(e_write_chart, task_rouse, &e_ident ## _task);                                   \
-    CHART_REGISTER(e_ident ## _transmit_chart, 1024, EXCHANGE_QUEUE_DEPTH);                              \
-    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, task_rouse, &e_ident ## _task);                      \
-    CHART_REGISTER(e_ident ## _receive_chart, 1024, EXCHANGE_QUEUE_DEPTH);                               \
-    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, task_rouse, &e_ident ## _task);                       \
-    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                                          \
-                           e_ident ## _receive_chart, e_ident ## _transmit_chart,                        \
-                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                                  \
-    exchange_instance_t e_ident ## _instance;                                                            \
-    fw_exchange_t e_ident = {                                                                            \
-        .label = (e_link_options).label,                                                                 \
-        .instance = &e_ident ## _instance,                                                               \
-        .exchange_task = &e_ident ## _task,                                                              \
-        .transmit_chart = &e_ident ## _transmit_chart,                                                   \
-        .receive_chart = &e_ident ## _receive_chart,                                                     \
-        .read_chart = &e_read_chart,                                                                     \
-        .write_chart = &e_write_chart,                                                                   \
+#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_chart, e_write_chart)                              \
+    extern fw_exchange_t e_ident;                                                                                     \
+    TASK_REGISTER(e_ident ## _task, fakewire_exc_exchange_loop, &e_ident, RESTARTABLE);                               \
+    CHART_CLIENT_NOTIFY(e_read_chart, task_rouse, &e_ident ## _task);                                                 \
+    CHART_SERVER_NOTIFY(e_write_chart, task_rouse, &e_ident ## _task);                                                \
+    CHART_REGISTER(e_ident ## _transmit_chart, 1024, EXCHANGE_QUEUE_DEPTH);                                           \
+    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, task_rouse, &e_ident ## _task);                                   \
+    CHART_REGISTER(e_ident ## _receive_chart, 1024, EXCHANGE_QUEUE_DEPTH);                                            \
+    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, task_rouse, &e_ident ## _task);                                    \
+    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                                                       \
+                           e_ident ## _receive_chart, e_ident ## _transmit_chart,                                     \
+                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                                               \
+    exchange_instance_t e_ident ## _instance;                                                                         \
+    fw_exchange_t e_ident = {                                                                                         \
+        .label = (e_link_options).label,                                                                              \
+        .instance = &e_ident ## _instance,                                                                            \
+        .exchange_task = &e_ident ## _task,                                                                           \
+        .transmit_chart = &e_ident ## _transmit_chart,                                                                \
+        .receive_chart = &e_ident ## _receive_chart,                                                                  \
+        .read_chart = &e_read_chart,                                                                                  \
+        .write_chart = &e_write_chart,                                                                                \
     }
 
-#define FAKEWIRE_EXCHANGE_ON_SWITCH(e_ident, e_link_options, e_switch, e_switch_port)                    \
-    CHART_REGISTER(e_ident ## _read_chart, 0x1100, 10);                                                  \
-    CHART_REGISTER(e_ident ## _write_chart, 0x1100, 10);                                                 \
-    FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options,                                                  \
-                               e_ident ## _read_chart, e_ident ## _write_chart);                         \
+#define FAKEWIRE_EXCHANGE_ON_SWITCH(e_ident, e_link_options, e_switch, e_switch_port)                                 \
+    CHART_REGISTER(e_ident ## _read_chart, 0x1100, 10);                                                               \
+    CHART_REGISTER(e_ident ## _write_chart, 0x1100, 10);                                                              \
+    FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options,                                                               \
+                               e_ident ## _read_chart, e_ident ## _write_chart);                                      \
     SWITCH_PORT(e_switch, e_switch_port, e_ident ## _read_chart, e_ident ## _write_chart)
 
-#define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)     \
-    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port) \
-    TASK_SCHEDULE(e_ident ## _task, 150)        \
-    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port) \
+#define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)                                                                           \
+    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port)                                                                       \
+    TASK_SCHEDULE(e_ident ## _task, 150)                                                                              \
+    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port)                                                                       \
     TASK_SCHEDULE(e_ident ## _task, 150)
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */
