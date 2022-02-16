@@ -70,7 +70,7 @@ static bool magnetometer_take_reading(magnetometer_t *mag, tlm_mag_reading_t *re
         status = RS_INVALID_ERR;
         RETRY(TRANSACTION_RETRIES, "magnetometer register reading, error=0x%03x", status) {
             status = rmap_read_exact(mag->endpoint, &mag->address, RF_INCREMENT,
-                                     0x00, REG_LATCH, sizeof(registers), (uint8_t *) registers);
+                                     0x00, REG_LATCH, sizeof(registers), (uint8_t *) registers, NULL);
             if (status == RS_OK) {
                 break;
             }

@@ -32,12 +32,12 @@ enum {
 
 static bool clock_calibrated = false;
 
-static bool clock_read_register(clock_device_t *device, uint32_t reg, void *output, size_t len) {
+static bool clock_read_register(clock_device_t *device, uint32_t reg, void *output, size_t len, uint64_t *time_out) {
     assert(device != NULL);
     rmap_status_t status;
 
     RETRY(TRANSACTION_RETRIES, "clock register %u read, error=0x%03x", reg, status) {
-        status = rmap_read_exact(device->rmap, &device->address, RF_INCREMENT, 0x00, reg, len, output);
+        status = rmap_read_exact(device->rmap, &device->address, RF_INCREMENT, 0x00, reg, len, output, time_out);
         if (status == RS_OK) {
             return true;
         }
@@ -60,18 +60,17 @@ void clock_start_main(clock_device_t *clock) {
 
     // validate that this is actually a clock
     uint32_t magic_num = 0;
-    if (!clock_read_register(clock, REG_MAGIC, &magic_num, sizeof(magic_num))) {
+    if (!clock_read_register(clock, REG_MAGIC, &magic_num, sizeof(magic_num), NULL)) {
         abortf("Could not read magic number from clock.");
     }
     magic_num = be32toh(magic_num);
     assert(magic_num == CLOCK_MAGIC_NUM);
 
-    uint64_t ref_time_sampled, local_time_postsampled;
+    uint64_t ref_time_sampled, local_time_postsampled = 0;
     // sample once remotely and once locally
-    if (!clock_read_register(clock, REG_CLOCK, &ref_time_sampled, sizeof(ref_time_sampled))) {
+    if (!clock_read_register(clock, REG_CLOCK, &ref_time_sampled, sizeof(ref_time_sampled), &local_time_postsampled)) {
         abortf("Could not sample current time from clock.");
     }
-    local_time_postsampled = clock_timestamp_monotonic();
 
     ref_time_sampled = be64toh(ref_time_sampled);
 

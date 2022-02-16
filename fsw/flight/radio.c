@@ -75,7 +75,7 @@ static uint8_t *radio_read_memory_fetch(radio_t *radio, radio_io_mode_t mode, ui
         actual_read = length;
         ptr_out = NULL;
         status = rmap_read_fetch(radio_rmap(radio, mode), radio_routing(radio, mode), RF_INCREMENT, 0x00,
-                                 mem_address + MEM_BASE_ADDR, &actual_read, &ptr_out);
+                                 mem_address + MEM_BASE_ADDR, &actual_read, &ptr_out, NULL);
         if (status == RS_OK) {
             assert(actual_read == length && ptr_out != NULL);
             return ptr_out;
@@ -118,7 +118,7 @@ static bool radio_read_registers(radio_t *radio, radio_io_mode_t mode,
 
     RETRY(TRANSACTION_RETRIES, "register query on [%u, %u], error=0x%03x", first_reg, last_reg, status) {
         status = rmap_read_exact(radio_rmap(radio, mode), radio_routing(radio, mode), RF_INCREMENT, 0x00,
-                                 first_reg * 4, read_len, (uint8_t *) output);
+                                 first_reg * 4, read_len, (uint8_t *) output, NULL);
         if (status == RS_OK) {
             // convert from big-endian
             for (int i = 0; i <= (int) last_reg - (int) first_reg; i++) {

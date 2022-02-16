@@ -90,10 +90,12 @@ rmap_status_t rmap_write_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_fl
 // performs a read of up to a certain size, and outputs the actual size and a pointer to the received data.
 // the pointer will be valid until the next call to any rmap function on this context.
 rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out);
+                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out,
+                              uint64_t *timestamp_out);
 // performs a read of up to a certain size, and copies the result into the specified buffer
 rmap_status_t rmap_read_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output);
+                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output,
+                              uint64_t *timestamp_out);
 
 // helper functions for main code (defined in rmap_helpers.c)
 uint8_t rmap_crc8(uint8_t *bytes, size_t len);

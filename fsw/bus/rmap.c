@@ -330,6 +330,7 @@ struct read_reply {
     uint8_t  status_byte;
     uint32_t data_length;
     uint8_t *data_ptr;
+    uint64_t timestamp;
 };
 
 // returns true if packet is a valid reply, and false otherwise.
@@ -419,6 +420,7 @@ static bool rmap_pull_read_reply(rmap_t *rmap, const rmap_addr_t *routing, struc
         if (rmap_validate_read_reply(rmap, ent->data, ent->actual_length, routing, out)) {
             // packet is a valid read reply
             out->received = true;
+            out->timestamp = ent->receive_timestamp;
             return true;
         }
 
@@ -428,7 +430,8 @@ static bool rmap_pull_read_reply(rmap_t *rmap, const rmap_addr_t *routing, struc
 }
 
 rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out) {
+                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out,
+                              uint64_t *timestamp_out) {
     // make sure we didn't get any null pointers
     assert(rmap != NULL && routing != NULL && ptr_out != NULL && length != NULL);
     // make sure flags are valid
@@ -528,6 +531,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
 
     rmap_status_t status_out;
 
+    uint64_t timestamp = 0;
     if (rmap_transmit_pending(rmap)) {
         // timed out when transmitting request, so don't bother waiting for a reply
         assert(clock_timestamp_monotonic() > transmit_timeout);
@@ -548,6 +552,7 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
             // length already validated
             *length = read_reply.data_length;
             *ptr_out = read_reply.data_ptr;
+            timestamp = read_reply.timestamp;
             // if the length doesn't match the expected length, signal an error (but still return the pointer)
             if (read_reply.data_length != max_data_length && status_out == RS_OK) {
                 status_out = RS_READ_LENGTH_DIFFERS;
@@ -563,6 +568,9 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
             *ptr_out = NULL;
         }
     }
+    if (timestamp_out != NULL) {
+        *timestamp_out = timestamp;
+    }
 
     debugf(TRACE, "RMAP  READ  STOP: DEST=%u SRC=%u KEY=%u LEN=%zu STATUS=%u",
            routing->destination.logical_address, routing->source.logical_address, routing->dest_key,
@@ -572,12 +580,13 @@ rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_fla
 }
 
 rmap_status_t rmap_read_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output) {
+                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output,
+                              uint64_t *timestamp_out) {
     assert(output != NULL);
     rmap_status_t status;
     size_t actual_length = length;
     uint8_t *read_ptr = NULL;
-    status = rmap_read_fetch(rmap, routing, flags, ext_addr, main_addr, &actual_length, &read_ptr);
+    status = rmap_read_fetch(rmap, routing, flags, ext_addr, main_addr, &actual_length, &read_ptr, timestamp_out);
     if (status != RS_OK) {
         return status;
     }
