@@ -14,23 +14,7 @@
 #include <hal/thread.h>
 #include <bus/exchange.h>
 
-static void make_fifos(const char *prefix) {
-    char path_buf[strlen(prefix) + 20];
-
-    size_t actual = snprintf(path_buf, sizeof(path_buf), "./%s-p2c.pipe", prefix);
-    assert(actual < sizeof(path_buf)); // no overflow
-    if (mkfifo(path_buf, 0755) < 0) {
-        perror("mkfifo");
-        exit(1);
-    }
-
-    actual = snprintf(path_buf, sizeof(path_buf), "./%s-c2p.pipe", prefix);
-    assert(actual < sizeof(path_buf)); // no overflow
-    if (mkfifo(path_buf, 0755) < 0) {
-        perror("mkfifo");
-        exit(1);
-    }
-}
+#include "fifo.h"
 
 struct packet_chain {
     uint8_t *packet_data;
@@ -232,10 +216,7 @@ static bool compare_packet_chains(const char *prefix, struct packet_chain *basel
     return ok;
 }
 
-static void prepare_test_fifos(void) {
-    make_fifos("fwfifo");
-}
-PROGRAM_INIT(STAGE_RAW, prepare_test_fifos);
+FIFO_REGISTER("fwfifo");
 
 static void exchange_controller_init(struct exchange_config *es) {
     mutex_init(&es->rc.out_mutex);
