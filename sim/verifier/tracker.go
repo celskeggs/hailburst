@@ -93,6 +93,16 @@ func (a *tracker) search(startTime, endTime model.VirtualTime, predicate func(Ev
 	return all
 }
 
+// searchFirst returns the least recent element that matches the predicate.
+func (a *tracker) searchFirst(predicate func(Event) bool) Event {
+	for i := 0; i < len(a.Events); i++ {
+		if predicate(a.Events[i]) {
+			return a.Events[i]
+		}
+	}
+	return nil
+}
+
 // searchLast returns the most recent element that matches the predicate.
 func (a *tracker) searchLast(predicate func(Event) bool) Event {
 	for i := len(a.Events) - 1; i >= 0; i-- {

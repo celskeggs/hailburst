@@ -134,8 +134,17 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 	// actually insert current event into tracker
 	v.tracker.OnTelemetryDownlink(telemetry, remoteTimestamp)
 
-	// check ReqTelemRecent
-	recentOk := now.Before(remoteTimestamp.Add(15*time.Millisecond)) && remoteTimestamp.Before(now)
+	// check ReqTelemRecent unless this telemetry was originally sent before the first piece of telemetry appeared
+	// (this accomodates telemetry that got buffered on the spacecraft until downlink could be established)
+	firstTDE := v.tracker.searchFirst(func(event Event) bool {
+		_, ok := event.(TelemetryDownlinkEvent)
+		return ok
+	})
+	flexibility := 15*time.Millisecond // normal flexibility
+	if remoteTimestamp.Before(firstTDE.(TelemetryDownlinkEvent).LocalTimestamp) {
+		flexibility = 100 * time.Millisecond // more flexibility for buffered data
+	}
+	recentOk := now.Before(remoteTimestamp.Add(flexibility)) && remoteTimestamp.Before(now)
 	if !recentOk && now.After(remoteTimestamp) {
 		log.Printf("ReqTelemRecent failure: delay=%v", now.Since(remoteTimestamp))
 	}
