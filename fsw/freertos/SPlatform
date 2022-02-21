@@ -55,6 +55,7 @@ env = Environment(
         "-Wno-enum-compare",
         "-nostdlib", "-nostdinc", "-ffreestanding",
         "-std=gnu11",
+        "-O1",
         "-D_BITSIZE=32", "-D__FREERTOS__",
     ],
     ASFLAGS=common_flags + [
