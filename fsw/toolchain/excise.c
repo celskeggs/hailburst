@@ -116,12 +116,6 @@ static bool fix_symbols(bfd *ob, asymbol **input_symbols, size_t input_symbol_co
 }
 
 static asymbol **lookup_symbol(struct callback_context *ctx, asymbol *symbol) {
-    if (symbol->flags & BSF_LOCAL) {
-        if (!ctx->unsafe) {
-            fprintf(stderr, "WARNING: unlikely to be able to reference replacement symbol %s\n", symbol->name);
-        }
-        ctx->unsafe = true;
-    }
     for (size_t i = 0; i < ctx->output_symbol_count; i++) {
         if (strcmp(ctx->output_symbols[i]->name, symbol->name) == 0) {
             return &ctx->output_symbols[i];
@@ -131,23 +125,31 @@ static asymbol **lookup_symbol(struct callback_context *ctx, asymbol *symbol) {
 }
 
 static asymbol **replace_symbol(struct callback_context *ctx, asymbol *symbol) {
-    /* section references will have been stripped, in which case we have to pivot to looking up what the  */
-    /* first thing was in the input section, because that's probably what was meant.                      */
-    if (symbol->flags & BSF_SECTION_SYM) {
-        for (size_t i = 0; i < ctx->input_symbol_count; i++) {
-            if (ctx->input_symbols[i]->section == symbol->section
-                    && ctx->input_symbols[i]->value == 0
-                    && (ctx->input_symbols[i]->flags & BSF_SECTION_SYM) == 0
-                    && ctx->input_symbols[i]->name[0] != '$') {
-#ifdef EXCISE_DEBUG
-                printf("Replacement selected for %s: %s\n", symbol->name, ctx->input_symbols[i]->name);
-#endif
-                return lookup_symbol(ctx, ctx->input_symbols[i]);
-            }
+    /* first: if this is not a local symbol, try to see if it is included in the output */
+    if (!(symbol->flags & BSF_LOCAL)) {
+        asymbol **replacement = lookup_symbol(ctx, symbol);
+        if (replacement != NULL) {
+            return replacement;
         }
-    } else {
-        return lookup_symbol(ctx, symbol);
     }
+    /* second: try to see if there's a replacement symbol that references the same address that we can use */
+    for (size_t i = 0; i < ctx->input_symbol_count; i++) {
+        if (ctx->input_symbols[i]->section == symbol->section
+                && ctx->input_symbols[i]->value == symbol->value
+                && (ctx->input_symbols[i]->flags & (BSF_SECTION_SYM | BSF_LOCAL)) == 0
+                && ctx->input_symbols[i]->name[0] != '$') {
+#ifdef EXCISE_DEBUG
+            printf("Replacement selected for %s: %s\n", symbol->name, ctx->input_symbols[i]->name);
+#endif
+            return lookup_symbol(ctx, ctx->input_symbols[i]);
+        }
+    }
+    /* finally, try the lookup once more if this was a local symbol, but warn. */
+    if (symbol->flags & BSF_LOCAL) {
+        fprintf(stderr, "WARNING: cannot reference replacement symbol for local symbol %s\n", symbol->name);
+        ctx->unsafe = true;
+    }
+    return NULL;
 }
 
 static void copy_section(bfd *ib, asection *isec, void *opaque) {
@@ -190,7 +192,9 @@ static void copy_section(bfd *ib, asection *isec, void *opaque) {
 #ifdef EXCISE_DEBUG
                 fprintf(stderr, "Could not find symbol at all: %s\n", symname);
 #endif
-                ctx->failed = true;
+                if (!ctx->unsafe) {
+                    ctx->failed = true;
+                }
                 return;
             }
             rl->sym_ptr_ptr = newsym;
