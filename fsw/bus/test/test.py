@@ -15,7 +15,7 @@ if (len(sys.argv) > 3 or
 if len(sys.argv) >= 2:
     N = int(sys.argv[1])
 if len(sys.argv) >= 3:
-    MAXPROC = int(sys.argv[1])
+    MAXPROC = int(sys.argv[2])
 
 print("%d trials, %d processes" % (N, MAXPROC))
 

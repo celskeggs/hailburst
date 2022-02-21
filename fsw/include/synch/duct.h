@@ -17,7 +17,7 @@
 #include <stdint.h>
 
 #include <hal/debug.h>
-#include <hal/eplock.h>
+#include <synch/eplock.h>
 
 /* set to 1 if ducts should enforce task separation strictly; 0 to use majority voting to recover instead */
 //#define CONFIG_DUCT_MODE_STRICT     1        TODO: IMPLEMENT THIS
@@ -51,7 +51,12 @@ typedef struct {
     uint8_t  body[];
 } duct_message_t;
 
-#define DUCT_REGISTER(d_ident, d_sender_replicas, d_receiver_replicas, d_max_flow, d_message_size)                    \
+enum duct_polarity {
+    DUCT_SENDER_FIRST,
+    DUCT_RECEIVER_FIRST,
+};
+
+#define DUCT_REGISTER(d_ident, d_sender_replicas, d_receiver_replicas, d_max_flow, d_message_size, d_polarity)        \
     static_assert(DUCT_MIN_REPLICAS <= (d_sender_replicas) && (d_sender_replicas) <= DUCT_MAX_REPLICAS,               \
                   "invalid number of replicas for sender");                                                           \
     static_assert(DUCT_MIN_REPLICAS <= (d_receiver_replicas) && (d_receiver_replicas) <= DUCT_MAX_REPLICAS,           \
@@ -63,7 +68,8 @@ typedef struct {
         (d_sender_replicas) * (d_max_flow) * (sizeof(duct_message_t) + (d_message_size))                              \
     ];                                                                                                                \
     duct_flow_index symbol_join(d_ident, flow_statuses)[(d_sender_replicas) * (d_receiver_replicas)] = {              \
-        [0 ... ((d_sender_replicas) * (d_receiver_replicas) - 1)] = DUCT_MISSING_FLOW,                                \
+        [0 ... ((d_sender_replicas) * (d_receiver_replicas) - 1)] =                                                   \
+                ((d_polarity) == DUCT_SENDER_FIRST) ? DUCT_MISSING_FLOW : 0,                                          \
     };                                                                                                                \
     EPLOCK_REGISTER(symbol_join(d_ident, mutex));                                                                     \
     duct_t d_ident = {                                                                                                \

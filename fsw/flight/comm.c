@@ -37,7 +37,7 @@ static uint8_t comm_dec_next_byte(comm_dec_t *dec, size_t protect_len) {
     // if we don't have enough bytes for the next symbol, we need to get more.
     if (dec->resume_start == dec->resume_end) {
         uint8_t *region = dec->scratch_buffer + protect_len;
-        size_t count = stream_read(dec->uplink, region, COMM_SCRATCH_SIZE - protect_len);
+        size_t count = stream_read(dec->uplink, region, COMM_SCRATCH_SIZE - protect_len, true);
         assert(count > 0 && count + protect_len <= COMM_SCRATCH_SIZE);
         dec->resume_start = protect_len;
         dec->resume_end = protect_len + count;

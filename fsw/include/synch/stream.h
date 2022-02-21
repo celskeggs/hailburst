@@ -36,7 +36,8 @@ void stream_set_writer(stream_t *stream, thread_t writer);
 void stream_set_reader(stream_t *stream, thread_t reader);
 // may only be used by a single thread at a time
 void stream_write(stream_t *stream, uint8_t *data, size_t length);
+size_t stream_write_nonblock(stream_t *stream, uint8_t *data, size_t length);
 // may only be used by a single thread at a time
-size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len);
+size_t stream_read(stream_t *stream, uint8_t *data, size_t max_len, bool block);
 
 #endif /* FSW_STREAM_H */

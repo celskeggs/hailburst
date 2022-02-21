@@ -1,7 +1,6 @@
 #include <inttypes.h>
 
 #include <hal/debug.h>
-#include <hal/eplock.h>
 #include <hal/thread.h>
 
 static bool initialized = false;

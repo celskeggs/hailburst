@@ -8,6 +8,7 @@
 
 enum {
     EXCHANGE_QUEUE_DEPTH = 16,
+    MAX_OUTSTANDING_TOKENS = 10,
 };
 
 // custom exchange protocol

@@ -85,10 +85,13 @@ static inline size_t stream_read_possible(stream_t *stream, uint8_t *data_out, s
 }
 
 // may only be used by a single thread at a time
-size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length) {
+size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length, bool block) {
     assert(stream != NULL && data_out != NULL && stream->reader != NULL && stream->writer != NULL);
-    // read at least one byte, blocking if necessary
-    size_t total_read = stream_read_possible(stream, data_out, max_length, true);
+    // read at least one byte, blocking if necessary and requested
+    size_t total_read = stream_read_possible(stream, data_out, max_length, block);
+    if (total_read == 0 && !block) {
+        return 0;
+    }
     assert(total_read >= 1 && total_read <= max_length);
     // if we could read more, then do non-blocking reads until we've gotten all of it,
     // and return once we stop making any progress.
@@ -106,10 +109,13 @@ size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length) {
     return total_read;
 }
 
-static inline size_t stream_write_possible(stream_t *stream, uint8_t *data_in, size_t length) {
+static inline size_t stream_write_possible(stream_t *stream, uint8_t *data_in, size_t length, bool block) {
     assert(stream != NULL && data_in != NULL);
     // if we're being asked to write more data than there is free space, limit it.
-    size_t space = stream_take_space(stream);
+    size_t space = block ? stream_take_space(stream) : stream_space(stream);
+    if (space == 0 && !block) {
+        return 0;
+    }
     if (length > space) {
         length = space;
     }
@@ -134,10 +140,15 @@ void stream_write(stream_t *stream, uint8_t *data_in, size_t length) {
     assert(stream != NULL && data_in != NULL && stream->reader != NULL && stream->writer != NULL);
     while (length > 0) {
         // write as much as we can (at least one byte)
-        size_t actual = stream_write_possible(stream, data_in, length);
+        size_t actual = stream_write_possible(stream, data_in, length, true);
         assert(actual >= 1 && actual <= length);
         // try again with the remaining portion
         length  -= actual;
         data_in += actual;
     }
+}
+
+size_t stream_write_nonblock(stream_t *stream, uint8_t *data_in, size_t length) {
+    assert(stream != NULL && data_in != NULL && stream->reader != NULL && stream->writer != NULL);
+    return stream_write_possible(stream, data_in, length, false);
 }

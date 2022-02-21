@@ -35,7 +35,7 @@ typedef TCB_t *thread_t;
         .start_arg       = (void *) t_arg,                                                                            \
         .restartable     = t_restartable,                                                                             \
         .pxStack         = symbol_join(t_ident, stack),                                                               \
-        .pcTaskName      = #t_ident,                                                                                  \
+        .pcTaskName      = symbol_str(t_ident),                                                                       \
     }
 
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )

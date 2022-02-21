@@ -8,10 +8,6 @@
 #include <hal/thread.h>
 #include <bus/exchange.h>
 
-enum {
-    MAX_OUTSTANDING_TOKENS = 10,
-};
-
 //#define EXCHANGE_DEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, exc->conf->label, ## __VA_ARGS__)

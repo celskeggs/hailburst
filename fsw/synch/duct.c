@@ -3,20 +3,23 @@
 #include <hal/clock.h>
 #include <synch/duct.h>
 
+//#define DUCT_DEBUG
+
 void duct_send_prepare(duct_t *duct, uint8_t sender_id) {
     assert(duct != NULL);
     assert(sender_id < duct->sender_replicas);
+
+#ifdef DUCT_DEBUG
+    debugf(TRACE, "duct send prepare: %p[%u]", duct, sender_id);
+#endif
+
     eplock_acquire(duct->mutex); /* hold lock until we commit */
 
     /* ensure that all previously-sent flows have been consumed */
     for (uint8_t receiver_id = 0; receiver_id < duct->receiver_replicas; receiver_id++) {
-        uint64_t deadline_ns = clock_timestamp_monotonic() + CLOCK_NS_PER_MS * 2;
-        while (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] != DUCT_MISSING_FLOW) {
-            /* keep rechecking until eplock_wait_ready times out (instantly on FreeRTOS) */
-            if (!eplock_wait_ready(duct->mutex, deadline_ns)) {
-                abortf("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
-                       task_get_name(task_get_current()));
-            }
+        if (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] != DUCT_MISSING_FLOW) {
+            abortf("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
+                   task_get_name(task_get_current()));
         }
     }
 
@@ -48,7 +51,8 @@ void duct_send_message(duct_t *duct, uint8_t sender_id, void *message, size_t si
     entry->size = size;
     entry->timestamp = timestamp;
     memcpy(entry->body, message, size);
-    memset(entry->body + size, 0, duct->message_size - size);
+    // NOTE: this memset is too slow to be allowable!
+    // memset(entry->body + size, 0, duct->message_size - size);
 
     duct->flow_current += 1;
 }
@@ -70,23 +74,27 @@ void duct_send_commit(duct_t *duct, uint8_t sender_id) {
     duct->flow_current = DUCT_MISSING_FLOW;
 
     eplock_release(duct->mutex);
+
+#ifdef DUCT_DEBUG
+    debugf(TRACE, "duct send commit: %p[%u]", duct, sender_id);
+#endif
 }
 
 void duct_receive_prepare(duct_t *duct, uint8_t receiver_id) {
     assert(duct != NULL);
     assert(receiver_id < duct->receiver_replicas);
+
+#ifdef DUCT_DEBUG
+    debugf(TRACE, "duct receive prepare: %p[%u]", duct, receiver_id);
+#endif
+
     eplock_acquire(duct->mutex); /* hold lock until we commit */
 
     /* ensure that all senders have transmitted flows for us */
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
-        /* the exact deadline doesn't matter; it's only used for task alignment on Linux */
-        uint64_t deadline_ns = clock_timestamp_monotonic() + CLOCK_NS_PER_SEC;
-        while (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] == DUCT_MISSING_FLOW) {
-            /* keep rechecking until eplock_wait_ready times out (instantly on FreeRTOS) */
-            if (!eplock_wait_ready(duct->mutex, deadline_ns)) {
-                abortf("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
-                       task_get_name(task_get_current()));
-            }
+        if (duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] == DUCT_MISSING_FLOW) {
+            abortf("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
+                   task_get_name(task_get_current()));
         }
         assert(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id] <= duct->max_flow);
     }
@@ -176,4 +184,8 @@ void duct_receive_commit(duct_t *duct, uint8_t receiver_id) {
     duct->flow_current = DUCT_MISSING_FLOW;
 
     eplock_release(duct->mutex);
+
+#ifdef DUCT_DEBUG
+    debugf(TRACE, "duct receive commit: %p[%u]", duct, receiver_id);
+#endif
 }
