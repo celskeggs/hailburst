@@ -21,8 +21,6 @@ enum {
 
     TX_STATE_IDLE   = 0x00,
     TX_STATE_ACTIVE = 0x01,
-
-    TRANSACTION_RETRIES = 5,
 };
 
 typedef struct {
@@ -36,145 +34,7 @@ const memregion_t rx_halves[] = {
 };
 const memregion_t tx_region = { .base = MEM_SIZE / 2, .size = MEM_SIZE / 2 };
 
-enum {
-    RADIO_RS_PACKET_CORRUPTED   = 0x01,
-    RADIO_RS_REGISTER_READ_ONLY = 0x02,
-    RADIO_RS_INVALID_ADDRESS    = 0x03,
-    RADIO_RS_VALUE_OUT_OF_RANGE = 0x04,
-};
-
-typedef enum {
-    IO_UPLINK_CONTEXT,
-    IO_DOWNLINK_CONTEXT,
-} radio_io_mode_t;
-
-static rmap_t *radio_rmap(radio_t *radio, radio_io_mode_t mode) {
-    if (mode == IO_DOWNLINK_CONTEXT) {
-        assert(radio->rmap_down != NULL);
-        return radio->rmap_down;
-    } else if (mode == IO_UPLINK_CONTEXT) {
-        assert(radio->rmap_up != NULL);
-        return radio->rmap_up;
-    } else {
-        abortf("invalid mode %u", mode);
-    }
-}
-
-static rmap_addr_t *radio_routing(radio_t *radio, radio_io_mode_t mode) {
-    assert(mode == IO_DOWNLINK_CONTEXT || mode == IO_UPLINK_CONTEXT);
-    return mode == IO_DOWNLINK_CONTEXT ? &radio->address_down : &radio->address_up;
-}
-
-static uint8_t *radio_read_memory_fetch(radio_t *radio, radio_io_mode_t mode, uint32_t mem_address, size_t length) {
-    rmap_status_t status;
-    assert(radio != NULL);
-    size_t actual_read;
-    uint8_t *ptr_out;
-
-    RETRY(TRANSACTION_RETRIES, "radio memory read at 0x%x of length 0x%zx, error=0x%03x", mem_address, length, status) {
-        actual_read = length;
-        ptr_out = NULL;
-        status = rmap_read_fetch(radio_rmap(radio, mode), radio_routing(radio, mode), RF_INCREMENT, 0x00,
-                                 mem_address + MEM_BASE_ADDR, &actual_read, &ptr_out, NULL);
-        if (status == RS_OK) {
-            assert(actual_read == length && ptr_out != NULL);
-            return ptr_out;
-        }
-    }
-    return NULL;
-}
-
-static uint8_t *radio_write_memory_prepare(radio_t *radio, radio_io_mode_t mode, uint32_t mem_address,
-                                           rmap_status_t *status_out) {
-    assert(radio != NULL && status_out != NULL);
-    uint8_t *ptr_out = NULL;
-    rmap_status_t status;
-    status = rmap_write_prepare(radio_rmap(radio, mode), radio_routing(radio, mode),
-                                RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
-                                0x00, mem_address + MEM_BASE_ADDR, &ptr_out);
-    *status_out = status;
-    if (status == RS_OK) {
-        assert(ptr_out != NULL);
-        return ptr_out;
-    }
-    return NULL;
-}
-
-static bool radio_write_memory_commit(radio_t *radio, radio_io_mode_t mode, size_t write_len,
-                                      rmap_status_t *status_out) {
-    assert(radio != NULL && status_out != NULL);
-    rmap_status_t status = rmap_write_commit(radio_rmap(radio, mode), write_len, NULL);
-    *status_out = status;
-    return status == RS_OK;
-}
-
-static bool radio_read_registers(radio_t *radio, radio_io_mode_t mode,
-                                 radio_register_t first_reg, radio_register_t last_reg, uint32_t *output) {
-    rmap_status_t status;
-    assert(output != NULL);
-    assert(first_reg <= last_reg && last_reg < NUM_REGISTERS);
-    size_t read_len = (last_reg - first_reg + 1) * 4;
-    assert(read_len > 0);
-
-    RETRY(TRANSACTION_RETRIES, "register query on [%u, %u], error=0x%03x", first_reg, last_reg, status) {
-        status = rmap_read_exact(radio_rmap(radio, mode), radio_routing(radio, mode), RF_INCREMENT, 0x00,
-                                 first_reg * 4, read_len, (uint8_t *) output, NULL);
-        if (status == RS_OK) {
-            // convert from big-endian
-            for (int i = 0; i <= (int) last_reg - (int) first_reg; i++) {
-                output[i] = be32toh(output[i]);
-            }
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool radio_read_register(radio_t *radio, radio_io_mode_t mode, radio_register_t reg, uint32_t *output) {
-    return radio_read_registers(radio, mode, reg, reg, output);
-}
-
-static bool radio_write_registers(radio_t *radio, radio_io_mode_t mode,
-                                  radio_register_t first_reg, radio_register_t last_reg, uint32_t *input) {
-    rmap_status_t status;
-    assert(input != NULL);
-    assert(first_reg <= last_reg && last_reg < NUM_REGISTERS);
-    size_t num_regs = last_reg - first_reg + 1;
-    assert(num_regs > 0);
-
-    RETRY(TRANSACTION_RETRIES, "register update on [%u, %u], error=0x%03x", first_reg, last_reg, status) {
-        // transmit the data over the network
-        uint8_t *write_ptr = NULL;
-        status = rmap_write_prepare(radio_rmap(radio, mode), radio_routing(radio, mode),
-                                    RF_VERIFY | RF_ACKNOWLEDGE | RF_INCREMENT,
-                                    0x00, first_reg * sizeof(uint32_t), &write_ptr);
-        if (status == RS_OK) {
-            assert(write_ptr != NULL);
-            // convert to big-endian
-            uint32_t *write_ptr32 = (uint32_t *) write_ptr;
-            for (size_t i = 0; i < num_regs; i++) {
-                write_ptr32[i] = be32toh(input[i]);
-            }
-            status = rmap_write_commit(radio_rmap(radio, mode), num_regs * sizeof(uint32_t), NULL);
-            if (status == RS_OK) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-static bool radio_write_register(radio_t *radio, radio_io_mode_t mode, radio_register_t reg, uint32_t input) {
-    return radio_write_registers(radio, mode, reg, reg, &input);
-}
-
-static bool radio_initialize_common(radio_t *radio, radio_io_mode_t mode) {
-    uint32_t config_data[3];
-    static_assert(REG_MAGIC + 1 == REG_MEM_BASE, "register layout assumptions");
-    static_assert(REG_MEM_BASE + 1 == REG_MEM_SIZE, "register layout assumptions");
-    if (!radio_read_registers(radio, mode, REG_MAGIC, REG_MEM_SIZE, config_data)) {
-        return false;
-    }
+static bool radio_validate_common_config(uint32_t config_data[3]) {
     if (config_data[0] != RADIO_MAGIC) {
         debugf(CRITICAL, "Invalid magic number 0x%08x when 0x%08x was expected.", config_data[0], RADIO_MAGIC);
         return false;
@@ -190,44 +50,6 @@ static bool radio_initialize_common(radio_t *radio, radio_io_mode_t mode) {
     return true;
 }
 
-static bool radio_initialize_downlink(radio_t *radio) {
-    if (!radio_initialize_common(radio, IO_DOWNLINK_CONTEXT)) {
-        return false;
-    }
-
-    // disable transmission and zero pointer and length registers
-    uint32_t zeroes[] = { 0, 0, TX_STATE_IDLE };
-    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
-    static_assert(REG_TX_LEN + 1 == REG_TX_STATE, "register layout assumptions");
-    if (!radio_write_registers(radio, IO_DOWNLINK_CONTEXT, REG_TX_PTR, REG_TX_STATE, zeroes)) {
-        return false;
-    }
-
-    return true;
-}
-
-static bool radio_initialize_uplink(radio_t *radio) {
-    if (!radio_initialize_common(radio, IO_UPLINK_CONTEXT)) {
-        return false;
-    }
-
-    // disable transmission and reception
-    if (!radio_write_register(radio, IO_UPLINK_CONTEXT, REG_RX_STATE, RX_STATE_IDLE)) {
-        return false;
-    }
-
-    // clear remaining registers so that we have a known safe state to start from
-    uint32_t zeroes[4] = { 0, 0, 0, 0 };
-    static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
-    static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
-    static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
-    if (!radio_write_registers(radio, IO_UPLINK_CONTEXT, REG_RX_PTR, REG_RX_LEN_ALT, zeroes)) {
-        return false;
-    }
-
-    return true;
-}
-
 /*************************************************************************************************
  * The big challenge with radio reception is that we need to be able to CONTINUOUSLY receive     *
  * data from the ground, even if we're currently transferring part of the buffer to the FSW.     *
@@ -236,17 +58,17 @@ static bool radio_initialize_uplink(radio_t *radio) {
  * buffering arrangement without too much trouble.                                               *
  *************************************************************************************************/
 
-// interacts with radio to read from and flip virtual ping-pong buffer;
-// returns number of bytes placed into the uplink_buf_local buffer, or negative numbers on error.
-static ssize_t radio_uplink_service(radio_t *radio) {
-    static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
-    static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
-    static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
-    static_assert(REG_RX_PTR + 4 == REG_RX_STATE, "register layout assumptions");
-    uint32_t reg[NUM_REGISTERS];
-    if (!radio_read_registers(radio, IO_UPLINK_CONTEXT, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
-        return -1;
-    }
+struct uplink_reads {
+    uint32_t prime_read_address;
+    uint32_t prime_read_length;
+    uint32_t flipped_read_address;
+    uint32_t flipped_read_length;
+    bool needs_update_all; // if set, then register array has new values for all five core registers written back
+    bool needs_alt_update; // if set, then register array has new values for PTR_ALT and LEN_ALT only
+};
+
+static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTERS], struct uplink_reads *reads) {
+    assert(radio != NULL && reg != NULL && reads != NULL);
 
     if (reg[REG_RX_STATE] == RX_STATE_IDLE) {
         debugf(INFO, "Radio: initializing uplink out of IDLE mode");
@@ -258,22 +80,24 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         reg[REG_RX_LEN_ALT] = rx_halves[1].size;
         reg[REG_RX_STATE] = RX_STATE_LISTENING;
 
+        // no data to read; just initialize the buffers
+        *reads = (struct uplink_reads) {
+            .prime_read_length = 0,
+            .flipped_read_length = 0,
+            .needs_update_all = true,
+        };
+
 #ifdef DEBUGIDX
         debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
 
-        if (!radio_write_registers(radio, IO_UPLINK_CONTEXT, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
-            return -1;
-        }
-        // no data to read, because we just initialized the buffers
-        return 0;
+        return;
     }
-    // otherwise, we've already been initialized, and can go look to read back previous results.
 
     // start by identifying what the current positions mean.
-    uint32_t end_index_h0 = rx_halves[0].base + rx_halves[0].size;
-    uint32_t end_index_h1 = rx_halves[1].base + rx_halves[1].size;
+    const uint32_t end_index_h0 = rx_halves[0].base + rx_halves[0].size;
+    const uint32_t end_index_h1 = rx_halves[1].base + rx_halves[1].size;
 
     uint32_t end_index_prime = reg[REG_RX_PTR] + reg[REG_RX_LEN];
     uint32_t end_index_alt = reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT];
@@ -281,14 +105,12 @@ static ssize_t radio_uplink_service(radio_t *radio) {
     debugf(TRACE, "Radio indices: end_index_h0=%u, end_index_h1=%u, end_index_prime=%u, end_index_alt=%u, extracted=%u",
            end_index_h0, end_index_h1, end_index_prime, end_index_alt, radio->bytes_extracted);
 #endif
-    assert(end_index_prime == end_index_h0
-        || end_index_prime == end_index_h1);
+    assert(end_index_prime == end_index_h0 || end_index_prime == end_index_h1);
     assert(end_index_prime != end_index_alt);
     if (end_index_alt == 0) {
         assert(reg[REG_RX_PTR_ALT] == 0 && reg[REG_RX_LEN_ALT] == 0);
     } else {
-        assert(end_index_alt == end_index_h0
-            || end_index_alt == end_index_h1);
+        assert(end_index_alt == end_index_h0 || end_index_alt == end_index_h1);
     }
 
     // identify where the next read location should be...
@@ -329,31 +151,20 @@ static ssize_t radio_uplink_service(radio_t *radio) {
         read_length_flip = UPLINK_BUF_LOCAL_SIZE - read_length;
     }
 
-    // and perform both the prime and flipped reads as necessary
-    assert(read_length <= UPLINK_BUF_LOCAL_SIZE);
-    if (read_length > 0) {
-        uint8_t *src = radio_read_memory_fetch(radio, IO_UPLINK_CONTEXT,
-                                               rx_halves[read_half].base + read_half_offset, read_length);
-        if (src == NULL) {
-            return -1;
-        }
-        memcpy(radio->uplink_buf_local, src, read_length);
-    }
+    // should not have read_length_flip nonzero when read_length is zero
+    assert(read_length_flip == 0 || read_length != 0);
 
-    assert(read_length_flip <= UPLINK_BUF_LOCAL_SIZE - read_length);
-    if (read_length_flip > 0) {
-        uint8_t *src = radio_read_memory_fetch(radio, IO_UPLINK_CONTEXT,
-                                               rx_halves[read_half ? 0 : 1].base, read_length_flip);
-        if (src == NULL) {
-            return -1;
-        }
-        memcpy(radio->uplink_buf_local + read_length, src, read_length_flip);
-    }
+    *reads = (struct uplink_reads) {
+        .prime_read_address = rx_halves[read_half].base + read_half_offset,
+        .prime_read_length = read_length,
+        .flipped_read_address = rx_halves[read_half ? 0 : 1].base,
+        .flipped_read_length = read_length_flip,
+        .needs_update_all = false, /* updated later if necessary */
+        .needs_alt_update = false, /* updated later if necessary */
+    };
 
     uint32_t total_read = read_length + read_length_flip;
     radio->bytes_extracted += total_read;
-
-    // now that we've read a chunk of data, we need to consider whether we'll be updating the pointers.
 
     // quick coherency check: if we are in OVERFLOW condition, then we must have run out of data on our prime buffer.
     if (reg[REG_RX_STATE] == RX_STATE_OVERFLOW) {
@@ -386,13 +197,12 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             reg[REG_RX_LEN_ALT] = 0;
             reg[REG_RX_STATE] = RX_STATE_LISTENING;
             debugf(CRITICAL, "Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
+
 #ifdef DEBUGIDX
             debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                    reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
-            if (!radio_write_registers(radio, IO_UPLINK_CONTEXT, REG_RX_PTR, REG_RX_STATE, reg + REG_RX_PTR)) {
-                return -1;
-            }
+            reads->needs_update_all = true;
         } else if (end_index_alt == 0) {
             // we need to refill the alternate pointer and length
             assert(reg[REG_RX_STATE] == RX_STATE_LISTENING);
@@ -402,139 +212,396 @@ static ssize_t radio_uplink_service(radio_t *radio) {
             debugf(TRACE, "Radio UPDATED indices: end_index_prime=<unchanged>, end_index_alt=%u",
                    reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
 #endif
-            if (!radio_write_registers(radio, IO_UPLINK_CONTEXT,
-                                       REG_RX_PTR_ALT, REG_RX_LEN_ALT, reg + REG_RX_PTR_ALT)) {
-                return -1;
-            }
+            reads->needs_alt_update = true;
         } else {
             // or, in this case, no refill is actually necessary!
         }
     }
 
-    return total_read;
+    // run this here, so that it only happens AFTER we initialize out of idle mode.
+    watchdog_ok(WATCHDOG_ASPECT_RADIO_UPLINK);
 }
+
+enum uplink_state {
+    RAD_UL_INITIAL_STATE,
+    RAD_UL_QUERY_COMMON_CONFIG,
+    RAD_UL_DISABLE_RECEIVE,
+    RAD_UL_RESET_REGISTERS,
+    RAD_UL_QUERY_STATE,
+    RAD_UL_PRIME_READ,
+    RAD_UL_FLIPPED_READ,
+    RAD_UL_REFILL_BUFFERS,
+    RAD_UL_WRITE_TO_STREAM,
+};
 
 void radio_uplink_loop(radio_t *radio) {
     assert(radio != NULL);
 
-    // (re)configure uplink side of radio
-    if (!radio_initialize_uplink(radio)) {
-        debugf(WARNING, "Radio: could not identify device settings for uplink.");
-        return;
-    }
+    enum uplink_state state = RAD_UL_INITIAL_STATE;
+
+    rmap_status_t status;
+    size_t uplink_offset = 0;
+    uint32_t registers[NUM_REGISTERS];
+    struct uplink_reads read_plan = { };
 
     for (;;) {
-        ssize_t grabbed = radio_uplink_service(radio);
-        if (grabbed < 0) {
-            debugf(WARNING, "Radio: hit error in uplink loop; halting uplink thread.");
+        rmap_epoch_prepare(radio->rmap_up);
+
+        switch (state) {
+        case RAD_UL_QUERY_COMMON_CONFIG:
+            status = rmap_read_complete(radio->rmap_up, (uint8_t*) registers, sizeof(uint32_t) * 3, NULL);
+            if (status == RS_OK) {
+                for (int i = 0; i < 3; i++) {
+                    registers[i] = be32toh(registers[i]);
+                }
+                if (!radio_validate_common_config(registers)) {
+                    // invalid radio; stop.
+                    return;
+                }
+                state = RAD_UL_DISABLE_RECEIVE;
+            } else {
+                debugf(WARNING, "Failed to read initial radio metadata, error=0x%03x", status);
+            }
             break;
-        } else if (grabbed > 0) {
-            assert(grabbed <= UPLINK_BUF_LOCAL_SIZE);
-            // write all the data we just pulled to the stream before continuing
-            stream_write(radio->up_stream, radio->uplink_buf_local, grabbed);
-
-            // NOTE: if there's not enough space in the stream, and we block, and the radio ends up overflowing its
-            // buffer... then that's a problem with us not reading the stream fast enough, not a problem with us
-            // blocking on writing to the stream.
+        case RAD_UL_DISABLE_RECEIVE:
+            status = rmap_write_complete(radio->rmap_up, NULL);
+            if (status == RS_OK) {
+                state = RAD_UL_RESET_REGISTERS;
+            } else {
+                debugf(WARNING, "Failed to disable radio receiver, error=0x%03x", status);
+            }
+            break;
+        case RAD_UL_RESET_REGISTERS:
+            status = rmap_write_complete(radio->rmap_up, NULL);
+            if (status == RS_OK) {
+                state = RAD_UL_QUERY_STATE;
+            } else {
+                debugf(WARNING, "Failed to reset radio receiver to known state, error=0x%03x", status);
+            }
+            break;
+        case RAD_UL_QUERY_STATE:
+            status = rmap_read_complete(radio->rmap_up,
+                                        (uint8_t*) (registers + REG_RX_PTR), sizeof(uint32_t) * 5, NULL);
+            if (status == RS_OK) {
+                for (int i = REG_RX_PTR; i < REG_RX_PTR + 5; i++) {
+                    registers[i] = be32toh(registers[i]);
+                }
+                radio_uplink_compute_reads(radio, registers, &read_plan);
+                uplink_offset = 0;
+                state = RAD_UL_PRIME_READ;
+            } else {
+                debugf(WARNING, "Failed to query radio status, error=0x%03x", status);
+            }
+            break;
+        case RAD_UL_PRIME_READ:
+            status = rmap_read_complete(radio->rmap_up, radio->uplink_buf_local, read_plan.prime_read_length, NULL);
+            if (status == RS_OK) {
+                state = RAD_UL_FLIPPED_READ;
+            } else {
+                debugf(WARNING, "Failed to read prime memory region, error=0x%03x", status);
+            }
+            break;
+        case RAD_UL_FLIPPED_READ:
+            status = rmap_read_complete(radio->rmap_up, radio->uplink_buf_local + read_plan.prime_read_length,
+                                                        read_plan.flipped_read_length, NULL);
+            if (status == RS_OK) {
+                state = RAD_UL_REFILL_BUFFERS;
+            } else {
+                debugf(WARNING, "Failed to read flipped memory region, error=0x%03x", status);
+            }
+            break;
+        case RAD_UL_REFILL_BUFFERS:
+            status = rmap_write_complete(radio->rmap_up, NULL);
+            if (status == RS_OK) {
+                state = RAD_UL_WRITE_TO_STREAM;
+            } else {
+                debugf(WARNING, "Failed to refill receiver buffers, error=0x%03x", status);
+            }
+            break;
+        default:
+            /* nothing to do */
+            break;
         }
 
-        // only sleep if we haven't been reading all that much data. if we have, then we'd better keep at it!
-        if (grabbed < 500) {
-            task_delay(10000000);
+        if (state == RAD_UL_INITIAL_STATE) {
+            state = RAD_UL_QUERY_COMMON_CONFIG;
+        }
+        if ((state == RAD_UL_PRIME_READ && read_plan.prime_read_length == 0)
+                || (state == RAD_UL_FLIPPED_READ && read_plan.flipped_read_length == 0)) {
+            state = RAD_UL_REFILL_BUFFERS;
+        }
+        if (state == RAD_UL_REFILL_BUFFERS && !read_plan.needs_update_all && !read_plan.needs_alt_update) {
+            state = RAD_UL_WRITE_TO_STREAM;
+        }
+        if (state == RAD_UL_WRITE_TO_STREAM) {
+            uint32_t uplink_length = read_plan.prime_read_length + read_plan.flipped_read_length;
+            if (uplink_length == 0) {
+                state = RAD_UL_QUERY_STATE;
+            } else {
+                assert(uplink_offset < uplink_length && uplink_length <= UPLINK_BUF_LOCAL_SIZE);
+                // write all the data we just pulled to the stream before continuing
+                uplink_offset += stream_write_nonblock(radio->up_stream, radio->uplink_buf_local + uplink_offset,
+                                                                         uplink_length - uplink_offset);
+                if (uplink_offset == uplink_length) {
+                    state = RAD_UL_QUERY_STATE;
+                    debugf(TRACE, "Radio uplink received %u bytes.", uplink_length);
+                }
+                assert(uplink_offset <= uplink_length);
+            }
         }
 
-        watchdog_ok(WATCHDOG_ASPECT_RADIO_UPLINK);
+        switch (state) {
+        case RAD_UL_QUERY_COMMON_CONFIG:
+            // validate basic radio configuration settings
+            rmap_read_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_MAGIC * sizeof(uint32_t), sizeof(uint32_t) * 3);
+            static_assert(REG_MAGIC + 1 == REG_MEM_BASE, "register layout assumptions");
+            static_assert(REG_MAGIC + 2 == REG_MEM_SIZE, "register layout assumptions");
+            break;
+        case RAD_UL_DISABLE_RECEIVE:
+            // disable receiver
+            registers[0] = htobe32(RX_STATE_IDLE);
+            rmap_write_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_RX_STATE * sizeof(uint32_t),
+                             (uint8_t*) registers, sizeof(uint32_t));
+            break;
+        case RAD_UL_RESET_REGISTERS:
+            // clear remaining registers so that we have a known safe state to start from
+            registers[0] = 0;
+            registers[1] = 0;
+            registers[2] = 0;
+            registers[3] = 0;
+            // no need to use htobe32... they're already zero!
+            rmap_write_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_RX_PTR * sizeof(uint32_t),
+                             (uint8_t*) registers, sizeof(uint32_t) * 4);
+            static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
+            static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
+            static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
+            break;
+        case RAD_UL_QUERY_STATE:
+            // query reception state
+            rmap_read_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_RX_PTR * sizeof(uint32_t), sizeof(uint32_t) * 5);
+            static_assert(REG_RX_PTR + 1 == REG_RX_LEN, "register layout assumptions");
+            static_assert(REG_RX_PTR + 2 == REG_RX_PTR_ALT, "register layout assumptions");
+            static_assert(REG_RX_PTR + 3 == REG_RX_LEN_ALT, "register layout assumptions");
+            static_assert(REG_RX_PTR + 4 == REG_RX_STATE, "register layout assumptions");
+            break;
+        case RAD_UL_PRIME_READ:
+            assert(read_plan.prime_read_length > 0);
+            rmap_read_start(radio->rmap_up,
+                            0x00, MEM_BASE_ADDR + read_plan.prime_read_address, read_plan.prime_read_length);
+            break;
+        case RAD_UL_FLIPPED_READ:
+            assert(read_plan.flipped_read_length > 0);
+            rmap_read_start(radio->rmap_up,
+                            0x00, MEM_BASE_ADDR + read_plan.flipped_read_address, read_plan.flipped_read_length);
+            break;
+        case RAD_UL_REFILL_BUFFERS:
+            assert(read_plan.needs_update_all || read_plan.needs_alt_update);
+            if (read_plan.needs_update_all) {
+                for (int i = REG_RX_PTR; i < REG_RX_PTR + 5; i++) {
+                    registers[i] = htobe32(registers[i]);
+                }
+                rmap_write_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_RX_PTR * sizeof(uint32_t),
+                                 (uint8_t*) (registers + REG_RX_PTR), sizeof(uint32_t) * 5);
+            } else {
+                for (int i = REG_RX_PTR_ALT; i < REG_RX_PTR_ALT + 2; i++) {
+                    registers[i] = htobe32(registers[i]);
+                }
+                rmap_write_start(radio->rmap_up, 0x00, REG_BASE_ADDR + REG_RX_PTR_ALT * sizeof(uint32_t),
+                                 (uint8_t*) (registers + REG_RX_PTR_ALT), sizeof(uint32_t) * 2);
+            }
+            break;
+        default:
+            /* nothing to do */
+            break;
+        }
+
+        rmap_epoch_commit(radio->rmap_up);
+
+        task_yield();
     }
 }
 
-static bool radio_downlink_service(radio_t *radio, size_t append_len) {
-    uint32_t state;
-    // make sure the radio is idle
-    if (!radio_read_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_STATE, &state)) {
-        return false;
-    }
-    assert(state == TX_STATE_IDLE);
-
-    // TODO: eliminate need for separate local downlink buffer
-
-    // write the new transmission into radio memory
-    rmap_status_t status = RS_INVALID_ERR;
-    RETRY(TRANSACTION_RETRIES, "radio memory write at 0x%x of length 0x%zx, error=0x%03x",
-                               tx_region.base, append_len, status) {
-        uint8_t *write_target = radio_write_memory_prepare(radio, IO_DOWNLINK_CONTEXT, tx_region.base, &status);
-        if (write_target == NULL) {
-            continue;
-        }
-        memcpy(write_target, radio->downlink_buf_local, append_len);
-        if (!radio_write_memory_commit(radio, IO_DOWNLINK_CONTEXT, append_len, &status)) {
-            continue;
-        }
-        break;
-    }
-    if (status != RS_OK) {
-        return false;
-    }
-
-    // start the write
-    static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
-    static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
-    assert(append_len <= tx_region.size);
-    uint32_t reg[] = {
-        /* REG_TX_PTR */   tx_region.base,
-        /* REG_TX_LEN */   append_len,
-        /* REG_TX_STATE */ TX_STATE_ACTIVE,
-    };
-    if (!radio_write_registers(radio, IO_DOWNLINK_CONTEXT, REG_TX_PTR, REG_TX_STATE, reg)) {
-        return false;
-    }
-
-    // monitor the write until it completes
-    uint32_t cur_len = 0;
-    for (;;) {
-        if (!radio_read_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_LEN, &cur_len)) {
-            return false;
-        }
-        if (cur_len > 0) {
-            task_delay((cur_len + 5) * 1000);
-        } else {
-            break;
-        }
-    }
-
-    // confirm that the radio has, in fact, stopped transmitting
-    if (!radio_read_register(radio, IO_DOWNLINK_CONTEXT, REG_TX_STATE, &state)) {
-        return false;
-    }
-    assert(state == TX_STATE_IDLE);
-
-    return true;
-}
+enum downlink_state {
+    RAD_DL_INITIAL_STATE,
+    RAD_DL_QUERY_COMMON_CONFIG,
+    RAD_DL_DISABLE_TRANSMIT,
+    RAD_DL_WAITING_FOR_STREAM,
+    RAD_DL_VALIDATE_IDLE,
+    RAD_DL_WRITE_RADIO_MEMORY,
+    RAD_DL_START_TRANSMIT,
+    RAD_DL_MONITOR_TRANSMIT,
+    RAD_DL_VERIFY_COMPLETE,
+};
 
 void radio_downlink_loop(radio_t *radio) {
     assert(radio != NULL);
 
-    // (re)configure downlink side of radio
-    if (!radio_initialize_downlink(radio)) {
-        debugf(WARNING, "Radio: could not identify device settings for downlink.");
-        return;
-    }
+    enum downlink_state state = RAD_DL_INITIAL_STATE;
 
-    size_t max_len = tx_region.size;
-    if (max_len > DOWNLINK_BUF_LOCAL_SIZE) {
-        max_len = DOWNLINK_BUF_LOCAL_SIZE;
-    }
-    assert(max_len > 0);
+    // scratch variables for use in switch statements
+    rmap_status_t status;
+    uint32_t registers[3];
+    uint32_t downlink_length = 0;
+
     for (;;) {
-        size_t grabbed = stream_read(radio->down_stream, radio->downlink_buf_local, max_len, true);
-        assert(grabbed > 0 && grabbed <= DOWNLINK_BUF_LOCAL_SIZE && grabbed <= tx_region.size);
+        rmap_epoch_prepare(radio->rmap_down);
 
-        debugf(TRACE, "Radio downlink received %zu bytes for transmission.", grabbed);
-        if (!radio_downlink_service(radio, grabbed)) {
-            debugf(WARNING, "Radio: hit error in downlink loop; halting downlink thread.");
+        switch (state) {
+        case RAD_DL_QUERY_COMMON_CONFIG:
+            status = rmap_read_complete(radio->rmap_down, (uint8_t*) registers, sizeof(uint32_t) * 3, NULL);
+            if (status == RS_OK) {
+                for (int i = 0; i < 3; i++) {
+                    registers[i] = be32toh(registers[i]);
+                }
+                if (!radio_validate_common_config(registers)) {
+                    // invalid radio; stop.
+                    return;
+                }
+                state = RAD_DL_DISABLE_TRANSMIT;
+            } else {
+                debugf(WARNING, "Failed to read initial radio metadata, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_DISABLE_TRANSMIT:
+            status = rmap_write_complete(radio->rmap_down, NULL);
+            if (status == RS_OK) {
+                state = RAD_DL_WAITING_FOR_STREAM;
+            } else {
+                debugf(WARNING, "Failed to disable radio transmitter, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_VALIDATE_IDLE:
+            status = rmap_read_complete(radio->rmap_down, (uint8_t*) registers, sizeof(uint32_t), NULL);
+            if (status == RS_OK) {
+                registers[0] = be32toh(registers[0]);
+                if (registers[0] != TX_STATE_IDLE) {
+                    debugf(WARNING, "Radio transmitter is unexpectedly not IDLE (%u).", registers[0]);
+                    return;
+                }
+                state = RAD_DL_WRITE_RADIO_MEMORY;
+            } else {
+                debugf(WARNING, "Failed to query radio transmit state, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_WRITE_RADIO_MEMORY:
+            status = rmap_write_complete(radio->rmap_down, NULL);
+            if (status == RS_OK) {
+                state = RAD_DL_START_TRANSMIT;
+            } else {
+                debugf(WARNING, "Failed to write transmission to radio memory, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_START_TRANSMIT:
+            status = rmap_write_complete(radio->rmap_down, NULL);
+            if (status == RS_OK) {
+                state = RAD_DL_MONITOR_TRANSMIT;
+            } else {
+                debugf(WARNING, "Failed to start radio transmission, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_MONITOR_TRANSMIT:
+            status = rmap_read_complete(radio->rmap_down, (uint8_t*) registers, sizeof(uint32_t), NULL);
+            if (status == RS_OK) {
+                registers[0] = be32toh(registers[0]);
+                if (registers[0] == 0) {
+                    state = RAD_DL_VERIFY_COMPLETE;
+                } else {
+                    debugf(TRACE, "Remaining bytes to transmit: %u/%u.", registers[0], downlink_length);
+                }
+            } else {
+                debugf(WARNING, "Failed to query radio transmit bytes remaining, error=0x%03x", status);
+            }
+            break;
+        case RAD_DL_VERIFY_COMPLETE:
+            status = rmap_read_complete(radio->rmap_down, (uint8_t*) registers, sizeof(uint32_t), NULL);
+            if (status == RS_OK) {
+                registers[0] = be32toh(registers[0]);
+                assert(downlink_length >= 1 && downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
+                if (registers[0] != TX_STATE_IDLE) {
+                    debugf(WARNING, "Radio has not yet reached IDLE (%u).", registers[0]);
+                } else {
+                    state = RAD_DL_WAITING_FOR_STREAM;
+                    debugf(TRACE, "Radio downlink completed transmitting %u bytes.", downlink_length);
+                    downlink_length = 0;
+                    watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);
+                }
+            } else {
+                debugf(WARNING, "Failed to query radio transmit status, error=0x%03x", status);
+            }
+            break;
+        default:
+            /* nothing to do */
             break;
         }
-        debugf(TRACE, "Radio downlink completed transmitting %zu bytes.", grabbed);
 
-        watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);
+        if (state == RAD_DL_INITIAL_STATE) {
+            state = RAD_DL_QUERY_COMMON_CONFIG;
+        } else if (state == RAD_DL_WAITING_FOR_STREAM) {
+            assert(tx_region.size >= DOWNLINK_BUF_LOCAL_SIZE);
+            downlink_length = stream_read(radio->down_stream, radio->downlink_buf_local,
+                                          DOWNLINK_BUF_LOCAL_SIZE, false);
+            if (downlink_length > 0) {
+                assert(downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
+                state = RAD_DL_VALIDATE_IDLE;
+                debugf(TRACE, "Radio downlink received %u bytes for transmission.", downlink_length);
+            }
+        }
+
+        switch (state) {
+        case RAD_DL_QUERY_COMMON_CONFIG:
+            // validate basic radio configuration settings
+            rmap_read_start(radio->rmap_down, 0x00,
+                            REG_BASE_ADDR + REG_MAGIC * sizeof(uint32_t), sizeof(uint32_t) * 3);
+            static_assert(REG_MAGIC + 1 == REG_MEM_BASE, "register layout assumptions");
+            static_assert(REG_MAGIC + 2 == REG_MEM_SIZE, "register layout assumptions");
+            break;
+        case RAD_DL_DISABLE_TRANSMIT:
+            // disable transmission and zero pointer and length registers
+            registers[0] = 0;
+            registers[1] = 0;
+            registers[2] = htobe32(TX_STATE_IDLE);
+            rmap_write_start(radio->rmap_down, 0x00, REG_TX_PTR * sizeof(uint32_t),
+                             (uint8_t*) registers, sizeof(uint32_t) * 3);
+            static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+            static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
+            break;
+        case RAD_DL_VALIDATE_IDLE:
+            // validate that radio is idle
+            rmap_read_start(radio->rmap_down, 0x00, REG_BASE_ADDR + REG_TX_STATE * sizeof(uint32_t), sizeof(uint32_t));
+            break;
+        case RAD_DL_WRITE_RADIO_MEMORY:
+            // place data into radio memory
+            assert(downlink_length >= 1 && downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
+            rmap_write_start(radio->rmap_down, 0x00, MEM_BASE_ADDR + tx_region.base,
+                             radio->downlink_buf_local, downlink_length);
+            break;
+        case RAD_DL_START_TRANSMIT:
+            // enable transmission
+            assert(downlink_length >= 1 && downlink_length <= DOWNLINK_BUF_LOCAL_SIZE
+                                        && downlink_length <= tx_region.size);
+            registers[0] = htobe32(tx_region.base);
+            registers[1] = htobe32(downlink_length);
+            registers[2] = htobe32(TX_STATE_ACTIVE);
+            rmap_write_start(radio->rmap_down, 0x00, REG_BASE_ADDR + REG_TX_PTR * sizeof(uint32_t),
+                             (uint8_t*) registers, sizeof(uint32_t) * 3);
+            static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
+            static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
+            break;
+        case RAD_DL_MONITOR_TRANSMIT:
+            // check how many bytes remain to be transmitted
+            rmap_read_start(radio->rmap_down, 0x00, REG_BASE_ADDR + REG_TX_LEN * sizeof(uint32_t), sizeof(uint32_t));
+            break;
+        case RAD_DL_VERIFY_COMPLETE:
+            // validate that radio is idle
+            rmap_read_start(radio->rmap_down, 0x00, REG_BASE_ADDR + REG_TX_STATE * sizeof(uint32_t), sizeof(uint32_t));
+            break;
+        default:
+            /* nothing to do */
+            break;
+        }
+
+        rmap_epoch_commit(radio->rmap_down);
+
+        task_yield();
     }
 }

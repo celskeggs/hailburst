@@ -32,9 +32,6 @@ typedef struct {
     // separate RMAP handlers so that the tasks can operate independently
     rmap_t        *rmap_up;
     rmap_t        *rmap_down;
-    // addresses differ by source address
-    rmap_addr_t    address_up;
-    rmap_addr_t    address_down;
 
     uint32_t       bytes_extracted;
     stream_t      *up_stream;
@@ -47,7 +44,7 @@ void radio_uplink_loop(radio_t *radio);
 void radio_downlink_loop(radio_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
-#define RADIO_REGISTER(r_ident,     r_switch,                                                                         \
+#define RADIO_REGISTER(r_ident,     r_switch_in, r_switch_out,                                                        \
                        r_up_addr,   r_up_port,   r_up_capacity,   r_uplink,                                           \
                        r_down_addr, r_down_port, r_down_capacity, r_downlink)                                         \
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity                                                        \
@@ -55,17 +52,15 @@ void radio_downlink_loop(radio_t *radio);
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                      \
                     && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                              \
     extern radio_t r_ident;                                                                                           \
-    TASK_REGISTER(r_ident ## _up_task, radio_uplink_loop, &r_ident, RESTARTABLE);                                     \
+    TASK_REGISTER(r_ident ## _up_task,   radio_uplink_loop,   &r_ident, RESTARTABLE);                                 \
     TASK_REGISTER(r_ident ## _down_task, radio_downlink_loop, &r_ident, RESTARTABLE);                                 \
-    RMAP_ON_SWITCH(r_ident ## _up,     r_switch,           r_up_port,                                                 \
-                   r_up_capacity,      REG_IO_BUFFER_SIZE, r_ident ## _up_task);                                      \
-    RMAP_ON_SWITCH(r_ident ## _down,   r_switch,           r_down_port,                                               \
-                   REG_IO_BUFFER_SIZE, r_down_capacity,    r_ident ## _down_task);                                    \
+    RMAP_ON_SWITCHES(r_ident ## _up,        "radio_up",   r_switch_in, r_switch_out, r_up_port,   r_up_addr,          \
+                     UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);                                                      \
+    RMAP_ON_SWITCHES(r_ident ## _down,      "radio_down", r_switch_in, r_switch_out, r_down_port, r_down_addr,        \
+                     REG_IO_BUFFER_SIZE,    DOWNLINK_BUF_LOCAL_SIZE);                                                 \
     radio_t r_ident = {                                                                                               \
         .rmap_up = &r_ident ## _up,                                                                                   \
         .rmap_down = &r_ident ## _down,                                                                               \
-        .address_up = (r_up_addr),                                                                                    \
-        .address_down = (r_down_addr),                                                                                \
         .bytes_extracted = 0,                                                                                         \
         .up_stream = &r_uplink,                                                                                       \
         .down_stream = &r_downlink,                                                                                   \
@@ -77,6 +72,14 @@ void radio_downlink_loop(radio_t *radio);
         stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                       \
     }                                                                                                                 \
     PROGRAM_INIT(STAGE_CRAFT, r_ident ## _init)
+
+// two RMAP channels, so twice the flow
+#define RADIO_MAX_IO_FLOW (2 * RMAP_MAX_IO_FLOW)
+
+// largest packet size that the switch needs to be able to route
+#define RADIO_MAX_IO_PACKET(r_up_capacity, r_down_capacity)                                                           \
+    /* we know from the earlier assertions that these are the largest values for the capacities */                    \
+    RMAP_MAX_IO_PACKET(r_up_capacity, r_down_capacity)
 
 #define RADIO_UP_SCHEDULE(r_ident)                                                                                    \
     TASK_SCHEDULE(r_ident ## _up_task, 150)

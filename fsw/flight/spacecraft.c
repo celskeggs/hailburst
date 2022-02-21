@@ -3,6 +3,7 @@
 #include <hal/debug.h>
 #include <hal/system.h>
 #include <hal/watchdog.h>
+#include <bus/switch.h>
 #include <flight/command.h>
 #include <flight/heartbeat.h>
 #include <flight/spacecraft.h>
@@ -92,40 +93,51 @@ static const rmap_addr_t clock_routing = {
 static bool initialized = false;
 static spacecraft_t sc;
 
-SWITCH_REGISTER(fce_vswitch);
+// the following line should have the max of all IO packet lengths... since radio is the largest right now, we'll just
+// put that directly (to simplify the macros) and assert that we were right that it was largest, instead of trying to
+// do a compile-time comparison.
+enum {
+    max_bus_packet = RADIO_MAX_IO_PACKET(UPLINK_STREAM_CAPACITY, DOWNLINK_STREAM_CAPACITY),
+};
+static_assert(max_bus_packet >= MAGNETOMETER_MAX_IO_PACKET, "assumption violated about relative sizes of packets");
+static_assert(max_bus_packet >= CLOCK_MAX_IO_PACKET, "assumption violated about relative sizes of packets");
+SWITCH_REGISTER(fce_vout, max_bus_packet);
+SWITCH_REGISTER(fce_vin,  max_bus_packet);
+
 // add physical routes
-SWITCH_ROUTE(fce_vswitch, PADDR_RADIO, VPORT_LINK, false);
-SWITCH_ROUTE(fce_vswitch, PADDR_MAG, VPORT_LINK, false);
-SWITCH_ROUTE(fce_vswitch, PADDR_CLOCK, VPORT_LINK, false);
+SWITCH_ROUTE(fce_vout, PADDR_RADIO, VPORT_LINK, false);
+SWITCH_ROUTE(fce_vout, PADDR_MAG, VPORT_LINK, false);
+SWITCH_ROUTE(fce_vout, PADDR_CLOCK, VPORT_LINK, false);
 // add virtual routes
-SWITCH_ROUTE(fce_vswitch, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
-SWITCH_ROUTE(fce_vswitch, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
-SWITCH_ROUTE(fce_vswitch, VADDR_MAG, VPORT_MAG, false);
-SWITCH_ROUTE(fce_vswitch, VADDR_CLOCK, VPORT_CLOCK, false);
+SWITCH_ROUTE(fce_vin, VADDR_RADIO_UP, VPORT_RADIO_UP, false);
+SWITCH_ROUTE(fce_vin, VADDR_RADIO_DOWN, VPORT_RADIO_DOWN, false);
+SWITCH_ROUTE(fce_vin, VADDR_MAG, VPORT_MAG, false);
+SWITCH_ROUTE(fce_vin, VADDR_CLOCK, VPORT_CLOCK, false);
 
 static const fw_link_options_t exchange_options = {
     .label = "bus",
     .path  = "/dev/vport0p1",
     .flags = FW_FLAG_VIRTIO,
 };
-FAKEWIRE_EXCHANGE_ON_SWITCH(fce_fw_exchange, exchange_options, fce_vswitch, VPORT_LINK);
+FAKEWIRE_EXCHANGE_ON_SWITCHES(fce_fw_exchange, exchange_options, fce_vin, fce_vout, VPORT_LINK,
+                              RADIO_MAX_IO_FLOW + MAGNETOMETER_MAX_IO_FLOW + CLOCK_MAX_IO_FLOW, max_bus_packet);
 
-CLOCK_REGISTER(sc_clock, clock_routing, fce_vswitch, VPORT_CLOCK);
+CLOCK_REGISTER(sc_clock, clock_routing, fce_vin, fce_vout, VPORT_CLOCK);
 
 STREAM_REGISTER(sc_uplink_stream, UPLINK_STREAM_CAPACITY);
 STREAM_REGISTER(sc_downlink_stream, DOWNLINK_STREAM_CAPACITY);
 
-RADIO_REGISTER(sc_radio, fce_vswitch,
+RADIO_REGISTER(sc_radio, fce_vin, fce_vout,
                radio_up_routing,   VPORT_RADIO_UP,   UPLINK_STREAM_CAPACITY,   sc_uplink_stream,
                radio_down_routing, VPORT_RADIO_DOWN, DOWNLINK_STREAM_CAPACITY, sc_downlink_stream);
 
-MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vswitch, VPORT_MAG);
+MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vin, fce_vout, VPORT_MAG);
 
 COMMAND_REGISTER(sc_cmd, sc);
 
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
-    SWITCH_SCHEDULE(fce_vswitch)
+    SWITCH_SCHEDULE(fce_vin)
     RADIO_UP_SCHEDULE(sc_radio)
     COMMAND_SCHEDULE(sc_cmd)
     MAGNETOMETER_SCHEDULE(sc_mag)
@@ -133,7 +145,7 @@ TASK_SCHEDULING_ORDER(
     CLOCK_SCHEDULE(sc_clock)
     HEARTBEAT_SCHEDULE()
     RADIO_DOWN_SCHEDULE(sc_radio)
-    SWITCH_SCHEDULE(fce_vswitch)
+    SWITCH_SCHEDULE(fce_vout)
     SYSTEM_MAINTENANCE_SCHEDULE()
 );
 

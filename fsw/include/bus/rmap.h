@@ -41,61 +41,61 @@ typedef enum {
     RS_OK                  = 0x000,
     RS_REMOTE_ERR_MIN      = 0x001,
     RS_REMOTE_ERR_MAX      = 0x0FF,
-    RS_TRANSACTION_TIMEOUT = 0x100,
-    RS_TRANSMIT_TIMEOUT    = 0x101,
-    RS_TRANSMIT_BLOCKED    = 0x102,
-    RS_READ_LENGTH_DIFFERS = 0x103,
+    RS_NO_RESPONSE         = 0x100,
+    RS_READ_LENGTH_DIFFERS = 0x101,
     RS_INVALID_ERR         = 0xFFF, // used as a marker for error variables
 } rmap_status_t;
 
 typedef struct {
-    thread_t client_task;
-    chart_t *rx_chart;
-    chart_t *tx_chart;
+    const char * const label;
+    duct_t     * const rx_duct;
+    duct_t     * const tx_duct;
+    uint8_t    * const scratch;
 
-    uint8_t *body_pointer;
-    bool     lingering_read;
+    const rmap_addr_t * const routing;
 
-    uint8_t            current_txn_flags;
-    uint16_t           current_txn_id;
-    const rmap_addr_t *current_routing;
+    uint16_t current_txn_id;
 } rmap_t;
+
+// maximum flow needed by an RMAP handler is one packet per epoch in each direction (for continuous operation)
+#define RMAP_MAX_IO_FLOW        1
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
-#define RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_receive, r_transmit, r_client_task) \
-    CHART_REGISTER(r_receive, io_rx_pad_size(SCRATCH_MARGIN_READ + r_max_read), 2);           \
-    CHART_REGISTER(r_transmit, io_rx_pad_size(SCRATCH_MARGIN_WRITE + r_max_write), 2);        \
-    rmap_t r_ident = {                                                                        \
-        .client_task = &r_client_task,                                                        \
-        .rx_chart = &r_receive,                                                               \
-        .tx_chart = &r_transmit,                                                              \
-    };                                                                                        \
-    CHART_SERVER_NOTIFY(r_receive, local_rouse, &r_client_task);                              \
-    CHART_CLIENT_NOTIFY(r_transmit, local_rouse, &r_client_task)
+#define RMAP_ON_SWITCHES(r_ident, r_label, r_switch_in, r_switch_out, r_switch_port, r_routing,                       \
+                         r_max_read, r_max_write)                                                                     \
+    DUCT_REGISTER(r_ident ## _receive,  SWITCH_REPLICAS, 1, RMAP_MAX_IO_FLOW, SCRATCH_MARGIN_READ  + r_max_read,      \
+                  DUCT_SENDER_FIRST);                                                                                 \
+    DUCT_REGISTER(r_ident ## _transmit, 1, SWITCH_REPLICAS, RMAP_MAX_IO_FLOW, SCRATCH_MARGIN_WRITE + r_max_write,     \
+                  DUCT_SENDER_FIRST);                                                                                 \
+    SWITCH_PORT_INBOUND(r_switch_out, r_switch_port, r_ident ## _transmit);                                           \
+    SWITCH_PORT_OUTBOUND(r_switch_in, r_switch_port, r_ident ## _receive);                                            \
+    uint8_t r_ident ## _scratch[RMAP_MAX_IO_PACKET(r_max_read, r_max_write)];                                         \
+    rmap_t r_ident = {                                                                                                \
+        .label = (r_label),                                                                                           \
+        .rx_duct = &r_ident ## _receive,                                                                              \
+        .tx_duct = &r_ident ## _transmit,                                                                             \
+        .scratch = r_ident ## _scratch,                                                                               \
+        .routing = &(r_routing),                                                                                      \
+    }
 
-#define RMAP_ON_SWITCH(r_ident, r_switch, r_switch_port, r_max_read, r_max_write, r_client_task)                      \
-    RMAP_REGISTER(r_ident, r_max_read, r_max_write, r_ident ## _receive, r_ident ## _transmit, r_client_task);        \
-    SWITCH_PORT(r_switch, r_switch_port, r_ident ## _transmit, r_ident ## _receive)
+#define RMAP_MAX_IO_PACKET(r_max_read, r_max_write)                                                                   \
+    PP_CONST_MAX(SCRATCH_MARGIN_READ + (r_max_read), SCRATCH_MARGIN_WRITE + (r_max_write))
 
-// returns a pointer into which up to max_write_length bytes can be written.
-rmap_status_t rmap_write_prepare(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                                 uint8_t ext_addr, uint32_t main_addr, uint8_t **ptr_out);
-// performs a prepared write, with the specified data length.
-rmap_status_t rmap_write_commit(rmap_t *rmap, size_t data_length, uint64_t *ack_timestamp_out);
-// performs a complete write
-rmap_status_t rmap_write_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                               uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *input,
-                               uint64_t *ack_timestamp_out);
-// performs a read of up to a certain size, and outputs the actual size and a pointer to the received data.
-// the pointer will be valid until the next call to any rmap function on this context.
-rmap_status_t rmap_read_fetch(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t *length, uint8_t **ptr_out,
-                              uint64_t *timestamp_out);
-// performs a read of up to a certain size, and copies the result into the specified buffer
-rmap_status_t rmap_read_exact(rmap_t *rmap, const rmap_addr_t *routing, rmap_flags_t flags,
-                              uint8_t ext_addr, uint32_t main_addr, size_t length, uint8_t *output,
-                              uint64_t *timestamp_out);
+// must be called every epoch before any uses of RMAP have been made, even if RMAP won't be used.
+void rmap_epoch_prepare(rmap_t *rmap);
+// must be called every epoch after all uses of RMAP have been completed, even if RMAP didn't get used.
+void rmap_epoch_commit(rmap_t *rmap);
+
+// uses ACKNOWLEDGE | VERIFY | INCREMENT flags
+void rmap_write_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t length);
+// this should be called one epoch later, to give the networking infrastructure time to respond
+rmap_status_t rmap_write_complete(rmap_t *rmap, uint64_t *ack_timestamp_out);
+
+// uses INCREMENT flag
+void rmap_read_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, size_t length);
+// this should be called one epoch later, to give the networking infrastructure time to respond
+rmap_status_t rmap_read_complete(rmap_t *rmap, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out);
 
 // helper functions for main code (defined in rmap_helpers.c)
 uint8_t rmap_crc8(uint8_t *bytes, size_t len);

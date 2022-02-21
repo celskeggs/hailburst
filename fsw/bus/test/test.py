@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 N = 2000
-MAXPROC = 200
+MAXPROC = 25
 
 if (len(sys.argv) > 3 or
         (len(sys.argv) >= 2 and not sys.argv[1].isdigit()) or

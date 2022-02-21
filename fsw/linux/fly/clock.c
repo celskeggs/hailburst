@@ -20,30 +20,9 @@ enum {
     REG_MAGIC  = 0x00,
     REG_CLOCK  = 0x04,
     REG_ERRORS = 0x0C,
-
-    TRANSACTION_RETRIES = 100,
-
-    CLOCK_RS_NOT_ALIGNED    = 1,
-    CLOCK_RS_INVALID_ADDR   = 2,
-    CLOCK_RS_INVALID_VALUE  = 3,
-    CLOCK_RS_INVALID_LENGTH = 4,
-    CLOCK_RS_CORRUPT_DATA   = 5,
 };
 
 static bool clock_calibrated = false;
-
-static bool clock_read_register(clock_device_t *device, uint32_t reg, void *output, size_t len, uint64_t *time_out) {
-    assert(device != NULL);
-    rmap_status_t status;
-
-    RETRY(TRANSACTION_RETRIES, "clock register %u read, error=0x%03x", reg, status) {
-        status = rmap_read_exact(device->rmap, &device->address, RF_INCREMENT, 0x00, reg, len, output, time_out);
-        if (status == RS_OK) {
-            return true;
-        }
-    }
-    return false;
-}
 
 void clock_wait_for_calibration(void) {
     while (!atomic_load(clock_calibrated)) {
@@ -54,30 +33,11 @@ void clock_wait_for_calibration(void) {
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
-void clock_start_main(clock_device_t *clock) {
-    assert(clock != NULL);
-    assert(!clock_calibrated);
-
-    // validate that this is actually a clock
-    uint32_t magic_num = 0;
-    if (!clock_read_register(clock, REG_MAGIC, &magic_num, sizeof(magic_num), NULL)) {
-        abortf("Could not read magic number from clock.");
-    }
-    magic_num = be32toh(magic_num);
-    assert(magic_num == CLOCK_MAGIC_NUM);
-
-    uint64_t ref_time_sampled, local_time_postsampled = 0;
-    // sample once remotely and once locally
-    if (!clock_read_register(clock, REG_CLOCK, &ref_time_sampled, sizeof(ref_time_sampled), &local_time_postsampled)) {
-        abortf("Could not sample current time from clock.");
-    }
-
-    ref_time_sampled = be64toh(ref_time_sampled);
-
-    debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, ref_time_sampled, local_time_postsampled);
+static void clock_configure(uint64_t received_timestamp, uint64_t network_timestamp) {
+    debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, received_timestamp, network_timestamp);
 
     // now compute the appropriate offset
-    clock_offset_adj = ref_time_sampled - local_time_postsampled;
+    clock_offset_adj = received_timestamp - network_timestamp;
 
     // notify anyone waiting
     atomic_store(clock_calibrated, true);
@@ -85,4 +45,81 @@ void clock_start_main(clock_device_t *clock) {
 
     // and log our success, which will include a time using our new adjustment
     tlm_clock_calibrated(&clock_telemetry, clock_offset_adj);
+}
+
+enum clock_state {
+    CLOCK_INITIAL_STATE,
+    CLOCK_READ_MAGIC_NUMBER,
+    CLOCK_READ_CURRENT_TIME,
+    CLOCK_IDLE,
+};
+
+void clock_start_main(clock_device_t *clock) {
+    assert(clock != NULL);
+    assert(!clock_calibrated);
+
+    enum clock_state state = CLOCK_INITIAL_STATE;
+
+    rmap_status_t status;
+    uint32_t magic_number;
+    uint64_t received_timestamp;
+    uint64_t network_timestamp;
+
+    // this thread only does one thing during init, and then sits there doing nothing for the rest of the time.
+    // TODO: can we reclaim this resource?
+
+    for (;;) {
+        rmap_epoch_prepare(clock->rmap);
+
+        switch (state) {
+        case CLOCK_READ_MAGIC_NUMBER:
+            status = rmap_read_complete(clock->rmap, (uint8_t*) &magic_number, sizeof(magic_number), NULL);
+            if (status == RS_OK) {
+                magic_number = be32toh(magic_number);
+                if (magic_number != CLOCK_MAGIC_NUM) {
+                    abortf("Clock sent incorrect magic number.");
+                }
+                state = CLOCK_READ_CURRENT_TIME;
+            } else {
+                debugf(WARNING, "Failed to query clock magic number, error=0x%03x", status);
+            }
+            break;
+        case CLOCK_READ_CURRENT_TIME:
+            status = rmap_read_complete(clock->rmap, (uint8_t*) &received_timestamp, sizeof(received_timestamp),
+                                        &network_timestamp);
+            if (status == RS_OK) {
+                received_timestamp = be64toh(received_timestamp);
+
+                clock_configure(received_timestamp, network_timestamp);
+
+                state = CLOCK_IDLE;
+            } else {
+                debugf(WARNING, "Failed to query clock current time, error=0x%03x", status);
+            }
+            break;
+        default:
+            /* nothing to do */
+            break;
+        }
+
+        if (state == CLOCK_INITIAL_STATE) {
+            state = CLOCK_READ_MAGIC_NUMBER;
+        }
+
+        switch (state) {
+        case CLOCK_READ_MAGIC_NUMBER:
+            rmap_read_start(clock->rmap, 0x00, REG_MAGIC, sizeof(magic_number));
+            break;
+        case CLOCK_READ_CURRENT_TIME:
+            rmap_read_start(clock->rmap, 0x00, REG_CLOCK, sizeof(received_timestamp));
+            break;
+        default:
+            /* nothing to do */
+            break;
+        }
+
+        rmap_epoch_commit(clock->rmap);
+
+        task_yield();
+    }
 }

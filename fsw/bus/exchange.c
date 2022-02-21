@@ -8,6 +8,10 @@
 #include <hal/thread.h>
 #include <bus/exchange.h>
 
+enum {
+    EXCHANGE_REPLICA_ID = 0,
+};
+
 //#define EXCHANGE_DEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, exc->conf->label, ## __VA_ARGS__)
@@ -18,22 +22,20 @@ static void rand_init(void) {
 }
 PROGRAM_INIT(STAGE_RAW, rand_init);
 
-// random interval in the range [3ms, 10ms)
-static uint64_t handshake_period(void) {
-    uint64_t ms = 1000 * 1000;
-    return (rand() % (7 * ms)) + 3 * ms;
+// random interval in the range [1 tick, 5 ticks]
+static uint32_t handshake_period_ticks(void) {
+    return rand() % 4 + 1;
 }
 
-static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t *conf, uint64_t next_timeout) {
+static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t *conf, uint32_t countdown_timeout) {
     assert(exc != NULL && conf != NULL);
 
     exc->conf = conf;
 
     exc->exc_state    = FW_EXC_CONNECTING;
     exc->recv_state   = FW_RECV_LISTENING;
-    exc->txmit_state  = FW_TXMIT_IDLE;
 
-    exc->next_timeout = next_timeout;
+    exc->countdown_timeout = countdown_timeout;
 
     exc->send_handshake_id = 0;
     exc->recv_handshake_id = 0;
@@ -48,50 +50,37 @@ static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t 
     exc->resend_fcts = false;
     exc->resend_pkts = false;
 
-    exc->read_entry   = NULL;
-    exc->write_entry  = NULL;
-    exc->write_offset = 0;
+    exc->read_offset = 0;
+    exc->read_timestamp = 0;
+    exc->write_needs_error = false;
 }
 
 static void exchange_instance_reset(exchange_instance_t *exc) {
     assert(exc != NULL);
-    exchange_instance_configure(exc, exc->conf, exc->next_timeout);
+    exchange_instance_configure(exc, exc->conf, exc->countdown_timeout);
 }
 
-static void exchange_instance_doze(exchange_instance_t *exc) {
+static void exchange_instance_check_timers(exchange_instance_t *exc) {
     assert(exc != NULL);
 
-    // if we've gotten a notification already, don't bother figuring out a specific way to doze
-    if (task_doze_try()) {
-        return;
+    // check timers now
+    if (exc->countdown_timeout > 0) {
+        exc->countdown_timeout -= 1;
     }
-
-    // flush encoder before we sleep
-    fakewire_enc_flush(&exc->encoder);
-
-    if (exc->exc_state == FW_EXC_OPERATING && (!exc->resend_fcts || !exc->resend_pkts)) {
-        // do a timed wait, so that we can send heartbeats when it's an appropriate time
-        if (!task_doze_timed_abs(exc->next_timeout)) {
-            assert(clock_timestamp_monotonic() >= exc->next_timeout);
-
+    if (exc->countdown_timeout == 0) {
+        if (exc->exc_state == FW_EXC_OPERATING) {
+            // send heartbeats
             exc->resend_fcts = true;
             exc->resend_pkts = true;
 
-            exc->next_timeout = clock_timestamp_monotonic() + handshake_period();
-        }
-    } else if ((exc->exc_state == FW_EXC_HANDSHAKING || exc->exc_state == FW_EXC_CONNECTING)
-                    && !exc->send_primary_handshake) {
-        // do a timed wait, so that we can send a fresh handshake when it's an appropriate time
-        if (!task_doze_timed_abs(exc->next_timeout)) {
-            assert(clock_timestamp_monotonic() >= exc->next_timeout);
-
+            exc->countdown_timeout = handshake_period_ticks();
+        } else if (exc->exc_state == FW_EXC_HANDSHAKING || exc->exc_state == FW_EXC_CONNECTING) {
+            // send a fresh handshake
             exc->send_primary_handshake = true;
 
-            exc->next_timeout = clock_timestamp_monotonic() + handshake_period();
-            debug_printf(DEBUG, "Next handshake scheduled for " TIMEFMT, TIMEARG(exc->next_timeout));
+            exc->countdown_timeout = handshake_period_ticks();
+            debug_printf(DEBUG, "Next handshake scheduled for %u ticks in the future", exc->countdown_timeout);
         }
-    } else {
-        task_doze();
     }
 }
 
@@ -156,31 +145,33 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
         }
         assert(exc->recv_state == FW_RECV_LISTENING);
 
-        assert(exc->read_entry == NULL);
-        exc->read_entry = chart_request_start(exc->conf->read_chart);
-        assert(exc->read_entry != NULL);
-        exc->read_entry->actual_length = 0;
-        exc->read_entry->receive_timestamp = receive_timestamp;
+        // should always be allowed, because the number of fcts we send are based on the max flow rate
+        assert(duct_send_allowed(exc->conf->read_duct, EXCHANGE_REPLICA_ID));
+
+        // reset receive state and buffer before proceeding
+        exc->read_offset = 0;
+        // Had to disable this memset because it was too slow to be practical.
+        // memset(exc->conf->read_buffer, 0, exc->conf->buffers_length);
+        exc->read_timestamp = receive_timestamp;
 
         exc->recv_state = FW_RECV_RECEIVING;
         exc->pkts_rcvd += 1;
-        // reset receive buffer before proceeding
-        memset(exc->read_entry->data, 0, io_rx_size(exc->conf->read_chart));
         break;
     case FWC_END_PACKET:
         if (exc->recv_state == FW_RECV_OVERFLOWED) {
             // discard state and get ready for another packet
             exc->recv_state = FW_RECV_LISTENING;
-            exc->read_entry = NULL;
-        } else if (exc->recv_state == FW_RECV_RECEIVING) {
-            assert(exc->read_entry != NULL);
-            // notify read task that data is ready to consume
-            chart_request_send(exc->conf->read_chart, 1);
-            exc->recv_state = FW_RECV_LISTENING;
-            exc->read_entry = NULL;
-        } else {
+        } else if (exc->recv_state != FW_RECV_RECEIVING) {
             debug_printf(WARNING, "Hit unexpected END_PACKET in receive state %d; resetting.", exc->recv_state);
             exchange_instance_reset(exc);
+        } else if (exc->read_offset == 0) {
+            debug_printf(WARNING, "Packet of length 0 received; discarding.");
+            exc->recv_state = FW_RECV_LISTENING;
+        } else {
+            // transmit received packet through duct
+            duct_send_message(exc->conf->read_duct, EXCHANGE_REPLICA_ID,
+                              exc->conf->read_buffer, exc->read_offset, exc->read_timestamp);
+            exc->recv_state = FW_RECV_LISTENING;
         }
         break;
     case FWC_ERROR_PACKET:
@@ -191,7 +182,6 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
         }
         // discard state and get ready for another packet
         exc->recv_state = FW_RECV_LISTENING;
-        exc->read_entry = NULL;
         break;
     case FWC_FLOW_CONTROL:
         if (param < exc->fcts_rcvd) {
@@ -220,6 +210,10 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
         debug_printf(WARNING, "Unexpected %s(0x%08x) during OPERATING mode; resetting.",
                      fakewire_codec_symbol(symbol), param);
         exchange_instance_reset(exc);
+        if (symbol == FWC_HANDSHAKE_1) {
+            // special case: process received handshakes immediately
+            exchange_recv_ctrl_char_while_connecting(exc, symbol, param);
+        }
     }
 }
 
@@ -262,19 +256,19 @@ static void exchange_instance_receive_data_chars(exchange_instance_t *exc, uint8
         debug_printf(WARNING, "Received at least %zu unexpected data characters during state (exc=%d, recv=%d); "
                      "resetting.", data_len, exc->exc_state, exc->recv_state);
         exchange_instance_reset(exc);
-    } else if (exc->read_entry->actual_length >= io_rx_size(exc->conf->read_chart)) {
+    } else if (exc->read_offset >= exc->conf->buffers_length) {
         assert(data_in == NULL);
-        debug_printf(WARNING, "Packet exceeded buffer size %u (at least %u + %zu bytes); discarding.",
-                     io_rx_size(exc->conf->read_chart), exc->read_entry->actual_length, data_len);
+        debug_printf(WARNING, "Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
+                     exc->conf->buffers_length, exc->read_offset, data_len);
         exc->recv_state = FW_RECV_OVERFLOWED;
     } else {
         assert(data_in != NULL);
-        assert(exc->read_entry->actual_length + data_len <= io_rx_size(exc->conf->read_chart));
+        assert(exc->read_offset + data_len <= exc->conf->buffers_length);
 #ifdef EXCHANGE_DEBUG
         debug_printf(TRACE, "Received %zu regular data bytes.", data_len);
 #endif
-        exc->read_entry->actual_length += data_len;
-        assert(exc->read_entry->actual_length <= io_rx_size(exc->conf->read_chart));
+        exc->read_offset += data_len;
+        assert(exc->read_offset <= exc->conf->buffers_length);
     }
 }
 
@@ -287,9 +281,9 @@ static bool exchange_instance_receive(exchange_instance_t *exc) {
 
     // UNLESS we have somewhere we can put that data, in which case put it there
     if (exc->exc_state == FW_EXC_OPERATING && exc->recv_state == FW_RECV_RECEIVING
-            && exc->read_entry->actual_length < io_rx_size(exc->conf->read_chart)) {
-        rx_ent.data_out     = exc->read_entry->data + exc->read_entry->actual_length;
-        rx_ent.data_max_len = io_rx_size(exc->conf->read_chart) - exc->read_entry->actual_length;
+            && exc->read_offset < exc->conf->buffers_length) {
+        rx_ent.data_out     = exc->conf->read_buffer + exc->read_offset;
+        rx_ent.data_max_len = exc->conf->buffers_length - exc->read_offset;
     }
 
     if (!fakewire_dec_decode(&exc->decoder, &rx_ent)) {
@@ -313,7 +307,7 @@ static bool exchange_instance_receive(exchange_instance_t *exc) {
 static void exchange_instance_check_fcts(exchange_instance_t *exc) {
     assert(exc != NULL);
 
-    uint32_t not_yet_received = chart_request_avail(exc->conf->read_chart);
+    uint32_t not_yet_received = duct_max_flow(exc->conf->read_duct);
     if (exc->recv_state != FW_RECV_LISTENING) {
         not_yet_received -= 1;
     }
@@ -328,7 +322,7 @@ static void exchange_instance_check_fcts(exchange_instance_t *exc) {
         exc->resend_fcts = true;
         exc->resend_pkts = true;
 
-        exc->next_timeout = clock_timestamp_monotonic() + handshake_period();
+        exc->countdown_timeout = handshake_period_ticks();
     }
 }
 
@@ -355,6 +349,20 @@ static void exchange_instance_transmit_tokens(exchange_instance_t *exc) {
 static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
     assert(exc != NULL);
 
+    if (exc->send_secondary_handshake
+            && fakewire_enc_encode_ctrl(&exc->encoder, FWC_HANDSHAKE_2, exc->recv_handshake_id)) {
+        assert(exc->exc_state == FW_EXC_CONNECTING);
+
+        exc->exc_state = FW_EXC_OPERATING;
+        exc->send_primary_handshake = false;
+        exc->send_secondary_handshake = false;
+
+        debug_printf(DEBUG, "Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
+                     exc->recv_handshake_id);
+
+        exc->countdown_timeout = handshake_period_ticks();
+    }
+
     if (exc->send_primary_handshake) {
         assert(exc->exc_state == FW_EXC_HANDSHAKING || exc->exc_state == FW_EXC_CONNECTING);
 
@@ -372,80 +380,61 @@ static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
                          gen_handshake_id);
         }
     }
-
-    if (exc->send_secondary_handshake
-            && fakewire_enc_encode_ctrl(&exc->encoder, FWC_HANDSHAKE_2, exc->recv_handshake_id)) {
-        assert(exc->exc_state == FW_EXC_CONNECTING);
-
-        exc->exc_state = FW_EXC_OPERATING;
-        exc->send_primary_handshake = false;
-        exc->send_secondary_handshake = false;
-
-        debug_printf(DEBUG, "Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
-                     exc->recv_handshake_id);
-
-        exc->next_timeout = clock_timestamp_monotonic() + handshake_period();
-    }
 }
 
-static bool exchange_instance_transmit_data(exchange_instance_t *exc) {
+static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t length) {
     assert(exc != NULL);
 
-    if (exc->txmit_state == FW_TXMIT_IDLE) {
-        assert(exc->write_entry == NULL);
-        exc->write_entry = chart_reply_start(exc->conf->write_chart);
-        if (exc->write_entry == NULL) {
-            // no more write requests remaining
+    if (exc->exc_state != FW_EXC_OPERATING) {
+        // can't transmit anything until we're in the operating state. drop packets instead.
+        return false;
+    }
+
+    if (exc->write_needs_error) {
+        // if we weren't able to transmit the whole last packet, then we need to make sure to transmit ERROR_PACKET to
+        // make sure the remote end drops it instead of trying to process it.
+        if (fakewire_enc_encode_ctrl(&exc->encoder, FWC_ERROR_PACKET, 0)) {
+            exc->write_needs_error = false;
+        } else {
+            debugf(TRACE, "Transmit buffer is full.");
             return false;
         }
+    }
 
-        assert(exc->write_entry->actual_length > 0);
+    if (exc->pkts_sent >= exc->fcts_rcvd) {
+        // no flow control tokens received; can't transmit any packets yet. drop them instead.
+        debugf(TRACE, "No more flow control tokens available.");
+        return false;
+    }
+    if (!fakewire_enc_encode_ctrl(&exc->encoder, FWC_START_PACKET, 0)) {
+        // no room to write START_PACKET; drop the packet and try again next epoch.
+        debugf(TRACE, "Transmit buffer is full.");
+        return false;
+    }
+
+    // sent a START_PACKET, so increment pkts_sent.
+    exc->pkts_sent++;
+
+    size_t actually_written = fakewire_enc_encode_data(&exc->encoder, exc->conf->write_buffer, length);
+    if (actually_written < length) {
+        // not enough room to finish writing the whole packet at once; drop it.
+        exc->write_needs_error = true;
+        debugf(TRACE, "Transmit buffer is either full or not large enough.");
+        return false;
+    }
+
+    if (!fakewire_enc_encode_ctrl(&exc->encoder, FWC_END_PACKET, 0)) {
+        // no room to write END_PACKET; drop it. (disappointing, but the alternative is transmitting a packet late.)
+        exc->write_needs_error = true;
+        debugf(TRACE, "Transmit buffer is full.");
+        return false;
+    }
+
 #ifdef EXCHANGE_DEBUG
-        debug_printf(TRACE, "Received packet (len=%u) to transmit.", exc->write_entry->actual_length);
+    debug_printf(TRACE, "Transmitted packet (len=%u).", length);
 #endif
-        exc->write_offset = 0;
-        exc->txmit_state = FW_TXMIT_HEADER;
-    }
 
-    if (exc->exc_state == FW_EXC_OPERATING && exc->txmit_state == FW_TXMIT_HEADER && exc->pkts_sent < exc->fcts_rcvd
-            && fakewire_enc_encode_ctrl(&exc->encoder, FWC_START_PACKET, 0)) {
-        assert(exc->write_entry != NULL && exc->write_offset == 0);
-
-        exc->txmit_state = FW_TXMIT_BODY;
-        exc->pkts_sent++;
-    }
-
-    if (exc->exc_state == FW_EXC_OPERATING && exc->txmit_state == FW_TXMIT_BODY) {
-        assert(exc->write_entry != NULL && exc->write_offset < exc->write_entry->actual_length);
-
-        size_t actually_written = fakewire_enc_encode_data(&exc->encoder, exc->write_entry->data + exc->write_offset,
-                                                           exc->write_entry->actual_length - exc->write_offset);
-        if (actually_written + exc->write_offset == exc->write_entry->actual_length) {
-            exc->txmit_state = FW_TXMIT_FOOTER;
-        } else {
-            assert(actually_written < exc->write_entry->actual_length - exc->write_offset);
-            exc->write_offset += actually_written;
-        }
-    }
-
-    if (exc->exc_state == FW_EXC_OPERATING && exc->txmit_state == FW_TXMIT_FOOTER
-            && fakewire_enc_encode_ctrl(&exc->encoder, FWC_END_PACKET, 0)) {
-        assert(exc->write_entry != NULL);
-
-        // respond to writer
-#ifdef EXCHANGE_DEBUG
-        debug_printf(TRACE, "Finished transmitting packet (len=%u).", exc->write_entry->actual_length);
-#endif
-        chart_reply_send(exc->conf->write_chart, 1);
-
-        // reset our state
-        exc->txmit_state = FW_TXMIT_IDLE;
-        exc->write_entry = NULL;
-        exc->write_offset = 0;
-    }
-
-    // if we didn't get to idle, stop; we can't make any more progress right now.
-    return exc->txmit_state == FW_TXMIT_IDLE;
+    return true;
 }
 
 void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
@@ -453,25 +442,49 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
     exchange_instance_t *exc = conf->instance;
     assert(exc != NULL);
 
-    uint64_t first_timeout = clock_timestamp_monotonic() + handshake_period();
-
     memset(exc, 0, sizeof(*exc));
-    exchange_instance_configure(exc, conf, first_timeout);
+    exchange_instance_configure(exc, conf, handshake_period_ticks());
     fakewire_enc_init(&exc->encoder, conf->transmit_chart);
     fakewire_dec_init(&exc->decoder, conf->receive_chart);
 
-    debug_printf(DEBUG, "First handshake scheduled for " TIMEFMT, TIMEARG(first_timeout));
+    debug_printf(DEBUG, "First handshake scheduled for %u ticks in the future", exc->countdown_timeout);
 
     while (true) {
-        exchange_instance_doze(exc);
-
         exchange_instance_check_invariants(exc);
 
+        duct_receive_prepare(exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+
+        duct_flow_index dropped = 0;
+        size_t packet_length;
+        assert(exc->conf->buffers_length == duct_message_size(exc->conf->write_duct));
+        while (0 != (packet_length = duct_receive_message(exc->conf->write_duct, EXCHANGE_REPLICA_ID,
+                                                          exc->conf->write_buffer, NULL))) {
+            assert(0 < packet_length && packet_length <= exc->conf->buffers_length);
+            if (!exchange_instance_transmit_data(exc, packet_length)) {
+                dropped++;
+            }
+        }
+        if (dropped) {
+            debug_printf(WARNING, "Dropped %u packets blocked from transmission.", dropped);
+        }
+
+        duct_receive_commit(exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+
+        // flush encoder before we sleep
+        fakewire_enc_flush(&exc->encoder);
+
+        // wait until we're scheduled again
+        task_yield();
+
+        exchange_instance_check_timers(exc);
+
+        duct_send_prepare(exc->conf->read_duct, EXCHANGE_REPLICA_ID);
         // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
         // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
         while (exchange_instance_receive(exc)) {
             // keep looping
         }
+        duct_send_commit(exc->conf->read_duct, EXCHANGE_REPLICA_ID);
 
         exchange_instance_check_fcts(exc);
 
@@ -479,11 +492,7 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
 
         exchange_instance_transmit_handshakes(exc);
 
-        // we want to keep trying to transmit until we either a) run out of pending write requests, or b) run out of
-        // encoding buffer space to write those requests. That way, we can be guaranteed that there will be a wakeup
-        // pending if there's anything more to do.
-        while (exchange_instance_transmit_data(exc)) {
-            // keep looping
-        }
+        // wait until we're scheduled again before we try to receive
+        task_yield();
     }
 }

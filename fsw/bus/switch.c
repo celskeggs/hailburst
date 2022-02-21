@@ -8,18 +8,13 @@
 //#define SWITCH_DEBUG
 
 // returns TRUE if packet is consumed.
-static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, struct io_rx_ent *entry,
-                          chart_t **outbound_out) {
-    // make sure we have a destination
-    if (entry->actual_length == 0) {
-        debugf(WARNING, "Switch port %u: dropping empty packet.", port);
-        return true;
-    }
-    uint8_t destination = entry->data[0];
+static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
+                          size_t message_size, uint64_t timestamp, uint8_t *message_buffer) {
+    uint8_t destination = message_buffer[0];
     if (destination < SWITCH_PORT_BASE) {
-        debugf(WARNING, "Switch port %u: dropping packet (len=%u) to invalid address %u.",
-               port, entry->actual_length, destination);
-        return true;
+        debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) to invalid address %u.",
+               replica_id, port, message_size, destination);
+        return;
     }
     bool address_pop = true;
     int outport = destination;
@@ -27,9 +22,9 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
         assert(destination - SWITCH_ROUTE_BASE < SWITCH_ROUTES);
         uint8_t route = sw->routing_table[destination - SWITCH_ROUTE_BASE];
         if (!(route & SWITCH_ROUTE_FLAG_ENABLED)) {
-            debugf(WARNING, "Switch port %u: dropping packet (len=%u) to nonexistent route %u.",
-                   port, entry->actual_length, destination);
-            return true;
+            debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) to nonexistent route %u.",
+                   replica_id, port, message_size, destination);
+            return;
         }
         if (!(route & SWITCH_ROUTE_FLAG_POP)) {
             address_pop = false;
@@ -38,89 +33,98 @@ static bool switch_packet(switch_t *sw, int port, chart_index_t avail_count, str
         assert(SWITCH_PORT_BASE <= outport && outport < SWITCH_PORT_BASE + SWITCH_PORTS);
     }
     assert(SWITCH_PORT_BASE <= outport && outport < SWITCH_PORT_BASE + SWITCH_PORTS);
-    chart_t *outbound = atomic_load(sw->ports_outbound[outport - SWITCH_PORT_BASE]);
+    duct_t *outbound = sw->ports_outbound[outport - SWITCH_PORT_BASE];
     if (!outbound) {
+        debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) to nonexistent port %u (address=%u).",
+               replica_id, port, message_size, outport, destination);
+        return;
+    }
+    if (!duct_send_allowed(outbound, replica_id)) {
         debugf(WARNING,
-               "Switch port %u: dropping packet (len=%u) to nonexistent port %u (address=%u).",
-               port, entry->actual_length, outport, destination);
-        return true;
+               "Switch replica %u port %u: dropped packet (len=%zu) violating max flow rate to port %u (address=%u).",
+               replica_id, port, message_size, outport, destination);
+        return;
     }
-    struct io_rx_ent *entry_out = chart_request_start(outbound);
-    if (!entry_out) {
-        // can't send right now.
-
-        // if we have more packets blocked behind this one, we don't want to make them wait for this one to be
-        // sendable. so if we can't forward it, and we have more backed up, then drop it.
-        if (avail_count > 1) {
-            debugf(WARNING, "Switch port %u: dropping packet (len=%u) to backlogged port %u (address=%u).",
-                   port, entry->actual_length, outport, destination);
-            return true;
-        }
-
-        // alternatively, if this is the only packet, we can just wait until delivery is possible. if we get more
-        // packets behind it, and still can't transmit it, then we'll drop it then.
-        debugf(TRACE, "Switch port %u: holding packet (len=%u) until port %u (address=%u) is free.",
-               port, entry->actual_length, outport, destination);
-        return false;
-    }
-    entry_out->receive_timestamp = entry->receive_timestamp;
-    entry_out->actual_length = entry->actual_length;
-    uint8_t *source = entry->data;
     if (address_pop) {
         // drop the first address
-        entry_out->actual_length -= 1;
-        source += 1;
+        message_size -= 1;
+        message_buffer += 1;
+        if (message_size == 0) {
+            debugf(WARNING,
+                   "Switch replica %u port %u: dropped packet (len=%zu) with no data beyond destination address %u.",
+                   replica_id, port, message_size, destination);
+            return;
+        }
     }
-    if (entry_out->actual_length > io_rx_size(outbound)) {
+    assert(message_size > 0);
+    if (message_size > duct_message_size(outbound)) {
         // don't passively accept this; it's likely to cause trouble down the line if left like this. so report it.
-        debugf(WARNING, "Switch port %u: dropping packet (len=%u) due to truncation (maxlen=%u) by "
-               "target port %u (address=%u).", port, entry->actual_length, io_rx_size(outbound), outport, destination);
-        return true;
+        debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) due to truncation (maxlen=%zu) by "
+               "target port %u (address=%u).",
+               replica_id, port, message_size, duct_message_size(outbound), outport, destination);
+        return;
     }
-    memcpy(entry_out->data, entry->data, entry_out->actual_length);
-    // defer chart_request_send(outbound, 1) until chart_reply_send(inbound, 1) has completed. see later.
-    *outbound_out = outbound;
-    debugf(TRACE, "Switch port %u: forwarding packet (len=%u) to destination port %u (address=%u).",
-           port, entry->actual_length, outport, destination);
-    return true;
+    duct_send_message(outbound, replica_id, message_buffer, message_size, timestamp);
+    debugf(TRACE, "Switch replica %u port %u: forwarded packet (len=%zu) to destination port %u (address=%u).",
+           replica_id, port, message_size, outport, destination);
 }
 
-void switch_mainloop_internal(switch_t *sw) {
+void switch_mainloop_internal(const switch_replica_t *sr) {
+    assert(sr != NULL);
+    uint8_t replica_id = sr->replica_id;
+    uint8_t *scratch_buffer = sr->scratch_buffer;
+    assert(scratch_buffer != NULL);
+    switch_t *sw = sr->replica_switch;
     assert(sw != NULL);
 
     for (;;) {
         // attempt to perform transfer for each port
-        struct io_rx_ent *entry;
         unsigned int packets = 0;
+
+        // first, prepare all transactions
         for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-            chart_t *inbound = atomic_load(sw->ports_inbound[port - SWITCH_PORT_BASE]);
-            if (inbound != NULL && (entry = chart_reply_start(inbound)) != NULL) {
-                assert(entry->actual_length <= io_rx_size(inbound));
-                chart_t *outbound = NULL;
-                if (switch_packet(sw, port, chart_reply_avail(inbound), entry, &outbound)) {
-                    chart_reply_send(inbound, 1);
-                    // we have to do this AFTER we acknowledge the original sender... it's much worse for us to
-                    // duplicate a packet than for us to drop a packet! so if we restart between the two sends, we want
-                    // to make sure the packet is dropped, not duplicated.
-                    if (outbound) {
-                        chart_request_send(outbound, 1);
-                    }
+            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+            duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
+            if (inbound != NULL) {
+                duct_receive_prepare(inbound, replica_id);
+            }
+            if (outbound != NULL) {
+                duct_send_prepare(outbound, replica_id);
+            }
+        }
+
+        // now shuffle all messages
+        for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
+            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+            if (inbound != NULL) {
+                uint64_t timestamp = 0;
+                size_t message_size;
+                while ((message_size = duct_receive_message(inbound, replica_id, scratch_buffer, &timestamp)) != 0) {
+                    assert(message_size <= sw->scratch_buffer_size);
+                    switch_packet(sw, replica_id, port, message_size, timestamp, scratch_buffer);
                     packets++;
                 }
             }
         }
-        if (packets > 0) {
-#ifdef SWITCH_DEBUG
-            debugf(TRACE, "Switch routed %u packets; checking to see if there are any more.", packets);
-#endif
-        } else {
-#ifdef SWITCH_DEBUG
-            debugf(TRACE, "Switch dozing; no packets to route right now.");
-#endif
-            task_doze();
-#ifdef SWITCH_DEBUG
-            debugf(TRACE, "Switch roused!");
-#endif
+
+        // finally, commit all transactions
+        for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
+            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+            duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
+            if (inbound != NULL) {
+                duct_receive_commit(inbound, replica_id);
+            }
+            if (outbound != NULL) {
+                duct_send_commit(outbound, replica_id);
+            }
         }
+
+#ifdef SWITCH_DEBUG
+        debugf(TRACE, "Switch routed %u packets in this epoch; waiting until next epoch...", packets);
+#endif
+        task_yield();
+#ifdef SWITCH_DEBUG
+        debugf(TRACE, "Switch woken on next epoch!");
+#endif
     }
 }
