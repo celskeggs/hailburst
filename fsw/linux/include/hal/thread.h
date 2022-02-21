@@ -35,6 +35,7 @@ typedef struct thread_st {
     bool top_rouse;
     bool local_rouse;
     bool scheduler_independent; // used during IO waits
+    pthread_cond_t sched_cond;
 } __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
 
 thread_t task_get_current(void);
