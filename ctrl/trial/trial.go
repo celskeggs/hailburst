@@ -61,7 +61,7 @@ func (opt Options) FswSourceDir() string {
 func (opt Options) BuildLinux() {
 	if opt.Rebuild {
 		log.Printf("Confirming that code can compile outside buildroot")
-		RunBuildCmd(opt.FswSourceDir(), "scons")
+		RunBuildCmd(opt.FswSourceDir(), "scons", "-j4")
 	}
 	if opt.Clean {
 		log.Printf("Cleaning build directory...")
@@ -82,7 +82,7 @@ func (opt Options) BuildFreeRTOS() {
 	}
 	if opt.Rebuild {
 		log.Printf("Rebuilding FSW image...")
-		RunBuildCmd(opt.FswSourceDir(), "scons")
+		RunBuildCmd(opt.FswSourceDir(), "scons", "-j4")
 	}
 }
 
