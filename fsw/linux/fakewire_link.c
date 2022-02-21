@@ -22,14 +22,11 @@ void fakewire_link_rx_loop(fw_link_t *fwl) {
         task_doze();
     }
 
-    task_become_independent();
     while (true) {
         struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
         if (entry == NULL) {
-            task_become_dependent();
             // wait for another entry to be available
             task_doze();
-            task_become_independent();
             continue;
         }
         // read as many bytes as possible from the input port at once
@@ -37,6 +34,10 @@ void fakewire_link_rx_loop(fw_link_t *fwl) {
         size_t max = io_rx_size(fwl->rx_chart);
         ssize_t actual = read(fwl->fd_in, entry->data, max);
 
+        if (actual == -1 && errno == EAGAIN) {
+            task_yield();
+            continue;
+        }
         if (actual <= 0) { // 0 means EOF, <0 means error
             debug_printf(CRITICAL, "Read failed: %zd when maximum was %zu", actual, max);
             break;
@@ -60,28 +61,36 @@ void fakewire_link_tx_loop(fw_link_t *fwl) {
         task_doze();
     }
 
-    task_become_independent();
     while (true) {
         struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
         if (entry == NULL) {
-            task_become_dependent();
             // wait for another entry to be available
             task_doze();
-            task_become_independent();
             continue;
         }
         // read as many bytes as possible from the input port at once
         assert(entry->actual_length > 0 && entry->actual_length <= io_tx_size(fwl->tx_chart));
 
         assert(fwl->fd_out != -1);
-        ssize_t actual = write(fwl->fd_out, entry->data, entry->actual_length);
+        size_t remaining = entry->actual_length;
+        uint8_t *data = entry->data;
+        while (remaining > 0) {
+            ssize_t actual = write(fwl->fd_out, data, remaining);
+            if (actual == -1 && errno == EAGAIN) {
+                task_yield();
+                continue;
+            }
+            if (actual <= 0) {
+                debug_printf(CRITICAL, "Write failed: %zd", actual);
+                break;
+            }
+            assert(0 < actual && actual <= (ssize_t) remaining);
+            remaining -= actual;
+            data += actual;
+        }
 
-        if (actual == (ssize_t) entry->actual_length) {
-#ifdef DEBUG
-            debug_printf(TRACE, "Finished writing %zd bytes to file descriptor.", actual);
-#endif
-        } else {
-            debug_printf(CRITICAL, "Write failed: %zd bytes instead of %u bytes", actual, entry->actual_length);
+        if (remaining == 0) {
+            debug_printf(TRACE, "Finished writing %u bytes to file descriptor.", entry->actual_length);
         }
 
         chart_reply_send(fwl->tx_chart, 1);
@@ -116,12 +125,15 @@ void fakewire_link_configure(fw_link_t *fwl) {
         }
         fwl->fd_in = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
         fwl->fd_out = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
+        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
+        fcntl(fwl->fd_out, F_SETFL, O_NONBLOCK);
     } else if (opts.flags == FW_FLAG_VIRTIO) {
         fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY);
         if (fwl->fd_in < 0) {
             perror("open");
             abortf("Failed to open VIRTIO serial port '%s' for fakewire link.", opts.path);
         }
+        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
     } else {
         assert(opts.flags == FW_FLAG_SERIAL);
         fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY | O_NDELAY);
@@ -129,7 +141,7 @@ void fakewire_link_configure(fw_link_t *fwl) {
             perror("open");
             abortf("Failed to open serial port '%s' for fakewire link.", opts.path);
         }
-        fcntl(fwl->fd_in, F_SETFL, 0);
+        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
 
         struct termios options;
 
