@@ -73,8 +73,11 @@ static inline const char *task_get_name(thread_t task) {
 }
 
 static inline void taskYIELD(void) {
+    uint64_t loads = schedule_loads;
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
-    asm volatile("WFI");
+    do {
+        asm volatile("WFI");
+    } while (loads == schedule_loads);
 }
 
 static inline void task_yield(void) {

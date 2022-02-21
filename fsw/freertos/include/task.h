@@ -105,6 +105,8 @@ typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
 
+extern uint64_t schedule_loads;
+
 void vTaskStartScheduler( void );
 void vTaskSwitchContext( void );
 
