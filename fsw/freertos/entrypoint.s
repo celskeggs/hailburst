@@ -105,7 +105,7 @@ resume_restore_context:
     RFEIA   sp!
 
 
-.align 4
+.align 5
 interrupt_vector_table:
     b .                         @ Reset
     b undef_insn_handler        @ Undefined Instruction
