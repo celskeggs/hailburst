@@ -89,13 +89,16 @@ extern void enter_scheduler(void);
     extern struct thread_st t_ident;
 
 // 'restartable' goes unused on POSIX; it is only used on FreeRTOS
-#define TASK_REGISTER(t_ident, t_start, t_arg, t_restartable)                                                         \
-    __attribute__((section("tasktable"))) __attribute__((__aligned__(16))) struct thread_st t_ident = {               \
-        .name = symbol_str(t_ident),                                                                                  \
-        .start_routine = PP_ERASE_TYPE(t_start, t_arg),                                                               \
-        .start_parameter = (void *) (t_arg),                                                                          \
-        .scheduler_independent = false,                                                                               \
+macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
+    __attribute__((section("tasktable")))
+    __attribute__((__aligned__(16)))
+    struct thread_st t_ident = {
+        .name = symbol_str(t_ident),
+        .start_routine = PP_ERASE_TYPE(t_start, t_arg),
+        .start_parameter = (void *) (t_arg),
+        .scheduler_independent = false,
     }
+}
 
 typedef struct {
     thread_t task;
@@ -105,8 +108,9 @@ typedef struct {
 extern const schedule_entry_t task_scheduling_order[];
 extern const uint32_t         task_scheduling_order_length;
 
-#define TASK_SCHEDULE(t_ident, t_micros)                                          \
+macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     { .task = &(t_ident), .nanos = (t_micros) * 1000 },
+}
 
 #define TASK_SCHEDULING_ORDER(...)                                                \
     const schedule_entry_t task_scheduling_order[] = {                            \

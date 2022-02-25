@@ -19,36 +19,36 @@ typedef TCB_t *thread_t;
 #define TASK_PROTO(t_ident) \
     extern TCB_t t_ident;
 
-#define TASK_REGISTER_INNER(t_ident, t_start, t_arg, t_restartable)                                                   \
-    StackType_t symbol_join(t_ident, stack)[RTOS_STACK_SIZE];                                                         \
-    TCB_mut_t symbol_join(t_ident, mutable) = {                                                                       \
-        .pxTopOfStack    = NULL,                                                                                      \
-        .needs_start     = true,                                                                                      \
-        .hit_restart     = false,                                                                                     \
-        .recursive_exception = false,                                                                                 \
-        .roused_task     = 0,                                                                                         \
-        .roused_local    = 0,                                                                                         \
-    };                                                                                                                \
-    __attribute__((section("tasktable"))) TCB_t t_ident = {                                                           \
-        .mut             = &symbol_join(t_ident, mutable),                                                            \
-        .start_routine   = PP_ERASE_TYPE(t_start, t_arg),                                                             \
-        .start_arg       = (void *) t_arg,                                                                            \
-        .restartable     = t_restartable,                                                                             \
-        .pxStack         = symbol_join(t_ident, stack),                                                               \
-        .pcTaskName      = symbol_str(t_ident),                                                                       \
-    }
-
+macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
+    StackType_t symbol_join(t_ident, stack)[RTOS_STACK_SIZE];
+    TCB_mut_t symbol_join(t_ident, mutable) = {
+        .pxTopOfStack        = NULL,
+        .needs_start         = true,
+        .hit_restart         = false,
+        .recursive_exception = false,
+        .roused_task         = 0,
+        .roused_local        = 0,
+    };
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
-#define TASK_REGISTER(t_ident, t_start, t_arg, t_restartable)                                                         \
-    REPLICATE_OBJECT_CODE(t_start, symbol_join(t_ident, start_fn));                                                   \
-    TASK_REGISTER_INNER(t_ident, symbol_join(t_ident, start_fn), t_arg, t_restartable)
-#else /* VIVID_REPLICATE_TASK_CODE == 0 */
-#define TASK_REGISTER(t_ident, t_start, t_arg, t_restartable)                                                         \
-    TASK_REGISTER_INNER(t_ident, t_start, t_arg, t_restartable)
+    REPLICATE_OBJECT_CODE(t_start, symbol_join(t_ident, start_fn));
 #endif
+    __attribute__((section("tasktable"))) TCB_t t_ident = {
+        .mut           = &symbol_join(t_ident, mutable),
+#if ( VIVID_REPLICATE_TASK_CODE == 1 )
+        .start_routine = PP_ERASE_TYPE(symbol_join(t_ident, start_fn), t_arg),
+#else /* VIVID_REPLICATE_TASK_CODE == 0 */
+        .start_routine = PP_ERASE_TYPE(t_start, t_arg),
+#endif
+        .start_arg     = (void *) t_arg,
+        .restartable   = t_restartable,
+        .pxStack       = symbol_join(t_ident, stack),
+        .pcTaskName    = symbol_str(t_ident),
+    }
+}
 
-#define TASK_SCHEDULE(t_ident, t_micros)                                                                              \
+macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     { .task = &(t_ident), .nanos = (t_micros) * 1000 },
+}
 
 #define TASK_SCHEDULING_ORDER(...)                                                                                    \
     const schedule_entry_t task_scheduling_order[] = {                                                                \

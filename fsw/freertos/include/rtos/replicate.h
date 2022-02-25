@@ -9,11 +9,12 @@ struct replication {
     void *replica_pointer;
 };
 
-#define REPLICATE_OBJECT_CODE(original_function, replica_name)                                                        \
-    extern typeof(original_function) replica_name;                                                                    \
-    const __attribute__((section("replicas"))) struct replication symbol_join(replica_name, metadata) = {             \
-        .base_pointer = &original_function,                                                                           \
-        .replica_pointer = &replica_name,                                                                             \
+macro_define(REPLICATE_OBJECT_CODE, original_function, replica_name) {
+    extern typeof(original_function) replica_name;
+    const __attribute__((section("replicas"))) struct replication symbol_join(replica_name, metadata) = {
+        .base_pointer = &original_function,
+        .replica_pointer = &replica_name,
     }
+}
 
 #endif /* FSW_FREERTOS_RTOS_REPLICATE_H */
