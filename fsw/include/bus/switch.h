@@ -8,7 +8,7 @@
 #include <hal/thread.h>
 #include <synch/duct.h>
 
-#define SWITCH_REPLICAS 1
+#define SWITCH_REPLICAS 3
 
 enum {
     SWITCH_PORT_BASE  = 1,
