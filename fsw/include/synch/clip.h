@@ -17,7 +17,11 @@ macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
         .clip_play = PP_ERASE_TYPE(c_play, c_arg),
         .clip_argument = (void *) (c_arg),
     };
-    TASK_REGISTER(c_ident ## _task, clip_loop, &c_ident, RESTARTABLE)
+    TASK_REGISTER(symbol_join(c_ident, task), clip_loop, &c_ident, RESTARTABLE)
+}
+
+macro_define(CLIP_SCHEDULE, c_ident, c_micros) {
+    TASK_SCHEDULE(symbol_join(c_ident, task), c_micros)
 }
 
 #endif /* FSW_SYNCH_CLIP_H */

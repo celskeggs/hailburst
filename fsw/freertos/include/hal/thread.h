@@ -85,7 +85,7 @@ static inline void task_yield(void) {
 }
 
 static inline uint32_t task_tick_index(void) {
-    return (uint32_t) schedule_loads;
+    return (uint32_t) schedule_ticks;
 }
 
 void task_suspend(void) __attribute__((noreturn));

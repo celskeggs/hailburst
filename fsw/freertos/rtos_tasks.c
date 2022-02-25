@@ -51,6 +51,7 @@ enum {
 
 static uint32_t schedule_index = 0;
 uint64_t schedule_loads = 0;
+uint32_t schedule_ticks = 0;
 static uint64_t schedule_last = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
@@ -168,4 +169,7 @@ void vTaskSwitchContext( void )
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
     schedule_load(true);
+    if (schedule_index == 0) {
+        schedule_ticks++;
+    }
 }
