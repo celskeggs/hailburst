@@ -308,7 +308,7 @@ def debugf_core(args, name_token):
         python_token('})'),
     ]
 
-    return tokens
+    return tokens, False
 
 
 def static_repeat(args, name_token):
@@ -328,7 +328,7 @@ def static_repeat(args, name_token):
         for r in range(repeat_count):
             count_token = new_token(str(r), repeat_count_tokens)
             tokens += [(count_token if token.match(variable_name) else token) for token in body]
-        return tokens
+        return tokens, True
 
     return handle_body
 
@@ -336,26 +336,58 @@ def static_repeat(args, name_token):
 def symbol_join(args, name_token):
     if len(args) < 2:
         raise MacroError("symbol_join requires at least two arguments")
-    return [new_token("_".join(argument(arg) for arg in args), name_token)]
+    return [new_token("_".join(argument(arg) for arg in args), name_token)], False
 
 
 def symbol_str(args, name_token):
     if len(args) != 1:
         raise MacroError("symbol_str takes exactly one argument")
     symbol = argument(args[0])
-    return [new_token('"%s"' % symbol.replace('\\', '\\\\').replace('"', '\\"'), name_token)]
+    return [new_token('"%s"' % symbol.replace('\\', '\\\\').replace('"', '\\"'), name_token)], False
+
+
+def is_valid_variable_name(name):
+    return name.replace("_", "").isalnum() and name[0].isalpha()
+
+
+def macro_define(args, name_token, parser):
+    if len(args) < 1:
+        raise MacroError("macro_define must always have a macro name to define")
+    param_names = [argument(arg) for arg in args]
+    for name in param_names:
+        if not is_valid_variable_name(name):
+            raise MacroError("invalid identifier %r" % name)
+    macro_name = param_names.pop(0)
+
+    def accept_body(body):
+        def defined_macro_callback(call_args, call_token):
+            if len(call_args) != len(param_names):
+                raise MacroError("user-defined macro %r requires %d arguments but found %d"
+                                 % (macro_name, len(param_names), len(call_args)))
+            lookup = {param: tokens for param, tokens in zip(param_names, call_args)}
+            substitution = []
+            for token in body:
+                substitution += lookup.get(token.token, [token])
+            return substitution, True
+
+        if not parser.try_add_macro(macro_name, defined_macro_callback):
+            raise MacroError("macro already defined: %r" % macro_name)
+
+        return [], False
+
+    return accept_body
 
 
 def anonymous_symbol(args, name_token, counter):
     if len(args) != 1:
         raise MacroError("anonymous_symbol takes exactly one argument")
     variable_name = argument(args[0])
-    if not (variable_name.replace("_", "").isalnum() and variable_name[0].isalpha()):
+    if not is_valid_variable_name(variable_name):
         raise MacroError("invalid variable name %r" % variable_name)
 
     uniq = counter[0].source_hash + str(counter[1]).encode()
     replacement = new_token("_anon_" + hashlib.sha256(uniq).hexdigest()[:8], args[0])
-    return lambda body: [(replacement if token.match(variable_name) else token) for token in body]
+    return lambda body: ([(replacement if token.match(variable_name) else token) for token in body], True)
 
 
 def default_parser(rawlines):
@@ -364,6 +396,7 @@ def default_parser(rawlines):
     parser.add_macro("static_repeat", static_repeat)
     parser.add_macro("symbol_join", symbol_join)
     parser.add_macro("symbol_str", symbol_str)
+    parser.add_macro("macro_define", lambda args, name_token: macro_define(args, name_token, parser))
     mutable = [parser, 0]
     parser.add_macro("anonymous_symbol", lambda args, name_token: anonymous_symbol(args, name_token, mutable))
     return parser
@@ -394,7 +427,7 @@ def tokenize(line, filename, line_number):
                 start_column = column
             else:
                 cur_spaces += c
-        elif c in "{(,.&*)}":
+        elif c in "<[{(,.;&*)}]>":
             if cur_token is not None:
                 yield Token(cur_token, filename, line_number, start_column)
                 cur_token = None
@@ -452,15 +485,14 @@ class MacroExpr:
     def execute(self, token):
         if not token.match(")"):
             raise MacroError("Macro %r expected ')' but got %r" % (self.macro_func, token))
-        output = self.macro_func(self.args, self.name_token)
-        assert callable(output) or type(output) == list
-        if type(output) == list:
-            return output, False
-        elif callable(output):
+        result = self.macro_func(self.args, self.name_token)
+        if callable(result):
             # indicates brace continuation
-            return MacroBodyExpr(output), False
+            return MacroBodyExpr(result), False
         else:
-            raise RuntimeError("invalid output from macro function: %r" % output)
+            output, reinterpret = result
+            assert type(output) == list and type(reinterpret) == bool, "invalid output from macro function"
+            return output, reinterpret
 
     def __str__(self):
         return "%r: %r" % (self.name_token, self.args)
@@ -494,7 +526,9 @@ class MacroBodyExpr:
     def execute(self, token):
         if not token.match("}"):
             raise MacroError("Expected '}' but got %r" % token)
-        return self.macro_func(self.body), True
+        output, reinterpret = self.macro_func(self.body)
+        assert type(output) == list and type(reinterpret) == bool
+        return output, reinterpret
 
 
 class ParenExpr:
@@ -607,6 +641,12 @@ class Parser:
             last = token
             for output_token in self.on_token(token):
                 yield output_token
+
+    def try_add_macro(self, name, func):
+        if name in self.macros:
+            return False
+        self.add_macro(name, func)
+        return True
 
     def add_macro(self, name, func):
         assert name not in self.macros
