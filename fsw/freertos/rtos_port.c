@@ -66,14 +66,6 @@ registers, plus a 32-bit status register. */
 
 /*-----------------------------------------------------------*/
 
-/*
- * Starts the first task executing.  This function is necessarily written in
- * assembly code so is implemented in portASM.s.
- */
-extern void vPortRestoreTaskContext( void );
-
-/*-----------------------------------------------------------*/
-
 /* Counts the interrupt nesting depth.  A context switch is only performed if
 if the nesting depth is 0. */
 volatile uint32_t ulPortInterruptNesting = 0UL;
@@ -166,7 +158,5 @@ BaseType_t xPortStartScheduler( void )
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
     /* Start the first task executing. */
-    vPortRestoreTaskContext();
-
-    abortf("FreeRTOS scheduler failed");
+    resume_restore_context(pxCurrentTCB->mut->pxTopOfStack);
 }

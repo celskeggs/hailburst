@@ -108,6 +108,11 @@ extern TCB_t * volatile pxCurrentTCB;
 extern uint64_t schedule_loads;
 extern uint32_t schedule_ticks;
 
+/*
+ * Resume a task, restoring registers from the specified stack pointer.
+ */
+extern void resume_restore_context(volatile void *stack) __attribute__((noreturn));
+
 void vTaskStartScheduler( void );
 void vTaskSwitchContext( void );
 

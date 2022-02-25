@@ -81,13 +81,15 @@
 
 ; /**********************************************************************/
 
-.macro RESTORE_CONTEXT
+.align 4
+resume_restore_context:
+    .globl resume_restore_context
 
-    /* Set the SP to point to the stack of the task being restored. */
-    LDR     R0, pxCurrentTCBConst
-    LDR     R1, [R0]
-    LDR     R2, [R1]
-    LDR     SP, [R2]
+    /* Make sure we're in system mode. */
+    CPS     #SYS_MODE
+
+    /* Takes as a parameter the stack to switch into. */
+    MOV     SP, R0
 
     /* Restore the floating point context. */
     POP     {R0}
@@ -101,8 +103,6 @@
 
     /* Return to the task code, loading CPSR on the way. */
     RFEIA   sp!
-
-    .endm
 
 
 .align 4
@@ -207,8 +207,8 @@ trap_recursive_flag:
 
     SAVE_CONTEXT
     MOV     r0,  #\trapid
-    BL      task_abort_handler      @ trap_abort_handler will reset trap_recursive_flag to 0
-    RESTORE_CONTEXT
+    B       task_abort_handler      @ trap_abort_handler will reset trap_recursive_flag to 0
+    @ task_abort_handler does not return
 
     .endm
 
@@ -244,15 +244,6 @@ emergency_abort_handler:
     BLLE   exception_report   @ only try to report if this is our first/second time through... otherwise just abort directly
     BL     abort
     B      .
-
-/******************************************************************************
- * vPortRestoreTaskContext is used to start the scheduler.
- *****************************************************************************/
-.type vPortRestoreTaskContext, %function
-vPortRestoreTaskContext:
-    /* Switch to system mode. */
-    CPS     #SYS_MODE
-    RESTORE_CONTEXT
 
 .align 4
 .type interrupt_handler, %function
@@ -312,15 +303,9 @@ interrupt_handler:
     POP     {LR}
     SAVE_CONTEXT
 
-    /* Call the function that selects the new task to execute.
-    vTaskSwitchContext() if vTaskSwitchContext() uses LDRD or STRD
-    instructions, or 8 byte aligned stack allocated data.  LR does not need
-    saving as a new LR will be loaded by RESTORE_CONTEXT anyway. */
-    BL      vTaskSwitchContext
-
-    /* Restore the context of, and branch to, the task selected to execute
-    next. */
-    RESTORE_CONTEXT
+    /* Call the function that selects the new task to execute. It will directly
+    call resume_restore_context and never return. */
+    B       vTaskSwitchContext
 
     /****** DEVICE INTERRUPT ******/
 

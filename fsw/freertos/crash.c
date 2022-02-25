@@ -98,7 +98,7 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     // returns to an abort() call
 }
 
-void task_abort_handler(unsigned int trap_mode) {
+__attribute__((noreturn)) void task_abort_handler(unsigned int trap_mode) {
     const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = task_get_current();

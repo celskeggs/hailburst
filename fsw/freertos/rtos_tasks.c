@@ -158,7 +158,7 @@ void vTaskStartScheduler( void )
 }
 /*-----------------------------------------------------------*/
 
-void vTaskSwitchContext( void )
+__attribute__((noreturn)) void vTaskSwitchContext( void )
 {
     /* Is the currently saved stack pointer within the stack limit? */
     if( pxCurrentTCB->mut->pxTopOfStack <= pxCurrentTCB->pxStack )
@@ -172,4 +172,6 @@ void vTaskSwitchContext( void )
     if (schedule_index == 0) {
         schedule_ticks++;
     }
+
+    resume_restore_context(pxCurrentTCB->mut->pxTopOfStack);
 }
