@@ -61,7 +61,7 @@ macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
 
 #define SWITCH_SCHEDULE(v_ident)                                                                                      \
     static_repeat(SWITCH_REPLICAS, switch_replica_id) {                                                               \
-        CLIP_SCHEDULE(symbol_join(v_ident, clip, switch_replica_id), 100)                                             \
+        CLIP_SCHEDULE(symbol_join(v_ident, clip, switch_replica_id), 60)                                              \
     }
 
 // inbound is for packets TO the switch.

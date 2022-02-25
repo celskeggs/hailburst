@@ -9,7 +9,7 @@ TASK_PROTO(scrubber_1_task);
 TASK_PROTO(scrubber_2_task);
 
 #define SYSTEM_MAINTENANCE_SCHEDULE()     \
-    TASK_SCHEDULE(watchdog_task, 100)     \
+    TASK_SCHEDULE(watchdog_task, 10)      \
     TASK_SCHEDULE(scrubber_1_task, 100)   \
     TASK_SCHEDULE(scrubber_2_task, 100)
 
