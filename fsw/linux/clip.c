@@ -1,4 +1,4 @@
-#include <synch/clip.h>
+#include <hal/clip.h>
 #include <synch/config.h>
 
 void clip_loop(clip_t *clip) {

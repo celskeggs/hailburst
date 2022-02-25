@@ -51,14 +51,7 @@ context. */
 #define portNO_FLOATING_POINT_CONTEXT   ( ( StackType_t ) 0 )
 
 /* Constants required to setup the initial task context. */
-#define portINITIAL_SPSR                ( ( StackType_t ) 0x1f ) /* System mode, ARM mode, IRQ enabled FIQ enabled. */
-
-/* Masks all bits in the APSR other than the mode bits. */
-#define portAPSR_MODE_BITS_MASK         ( 0x1F )
-
-/* The value of the mode bits in the APSR when the CPU is executing in user
-mode. */
-#define portAPSR_USER_MODE              ( 0x10 )
+#define portINITIAL_SPSR                ( ( StackType_t ) 0x1f ) /* System mode, ARM mode, IRQ enabled FIQ enabled. */\
 
 /* The space on the stack required to hold the FPU registers.  This is 32 64-bit
 registers, plus a 32-bit status register. */
@@ -138,25 +131,4 @@ StackType_t *pxPortInitialiseStack( StackType_t *pxTopOfStack, TCB_t * pxNewTCB 
     memset( pxTopOfStack, 0x00, portFPU_REGISTER_WORDS * sizeof( StackType_t ) );
 
     return pxTopOfStack;
-}
-/*-----------------------------------------------------------*/
-
-BaseType_t xPortStartScheduler( void )
-{
-    uint32_t ulAPSR;
-
-    /* Only continue if the CPU is not in User mode.  The CPU must be in a
-    Privileged mode for the scheduler to start. */
-    __asm volatile ( "MRS %0, APSR" : "=r" ( ulAPSR ) :: "memory" );
-    ulAPSR &= portAPSR_MODE_BITS_MASK;
-    assert(ulAPSR != portAPSR_USER_MODE);
-
-    /* Interrupts are turned off in the CPU itself to ensure tick does
-    not execute while the scheduler is being started.  Interrupts are
-    automatically turned back on in the CPU when the first task starts
-    executing. */
-    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
-
-    /* Start the first task executing. */
-    resume_restore_context(pxCurrentTCB->mut->pxTopOfStack);
 }

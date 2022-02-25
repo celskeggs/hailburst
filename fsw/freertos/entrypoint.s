@@ -104,6 +104,40 @@ resume_restore_context:
     /* Return to the task code, loading CPSR on the way. */
     RFEIA   sp!
 
+.align 4
+start_clip_context:
+    .globl start_clip_context
+
+    /* Make sure we're in system mode. */
+    CPS     #SYS_MODE
+
+    /* Takes as a parameter the stack to switch into (R0). */
+    MOV     SP,    R0
+
+    /* Initialize the system mode registers to a known state. */
+    MOV     R0,  #0x00000000
+    LDR     R1,  =0x01010101
+    LDR     R2,  =0x02020202
+    LDR     R3,  =0x03030303
+    LDR     R4,  =0x04040404
+    LDR     R5,  =0x05050505
+    LDR     R6,  =0x06060606
+    LDR     R7,  =0x07070707
+    LDR     R8,  =0x08080808
+    LDR     R9,  =0x09090909
+    LDR     R10, =0x10101010
+    LDR     R11, =0x11111111
+    LDR     R12, =0x12121212
+    LDR     R14, =abort
+
+    /* Don't bother fully initializing the floating-point context. There's no need for a hard security boundary. */
+    VMSR    FPSCR, R0
+
+    /* Already in system mode, but make sure to enable everything before we jump to the entrypoint. */
+    CPSIE   aif
+
+    B       clip_play_direct
+
 
 .align 5
 interrupt_vector_table:

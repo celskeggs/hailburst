@@ -45,6 +45,7 @@
 typedef enum {
     NOT_RESTARTABLE = 0,
     RESTARTABLE,
+    RESTART_ON_RESCHEDULE,
 } restartable_t;
 
 /**
@@ -60,6 +61,10 @@ typedef struct
     uint32_t recursive_exception;        /*< MUST BE THE SECOND MEMBER OF THE TCB STRUCT */
     bool needs_start;
     bool hit_restart;
+
+    // only used for clips
+    bool     clip_running;
+    uint32_t clip_next_tick;
 
     // these are just 0 or 1, but in a full uint32_t to help with atomicity
     uint32_t roused_task;
@@ -112,6 +117,7 @@ extern uint32_t schedule_ticks;
  * Resume a task, restoring registers from the specified stack pointer.
  */
 extern void resume_restore_context(volatile void *stack) __attribute__((noreturn));
+extern void start_clip_context(volatile void *stack) __attribute__((noreturn));
 
 void vTaskStartScheduler( void );
 void vTaskSwitchContext( void );

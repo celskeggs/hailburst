@@ -42,6 +42,12 @@
 
 enum {
     IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
+
+    /* Masks all bits in the APSR other than the mode bits. */
+    portAPSR_MODE_BITS_MASK = 0x1F,
+
+    /* The value of the mode bits in the APSR when the CPU is executing in user mode. */
+    portAPSR_USER_MODE = 0x10,
 };
 
 #define taskFOREACH( pxTCB ) \
@@ -57,31 +63,20 @@ TCB_t * volatile pxCurrentTCB = NULL;
 
 /*-----------------------------------------------------------*/
 
-// This is only called in two different circumstances:
-//   1. During initialization, to set up tasks before the scheduler starts.
-//   2. When restarting a task, in a critical section.
-void thread_start_internal( TCB_t * pxNewTCB )
-{
-    assert(pxNewTCB != NULL);
-
-    StackType_t * pxTopOfStack;
-
+static inline StackType_t *task_top_of_stack(TCB_t *task) {
+    assert(task != NULL);
     /* Calculate the top of stack address. */
-    pxTopOfStack = &(pxNewTCB->pxStack[RTOS_STACK_SIZE - (uint32_t) 1]);
-    pxTopOfStack = (StackType_t *) (((uintptr_t) pxTopOfStack) & (~((uintptr_t) portBYTE_ALIGNMENT_MASK)));
-
+    StackType_t *top = &(task->pxStack[RTOS_STACK_SIZE - (uint32_t) 1]);
+    top = (StackType_t *) (((uintptr_t) top) & (~((uintptr_t) portBYTE_ALIGNMENT_MASK)));
     /* Check the alignment of the calculated top of stack is correct. */
-    assert((((uintptr_t) pxTopOfStack & (uintptr_t) portBYTE_ALIGNMENT_MASK) == 0UL));
-
-    /* Initialize the TCB stack to look as if the task was already running,
-     * but had been interrupted by the scheduler.  The return address is set
-     * to the start of the task function. Once the stack has been initialised
-     * the top of stack variable is updated. */
-    pxNewTCB->mut->pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB );
+    assert((((uintptr_t) top & (uintptr_t) portBYTE_ALIGNMENT_MASK) == 0UL));
+    return top;
 }
+
 /*-----------------------------------------------------------*/
 
-static inline void schedule_load(bool validate)
+__attribute__((noreturn))
+static void schedule_execute(bool validate)
 {
     assert(schedule_index < task_scheduling_order_length);
     schedule_entry_t sched = task_scheduling_order[schedule_index];
@@ -92,6 +87,8 @@ static inline void schedule_load(bool validate)
     // update the next callback time to the next timing tick
     uint64_t new_time = schedule_last + sched.nanos;
     arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
+    // set the enable bit and don't set the mask bit
+    arm_set_cntp_ctl(ARM_TIMER_ENABLE);
 
 #ifdef TASK_DEBUG
     debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
@@ -105,13 +102,25 @@ static inline void schedule_load(bool validate)
 
     schedule_last = new_time;
 
-    // we put this here instead of in a separate task, because it has to have a critical section anyway,
-    // so it shouldn't be any more dangerous here than elsewhere.
-    if (sched.task->mut->needs_start == true) {
-        debugf(WARNING, "Starting or restarting task '%s'", sched.task->pcTaskName);
+    if (sched.task->restartable == RESTART_ON_RESCHEDULE) {
+        // just go directly to its entrypoint without restoring registers
+        start_clip_context(task_top_of_stack(sched.task));
+    } else {
+        // we put this here instead of in a separate task, because it has to have a critical section anyway,
+        // so it shouldn't be any more dangerous here than elsewhere.
+        if (sched.task->mut->needs_start == true) {
+            debugf(WARNING, "Starting or restarting task '%s'", sched.task->pcTaskName);
 
-        sched.task->mut->needs_start = false;
-        thread_start_internal(sched.task);
+            sched.task->mut->needs_start = false;
+
+            /* Initialize the TCB stack to look as if the task was already running,
+             * but had been interrupted by the scheduler.  The return address is set
+             * to the start of the task function. Once the stack has been initialised
+             * the top of stack variable is updated. */
+            sched.task->mut->pxTopOfStack = pxPortInitialiseStack(task_top_of_stack(sched.task), sched.task);
+        }
+
+        resume_restore_context(sched.task->mut->pxTopOfStack);
     }
 }
 
@@ -123,7 +132,7 @@ static void unexpected_irq_callback(void *opaque)
     abortf("should not have gotten a callback on the timer IRQ");
 }
 
-void vTaskStartScheduler( void )
+__attribute__((noreturn)) void vTaskStartScheduler( void )
 {
     /* Interrupts are verified to be off here, to ensure a tick does not occur
      * before or during the call to xPortStartScheduler().  The stacks of
@@ -137,24 +146,30 @@ void vTaskStartScheduler( void )
     /* Start the timer that generates the tick ISR. */
     assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
 
+    /* Only continue if the CPU is not in User mode.  The CPU must be in a
+    Privileged mode for the scheduler to start. */
+    uint32_t ulAPSR;
+    __asm volatile ( "MRS %0, APSR" : "=r" ( ulAPSR ) :: "memory" );
+    ulAPSR &= portAPSR_MODE_BITS_MASK;
+    assert(ulAPSR != portAPSR_USER_MODE);
+
+    /* Interrupts are turned off in the CPU itself to ensure ticks do
+    not execute while the scheduler is being started.  Interrupts are
+    automatically turned back on in the CPU when the first task starts
+    executing. */
+    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
+
     // start scheduling at next millisecond boundary (yes, this means the first task might have a bit of extra
     // time, but we can live with that)
     uint64_t start_time_ns = timer_now_ns();
     schedule_last = start_time_ns + CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
 
-    // start executing first task
-    schedule_index = 0;
-    schedule_load(false);
-
-    // set the enable bit and don't set the mask bit
-    arm_set_cntp_ctl(ARM_TIMER_ENABLE);
     // don't provide a real callback here, because it will never actually have to be called.
     enable_irq(IRQ_PHYS_TIMER, unexpected_irq_callback, NULL);
 
-    /* Setting up the timer tick is hardware specific and thus in the
-     * portable interface. */
-    xPortStartScheduler();
-    abortf("should never return from xPortStartScheduler");
+    // start executing first task
+    schedule_index = 0;
+    schedule_execute(false);
 }
 /*-----------------------------------------------------------*/
 
@@ -168,10 +183,8 @@ __attribute__((noreturn)) void vTaskSwitchContext( void )
 
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
-    schedule_load(true);
     if (schedule_index == 0) {
         schedule_ticks++;
     }
-
-    resume_restore_context(pxCurrentTCB->mut->pxTopOfStack);
+    schedule_execute(true);
 }

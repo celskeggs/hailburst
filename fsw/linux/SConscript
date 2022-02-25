@@ -5,6 +5,7 @@ env["CPPPATH"] += [
 ]
 
 sources = [
+    "clip.c",
     "fakewire_link.c",
     "platform.c",
     "semaphore.c",

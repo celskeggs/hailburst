@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <hal/clip.h>
 #include <hal/init.h>
 #include <hal/thread.h>
-#include <synch/clip.h>
 #include <synch/duct.h>
 
 #define SWITCH_REPLICAS 3

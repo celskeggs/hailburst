@@ -28,26 +28,36 @@ macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
         .recursive_exception = false,
         .roused_task         = 0,
         .roused_local        = 0,
+        .clip_running        = false,
+        .clip_next_tick      = 0,
     };
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
     REPLICATE_OBJECT_CODE(t_start, symbol_join(t_ident, start_fn));
 #endif
     __attribute__((section("tasktable"))) TCB_t t_ident = {
-        .mut           = &symbol_join(t_ident, mutable),
+        .mut             = &symbol_join(t_ident, mutable),
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
-        .start_routine = PP_ERASE_TYPE(symbol_join(t_ident, start_fn), t_arg),
+        .start_routine   = PP_ERASE_TYPE(symbol_join(t_ident, start_fn), t_arg),
 #else /* VIVID_REPLICATE_TASK_CODE == 0 */
-        .start_routine = PP_ERASE_TYPE(t_start, t_arg),
+        .start_routine   = PP_ERASE_TYPE(t_start, t_arg),
 #endif
-        .start_arg     = (void *) t_arg,
-        .restartable   = t_restartable,
-        .pxStack       = symbol_join(t_ident, stack),
-        .pcTaskName    = symbol_str(t_ident),
+        .start_arg       = (void *) t_arg,
+        .restartable     = t_restartable,
+        .pxStack         = symbol_join(t_ident, stack),
+        .pcTaskName      = symbol_str(t_ident),
     }
+}
+
+macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
+    TASK_REGISTER(symbol_join(c_ident, task), c_play, c_arg, RESTART_ON_RESCHEDULE)
 }
 
 macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     { .task = &(t_ident), .nanos = (t_micros) * 1000 },
+}
+
+macro_define(CLIP_SCHEDULE, c_ident, c_micros) {
+    TASK_SCHEDULE(symbol_join(c_ident, task), c_micros)
 }
 
 #define TASK_SCHEDULING_ORDER(...)                                                                                    \

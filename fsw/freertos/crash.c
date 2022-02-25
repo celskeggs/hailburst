@@ -32,6 +32,10 @@ __attribute__((noreturn)) void restart_current_task(void) {
         current_thread->mut->needs_start = true;
 
         debugf(WARNING, "Suspending task to wait for restart.");
+    } else if (current_thread->restartable == RESTART_ON_RESCHEDULE) {
+        current_thread->mut->hit_restart = true;
+
+        debugf(WARNING, "Suspending restarted task to wait for reschedule.");
     } else {
         debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
     }

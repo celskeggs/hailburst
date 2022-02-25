@@ -1,5 +1,5 @@
-#ifndef FSW_SYNCH_CLIP_H
-#define FSW_SYNCH_CLIP_H
+#ifndef FSW_LINUX_FSW_CLIP_H
+#define FSW_LINUX_FSW_CLIP_H
 
 #include <hal/thread.h>
 
@@ -24,4 +24,4 @@ macro_define(CLIP_SCHEDULE, c_ident, c_micros) {
     TASK_SCHEDULE(symbol_join(c_ident, task), c_micros)
 }
 
-#endif /* FSW_SYNCH_CLIP_H */
+#endif /* FSW_LINUX_FSW_CLIP_H */
