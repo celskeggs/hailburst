@@ -109,7 +109,7 @@ resume_restore_context:
 interrupt_vector_table:
     b .                         @ Reset
     b undef_insn_handler        @ Undefined Instruction
-    b .                         @ Supervisor Call (SWI instruction)
+    b supervisor_abort_handler  @ Supervisor Call (SWI instruction)
     b prefetch_abort_handler    @ Prefetch Abort
     b data_abort_handler        @ Data Abort
     b .                         @ (unused)
@@ -218,14 +218,19 @@ undef_insn_handler:
     TRAP_HANDLER 0
 
 .align 4
+.type supervisor_abort_handler, %function
+supervisor_abort_handler:
+    TRAP_HANDLER 1
+
+.align 4
 .type prefetch_abort_handler, %function
 prefetch_abort_handler:
-    TRAP_HANDLER 1
+    TRAP_HANDLER 2
 
 .align 4
 .type data_abort_handler, %function
 data_abort_handler:
-    TRAP_HANDLER 2
+    TRAP_HANDLER 3
 
 .align 4
 .type emergency_abort_handler, %function

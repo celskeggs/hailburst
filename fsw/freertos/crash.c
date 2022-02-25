@@ -57,8 +57,9 @@ struct reg_state {
 };
 static_assert(sizeof(struct reg_state) == 14 * 4, "invalid sizeof(struct reg_state)");
 
-static const char *trap_mode_names[3] = {
+static const char *trap_mode_names[] = {
     "UNDEFINED INSTRUCTION",
+    "SUPERVISOR CALL ABORT",
     "PREFETCH ABORT",
     "DATA ABORT",
 };
@@ -99,7 +100,10 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
 }
 
 __attribute__((noreturn)) void task_abort_handler(unsigned int trap_mode) {
-    const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
+    const char *trap_name = "???????";
+    if (trap_mode < sizeof(trap_mode_names) / sizeof(trap_mode_names[0])) {
+        trap_name = trap_mode_names[trap_mode];
+    }
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = task_get_current();
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
