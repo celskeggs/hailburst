@@ -40,6 +40,7 @@ typedef struct thread_st {
 
 thread_t task_get_current(void);
 void task_yield(void);
+uint32_t task_tick_index(void);
 void task_become_independent(void);
 void task_become_dependent(void);
 

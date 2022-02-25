@@ -12,6 +12,7 @@ extern struct thread_st tasktable_end[];
 
 static mutex_t        scheduling_lock;
 static thread_t       scheduled_task;
+static uint32_t       schedule_index;
 
 thread_t task_get_current(void) {
     thread_t thread = (thread_t) pthread_getspecific(task_current_key);
@@ -80,6 +81,10 @@ void task_yield(void) {
     pthread_cond_broadcast(&task->sched_cond);
     task_wait_scheduled();
     mutex_unlock(&scheduling_lock);
+}
+
+uint32_t task_tick_index(void) {
+    return schedule_index;
 }
 
 void task_become_independent(void) {
@@ -158,5 +163,6 @@ void enter_scheduler(void) {
             debugf(TRACE, "relative: %" PRIu64 " < %" PRIu64, here - last, total);
         }
         last = here;
+        schedule_index++;
     }
 }

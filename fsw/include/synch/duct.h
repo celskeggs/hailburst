@@ -19,9 +19,6 @@
 #include <hal/debug.h>
 #include <synch/eplock.h>
 
-/* set to 1 if ducts should enforce task separation strictly; 0 to use majority voting to recover instead */
-//#define CONFIG_DUCT_MODE_STRICT     1        TODO: IMPLEMENT THIS
-
 enum {
     DUCT_MIN_REPLICAS =   1,
     DUCT_MAX_REPLICAS = 254, /* don't allow 255 replicas to avoid overflow of uint8_t variables */

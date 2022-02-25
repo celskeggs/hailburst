@@ -84,6 +84,10 @@ static inline void task_yield(void) {
     taskYIELD();
 }
 
+static inline uint32_t task_tick_index(void) {
+    return (uint32_t) schedule_loads;
+}
+
 void task_suspend(void) __attribute__((noreturn));
 
 static inline void task_delay_abs(uint64_t deadline_ns) {
