@@ -69,62 +69,54 @@ static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
            replica_id, port, message_size, outport, destination);
 }
 
-void switch_mainloop_internal(const switch_replica_t *sr) {
+void switch_io_clip(const switch_replica_t *sr) {
     assert(sr != NULL);
     uint8_t replica_id = sr->replica_id;
-    uint8_t *scratch_buffer = sr->scratch_buffer;
-    assert(scratch_buffer != NULL);
     switch_t *sw = sr->replica_switch;
     assert(sw != NULL);
 
-    for (;;) {
-        // attempt to perform transfer for each port
-        unsigned int packets = 0;
+    // attempt to perform transfer for each port
+    unsigned int packets = 0;
 
-        // first, prepare all transactions
-        for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-            duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
-            if (inbound != NULL) {
-                duct_receive_prepare(inbound, replica_id);
-            }
-            if (outbound != NULL) {
-                duct_send_prepare(outbound, replica_id);
-            }
+    // first, prepare all transactions
+    for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
+        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+        duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
+        if (inbound != NULL) {
+            duct_receive_prepare(inbound, replica_id);
         }
-
-        // now shuffle all messages
-        for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-            if (inbound != NULL) {
-                uint64_t timestamp = 0;
-                size_t message_size;
-                while ((message_size = duct_receive_message(inbound, replica_id, scratch_buffer, &timestamp)) != 0) {
-                    assert(message_size <= sw->scratch_buffer_size);
-                    switch_packet(sw, replica_id, port, message_size, timestamp, scratch_buffer);
-                    packets++;
-                }
-            }
+        if (outbound != NULL) {
+            duct_send_prepare(outbound, replica_id);
         }
-
-        // finally, commit all transactions
-        for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-            duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-            duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
-            if (inbound != NULL) {
-                duct_receive_commit(inbound, replica_id);
-            }
-            if (outbound != NULL) {
-                duct_send_commit(outbound, replica_id);
-            }
-        }
-
-#ifdef SWITCH_DEBUG
-        debugf(TRACE, "Switch routed %u packets in this epoch; waiting until next epoch...", packets);
-#endif
-        task_yield();
-#ifdef SWITCH_DEBUG
-        debugf(TRACE, "Switch woken on next epoch!");
-#endif
     }
+
+    // now shuffle all messages
+    for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
+        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+        if (inbound != NULL) {
+            uint64_t timestamp = 0;
+            size_t message_size;
+            while ((message_size = duct_receive_message(inbound, replica_id, sr->scratch_buffer, &timestamp)) != 0) {
+                assert(message_size <= sw->scratch_buffer_size);
+                switch_packet(sw, replica_id, port, message_size, timestamp, sr->scratch_buffer);
+                packets++;
+            }
+        }
+    }
+
+    // finally, commit all transactions
+    for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
+        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
+        duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
+        if (inbound != NULL) {
+            duct_receive_commit(inbound, replica_id);
+        }
+        if (outbound != NULL) {
+            duct_send_commit(outbound, replica_id);
+        }
+    }
+
+#ifdef SWITCH_DEBUG
+    debugf(TRACE, "Switch routed %u packets in this epoch; waiting until next epoch...", packets);
+#endif
 }

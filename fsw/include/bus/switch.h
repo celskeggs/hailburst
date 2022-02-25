@@ -38,29 +38,30 @@ typedef struct {
     uint8_t   replica_id;
 } switch_replica_t;
 
-void switch_mainloop_internal(const switch_replica_t *sr);
+void switch_io_clip(const switch_replica_t *sr);
 
-#define SWITCH_REGISTER(v_ident, v_max_buffer)                                                                        \
-    switch_t v_ident = {                                                                                              \
-        .ports_inbound = { NULL },                                                                                    \
-        .ports_outbound = { NULL },                                                                                   \
-        .scratch_buffer_size = (v_max_buffer),                                                                        \
-        .routing_table = { 0 },                                                                                       \
-    };                                                                                                                \
-    static_repeat(SWITCH_REPLICAS, switch_replica_id) {                                                               \
-        uint8_t symbol_join(v_ident, scratch_buffer, switch_replica_id)[v_max_buffer];                                \
-        const switch_replica_t symbol_join(v_ident, replica, switch_replica_id) = {                                   \
-            .replica_switch = &v_ident,                                                                               \
-            .scratch_buffer = symbol_join(v_ident, scratch_buffer, switch_replica_id),                                \
-            .replica_id     = switch_replica_id,                                                                      \
-        };                                                                                                            \
-        TASK_REGISTER(symbol_join(v_ident, task, switch_replica_id), switch_mainloop_internal,                        \
-                      &symbol_join(v_ident, replica, switch_replica_id), RESTARTABLE);                                \
+macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
+    switch_t v_ident = {
+        .ports_inbound = { NULL },
+        .ports_outbound = { NULL },
+        .scratch_buffer_size = (v_max_buffer),
+        .routing_table = { 0 },
+    };
+    static_repeat(SWITCH_REPLICAS, switch_replica_id) {
+        uint8_t symbol_join(v_ident, scratch_buffer, switch_replica_id)[v_max_buffer];
+        const switch_replica_t symbol_join(v_ident, replica, switch_replica_id) = {
+            .replica_switch = &v_ident,
+            .scratch_buffer = symbol_join(v_ident, scratch_buffer, switch_replica_id),
+            .replica_id     = switch_replica_id,
+        };
+        CLIP_REGISTER(symbol_join(v_ident, clip, switch_replica_id), switch_io_clip,
+                      &symbol_join(v_ident, replica, switch_replica_id));
     }
+}
 
 #define SWITCH_SCHEDULE(v_ident)                                                                                      \
     static_repeat(SWITCH_REPLICAS, switch_replica_id) {                                                               \
-        TASK_SCHEDULE(symbol_join(v_ident, task, switch_replica_id), 100)                                             \
+        CLIP_SCHEDULE(symbol_join(v_ident, clip, switch_replica_id), 100)                                             \
     }
 
 // inbound is for packets TO the switch.
