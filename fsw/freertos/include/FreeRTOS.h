@@ -33,15 +33,37 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h> /* READ COMMENT ABOVE. */
+#include <stdint.h>
+#include <string.h>
 
-/* Application specific configuration options. */
-#include "FreeRTOSConfig.h"
+#include <hal/debug.h>
 
-/* Basic FreeRTOS definitions. */
-#include "projdefs.h"
+typedef uint32_t StackType_t;
 
-/* Definitions specific to the port being used. */
-#include "portable.h"
+/* Interrupt controller access addresses. */
+#define portICCPMR_PRIORITY_MASK_OFFSET                         ( 0x04 )
+#define portICCIAR_INTERRUPT_ACKNOWLEDGE_OFFSET                 ( 0x0C )
+#define portICCEOIR_END_OF_INTERRUPT_OFFSET                     ( 0x10 )
+
+/* Interrupt nesting behaviour configuration. */
+#define configINTERRUPT_CONTROLLER_BASE_ADDRESS         0x08000000
+#define configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET 0x00010000
+
+#define portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS      ( configINTERRUPT_CONTROLLER_BASE_ADDRESS + configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET )
+#define portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS   ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCIAR_INTERRUPT_ACKNOWLEDGE_OFFSET )
+#define portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS       ( portINTERRUPT_CONTROLLER_CPU_INTERFACE_ADDRESS + portICCEOIR_END_OF_INTERRUPT_OFFSET )
+
+/* ARM is 8-byte aligned */
+#define portBYTE_ALIGNMENT_MASK     ( 0x0007 )
+
+/*
+ * Setup the stack of a new task so it is ready to be placed under the
+ * scheduler control.  The registers have to be placed on the stack in
+ * the order that the port expects to find them.
+ *
+ */
+typedef struct TCB_st const TCB_t;
+StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
+                                     TCB_t * pxNewTCB );
 
 #endif /* INC_FREERTOS_H */
