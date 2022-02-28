@@ -18,7 +18,7 @@ __attribute__((noreturn)) void task_suspend(void) {
     // make sure interrupts are enabled before we use any WFI instructions
     asm volatile("CPSIE i" ::: "memory");
     for (;;) {
-        taskYIELD();
+        task_yield();
     }
 }
 

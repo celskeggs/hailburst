@@ -45,7 +45,7 @@ void scrubber_cycle_wait(void) {
     scrubber_start_pend(&pend);
 
     while (!scrubber_is_pend_done(&pend)) {
-        taskYIELD();
+        task_yield();
     }
 }
 

@@ -82,16 +82,12 @@ static inline const char *task_get_name(thread_t task) {
     return task->pcTaskName;
 }
 
-static inline void taskYIELD(void) {
+static inline void task_yield(void) {
     uint64_t loads = schedule_loads;
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
     do {
         asm volatile("WFI");
     } while (loads == schedule_loads);
-}
-
-static inline void task_yield(void) {
-    taskYIELD();
 }
 
 static inline uint32_t task_tick_index(void) {
@@ -102,7 +98,7 @@ void task_suspend(void) __attribute__((noreturn));
 
 static inline void task_delay_abs(uint64_t deadline_ns) {
     while (timer_now_ns() < deadline_ns) {
-        taskYIELD();
+        task_yield();
     }
 }
 
@@ -129,14 +125,14 @@ static inline bool task_doze_try(void) {
 
 static inline void task_doze(void) {
     while (!task_doze_try()) {
-        taskYIELD();
+        task_yield();
     }
 }
 
 static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
     bool roused = task_doze_try();
     while (!roused && timer_now_ns() < deadline_ns) {
-        taskYIELD();
+        task_yield();
         roused = task_doze_try();
     }
     return roused;
@@ -167,7 +163,7 @@ static inline bool local_doze_try(thread_t task) {
 static inline void local_doze(thread_t task) {
     assert(task == task_get_current());
     while (!local_doze_try_raw()) {
-        taskYIELD();
+        task_yield();
     }
 }
 
@@ -175,7 +171,7 @@ static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     assert(task == task_get_current());
     bool roused = local_doze_try_raw();
     while (!roused && timer_now_ns() < deadline_ns) {
-        taskYIELD();
+        task_yield();
         roused = local_doze_try_raw();
     }
     return roused;
