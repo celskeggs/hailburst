@@ -6,9 +6,10 @@
 // CONFIG_SYNCH_MODE_STRICT can be set to one of two values:
 //   [0] Timing and data errors will be considered recoverable. (Use for operation in the presence of radiation.)
 //   [1] Timing and data errors will be considered crash-worthy. (Use for testing in the absence of radiation.)
-#define CONFIG_SYNCH_MODE_STRICT 1
+#define CONFIG_SYNCH_MODE_STRICT 0
 
-#if ( CONFIG_SYNCH_MODE_STRICT == 0 )
+// Note: on Linux, only strict mode is available.
+#if ( CONFIG_SYNCH_MODE_STRICT == 0 ) && defined(__FREERTOS__)
 #define malfunctionf(fmt, ...) restartf("Malfunction: " fmt, ## __VA_ARGS__)
 #define miscomparef(fmt, ...) debugf(WARNING, "Miscompare: " fmt, ## __VA_ARGS__)
 #else

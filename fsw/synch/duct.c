@@ -101,12 +101,11 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
     /* ensure that all senders have transmitted flows for us */
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
         duct_flow_index status = atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]);
-        if (status == DUCT_MISSING_FLOW) {
+        if (status == DUCT_MISSING_FLOW || status > duct->max_flow) {
             miscomparef("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
                         task_get_name(task_get_current()));
             atomic_store_relaxed(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id], 0);
         }
-        assert(status <= duct->max_flow);
     }
 }
 
