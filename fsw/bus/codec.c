@@ -36,6 +36,14 @@ void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart) {
     // clear everything and populate rx_chart
     memset(fwd, 0, sizeof(*fwd));
     fwd->rx_chart = rx_chart;
+
+    chart_index_t count_avail = chart_reply_avail(rx_chart);
+    if (count_avail > 0) {
+        // this is to help mitigate the possible impact of receiving too much data to process (which could cause a
+        // temporal overrun, and then cascade by causing additional restarts)
+        debugf(WARNING, "Discarded %u input buffers during codec (re)init.", count_avail);
+        chart_reply_send(rx_chart, count_avail);
+    }
 }
 
 // partial version of decode that does not decode control character parameters (ctrl_param is not set)
