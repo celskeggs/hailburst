@@ -28,23 +28,15 @@ enum {
     LATCHING_DELAY_NS = 15 * 1000 * 1000, // wait 15 ms before checking for reading completion
 };
 
-enum mag_state {
-    MS_INACTIVE = 0,
-    MS_ACTIVATING,
-    MS_ACTIVE,
-    MS_LATCHING_ON,
-    MS_LATCHED_ON,
-    MS_TAKING_READING,
-    MS_DEACTIVATING,
-};
-
-void magnetometer_query_loop(magnetometer_t *mag) {
+void magnetometer_query_clip(magnetometer_t *mag) {
     assert(mag != NULL);
 
-    enum mag_state state = MS_INACTIVE;
-    uint64_t next_reading_time = 0;
-    uint64_t actual_reading_time = 0;
-    uint64_t check_latch_time = 0;
+    if (clip_is_restart()) {
+        mag->state = MS_INACTIVE;
+        mag->next_reading_time = 0;
+        mag->actual_reading_time = 0;
+        mag->check_latch_time = 0;
+    }
 
     // scratch variables for use in switch statements
     rmap_status_t status;
@@ -52,114 +44,110 @@ void magnetometer_query_loop(magnetometer_t *mag) {
     uint16_t single_value;
     uint16_t registers[4];
 
-    for (;;) {
-        debugf(TRACE, "About to prepare RMAP");
+    rmap_txn_t rmap_txn;
+    rmap_epoch_prepare(&rmap_txn, mag->endpoint);
 
-        rmap_txn_t rmap_txn;
-        rmap_epoch_prepare(&rmap_txn, mag->endpoint);
-
-        switch (state) {
-        case MS_ACTIVATING:
-            status = rmap_write_complete(&rmap_txn, NULL);
-            if (status == RS_OK) {
-                state = MS_ACTIVE;
-                next_reading_time = clock_timestamp_monotonic() + READING_DELAY_NS;
-                tlm_mag_pwr_state_changed(mag->telemetry_async, true);
-            } else {
-                debugf(WARNING, "Failed to turn on magnetometer power, error=0x%03x", status);
+    switch (mag->state) {
+    case MS_ACTIVATING:
+        status = rmap_write_complete(&rmap_txn, NULL);
+        if (status == RS_OK) {
+            mag->state = MS_ACTIVE;
+            mag->next_reading_time = clock_timestamp_monotonic() + READING_DELAY_NS;
+            tlm_mag_pwr_state_changed(mag->telemetry_async, true);
+        } else {
+            debugf(WARNING, "Failed to turn on magnetometer power, error=0x%03x", status);
+        }
+        break;
+    case MS_DEACTIVATING:
+        status = rmap_write_complete(&rmap_txn, NULL);
+        if (status == RS_OK) {
+            mag->state = MS_INACTIVE;
+            tlm_mag_pwr_state_changed(mag->telemetry_async, false);
+        } else {
+            debugf(WARNING, "Failed to turn off magnetometer power, error=0x%03x", status);
+        }
+        break;
+    case MS_LATCHING_ON:
+        // TODO: stop after a certain number of retries?
+        mag->actual_reading_time = 0;
+        status = rmap_write_complete(&rmap_txn, &mag->actual_reading_time);
+        if (status == RS_OK) {
+            assert(mag->actual_reading_time != 0);
+            mag->state = MS_LATCHED_ON;
+            mag->check_latch_time = clock_timestamp_monotonic() + LATCHING_DELAY_NS;
+        } else {
+            debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
+        }
+        break;
+    case MS_TAKING_READING:
+        // TODO: stop after a certain number of retries?
+        status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(registers), NULL);
+        if (status == RS_OK) {
+            for (int i = 0; i < 4; i++) {
+                registers[i] = be16toh(registers[i]);
             }
-            break;
-        case MS_DEACTIVATING:
-            status = rmap_write_complete(&rmap_txn, NULL);
-            if (status == RS_OK) {
-                state = MS_INACTIVE;
-                tlm_mag_pwr_state_changed(mag->telemetry_async, false);
-            } else {
-                debugf(WARNING, "Failed to turn off magnetometer power, error=0x%03x", status);
-            }
-            break;
-        case MS_LATCHING_ON:
-            // TODO: stop after a certain number of retries?
-            status = rmap_write_complete(&rmap_txn, &actual_reading_time);
-            if (status == RS_OK) {
-                assert(actual_reading_time != 0);
-                state = MS_LATCHED_ON;
-                check_latch_time = clock_timestamp_monotonic() + LATCHING_DELAY_NS;
-            } else {
-                debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
-            }
-            break;
-        case MS_TAKING_READING:
-            // TODO: stop after a certain number of retries?
-            status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(registers), NULL);
-            if (status == RS_OK) {
-                for (int i = 0; i < 4; i++) {
-                    registers[i] = be16toh(registers[i]);
+            if (registers[0] == LATCH_OFF) {
+                tlm_mag_reading_t *reading = chart_request_start(mag->readings);
+                if (reading != NULL) {
+                    reading->reading_time = mag->actual_reading_time;
+                    reading->mag_x = registers[REG_X - REG_LATCH];
+                    reading->mag_y = registers[REG_Y - REG_LATCH];
+                    reading->mag_z = registers[REG_Z - REG_LATCH];
+                    chart_request_send(mag->readings, 1);
                 }
-                if (registers[0] == LATCH_OFF) {
-                    tlm_mag_reading_t *reading = chart_request_start(mag->readings);
-                    if (reading != NULL) {
-                        reading->reading_time = actual_reading_time;
-                        reading->mag_x = registers[REG_X - REG_LATCH];
-                        reading->mag_y = registers[REG_Y - REG_LATCH];
-                        reading->mag_z = registers[REG_Z - REG_LATCH];
-                        chart_request_send(mag->readings, 1);
-                    }
-                    state = MS_ACTIVE;
-                }
-                // otherwise keep checking until latch turns off
-            } else {
-                debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
+                mag->state = MS_ACTIVE;
             }
-            break;
-        default:
-            // nothing to be received
-            break;
+            // otherwise keep checking until latch turns off
+        } else {
+            debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
         }
-
-        if ((state == MS_INACTIVE || state == MS_DEACTIVATING) && atomic_load_relaxed(mag->should_be_powered)) {
-            debugf(DEBUG, "Turning on magnetometer power...");
-            state = MS_ACTIVATING;
-        } else if ((state == MS_ACTIVATING || state == MS_ACTIVE) && !atomic_load_relaxed(mag->should_be_powered)) {
-            debugf(DEBUG, "Turning off magnetometer power...");
-            state = MS_DEACTIVATING;
-        } else if (state == MS_ACTIVE && clock_timestamp_monotonic() >= next_reading_time) {
-            debugf(DEBUG, "Taking magnetometer reading...");
-            state = MS_LATCHING_ON;
-            next_reading_time += READING_DELAY_NS;
-        } else if (state == MS_LATCHED_ON && clock_timestamp_monotonic() >= check_latch_time) {
-            state = MS_TAKING_READING;
-        }
-
-        switch (state) {
-        case MS_ACTIVATING:
-            single_value = htobe16(POWER_ON);
-            rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
-            break;
-        case MS_DEACTIVATING:
-            single_value = htobe16(POWER_OFF);
-            rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
-            break;
-        case MS_LATCHING_ON:
-            single_value = htobe16(LATCH_ON);
-            rmap_write_start(&rmap_txn, 0x00, REG_LATCH, (uint8_t*) &single_value, sizeof(single_value));
-            break;
-        case MS_TAKING_READING:
-            rmap_read_start(&rmap_txn, 0x00, REG_LATCH, sizeof(uint16_t) * 4);
-            static_assert(REG_LATCH + 1 == REG_X, "assumptions about register layout");
-            static_assert(REG_LATCH + 2 == REG_Y, "assumptions about register layout");
-            static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
-            break;
-        default:
-            // nothing to be transmitted
-            break;
-        }
-
-        rmap_epoch_commit(&rmap_txn);
-
-        debugf(TRACE, "Yield from magnetometer");
-        task_yield();
+        break;
+    default:
+        // nothing to be received
+        break;
     }
+
+    if ((mag->state == MS_INACTIVE || mag->state == MS_DEACTIVATING)
+                    && atomic_load_relaxed(mag->should_be_powered)) {
+        debugf(DEBUG, "Turning on magnetometer power...");
+        mag->state = MS_ACTIVATING;
+    } else if ((mag->state == MS_ACTIVATING || mag->state == MS_ACTIVE)
+                    && !atomic_load_relaxed(mag->should_be_powered)) {
+        debugf(DEBUG, "Turning off magnetometer power...");
+        mag->state = MS_DEACTIVATING;
+    } else if (mag->state == MS_ACTIVE && clock_timestamp_monotonic() >= mag->next_reading_time) {
+        debugf(DEBUG, "Taking magnetometer reading...");
+        mag->state = MS_LATCHING_ON;
+        mag->next_reading_time += READING_DELAY_NS;
+    } else if (mag->state == MS_LATCHED_ON && clock_timestamp_monotonic() >= mag->check_latch_time) {
+        mag->state = MS_TAKING_READING;
+    }
+
+    switch (mag->state) {
+    case MS_ACTIVATING:
+        single_value = htobe16(POWER_ON);
+        rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
+        break;
+    case MS_DEACTIVATING:
+        single_value = htobe16(POWER_OFF);
+        rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
+        break;
+    case MS_LATCHING_ON:
+        single_value = htobe16(LATCH_ON);
+        rmap_write_start(&rmap_txn, 0x00, REG_LATCH, (uint8_t*) &single_value, sizeof(single_value));
+        break;
+    case MS_TAKING_READING:
+        rmap_read_start(&rmap_txn, 0x00, REG_LATCH, sizeof(uint16_t) * 4);
+        static_assert(REG_LATCH + 1 == REG_X, "assumptions about register layout");
+        static_assert(REG_LATCH + 2 == REG_Y, "assumptions about register layout");
+        static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
+        break;
+    default:
+        // nothing to be transmitted
+        break;
+    }
+
+    rmap_epoch_commit(&rmap_txn);
 }
 
 static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tlm_mag_reading_t *reading_out) {
