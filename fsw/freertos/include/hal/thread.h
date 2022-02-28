@@ -49,7 +49,7 @@ macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
 }
 
 macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
-    TASK_REGISTER(symbol_join(c_ident, task), c_play, c_arg, RESTART_ON_RESCHEDULE)
+    TASK_REGISTER(c_ident, c_play, c_arg, RESTART_ON_RESCHEDULE)
 }
 
 macro_define(TASK_SCHEDULE, t_ident, t_micros) {
@@ -57,7 +57,7 @@ macro_define(TASK_SCHEDULE, t_ident, t_micros) {
 }
 
 macro_define(CLIP_SCHEDULE, c_ident, c_micros) {
-    TASK_SCHEDULE(symbol_join(c_ident, task), c_micros)
+    TASK_SCHEDULE(c_ident, c_micros)
 }
 
 #define TASK_SCHEDULING_ORDER(...)                                                                                    \

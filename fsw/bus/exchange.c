@@ -437,63 +437,73 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
     return true;
 }
 
-void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
+static void fakewire_exc_check_reinit(const fw_exchange_t *conf) {
     assert(conf != NULL);
     exchange_instance_t *exc = conf->instance;
     assert(exc != NULL);
 
-    memset(exc, 0, sizeof(*exc));
-    exchange_instance_configure(exc, conf, handshake_period_ticks());
-    fakewire_enc_init(&exc->encoder, conf->transmit_chart);
-    fakewire_dec_init(&exc->decoder, conf->receive_chart);
+    if (clip_is_restart()) {
+        memset(exc, 0, sizeof(*exc));
+        exchange_instance_configure(exc, conf, handshake_period_ticks());
+        fakewire_enc_init(&exc->encoder, conf->transmit_chart);
+        fakewire_dec_init(&exc->decoder, conf->receive_chart);
 
-    debug_printf(DEBUG, "First handshake scheduled for %u ticks in the future", exc->countdown_timeout);
-
-    while (true) {
-        exchange_instance_check_invariants(exc);
-
-        duct_txn_t recv_txn;
-        duct_receive_prepare(&recv_txn, exc->conf->write_duct, EXCHANGE_REPLICA_ID);
-
-        duct_flow_index dropped = 0;
-        size_t packet_length;
-        assert(exc->conf->buffers_length == duct_message_size(exc->conf->write_duct));
-        while (0 != (packet_length = duct_receive_message(&recv_txn, exc->conf->write_buffer, NULL))) {
-            assert(0 < packet_length && packet_length <= exc->conf->buffers_length);
-            if (!exchange_instance_transmit_data(exc, packet_length)) {
-                dropped++;
-            }
-        }
-        if (dropped) {
-            debug_printf(WARNING, "Dropped %u packets blocked from transmission.", dropped);
-        }
-
-        duct_receive_commit(&recv_txn);
-
-        // flush encoder before we sleep
-        fakewire_enc_flush(&exc->encoder);
-
-        // wait until we're scheduled again
-        task_yield();
-
-        exchange_instance_check_timers(exc);
-
-        duct_txn_t send_txn;
-        duct_send_prepare(&send_txn, exc->conf->read_duct, EXCHANGE_REPLICA_ID);
-        // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
-        // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
-        while (exchange_instance_receive(exc, &send_txn)) {
-            // keep looping
-        }
-        duct_send_commit(&send_txn);
-
-        exchange_instance_check_fcts(exc);
-
-        exchange_instance_transmit_tokens(exc);
-
-        exchange_instance_transmit_handshakes(exc);
-
-        // wait until we're scheduled again before we try to receive
-        task_yield();
+        debug_printf(DEBUG, "First handshake scheduled for %u ticks in the future", exc->countdown_timeout);
     }
+}
+
+void fakewire_exc_tx_clip(const fw_exchange_t *conf) {
+    assert(conf != NULL);
+    exchange_instance_t *exc = conf->instance;
+    assert(exc != NULL);
+
+    fakewire_exc_check_reinit(conf);
+
+    exchange_instance_check_invariants(exc);
+
+    duct_txn_t recv_txn;
+    duct_receive_prepare(&recv_txn, exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+
+    duct_flow_index dropped = 0;
+    size_t packet_length;
+    assert(exc->conf->buffers_length == duct_message_size(exc->conf->write_duct));
+    while (0 != (packet_length = duct_receive_message(&recv_txn, exc->conf->write_buffer, NULL))) {
+        assert(0 < packet_length && packet_length <= exc->conf->buffers_length);
+        if (!exchange_instance_transmit_data(exc, packet_length)) {
+            dropped++;
+        }
+    }
+    if (dropped) {
+        debug_printf(WARNING, "Dropped %u packets blocked from transmission.", dropped);
+    }
+
+    duct_receive_commit(&recv_txn);
+
+    // flush encoder before the clip ends
+    fakewire_enc_flush(&exc->encoder);
+}
+
+void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
+    assert(conf != NULL);
+    exchange_instance_t *exc = conf->instance;
+    assert(exc != NULL);
+
+    fakewire_exc_check_reinit(conf);
+
+    exchange_instance_check_timers(exc);
+
+    duct_txn_t send_txn;
+    duct_send_prepare(&send_txn, exc->conf->read_duct, EXCHANGE_REPLICA_ID);
+    // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
+    // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
+    while (exchange_instance_receive(exc, &send_txn)) {
+        // keep looping
+    }
+    duct_send_commit(&send_txn);
+
+    exchange_instance_check_fcts(exc);
+
+    exchange_instance_transmit_tokens(exc);
+
+    exchange_instance_transmit_handshakes(exc);
 }

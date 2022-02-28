@@ -9,19 +9,20 @@ void clip_loop(clip_t *clip) {
 
     for (;;) {
         if (current_tick != (now = task_tick_index())) {
-            miscomparef("Clip %s desynched from timeline. Tick found to be %u instead of %u.",
-                        clip->label, now, current_tick);
+            malfunctionf("Clip %s desynched from timeline. Tick found to be %u instead of %u.",
+                         clip->label, now, current_tick);
         }
 
         clip->clip_play(clip->clip_argument);
 
         if (current_tick != (now = task_tick_index())) {
-            miscomparef("Clip %s overran scheduling period. Tick found to be %u instead of %u.",
-                        clip->label, now, current_tick);
+            malfunctionf("Clip %s overran scheduling period. Tick found to be %u instead of %u.",
+                         clip->label, now, current_tick);
         }
 
         task_yield();
 
+        clip->clip_just_started = false;
         current_tick++;
     }
 }

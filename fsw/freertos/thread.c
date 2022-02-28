@@ -31,13 +31,16 @@ void clip_play_direct(void) {
         debugf(WARNING, "Clip %s resuming immediately; not waiting for scrubber cycle.", clip->pcTaskName);
         clip->mut->hit_restart = false;
         clip->mut->clip_next_tick = task_tick_index();
+        clip->mut->needs_start = true;
     } else if (atomic_load(clip->mut->clip_running)) {
-        miscomparef("Clip %s did not have a chance to complete by the end of its execution!", clip->pcTaskName);
+        malfunctionf("Clip %s did not have a chance to complete by the end of its execution!", clip->pcTaskName);
+        clip->mut->needs_start = true;
     } else {
         uint32_t now = task_tick_index();
         if (now != clip->mut->clip_next_tick) {
-            miscomparef("Clip %s desynched from timeline. Tick found to be %u instead of %u.",
-                        clip->pcTaskName, now, clip->mut->clip_next_tick);
+            malfunctionf("Clip %s desynched from timeline. Tick found to be %u instead of %u.",
+                         clip->pcTaskName, now, clip->mut->clip_next_tick);
+            clip->mut->needs_start = true;
         }
     }
 
@@ -55,6 +58,7 @@ void clip_play_direct(void) {
 
     assert(clip->mut->clip_running == true);
     atomic_store(clip->mut->clip_running, false);
+    clip->mut->needs_start = false;
 
     // yield until we are rescheduled, and start from the beginning.
     task_yield();

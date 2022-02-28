@@ -9,8 +9,10 @@
 #define CONFIG_SYNCH_MODE_STRICT 1
 
 #if ( CONFIG_SYNCH_MODE_STRICT == 0 )
-#define miscomparef(fmt, ...) restartf("Miscompare: " fmt, ## __VA_ARGS__)
+#define malfunctionf(fmt, ...) restartf("Malfunction: " fmt, ## __VA_ARGS__)
+#define miscomparef(fmt, ...) debugf(WARNING, "Miscompare: " fmt, ## __VA_ARGS__)
 #else
+#define malfunctionf(fmt, ...) abortf("Malfunction: " fmt, ## __VA_ARGS__)
 #define miscomparef(fmt, ...) abortf("Miscompare: " fmt, ## __VA_ARGS__)
 #endif
 
