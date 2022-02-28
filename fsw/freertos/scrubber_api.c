@@ -10,9 +10,7 @@ SCRUBBER_REGISTER(scrubber_2);
 static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     assert(scrubber != NULL);
 
-    // if we're currently in an iteration, consider the 'start iteration' to be the next one; otherwise, if we're
-    // waiting for an iteration, consider the 'start iteration' to be the one that's about to start.
-    uint64_t start_iteration = (atomic_load_relaxed(scrubber->iteration) + 1) & ~1;
+    uint64_t start_iteration = atomic_load_relaxed(scrubber->iteration);
 
     // encourage the scrubber to start a cycle immediately
     task_rouse(scrubber->scrubber_task);
@@ -21,7 +19,7 @@ static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
 }
 
 static bool scrubber_done(struct scrubber_task_data *scrubber, uint64_t start_iteration) {
-    return atomic_load_relaxed(scrubber->iteration) >= start_iteration + 2;
+    return atomic_load_relaxed(scrubber->iteration) > start_iteration;
 }
 
 void scrubber_start_pend(scrubber_pend_t *pend) {

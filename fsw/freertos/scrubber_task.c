@@ -47,8 +47,6 @@ void scrubber_mainloop(struct scrubber_task_data *local) {
         debugf(DEBUG, "beginning cycle (baseline kernel ELF at 0x%08x)...",
                       (uintptr_t) local->kernel_elf_rom);
 
-        atomic_store_relaxed(local->iteration, local->iteration | 1);
-
         if (!elf_validate_header(local->kernel_elf_rom)) {
             debugf(CRITICAL, "header validation failed; halting scrubber.");
             break;
