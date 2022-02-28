@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/celskeggs/hailburst/sim/component"
 	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/verifier/collector"
 	"io"
 	"log"
 	"os"
@@ -196,10 +197,29 @@ func (rt *ReqTracker) ExplainFailure() string {
 		}
 	}
 	for _, req := range requirements {
-		line := fmt.Sprintf(
-			"  [%s] Succeeded: %5d, Failed: %5d, Outstanding: %5d",
-			leftPad(req, maxReqLen), rt.succeeded[req], rt.failed[req], rt.outstanding[req])
-		lines = append(lines, line)
+		var summary string
+		if rt.failed[req] > 0 {
+			summary = collector.WithColor("FAILED", collector.ColorRed)
+		} else if rt.succeeded[req] > 0 {
+			summary = collector.WithColor("PASSED", collector.ColorGreen)
+		} else {
+			summary = collector.WithColor("pending...", collector.ColorYellow)
+		}
+		succeeded := fmt.Sprintf("Succeeded: %5d", rt.succeeded[req])
+		failed := fmt.Sprintf("Failed: %5d", rt.failed[req])
+		outstanding := fmt.Sprintf("Outstanding: %5d", rt.outstanding[req])
+		if rt.succeeded[req] > 0 {
+			succeeded = collector.WithColor(succeeded, collector.ColorGreen)
+		}
+		if rt.failed[req] > 0 {
+			failed = collector.WithColor(failed, collector.ColorRed)
+		}
+		if rt.outstanding[req] > 0 {
+			outstanding = collector.WithColor(outstanding, collector.ColorYellow)
+		}
+		lines = append(lines,
+			fmt.Sprintf("  [%s] %s, %s, %s - %s", leftPad(req, maxReqLen), succeeded, failed, outstanding, summary),
+		)
 	}
 	return strings.Join(lines, "\n")
 }

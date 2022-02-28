@@ -29,6 +29,10 @@ const (
 	ColorWhite   = "7"
 )
 
+func WithColor(text string, color string) string {
+	return fmt.Sprintf("\033[1;3%sm%s\033[0m", color, text)
+}
+
 func (a *renderer) display(color, left, mid, right string) {
 	if a.output != nil {
 		padding := WIDTH - len(left) - len(mid) - len(right)
@@ -37,7 +41,7 @@ func (a *renderer) display(color, left, mid, right string) {
 		}
 		padLeft := strings.Repeat(" ", padding/2)
 		padRight := strings.Repeat(" ", padding-len(padLeft))
-		_, err := fmt.Fprintf(a.output, "\033[1;3%sm%s%s%s%s%s\033[0m\n", color, left, padLeft, mid, padRight, right)
+		_, err := fmt.Fprintln(a.output, WithColor(left + padLeft + mid + padRight + right, color))
 		if err != nil {
 			log.Printf("Activity log print error: %v", err)
 			err = a.output.Close()
