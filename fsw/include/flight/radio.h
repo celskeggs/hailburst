@@ -72,6 +72,8 @@ typedef struct {
     enum radio_downlink_state downlink_state;
     uint32_t                  downlink_length;
 
+    flag_t uplink_query_status_flag;
+
     uint32_t       bytes_extracted;
     stream_t      *up_stream;
     stream_t      *down_stream;

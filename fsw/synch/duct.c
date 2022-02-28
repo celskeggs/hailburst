@@ -24,9 +24,15 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id) {
 
     /* ensure that all previously-sent flows have been consumed */
     for (uint8_t receiver_id = 0; receiver_id < duct->receiver_replicas; receiver_id++) {
-        if (atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]) != DUCT_MISSING_FLOW) {
-            miscomparef("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
+        uint32_t offset = sender_id * duct->receiver_replicas + receiver_id;
+        if (atomic_load(duct->flow_status[offset]) != DUCT_MISSING_FLOW) {
+            flag_raisef(&duct->flags_send[offset],
+                        "Duct sender %s: receiver has deviated from schedule.",
                         task_get_name(task_get_current()));
+        } else {
+            flag_recoverf(&duct->flags_send[offset],
+                          "Duct sender %s: receiver has resumed acting on schedule.",
+                          task_get_name(task_get_current()));
         }
     }
 }
@@ -100,11 +106,17 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
 
     /* ensure that all senders have transmitted flows for us */
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
-        duct_flow_index status = atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]);
+        uint32_t offset = sender_id * duct->receiver_replicas + receiver_id;
+        duct_flow_index status = atomic_load(duct->flow_status[offset]);
         if (status == DUCT_MISSING_FLOW || status > duct->max_flow) {
-            miscomparef("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
+            atomic_store_relaxed(duct->flow_status[offset], 0);
+            flag_raisef(&duct->flags_receive[offset],
+                        "Duct receiver %s: sender has deviated from schedule.",
                         task_get_name(task_get_current()));
-            atomic_store_relaxed(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id], 0);
+        } else {
+            flag_recoverf(&duct->flags_receive[offset],
+                          "Duct receiver %s: sender has resumed acting on schedule.",
+                          task_get_name(task_get_current()));
         }
     }
 }

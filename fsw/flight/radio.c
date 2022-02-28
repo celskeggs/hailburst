@@ -267,8 +267,9 @@ void radio_uplink_clip(radio_t *radio) {
             radio_uplink_compute_reads(radio, registers, &radio->read_plan);
             radio->uplink_offset = 0;
             radio->uplink_state = RAD_UL_PRIME_READ;
+            flag_recoverf(&radio->uplink_query_status_flag, "Radio status queries recovered.");
         } else {
-            debugf(WARNING, "Failed to query radio status, error=0x%03x", status);
+            flag_raisef(&radio->uplink_query_status_flag, "Failed to query radio status, error=0x%03x", status);
         }
         break;
     case RAD_UL_PRIME_READ:

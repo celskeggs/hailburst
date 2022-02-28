@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include <hal/debug.h>
+#include <synch/flag.h>
 
 enum {
     DUCT_MIN_REPLICAS =   1,
@@ -37,6 +38,8 @@ typedef struct {
     const size_t            message_size;
     uint8_t * const         message_buffer;
     duct_flow_index * const flow_status; // DUCT_MISSING_FLOW if not sent; otherwise [0, max_flow] based on msgs.
+    flag_t * const          flags_receive;
+    flag_t * const          flags_send;
 } duct_t;
 
 enum duct_txn_mode {
@@ -79,6 +82,8 @@ enum duct_polarity {
         [0 ... ((d_sender_replicas) * (d_receiver_replicas) - 1)] =                                                   \
                 ((d_polarity) == DUCT_SENDER_FIRST) ? DUCT_MISSING_FLOW : 0,                                          \
     };                                                                                                                \
+    flag_t symbol_join(d_ident, flags_receive)[(d_sender_replicas) * (d_receiver_replicas)];                          \
+    flag_t symbol_join(d_ident, flags_send)[(d_sender_replicas) * (d_receiver_replicas)];                             \
     duct_t d_ident = {                                                                                                \
         .sender_replicas = (d_sender_replicas),                                                                       \
         .receiver_replicas = (d_receiver_replicas),                                                                   \
@@ -86,6 +91,8 @@ enum duct_polarity {
         .message_size = (d_message_size),                                                                             \
         .message_buffer = symbol_join(d_ident, buf),                                                                  \
         .flow_status = symbol_join(d_ident, flow_statuses),                                                           \
+        .flags_receive = symbol_join(d_ident, flags_receive),                                                         \
+        .flags_send = symbol_join(d_ident, flags_send),                                                               \
     }
 
 static inline size_t duct_message_size(duct_t *duct) {
