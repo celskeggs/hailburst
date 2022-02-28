@@ -22,10 +22,16 @@ enum {
     SWITCH_ROUTE_FLAG_POP     = 0x80,
 };
 
+typedef struct {
+    duct_t *inbound;
+    duct_txn_t inbound_txn;
+    duct_t *outbound;
+    duct_txn_t outbound_txn;
+} switch_port_t;
+
 // TODO: figure out how to prebuild this structure so that it can be const
 typedef struct {
-    duct_t *ports_inbound[SWITCH_PORTS];
-    duct_t *ports_outbound[SWITCH_PORTS];
+    switch_port_t ports[SWITCH_PORTS];
 
     size_t scratch_buffer_size;
 
@@ -42,8 +48,7 @@ void switch_io_clip(const switch_replica_t *sr);
 
 macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
     switch_t v_ident = {
-        .ports_inbound = { NULL },
-        .ports_outbound = { NULL },
+        .ports = { { NULL } },
         .scratch_buffer_size = (v_max_buffer),
         .routing_table = { 0 },
     };
@@ -70,8 +75,8 @@ macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
                   "switch port must be valid");                                                                       \
     static void v_ident ## _port_ ## v_port ## _init_inbound(void) {                                                  \
         assert(duct_message_size(&(v_inbound)) <= v_ident.scratch_buffer_size);                                       \
-        assert(v_ident.ports_inbound[(v_port) - SWITCH_PORT_BASE] == NULL);                                           \
-        v_ident.ports_inbound[(v_port) - SWITCH_PORT_BASE] = &v_inbound;                                              \
+        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound == NULL);                                           \
+        v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound = &v_inbound;                                              \
     }                                                                                                                 \
     PROGRAM_INIT(STAGE_RAW, v_ident ## _port_ ## v_port ## _init_inbound)
 
@@ -81,8 +86,8 @@ macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
                   "switch port must be valid");                                                                       \
     static void v_ident ## _port_ ## v_port ## _init_outbound(void) {                                                 \
         /* no need to check outbound message size; we can detect if a truncation is necessary! */                     \
-        assert(v_ident.ports_outbound[(v_port) - SWITCH_PORT_BASE] == NULL);                                          \
-        v_ident.ports_outbound[(v_port) - SWITCH_PORT_BASE] = &v_outbound;                                            \
+        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound == NULL);                                          \
+        v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound = &v_outbound;                                            \
     }                                                                                                                 \
     PROGRAM_INIT(STAGE_RAW, v_ident ## _port_ ## v_port ## _init_outbound)
 

@@ -14,10 +14,10 @@
  * If the receiver fails to hold up its end of the deal, an assertion is tripped.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <hal/debug.h>
-#include <synch/eplock.h>
 
 enum {
     DUCT_MIN_REPLICAS =   1,
@@ -37,9 +37,20 @@ typedef struct {
     const size_t            message_size;
     uint8_t * const         message_buffer;
     duct_flow_index * const flow_status; // DUCT_MISSING_FLOW if not sent; otherwise [0, max_flow] based on msgs.
-    eplock_t * const        mutex;
-    uint8_t                 flow_current; // scratch variable for current holder of mutex
 } duct_t;
+
+enum duct_txn_mode {
+    DUCT_TXN_INVALID = 0,
+    DUCT_TXN_SEND = 1,
+    DUCT_TXN_RECV = 2,
+};
+
+typedef struct {
+    enum duct_txn_mode mode;
+    duct_t            *duct;
+    uint8_t            replica_id;
+    duct_flow_index    flow_current;
+} duct_txn_t;
 
 typedef struct {
     size_t   size;
@@ -68,7 +79,6 @@ enum duct_polarity {
         [0 ... ((d_sender_replicas) * (d_receiver_replicas) - 1)] =                                                   \
                 ((d_polarity) == DUCT_SENDER_FIRST) ? DUCT_MISSING_FLOW : 0,                                          \
     };                                                                                                                \
-    EPLOCK_REGISTER(symbol_join(d_ident, mutex));                                                                     \
     duct_t d_ident = {                                                                                                \
         .sender_replicas = (d_sender_replicas),                                                                       \
         .receiver_replicas = (d_receiver_replicas),                                                                   \
@@ -76,8 +86,6 @@ enum duct_polarity {
         .message_size = (d_message_size),                                                                             \
         .message_buffer = symbol_join(d_ident, buf),                                                                  \
         .flow_status = symbol_join(d_ident, flow_statuses),                                                           \
-        .mutex = &symbol_join(d_ident, mutex),                                                                        \
-        .flow_current = DUCT_MISSING_FLOW,                                                                            \
     }
 
 static inline size_t duct_message_size(duct_t *duct) {
@@ -99,17 +107,17 @@ static inline duct_message_t *duct_lookup_message(duct_t *duct, uint8_t sender_i
     ];
 }
 
-void duct_send_prepare(duct_t *duct, uint8_t sender_id);
+void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id);
 // returns true if we're allowed to send at least one more message
-bool duct_send_allowed(duct_t *duct, uint8_t sender_id);
+bool duct_send_allowed(duct_txn_t *txn);
 // asserts if we've used up our max flow in this transaction already
-void duct_send_message(duct_t *duct, uint8_t sender_id, void *message, size_t size, uint64_t timestamp);
-void duct_send_commit(duct_t *duct, uint8_t sender_id);
+void duct_send_message(duct_txn_t *txn, void *message, size_t size, uint64_t timestamp);
+void duct_send_commit(duct_txn_t *txn);
 
-void duct_receive_prepare(duct_t *duct, uint8_t receiver_id);
+void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id);
 // returns size > 0 if a message was successfully received. if size = 0, then we're done with this transaction.
-size_t duct_receive_message(duct_t *duct, uint8_t receiver_id, void *message_out, uint64_t *timestamp_out);
+size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timestamp_out);
 // asserts if we left any messages unprocessed
-void duct_receive_commit(duct_t *duct, uint8_t receiver_id);
+void duct_receive_commit(duct_txn_t *txn);
 
 #endif /* FSW_SYNCH_DUCT_H */

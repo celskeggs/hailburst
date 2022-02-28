@@ -61,11 +61,12 @@ static void link_monitor_loop(struct link_monitor *mon) {
 
     assert(mon->validated == false);
 
-    duct_receive_prepare(mon->rx, 0);
-    if (duct_receive_message(mon->rx, 0, NULL, NULL) > 0) {
+    duct_txn_t txn;
+    duct_receive_prepare(&txn, mon->rx, 0);
+    if (duct_receive_message(&txn, NULL, NULL) > 0) {
         abortf("Received unexpected duct message before any had been sent.");
     }
-    duct_receive_commit(mon->rx, 0);
+    duct_receive_commit(&txn);
 
     uint8_t packet_data[mon->max_rate * mon->max_packet];
     size_t  packet_lens[mon->max_rate];
@@ -78,24 +79,24 @@ static void link_monitor_loop(struct link_monitor *mon) {
         duct_flow_index loop_quantity = rand() % (mon->max_rate + 1);
         random_packet_chain(packet_data, packet_lens, loop_quantity, mon->max_packet);
 
-        duct_send_prepare(mon->tx, 0);
+        duct_send_prepare(&txn, mon->tx, 0);
 
         for (duct_flow_index i = 0; i < loop_quantity; i++) {
-            if (!duct_send_allowed(mon->tx, 0)) {
+            if (!duct_send_allowed(&txn)) {
                 abortf("Unable to transmit message at a point where it should be possible.");
             }
-            duct_send_message(mon->tx, 0, &packet_data[mon->max_packet * i], packet_lens[i], 0 /* no timestamp */);
+            duct_send_message(&txn, &packet_data[mon->max_packet * i], packet_lens[i], 0 /* no timestamp */);
         }
 
-        duct_send_commit(mon->tx, 0);
+        duct_send_commit(&txn);
 
         task_yield();
 
-        duct_receive_prepare(mon->rx, 0);
+        duct_receive_prepare(&txn, mon->rx, 0);
 
         size_t count_successes = 0;
         for (duct_flow_index i = 0; i < loop_quantity; i++) {
-            recv_len = duct_receive_message(mon->rx, 0, recv_data, NULL);
+            recv_len = duct_receive_message(&txn, recv_data, NULL);
             if (recv_len == 0) {
                 break;
             }
@@ -111,7 +112,7 @@ static void link_monitor_loop(struct link_monitor *mon) {
         debugf(TRACE, "[%s] Packet flow: %zu/%u packets (valid_epochs=%zu).",
                mon->label, count_successes, loop_quantity, valid_epochs);
 
-        recv_len = duct_receive_message(mon->rx, 0, NULL, NULL);
+        recv_len = duct_receive_message(&txn, NULL, NULL);
         if (recv_len > 0) {
             abortf("[%s] Received unexpected packet of length %zu", mon->label, recv_len);
         }
@@ -137,7 +138,7 @@ static void link_monitor_loop(struct link_monitor *mon) {
             }
         }
 
-        duct_receive_commit(mon->rx, 0);
+        duct_receive_commit(&txn);
     }
 }
 

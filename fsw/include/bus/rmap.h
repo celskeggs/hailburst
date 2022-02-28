@@ -57,6 +57,12 @@ typedef struct {
     uint16_t current_txn_id;
 } rmap_t;
 
+typedef struct {
+    rmap_t    *rmap;
+    duct_txn_t rx_recv_txn;
+    duct_txn_t tx_send_txn;
+} rmap_txn_t;
+
 // maximum flow needed by an RMAP handler is one packet per epoch in each direction (for continuous operation)
 #define RMAP_MAX_IO_FLOW        1
 
@@ -83,19 +89,19 @@ typedef struct {
     PP_CONST_MAX(SCRATCH_MARGIN_READ + (r_max_read), SCRATCH_MARGIN_WRITE + (r_max_write))
 
 // must be called every epoch before any uses of RMAP have been made, even if RMAP won't be used.
-void rmap_epoch_prepare(rmap_t *rmap);
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap);
 // must be called every epoch after all uses of RMAP have been completed, even if RMAP didn't get used.
-void rmap_epoch_commit(rmap_t *rmap);
+void rmap_epoch_commit(rmap_txn_t *txn);
 
 // uses ACKNOWLEDGE | VERIFY | INCREMENT flags
-void rmap_write_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t length);
+void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t length);
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_write_complete(rmap_t *rmap, uint64_t *ack_timestamp_out);
+rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out);
 
 // uses INCREMENT flag
-void rmap_read_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, size_t length);
+void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size_t length);
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_read_complete(rmap_t *rmap, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out);
+rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out);
 
 // helper functions for main code (defined in rmap_helpers.c)
 uint8_t rmap_crc8(uint8_t *bytes, size_t len);

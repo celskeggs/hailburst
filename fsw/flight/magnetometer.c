@@ -54,11 +54,13 @@ void magnetometer_query_loop(magnetometer_t *mag) {
 
     for (;;) {
         debugf(TRACE, "About to prepare RMAP");
-        rmap_epoch_prepare(mag->endpoint);
+
+        rmap_txn_t rmap_txn;
+        rmap_epoch_prepare(&rmap_txn, mag->endpoint);
 
         switch (state) {
         case MS_ACTIVATING:
-            status = rmap_write_complete(mag->endpoint, NULL);
+            status = rmap_write_complete(&rmap_txn, NULL);
             if (status == RS_OK) {
                 state = MS_ACTIVE;
                 next_reading_time = clock_timestamp_monotonic() + READING_DELAY_NS;
@@ -68,7 +70,7 @@ void magnetometer_query_loop(magnetometer_t *mag) {
             }
             break;
         case MS_DEACTIVATING:
-            status = rmap_write_complete(mag->endpoint, NULL);
+            status = rmap_write_complete(&rmap_txn, NULL);
             if (status == RS_OK) {
                 state = MS_INACTIVE;
                 tlm_mag_pwr_state_changed(mag->telemetry_async, false);
@@ -78,7 +80,7 @@ void magnetometer_query_loop(magnetometer_t *mag) {
             break;
         case MS_LATCHING_ON:
             // TODO: stop after a certain number of retries?
-            status = rmap_write_complete(mag->endpoint, &actual_reading_time);
+            status = rmap_write_complete(&rmap_txn, &actual_reading_time);
             if (status == RS_OK) {
                 assert(actual_reading_time != 0);
                 state = MS_LATCHED_ON;
@@ -89,7 +91,7 @@ void magnetometer_query_loop(magnetometer_t *mag) {
             break;
         case MS_TAKING_READING:
             // TODO: stop after a certain number of retries?
-            status = rmap_read_complete(mag->endpoint, (uint8_t*) registers, sizeof(registers), NULL);
+            status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(registers), NULL);
             if (status == RS_OK) {
                 for (int i = 0; i < 4; i++) {
                     registers[i] = be16toh(registers[i]);
@@ -132,18 +134,18 @@ void magnetometer_query_loop(magnetometer_t *mag) {
         switch (state) {
         case MS_ACTIVATING:
             single_value = htobe16(POWER_ON);
-            rmap_write_start(mag->endpoint, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
+            rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
             break;
         case MS_DEACTIVATING:
             single_value = htobe16(POWER_OFF);
-            rmap_write_start(mag->endpoint, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
+            rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
             break;
         case MS_LATCHING_ON:
             single_value = htobe16(LATCH_ON);
-            rmap_write_start(mag->endpoint, 0x00, REG_LATCH, (uint8_t*) &single_value, sizeof(single_value));
+            rmap_write_start(&rmap_txn, 0x00, REG_LATCH, (uint8_t*) &single_value, sizeof(single_value));
             break;
         case MS_TAKING_READING:
-            rmap_read_start(mag->endpoint, 0x00, REG_LATCH, sizeof(uint16_t) * 4);
+            rmap_read_start(&rmap_txn, 0x00, REG_LATCH, sizeof(uint16_t) * 4);
             static_assert(REG_LATCH + 1 == REG_X, "assumptions about register layout");
             static_assert(REG_LATCH + 2 == REG_Y, "assumptions about register layout");
             static_assert(REG_LATCH + 3 == REG_Z, "assumptions about register layout");
@@ -153,7 +155,7 @@ void magnetometer_query_loop(magnetometer_t *mag) {
             break;
         }
 
-        rmap_epoch_commit(mag->endpoint);
+        rmap_epoch_commit(&rmap_txn);
 
         debugf(TRACE, "Yield from magnetometer");
         task_yield();

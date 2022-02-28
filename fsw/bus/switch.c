@@ -33,13 +33,13 @@ static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
         assert(SWITCH_PORT_BASE <= outport && outport < SWITCH_PORT_BASE + SWITCH_PORTS);
     }
     assert(SWITCH_PORT_BASE <= outport && outport < SWITCH_PORT_BASE + SWITCH_PORTS);
-    duct_t *outbound = sw->ports_outbound[outport - SWITCH_PORT_BASE];
-    if (!outbound) {
+    switch_port_t *swport = &sw->ports[outport - SWITCH_PORT_BASE];
+    if (!swport->outbound) {
         debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) to nonexistent port %u (address=%u).",
                replica_id, port, message_size, outport, destination);
         return;
     }
-    if (!duct_send_allowed(outbound, replica_id)) {
+    if (!duct_send_allowed(&swport->outbound_txn)) {
         debugf(WARNING,
                "Switch replica %u port %u: dropped packet (len=%zu) violating max flow rate to port %u (address=%u).",
                replica_id, port, message_size, outport, destination);
@@ -57,14 +57,14 @@ static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
         }
     }
     assert(message_size > 0);
-    if (message_size > duct_message_size(outbound)) {
+    if (message_size > duct_message_size(swport->outbound)) {
         // don't passively accept this; it's likely to cause trouble down the line if left like this. so report it.
         debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) due to truncation (maxlen=%zu) by "
                "target port %u (address=%u).",
-               replica_id, port, message_size, duct_message_size(outbound), outport, destination);
+               replica_id, port, message_size, duct_message_size(swport->outbound), outport, destination);
         return;
     }
-    duct_send_message(outbound, replica_id, message_buffer, message_size, timestamp);
+    duct_send_message(&swport->outbound_txn, message_buffer, message_size, timestamp);
     debugf(TRACE, "Switch replica %u port %u: forwarded packet (len=%zu) to destination port %u (address=%u).",
            replica_id, port, message_size, outport, destination);
 }
@@ -80,23 +80,22 @@ void switch_io_clip(const switch_replica_t *sr) {
 
     // first, prepare all transactions
     for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-        duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
-        if (inbound != NULL) {
-            duct_receive_prepare(inbound, replica_id);
+        switch_port_t *swport = &sw->ports[port - SWITCH_PORT_BASE];
+        if (swport->inbound != NULL) {
+            duct_receive_prepare(&swport->inbound_txn, swport->inbound, replica_id);
         }
-        if (outbound != NULL) {
-            duct_send_prepare(outbound, replica_id);
+        if (swport->outbound != NULL) {
+            duct_send_prepare(&swport->outbound_txn, swport->outbound, replica_id);
         }
     }
 
     // now shuffle all messages
     for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-        if (inbound != NULL) {
+        switch_port_t *swport = &sw->ports[port - SWITCH_PORT_BASE];
+        if (swport->inbound != NULL) {
             uint64_t timestamp = 0;
             size_t message_size;
-            while ((message_size = duct_receive_message(inbound, replica_id, sr->scratch_buffer, &timestamp)) != 0) {
+            while ((message_size = duct_receive_message(&swport->inbound_txn, sr->scratch_buffer, &timestamp)) != 0) {
                 assert(message_size <= sw->scratch_buffer_size);
                 switch_packet(sw, replica_id, port, message_size, timestamp, sr->scratch_buffer);
                 packets++;
@@ -106,13 +105,12 @@ void switch_io_clip(const switch_replica_t *sr) {
 
     // finally, commit all transactions
     for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
-        duct_t *inbound = sw->ports_inbound[port - SWITCH_PORT_BASE];
-        duct_t *outbound = sw->ports_outbound[port - SWITCH_PORT_BASE];
-        if (inbound != NULL) {
-            duct_receive_commit(inbound, replica_id);
+        switch_port_t *swport = &sw->ports[port - SWITCH_PORT_BASE];
+        if (swport->inbound != NULL) {
+            duct_receive_commit(&swport->inbound_txn);
         }
-        if (outbound != NULL) {
-            duct_send_commit(outbound, replica_id);
+        if (swport->outbound != NULL) {
+            duct_send_commit(&swport->outbound_txn);
         }
     }
 

@@ -130,8 +130,8 @@ static void exchange_recv_ctrl_char_while_handshaking(exchange_instance_t *exc, 
     exc->send_secondary_handshake = false;
 }
 
-static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw_ctrl_t symbol, uint32_t param,
-                                                    uint64_t receive_timestamp) {
+static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, duct_txn_t *send_txn,
+                                                    fw_ctrl_t symbol, uint32_t param, uint64_t receive_timestamp) {
     assert(exc != NULL);
 
     // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
@@ -146,7 +146,7 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
         assert(exc->recv_state == FW_RECV_LISTENING);
 
         // should always be allowed, because the number of fcts we send are based on the max flow rate
-        assert(duct_send_allowed(exc->conf->read_duct, EXCHANGE_REPLICA_ID));
+        assert(duct_send_allowed(send_txn));
 
         // reset receive state and buffer before proceeding
         exc->read_offset = 0;
@@ -169,8 +169,7 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
             exc->recv_state = FW_RECV_LISTENING;
         } else {
             // transmit received packet through duct
-            duct_send_message(exc->conf->read_duct, EXCHANGE_REPLICA_ID,
-                              exc->conf->read_buffer, exc->read_offset, exc->read_timestamp);
+            duct_send_message(send_txn, exc->conf->read_buffer, exc->read_offset, exc->read_timestamp);
             exc->recv_state = FW_RECV_LISTENING;
         }
         break;
@@ -217,8 +216,8 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, fw
     }
 }
 
-static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, fw_ctrl_t symbol, uint32_t param,
-                                                uint64_t receive_timestamp) {
+static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, duct_txn_t *send_txn,
+                                                fw_ctrl_t symbol, uint32_t param, uint64_t receive_timestamp) {
     assert(exc != NULL);
     assert(param == 0 || fakewire_is_parametrized(symbol));
 
@@ -234,7 +233,7 @@ static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, fw_ctr
         exchange_recv_ctrl_char_while_handshaking(exc, symbol, param);
         break;
     case FW_EXC_OPERATING:
-        exchange_recv_ctrl_char_while_operating(exc, symbol, param, receive_timestamp);
+        exchange_recv_ctrl_char_while_operating(exc, send_txn, symbol, param, receive_timestamp);
         break;
     default:
         assert(false);
@@ -272,7 +271,7 @@ static void exchange_instance_receive_data_chars(exchange_instance_t *exc, uint8
     }
 }
 
-static bool exchange_instance_receive(exchange_instance_t *exc) {
+static bool exchange_instance_receive(exchange_instance_t *exc, duct_txn_t *send_txn) {
     // discard all data and just tell us the number of bytes
     fw_decoded_ent_t rx_ent = {
         .data_out     = NULL,
@@ -294,7 +293,8 @@ static bool exchange_instance_receive(exchange_instance_t *exc) {
     if (rx_ent.ctrl_out != FWC_NONE) {
         assert(rx_ent.data_actual_len == 0);
 
-        exchange_instance_receive_ctrl_char(exc, rx_ent.ctrl_out, rx_ent.ctrl_param, rx_ent.receive_timestamp);
+        exchange_instance_receive_ctrl_char(exc, send_txn,
+                                            rx_ent.ctrl_out, rx_ent.ctrl_param, rx_ent.receive_timestamp);
     } else {
         assert(rx_ent.data_actual_len > 0);
 
@@ -452,13 +452,13 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
     while (true) {
         exchange_instance_check_invariants(exc);
 
-        duct_receive_prepare(exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+        duct_txn_t recv_txn;
+        duct_receive_prepare(&recv_txn, exc->conf->write_duct, EXCHANGE_REPLICA_ID);
 
         duct_flow_index dropped = 0;
         size_t packet_length;
         assert(exc->conf->buffers_length == duct_message_size(exc->conf->write_duct));
-        while (0 != (packet_length = duct_receive_message(exc->conf->write_duct, EXCHANGE_REPLICA_ID,
-                                                          exc->conf->write_buffer, NULL))) {
+        while (0 != (packet_length = duct_receive_message(&recv_txn, exc->conf->write_buffer, NULL))) {
             assert(0 < packet_length && packet_length <= exc->conf->buffers_length);
             if (!exchange_instance_transmit_data(exc, packet_length)) {
                 dropped++;
@@ -468,7 +468,7 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
             debug_printf(WARNING, "Dropped %u packets blocked from transmission.", dropped);
         }
 
-        duct_receive_commit(exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+        duct_receive_commit(&recv_txn);
 
         // flush encoder before we sleep
         fakewire_enc_flush(&exc->encoder);
@@ -478,13 +478,14 @@ void fakewire_exc_exchange_loop(const fw_exchange_t *conf) {
 
         exchange_instance_check_timers(exc);
 
-        duct_send_prepare(exc->conf->read_duct, EXCHANGE_REPLICA_ID);
+        duct_txn_t send_txn;
+        duct_send_prepare(&send_txn, exc->conf->read_duct, EXCHANGE_REPLICA_ID);
         // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
         // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
-        while (exchange_instance_receive(exc)) {
+        while (exchange_instance_receive(exc, &send_txn)) {
             // keep looping
         }
-        duct_send_commit(exc->conf->read_duct, EXCHANGE_REPLICA_ID);
+        duct_send_commit(&send_txn);
 
         exchange_instance_check_fcts(exc);
 

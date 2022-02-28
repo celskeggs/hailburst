@@ -69,11 +69,12 @@ void clock_start_main(clock_device_t *clock) {
     // TODO: can we reclaim this resource?
 
     for (;;) {
-        rmap_epoch_prepare(clock->rmap);
+        rmap_txn_t rmap_txn;
+        rmap_epoch_prepare(&rmap_txn, clock->rmap);
 
         switch (state) {
         case CLOCK_READ_MAGIC_NUMBER:
-            status = rmap_read_complete(clock->rmap, (uint8_t*) &magic_number, sizeof(magic_number), NULL);
+            status = rmap_read_complete(&rmap_txn, (uint8_t*) &magic_number, sizeof(magic_number), NULL);
             if (status == RS_OK) {
                 magic_number = be32toh(magic_number);
                 if (magic_number != CLOCK_MAGIC_NUM) {
@@ -85,7 +86,7 @@ void clock_start_main(clock_device_t *clock) {
             }
             break;
         case CLOCK_READ_CURRENT_TIME:
-            status = rmap_read_complete(clock->rmap, (uint8_t*) &received_timestamp, sizeof(received_timestamp),
+            status = rmap_read_complete(&rmap_txn, (uint8_t*) &received_timestamp, sizeof(received_timestamp),
                                         &network_timestamp);
             if (status == RS_OK) {
                 received_timestamp = be64toh(received_timestamp);
@@ -108,17 +109,17 @@ void clock_start_main(clock_device_t *clock) {
 
         switch (state) {
         case CLOCK_READ_MAGIC_NUMBER:
-            rmap_read_start(clock->rmap, 0x00, REG_MAGIC, sizeof(magic_number));
+            rmap_read_start(&rmap_txn, 0x00, REG_MAGIC, sizeof(magic_number));
             break;
         case CLOCK_READ_CURRENT_TIME:
-            rmap_read_start(clock->rmap, 0x00, REG_CLOCK, sizeof(received_timestamp));
+            rmap_read_start(&rmap_txn, 0x00, REG_CLOCK, sizeof(received_timestamp));
             break;
         default:
             /* nothing to do */
             break;
         }
 
-        rmap_epoch_commit(clock->rmap);
+        rmap_epoch_commit(&rmap_txn);
 
         task_yield();
     }

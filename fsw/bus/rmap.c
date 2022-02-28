@@ -10,30 +10,34 @@ enum {
     RMAP_REPLICA_ID = 0,
 };
 
-void rmap_epoch_prepare(rmap_t *rmap) {
-    duct_send_prepare(rmap->tx_duct, RMAP_REPLICA_ID);
-    duct_receive_prepare(rmap->rx_duct, RMAP_REPLICA_ID);
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap) {
+    assert(txn != NULL && rmap != NULL);
+    txn->rmap = rmap;
+    duct_send_prepare(&txn->tx_send_txn, rmap->tx_duct, RMAP_REPLICA_ID);
+    duct_receive_prepare(&txn->rx_recv_txn, rmap->rx_duct, RMAP_REPLICA_ID);
 }
 
-void rmap_epoch_commit(rmap_t *rmap) {
+void rmap_epoch_commit(rmap_txn_t *txn) {
     /* make sure that, if we received a packet, we've taken it out of the receive queue to avoid an assert. */
     static_assert(RMAP_MAX_IO_FLOW == 1, "should only be one message accepted per epoch");
-    if (duct_receive_message(rmap->rx_duct, RMAP_REPLICA_ID, NULL, NULL) > 0) {
-        debugf(WARNING, "RMAP (%10s) dropped packet received at unexpected time.", rmap->label);
+    if (duct_receive_message(&txn->rx_recv_txn, NULL, NULL) > 0) {
+        debugf(WARNING, "RMAP (%10s) dropped packet received at unexpected time.", txn->rmap->label);
     }
 
-    duct_send_commit(rmap->tx_duct, RMAP_REPLICA_ID);
-    duct_receive_commit(rmap->rx_duct, RMAP_REPLICA_ID);
+    duct_send_commit(&txn->tx_send_txn);
+    duct_receive_commit(&txn->rx_recv_txn);
 }
 
-void rmap_write_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t data_length) {
+void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t data_length) {
+    assert(txn != NULL);
+    rmap_t *rmap = txn->rmap;
     assert(rmap != NULL && buffer != NULL);
     assert(data_length <= duct_message_size(rmap->tx_duct) - SCRATCH_MARGIN_WRITE);
 
     debugf(TRACE, "RMAP (%10s) WRITE START: ADDR=0x%02x_%08x LEN=0x%zx",
            rmap->label, ext_addr, main_addr, data_length);
 
-    if (!duct_send_allowed(rmap->tx_duct, RMAP_REPLICA_ID)) {
+    if (!duct_send_allowed(&txn->tx_send_txn)) {
         abortf("RMAP (%10s) not permitted to transmit another packet during this epoch.", rmap->label);
     }
 
@@ -80,7 +84,7 @@ void rmap_write_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, uint8_
 
     size_t packet_length = out - rmap->scratch;
     assert(packet_length <= duct_message_size(rmap->tx_duct));
-    duct_send_message(rmap->tx_duct, RMAP_REPLICA_ID, rmap->scratch, packet_length, 0 /* no timestamp needed */);
+    duct_send_message(&txn->tx_send_txn, rmap->scratch, packet_length, 0 /* no timestamp needed */);
 }
 
 // returns true if packet is a valid reply, and false otherwise.
@@ -134,12 +138,14 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, u
 }
 
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_write_complete(rmap_t *rmap, uint64_t *ack_timestamp_out) {
+rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out) {
+    assert(txn != NULL);
+    rmap_t *rmap = txn->rmap;
     assert(rmap != NULL);
 
     uint8_t status_byte;
     uint64_t timestamp = 0;
-    size_t packet_length = duct_receive_message(rmap->rx_duct, RMAP_REPLICA_ID, rmap->scratch, &timestamp);
+    size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
     if (packet_length == 0 || !rmap_validate_write_reply(rmap, rmap->scratch, packet_length, &status_byte)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
         debugf(TRACE, "RMAP (%10s) WRITE  FAIL: NO RESPONSE", rmap->label);
@@ -155,14 +161,16 @@ rmap_status_t rmap_write_complete(rmap_t *rmap, uint64_t *ack_timestamp_out) {
     return status_byte;
 }
 
-void rmap_read_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, size_t data_length) {
+void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size_t data_length) {
+    assert(txn != NULL);
+    rmap_t *rmap = txn->rmap;
     assert(rmap != NULL);
     assert(data_length <= duct_message_size(rmap->rx_duct) - SCRATCH_MARGIN_READ);
 
     debugf(TRACE, "RMAP (%10s)  READ START: ADDR=0x%02x_%08x LEN=0x%zx",
            rmap->label, ext_addr, main_addr, data_length);
 
-    if (!duct_send_allowed(rmap->tx_duct, RMAP_REPLICA_ID)) {
+    if (!duct_send_allowed(&txn->tx_send_txn)) {
         abortf("RMAP (%10s) not permitted to transmit another packet during this epoch.", rmap->label);
     }
 
@@ -206,7 +214,7 @@ void rmap_read_start(rmap_t *rmap, uint8_t ext_addr, uint32_t main_addr, size_t 
 
     size_t packet_length = out - rmap->scratch;
     assert(packet_length <= duct_message_size(rmap->tx_duct));
-    duct_send_message(rmap->tx_duct, RMAP_REPLICA_ID, rmap->scratch, packet_length, 0 /* no timestamp needed */);
+    duct_send_message(&txn->tx_send_txn, rmap->scratch, packet_length, 0 /* no timestamp needed */);
 }
 
 // returns true if packet is a valid reply, and false otherwise.
@@ -282,13 +290,15 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count,
     return true;
 }
 
-rmap_status_t rmap_read_complete(rmap_t *rmap, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out) {
+rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out) {
+    assert(txn != NULL);
+    rmap_t *rmap = txn->rmap;
     assert(rmap != NULL && buffer != NULL);
 
     uint8_t status_byte;
     size_t output_length = buffer_size;
     uint64_t timestamp = 0;
-    size_t packet_length = duct_receive_message(rmap->rx_duct, RMAP_REPLICA_ID, rmap->scratch, &timestamp);
+    size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
     if (packet_length == 0 || !rmap_validate_read_reply(rmap, rmap->scratch, packet_length,
                                                         &status_byte, buffer, &output_length)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
