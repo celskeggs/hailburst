@@ -44,6 +44,7 @@ static inline size_t stream_take_fill(stream_t *stream) {
     assert(stream != NULL);
     size_t fill;
     while ((fill = stream_fill(stream)) == 0) {
+        assert(stream->reader != NULL);
         local_doze(stream->reader);
     }
     return fill;
@@ -54,6 +55,7 @@ static inline size_t stream_take_space(stream_t *stream) {
     assert(stream != NULL);
     size_t space;
     while ((space = stream_space(stream)) == 0) {
+        assert(stream->writer != NULL);
         local_doze(stream->writer);
     }
     return space;
@@ -86,7 +88,7 @@ static inline size_t stream_read_possible(stream_t *stream, uint8_t *data_out, s
 
 // may only be used by a single thread at a time
 size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length, bool block) {
-    assert(stream != NULL && data_out != NULL && stream->reader != NULL && stream->writer != NULL);
+    assert(stream != NULL && data_out != NULL);
     // read at least one byte, blocking if necessary and requested
     size_t total_read = stream_read_possible(stream, data_out, max_length, block);
     if (total_read == 0 && !block) {
@@ -105,7 +107,9 @@ size_t stream_read(stream_t *stream, uint8_t *data_out, size_t max_length, bool 
         assert(total_read <= max_length);
     }
     // wake up the other end, now that more free space is available to it
-    local_rouse(stream->writer);
+    if (stream->writer != NULL) {
+        local_rouse(stream->writer);
+    }
     return total_read;
 }
 
@@ -130,14 +134,16 @@ static inline size_t stream_write_possible(stream_t *stream, uint8_t *data_in, s
     // advance write index
     atomic_store(stream->write_idx, stream->write_idx + length);
     // wake up the other end
-    local_rouse(stream->reader);
+    if (stream->reader != NULL) {
+        local_rouse(stream->reader);
+    }
     // return how much we actually wrote
     return length;
 }
 
 // may only be used by a single thread at a time
 void stream_write(stream_t *stream, uint8_t *data_in, size_t length) {
-    assert(stream != NULL && data_in != NULL && stream->reader != NULL && stream->writer != NULL);
+    assert(stream != NULL && data_in != NULL);
     while (length > 0) {
         // write as much as we can (at least one byte)
         size_t actual = stream_write_possible(stream, data_in, length, true);
@@ -149,6 +155,6 @@ void stream_write(stream_t *stream, uint8_t *data_in, size_t length) {
 }
 
 size_t stream_write_nonblock(stream_t *stream, uint8_t *data_in, size_t length) {
-    assert(stream != NULL && data_in != NULL && stream->reader != NULL && stream->writer != NULL);
+    assert(stream != NULL && data_in != NULL);
     return stream_write_possible(stream, data_in, length, false);
 }

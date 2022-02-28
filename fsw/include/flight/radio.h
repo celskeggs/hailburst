@@ -28,10 +28,49 @@ enum {
     REG_IO_BUFFER_SIZE = sizeof(uint32_t) * NUM_REGISTERS,
 };
 
+struct radio_uplink_reads {
+    uint32_t prime_read_address;
+    uint32_t prime_read_length;
+    uint32_t flipped_read_address;
+    uint32_t flipped_read_length;
+    bool needs_update_all; // if set, then register array has new values for all five core registers written back
+    bool needs_alt_update; // if set, then register array has new values for PTR_ALT and LEN_ALT only
+};
+
+enum radio_uplink_state {
+    RAD_UL_INITIAL_STATE,
+    RAD_UL_QUERY_COMMON_CONFIG,
+    RAD_UL_DISABLE_RECEIVE,
+    RAD_UL_RESET_REGISTERS,
+    RAD_UL_QUERY_STATE,
+    RAD_UL_PRIME_READ,
+    RAD_UL_FLIPPED_READ,
+    RAD_UL_REFILL_BUFFERS,
+    RAD_UL_WRITE_TO_STREAM,
+};
+
+enum radio_downlink_state {
+    RAD_DL_INITIAL_STATE,
+    RAD_DL_QUERY_COMMON_CONFIG,
+    RAD_DL_DISABLE_TRANSMIT,
+    RAD_DL_WAITING_FOR_STREAM,
+    RAD_DL_VALIDATE_IDLE,
+    RAD_DL_WRITE_RADIO_MEMORY,
+    RAD_DL_START_TRANSMIT,
+    RAD_DL_MONITOR_TRANSMIT,
+    RAD_DL_VERIFY_COMPLETE,
+};
+
 typedef struct {
     // separate RMAP handlers so that the tasks can operate independently
     rmap_t        *rmap_up;
     rmap_t        *rmap_down;
+
+    enum radio_uplink_state   uplink_state;
+    size_t                    uplink_offset;
+    struct radio_uplink_reads read_plan;
+    enum radio_downlink_state downlink_state;
+    uint32_t                  downlink_length;
 
     uint32_t       bytes_extracted;
     stream_t      *up_stream;
@@ -40,8 +79,8 @@ typedef struct {
     uint8_t        downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
 } radio_t;
 
-void radio_uplink_loop(radio_t *radio);
-void radio_downlink_loop(radio_t *radio);
+void radio_uplink_clip(radio_t *radio);
+void radio_downlink_clip(radio_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
 #define RADIO_REGISTER(r_ident,     r_switch_in, r_switch_out,                                                        \
@@ -52,8 +91,8 @@ void radio_downlink_loop(radio_t *radio);
     static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity                                                      \
                     && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");                              \
     extern radio_t r_ident;                                                                                           \
-    TASK_REGISTER(r_ident ## _up_task,   radio_uplink_loop,   &r_ident, RESTARTABLE);                                 \
-    TASK_REGISTER(r_ident ## _down_task, radio_downlink_loop, &r_ident, RESTARTABLE);                                 \
+    CLIP_REGISTER(r_ident ## _up_clip,   radio_uplink_clip,   &r_ident);                                              \
+    CLIP_REGISTER(r_ident ## _down_clip, radio_downlink_clip, &r_ident);                                              \
     RMAP_ON_SWITCHES(r_ident ## _up,        "radio_up",   r_switch_in, r_switch_out, r_up_port,   r_up_addr,          \
                      UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);                                                      \
     RMAP_ON_SWITCHES(r_ident ## _down,      "radio_down", r_switch_in, r_switch_out, r_down_port, r_down_addr,        \
@@ -62,16 +101,16 @@ void radio_downlink_loop(radio_t *radio);
         .rmap_up = &r_ident ## _up,                                                                                   \
         .rmap_down = &r_ident ## _down,                                                                               \
         .bytes_extracted = 0,                                                                                         \
+        .uplink_state = RAD_UL_INITIAL_STATE,                                                                         \
+        .uplink_offset = 0,                                                                                           \
+        .read_plan = { },                                                                                             \
+        .downlink_state = RAD_DL_INITIAL_STATE,                                                                       \
+        .downlink_length = 0,                                                                                         \
         .up_stream = &r_uplink,                                                                                       \
         .down_stream = &r_downlink,                                                                                   \
         .uplink_buf_local = { 0 },                                                                                    \
         .downlink_buf_local = { 0 },                                                                                  \
-    };                                                                                                                \
-    static void r_ident ## _init(void) {                                                                              \
-        stream_set_writer(&r_uplink, &r_ident ## _up_task);                                                           \
-        stream_set_reader(&r_downlink, &r_ident ## _down_task);                                                       \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_CRAFT, r_ident ## _init)
+    }
 
 // two RMAP channels, so twice the flow
 #define RADIO_MAX_IO_FLOW (2 * RMAP_MAX_IO_FLOW)
@@ -82,9 +121,9 @@ void radio_downlink_loop(radio_t *radio);
     RMAP_MAX_IO_PACKET(r_up_capacity, r_down_capacity)
 
 #define RADIO_UP_SCHEDULE(r_ident)                                                                                    \
-    TASK_SCHEDULE(r_ident ## _up_task, 150)
+    CLIP_SCHEDULE(r_ident ## _up_clip, 150)
 
 #define RADIO_DOWN_SCHEDULE(r_ident)                                                                                  \
-    TASK_SCHEDULE(r_ident ## _down_task, 150)
+    CLIP_SCHEDULE(r_ident ## _down_clip, 150)
 
 #endif /* FSW_RADIO_H */
