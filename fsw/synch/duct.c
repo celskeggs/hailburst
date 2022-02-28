@@ -1,8 +1,10 @@
 #include <string.h>
 
 #include <hal/atomic.h>
+#include <hal/clip.h>
 #include <hal/clock.h>
 #include <hal/thread.h>
+#include <synch/config.h>
 #include <synch/duct.h>
 
 //#define DUCT_DEBUG
@@ -23,8 +25,8 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id) {
     /* ensure that all previously-sent flows have been consumed */
     for (uint8_t receiver_id = 0; receiver_id < duct->receiver_replicas; receiver_id++) {
         if (atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]) != DUCT_MISSING_FLOW) {
-            abortf("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
-                   task_get_name(task_get_current()));
+            miscomparef("Temporal ordering broken: previous duct receiver did not act on schedule. (sender=%s)",
+                        task_get_name(task_get_current()));
         }
     }
 }
@@ -66,8 +68,6 @@ void duct_send_commit(duct_txn_t *txn) {
 
     /* emit new counts */
     for (uint8_t receiver_id = 0; receiver_id < txn->duct->receiver_replicas; receiver_id++) {
-        assert(txn->duct->flow_status[txn->replica_id * txn->duct->receiver_replicas + receiver_id]
-                    == DUCT_MISSING_FLOW);
         atomic_store(txn->duct->flow_status[txn->replica_id * txn->duct->receiver_replicas + receiver_id],
                      txn->flow_current);
     }
@@ -85,6 +85,10 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
     assert(txn != NULL && duct != NULL);
     assert(receiver_id < duct->receiver_replicas);
 
+    // ensure that all receives run inside clips, so that if they get descheduled, they don't keep trying to interpret
+    // received data that might be actively changing.
+    clip_assert();
+
 #ifdef DUCT_DEBUG
     debugf(TRACE, "duct receive prepare: %p[%u]", duct, receiver_id);
 #endif
@@ -98,11 +102,29 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
     for (uint8_t sender_id = 0; sender_id < duct->sender_replicas; sender_id++) {
         duct_flow_index status = atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]);
         if (status == DUCT_MISSING_FLOW) {
-            abortf("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
-                   task_get_name(task_get_current()));
+            miscomparef("Temporal ordering broken: previous duct sender did not act on schedule. (receiver=%s)",
+                        task_get_name(task_get_current()));
+            atomic_store_relaxed(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id], 0);
         }
         assert(status <= duct->max_flow);
     }
+}
+
+static inline duct_flow_index majority_threshold(duct_t *duct) {
+    return duct->sender_replicas / 2 + 1;
+}
+
+static duct_message_t *duct_check_message(duct_t *duct, uint8_t sender_id, uint8_t receiver_id, duct_flow_index idx) {
+    duct_flow_index status = atomic_load(duct->flow_status[sender_id * duct->receiver_replicas + receiver_id]);
+    if (status == DUCT_MISSING_FLOW || idx >= status || status > duct->max_flow) {
+        return NULL;
+    }
+    duct_message_t *candidate = duct_lookup_message(duct, sender_id, idx);
+    assert(candidate != NULL);
+    if (candidate->size == 0 || candidate->size > duct->message_size) {
+        return NULL;
+    }
+    return candidate;
 }
 
 // returns size > 0 if a message was successfully received. if size = 0, then we're done with this transaction.
@@ -117,54 +139,62 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timest
         return 0;
     }
 
-    /* ensure that all senders agree on whether they have another message to send us */
-    duct_flow_index another_count = 0;
-    for (uint8_t sender_id = 0; sender_id < txn->duct->sender_replicas; sender_id++) {
-        duct_flow_index index =
-                atomic_load(txn->duct->flow_status[sender_id * txn->duct->receiver_replicas + txn->replica_id]);
-        assert(index != DUCT_MISSING_FLOW && index <= txn->duct->max_flow);
-        if (index > txn->flow_current) {
-            another_count++;
+    // note: this code is written assuming that the receiver is running in a clip.
+    clip_assert();
+
+    uint8_t majority = majority_threshold(txn->duct);
+    duct_flow_index best_votes = 0, valid_messages = 0;
+    for (uint8_t candidate_id = 0; candidate_id < txn->duct->sender_replicas; candidate_id++) {
+        duct_message_t *candidate = duct_check_message(txn->duct, candidate_id, txn->replica_id, txn->flow_current);
+        if (candidate == NULL) {
+            // invalid data; skip this one.
+            continue;
+        }
+        valid_messages++;
+        duct_flow_index votes = 1;
+        for (uint8_t compare_id = candidate_id + 1; compare_id < txn->duct->sender_replicas; compare_id++) {
+            duct_message_t *compare = duct_check_message(txn->duct, compare_id, txn->replica_id, txn->flow_current);
+            if (compare == NULL) {
+                // invalid data; skip this one.
+                continue;
+            }
+            if (compare->size != candidate->size || compare->timestamp != candidate->timestamp) {
+                // metadata mismatch
+                continue;
+            }
+            if (memcmp(candidate->body, compare->body, compare->size) != 0) {
+                // data mismatch
+                continue;
+            }
+            // data and metadata match!
+            votes++;
+        }
+        if (votes >= best_votes) {
+            best_votes = votes;
+        }
+        if (votes >= majority) {
+            if (votes != txn->duct->sender_replicas) {
+                miscomparef("Voted for a message with %u/%u votes on index %u.",
+                            votes, txn->duct->sender_replicas, txn->flow_current);
+            }
+            if (message_out != NULL) {
+                memcpy(message_out, candidate->body, candidate->size);
+            }
+            if (timestamp_out) {
+                *timestamp_out = candidate->timestamp;
+            }
+            txn->flow_current += 1;
+            return candidate->size;
         }
     }
 
-    // TODO: change this when we move to non-strict mode
-    assert(another_count == 0 || another_count == txn->duct->sender_replicas);
-    if (another_count == 0) {
-        /* indicate that we've read all the messages that were sent */
-        return 0;
+    if (valid_messages != 0) {
+        miscomparef("Could not agree on a message: best vote was %u/%u at index %u.",
+                    best_votes, txn->duct->sender_replicas, txn->flow_current);
     }
 
-    /* grab the first message as a comparison point */
-    duct_message_t *first_message = duct_lookup_message(txn->duct, 0, txn->flow_current);
-    assert(first_message != NULL);
-    size_t first_size = first_message->size;
-    uint64_t first_timestamp = first_message->timestamp;
-    assert(first_size >= 1 && first_size <= txn->duct->message_size);
-    void *message_ref;
-    if (message_out != NULL) {
-        memcpy(message_out, first_message->body, first_size);
-        message_ref = message_out;
-    } else {
-        message_ref = first_message->body;
-    }
-
-    /* ensure the other messages match */
-    for (uint8_t sender_id = 1; sender_id < txn->duct->sender_replicas; sender_id++) {
-        duct_message_t *next_message = duct_lookup_message(txn->duct, sender_id, txn->flow_current);
-        assert(next_message != NULL);
-        assert(next_message->size == first_size);
-        assert(next_message->timestamp == first_timestamp);
-        assert(0 == memcmp(message_ref, next_message->body, first_size));
-    }
-
-    if (timestamp_out) {
-        *timestamp_out = first_timestamp;
-    }
-
-    txn->flow_current += 1;
-
-    return first_size;
+    /* indicate that there are no more valid messages for us to receive */
+    return 0;
 }
 
 // asserts if we left any messages unprocessed
@@ -174,10 +204,13 @@ void duct_receive_commit(duct_txn_t *txn) {
     assert(txn->replica_id < txn->duct->receiver_replicas);
     assert(txn->flow_current <= txn->duct->max_flow);
 
+    if (duct_receive_message(txn, NULL, NULL) > 0) {
+        malfunctionf("Did not consume all messages: consumed %u from space of %u, but there was at least one more.",
+                     txn->flow_current, txn->duct->max_flow);
+    }
+
     /* ensure that counts match actual number processed, and mark everything as consumed. */
     for (uint8_t sender_id = 0; sender_id < txn->duct->sender_replicas; sender_id++) {
-        uint32_t status = txn->duct->flow_status[sender_id * txn->duct->receiver_replicas + txn->replica_id];
-        assertf(status == txn->flow_current, "flow_status=%u, flow_current=%u", status, txn->flow_current);
         atomic_store(txn->duct->flow_status[sender_id * txn->duct->receiver_replicas + txn->replica_id],
                      DUCT_MISSING_FLOW);
     }

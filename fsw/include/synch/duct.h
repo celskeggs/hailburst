@@ -21,7 +21,7 @@
 
 enum {
     DUCT_MIN_REPLICAS =   1,
-    DUCT_MAX_REPLICAS = 254, /* don't allow 255 replicas to avoid overflow of uint8_t variables */
+    DUCT_MAX_REPLICAS =   3, /* limit this because we need to define an array of this size in each transaction */
     DUCT_MIN_FLOW     =   1,
     DUCT_MAX_FLOW     = 254, /* don't allow 255 flow per epoch to avoid overflow of uint8_t variables */
 
