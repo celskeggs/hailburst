@@ -350,25 +350,39 @@ def is_valid_variable_name(name):
     return name.replace("_", "").isalnum() and name[0].isalpha()
 
 
-def macro_define(args, name_token, parser):
-    if len(args) < 1:
-        raise MacroError("macro_define must always have a macro name to define")
+def macro_define(args, name_token, parser, is_block):
+    if is_block:
+        if len(args) < 2:
+            raise MacroError("macro_block_define must always have a macro name to define and a body variable")
+    else:
+        if len(args) < 1:
+            raise MacroError("macro_define must always have a macro name to define")
     param_names = [argument(arg) for arg in args]
     for name in param_names:
         if not is_valid_variable_name(name):
             raise MacroError("invalid identifier %r" % name)
     macro_name = param_names.pop(0)
+    body_name = param_names.pop() if is_block else None
 
     def accept_body(body):
-        def defined_macro_callback(call_args, call_token):
-            if len(call_args) != len(param_names):
-                raise MacroError("user-defined macro %r requires %d arguments but found %d"
-                                 % (macro_name, len(param_names), len(call_args)))
-            lookup = {param: tokens for param, tokens in zip(param_names, call_args)}
+        def substitute(lookup):
             substitution = []
             for token in body:
                 substitution += lookup.get(token.token, [token])
             return substitution, True
+
+        def defined_macro_callback(call_args, call_token):
+            if len(call_args) != len(param_names):
+                raise MacroError("user-defined macro %r requires %d arguments but found %d"
+                                 % (macro_name, len(param_names), len(call_args)))
+
+            lookup = {param: tokens for param, tokens in zip(param_names, call_args)}
+
+            def macro_accept_body(body):
+                lookup[body_name] = body
+                return substitute(lookup)
+
+            return macro_accept_body if is_block else substitute(lookup)
 
         if not parser.try_add_macro(macro_name, defined_macro_callback):
             raise MacroError("macro already defined: %r" % macro_name)
@@ -396,7 +410,8 @@ def default_parser(rawlines):
     parser.add_macro("static_repeat", static_repeat)
     parser.add_macro("symbol_join", symbol_join)
     parser.add_macro("symbol_str", symbol_str)
-    parser.add_macro("macro_define", lambda args, name_token: macro_define(args, name_token, parser))
+    parser.add_macro("macro_define", lambda args, name_token: macro_define(args, name_token, parser, False))
+    parser.add_macro("macro_block_define", lambda args, name_token: macro_define(args, name_token, parser, True))
     mutable = [parser, 0]
     parser.add_macro("anonymous_symbol", lambda args, name_token: anonymous_symbol(args, name_token, mutable))
     return parser
