@@ -11,6 +11,8 @@ struct scrubber_task_data {
     thread_t scrubber_task;
 };
 
+// scrubber_pend_t defined in task.h
+
 void scrubber_mainloop(struct scrubber_task_data *local);
 
 #define SCRUBBER_REGISTER(s_ident)                                                                                    \
@@ -23,6 +25,10 @@ void scrubber_mainloop(struct scrubber_task_data *local);
     }
 
 void scrubber_set_kernel(void *kernel_elf_rom);
+
+void scrubber_start_pend(scrubber_pend_t *pend);
+bool scrubber_is_pend_done(scrubber_pend_t *pend);
+
 // wait until the next (unstarted) scrubber cycle completes.
 void scrubber_cycle_wait(void);
 

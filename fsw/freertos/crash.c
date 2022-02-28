@@ -34,6 +34,7 @@ __attribute__((noreturn)) void restart_current_task(void) {
         debugf(WARNING, "Suspending task to wait for restart.");
     } else if (current_thread->restartable == RESTART_ON_RESCHEDULE) {
         current_thread->mut->hit_restart = true;
+        scrubber_start_pend(&current_thread->mut->clip_pend);
 
         debugf(WARNING, "Suspending restarted task to wait for reschedule.");
     } else {

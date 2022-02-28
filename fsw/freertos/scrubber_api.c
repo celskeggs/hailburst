@@ -24,20 +24,30 @@ static bool scrubber_done(struct scrubber_task_data *scrubber, uint64_t start_it
     return atomic_load_relaxed(scrubber->iteration) >= start_iteration + 2;
 }
 
-void scrubber_cycle_wait(void) {
-    uint64_t iteration_1 = start_scrub_wait(&scrubber_1);
-    uint64_t iteration_2 = start_scrub_wait(&scrubber_2);
+void scrubber_start_pend(scrubber_pend_t *pend) {
+    assert(pend != NULL);
+    pend->iteration_1 = start_scrub_wait(&scrubber_1);
+    pend->iteration_2 = start_scrub_wait(&scrubber_2);
+    pend->max_attempts = 200;
+}
 
-    int max_attempts = 200; // wait at most two seconds, regardless.
-    // wait until the iteration ends.
-    while (!scrubber_done(&scrubber_1, iteration_1) && !scrubber_done(&scrubber_2, iteration_2)) {
+bool scrubber_is_pend_done(scrubber_pend_t *pend) {
+    assert(pend != NULL);
+    // explanation of max_attempts: this whole thing is a heuristic. better to not sleep forever than to insist on a
+    // scrub cycle DEFINITELY having completed.
+    if (pend->max_attempts > 0) {
+        pend->max_attempts -= 1;
+    }
+    return (pend->max_attempts == 0) || scrubber_done(&scrubber_1, pend->iteration_1)
+                                     || scrubber_done(&scrubber_2, pend->iteration_2);
+}
+
+void scrubber_cycle_wait(void) {
+    scrubber_pend_t pend;
+    scrubber_start_pend(&pend);
+
+    while (!scrubber_is_pend_done(&pend)) {
         taskYIELD();
-        max_attempts -= 1;
-        if (max_attempts <= 0) {
-            // this whole thing is a heuristic, anyway. better to not sleep forever than to insist on a scrub cycle
-            // DEFINITELY having completed.
-            break;
-        }
     }
 }
 

@@ -14,6 +14,7 @@ void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
         scrubber_cycle_wait();
+        debugf(WARNING, "Task %s resuming after scrubber cycle completion.", state->pcTaskName);
     }
 
     /* clear crash flag */
@@ -28,7 +29,13 @@ void clip_play_direct(void) {
     thread_t clip = task_get_current();
 
     if (clip->mut->hit_restart) {
-        debugf(WARNING, "Clip %s resuming immediately; not waiting for scrubber cycle.", clip->pcTaskName);
+        // pend started in restart_current_task() to simplify this logic for us.
+        if (!scrubber_is_pend_done(&clip->mut->clip_pend)) {
+            // Go back to the top next scheduling period.
+            task_yield();
+            abortf("Clips should never return from yield!");
+        }
+        debugf(WARNING, "Clip %s resuming after scrubber cycle completion.", clip->pcTaskName);
         clip->mut->hit_restart = false;
         clip->mut->clip_next_tick = task_tick_index();
         clip->mut->needs_start = true;

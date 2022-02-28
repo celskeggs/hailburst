@@ -47,6 +47,12 @@ typedef enum {
     RESTART_ON_RESCHEDULE,
 } restartable_t;
 
+typedef struct {
+    uint64_t iteration_1;
+    uint64_t iteration_2;
+    uint8_t max_attempts;
+} scrubber_pend_t;
+
 /**
  * task. h
  *
@@ -62,8 +68,9 @@ typedef struct
     bool hit_restart;
 
     // only used for clips
-    bool     clip_running;
-    uint32_t clip_next_tick;
+    bool            clip_running;
+    uint32_t        clip_next_tick;
+    scrubber_pend_t clip_pend;
 
     // these are just 0 or 1, but in a full uint32_t to help with atomicity
     uint32_t roused_task;
