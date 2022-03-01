@@ -29,6 +29,9 @@ void clip_play_direct(void) {
     thread_t clip = task_get_current();
 
     if (clip->mut->hit_restart) {
+        // clear crash flag
+        clip->mut->recursive_exception = false;
+
         // pend started in restart_current_task() to simplify this logic for us.
         if (!scrubber_is_pend_done(&clip->mut->clip_pend)) {
             // Go back to the top next scheduling period.
@@ -52,9 +55,6 @@ void clip_play_direct(void) {
     }
 
     atomic_store(clip->mut->clip_running, true);
-
-    // clear crash flag
-    clip->mut->recursive_exception = false;
 
     // actual execution body
     clip->start_routine(clip->start_arg);

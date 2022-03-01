@@ -8,6 +8,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include <rtos/config.h>
 #include <rtos/replicate.h>
 #include <rtos/timer.h>
 #include <hal/atomic.h>
