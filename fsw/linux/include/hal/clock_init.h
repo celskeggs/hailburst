@@ -7,23 +7,32 @@
 
 #define CLOCK_EXISTS
 
+enum clock_state {
+    CLOCK_INITIAL_STATE,
+    CLOCK_READ_MAGIC_NUMBER,
+    CLOCK_READ_CURRENT_TIME,
+    CLOCK_IDLE,
+};
+
 typedef struct {
+    enum clock_state state;
     rmap_t *rmap;
 } clock_device_t;
 
-void clock_start_main(clock_device_t *clock);
+void clock_start_clip(clock_device_t *clock);
 
 #define CLOCK_REGISTER(c_ident, c_address, c_switch_in, c_switch_out, c_switch_port)                                  \
     extern clock_device_t c_ident;                                                                                    \
-    TASK_REGISTER(c_ident ## _task, clock_start_main, &c_ident, NOT_RESTARTABLE);                                     \
+    CLIP_REGISTER(c_ident ## _clip, clock_start_clip, &c_ident);                                                      \
     RMAP_ON_SWITCHES(c_ident ## _rmap, "clock", c_switch_in, c_switch_out, c_switch_port, c_address,                  \
                      sizeof(uint64_t), 0);                                                                            \
     clock_device_t c_ident = {                                                                                        \
         .rmap = &c_ident ## _rmap,                                                                                    \
+        .state = CLOCK_INITIAL_STATE,                                                                                 \
     }
 
 #define CLOCK_SCHEDULE(c_ident)                                                                                       \
-    TASK_SCHEDULE(c_ident ## _task, 100)
+    CLIP_SCHEDULE(c_ident ## _clip, 100)
 
 // one RMAP channel
 #define CLOCK_MAX_IO_FLOW       RMAP_MAX_IO_FLOW
