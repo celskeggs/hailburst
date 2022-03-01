@@ -90,91 +90,103 @@ void virtio_device_init_internal(struct virtio_device *device);
 void virtio_device_start_internal(struct virtio_device *device);
 void virtio_monitor_loop(struct virtio_device *device);
 
-#define VIRTIO_DEVICE_REGISTER(v_ident, v_region_id, v_device_id, v_feature_select, v_max_queues)                     \
-    extern struct virtio_device v_ident;                                                                              \
-    TASK_REGISTER(v_ident ## _task, virtio_monitor_loop, &v_ident, RESTARTABLE);                                      \
-    struct virtio_device_queue v_ident ## _queues[v_max_queues];                                                      \
-    struct virtio_device v_ident = {                                                                                  \
-        .initialized = false,                                                                                         \
-        .monitor_started = false,                                                                                     \
-        .monitor_task = &v_ident ## _task,                                                                            \
-        .mmio = (struct virtio_mmio_registers *)                                                                      \
-                    (VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * (v_region_id)),                          \
-        .feature_select_cb = (v_feature_select),                                                                      \
-        .irq = VIRTIO_MMIO_IRQS_BASE + (v_region_id),                                                                 \
-        .expected_device_id = (v_device_id),                                                                          \
-        .max_queues = (v_max_queues),                                                                                 \
-        .num_queues = 0, /* to be populated */                                                                        \
-        .queues = v_ident ## _queues, /* to be populated */                                                           \
-    };                                                                                                                \
-    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);                                    \
+macro_define(VIRTIO_DEVICE_REGISTER,
+             v_ident, v_region_id, v_device_id, v_feature_select, v_max_queues) {
+    extern struct virtio_device v_ident;
+    TASK_REGISTER(symbol_join(v_ident, task), virtio_monitor_loop, &v_ident, RESTARTABLE);
+    struct virtio_device_queue symbol_join(v_ident, queues)[v_max_queues];
+    struct virtio_device v_ident = {
+        .initialized = false,
+        .monitor_started = false,
+        .monitor_task = &symbol_join(v_ident, task),
+        .mmio = (struct virtio_mmio_registers *)
+                    (VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * (v_region_id)),
+        .feature_select_cb = (v_feature_select),
+        .irq = VIRTIO_MMIO_IRQS_BASE + (v_region_id),
+        .expected_device_id = (v_device_id),
+        .max_queues = (v_max_queues),
+        .num_queues = 0, /* to be populated */
+        .queues = symbol_join(v_ident, queues), /* to be populated */
+    };
+    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);
     PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
+}
 
-#define VIRTIO_DEVICE_SCHEDULE(v_ident, v_nanos) \
-    TASK_SCHEDULE(v_ident ## _task, v_nanos)
+macro_define(VIRTIO_DEVICE_SCHEDULE, v_ident, v_nanos) {
+    TASK_SCHEDULE(symbol_join(v_ident, task), v_nanos)
+}
 
 // this may only be called before the scheduler starts
 void virtio_device_setup_queue_internal(struct virtio_device *device, uint32_t queue_index);
 
-#define VIRTIO_DEVICE_QUEUE_REGISTER(v_ident, v_queue_index, v_direction, v_chart, v_queue_num)                       \
-    static struct virtq_desc v_ident ## _ ## v_queue_index ## _desc [v_queue_num] __attribute__((__aligned__(16)));   \
-    static struct {                                                                                                   \
-        /* weird init syntax required due to flexible array member */                                                 \
-        struct virtq_avail avail;                                                                                     \
-        uint16_t flex_ring[v_queue_num];                                                                              \
-    } v_ident ## _ ## v_queue_index ## _avail __attribute__((__aligned__(2)));                                        \
-    static struct {                                                                                                   \
-        /* weird init syntax required due to flexible array member */                                                 \
-        struct virtq_used used;                                                                                       \
-        struct virtq_used_elem ring[v_queue_num];                                                                     \
-    } v_ident ## _ ## v_queue_index ## _used __attribute__((__aligned__(4)));                                         \
-    static void v_ident ## _ ## v_queue_index ## _init(void) {                                                        \
-        assert(v_ident.queues[v_queue_index].chart == NULL);                                                          \
-        assert(v_ident.initialized == true && v_ident.monitor_started == false);                                      \
-        assert((v_queue_index) < v_ident.num_queues);                                                                 \
-        assert(chart_note_count(&v_chart) == (v_queue_num));                                                          \
-        v_ident.queues[v_queue_index].direction = (v_direction);                                                      \
-        v_ident.queues[v_queue_index].queue_num = (v_queue_num);                                                      \
-        v_ident.queues[v_queue_index].chart = &(v_chart);                                                             \
-        v_ident.queues[v_queue_index].desc  = v_ident ## _ ## v_queue_index ## _desc;                                 \
-        v_ident.queues[v_queue_index].avail = &v_ident ## _ ## v_queue_index ## _avail.avail;                         \
-        v_ident.queues[v_queue_index].used  = &v_ident ## _ ## v_queue_index ## _used.used;                           \
-        virtio_device_setup_queue_internal(&v_ident, v_queue_index);                                                  \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_READY, v_ident ## _ ## v_queue_index ## _init);
+macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
+             v_ident, v_queue_index, v_direction, v_chart, v_queue_num) {
+    static struct virtq_desc symbol_join(v_ident, v_queue_index, desc) [v_queue_num] __attribute__((__aligned__(16)));
+    static struct {
+        /* weird init syntax required due to flexible array member */
+        struct virtq_avail avail;
+        uint16_t flex_ring[v_queue_num];
+    } symbol_join(v_ident, v_queue_index, avail) __attribute__((__aligned__(2)));
+    static struct {
+        /* weird init syntax required due to flexible array member */
+        struct virtq_used used;
+        struct virtq_used_elem ring[v_queue_num];
+    } symbol_join(v_ident, v_queue_index, used) __attribute__((__aligned__(4)));
+    static void symbol_join(v_ident, v_queue_index, init)(void) {
+        assert(v_ident.queues[v_queue_index].chart == NULL);
+        assert(v_ident.initialized == true && v_ident.monitor_started == false);
+        assert((v_queue_index) < v_ident.num_queues);
+        assert(chart_note_count(&v_chart) == (v_queue_num));
+        v_ident.queues[v_queue_index].direction = (v_direction);
+        v_ident.queues[v_queue_index].queue_num = (v_queue_num);
+        v_ident.queues[v_queue_index].chart = &(v_chart);
+        v_ident.queues[v_queue_index].desc  = symbol_join(v_ident, v_queue_index, desc);
+        v_ident.queues[v_queue_index].avail = &symbol_join(v_ident, v_queue_index, avail).avail;
+        v_ident.queues[v_queue_index].used  = &symbol_join(v_ident, v_queue_index, used).used;
+        virtio_device_setup_queue_internal(&v_ident, v_queue_index);
+    }
+    PROGRAM_INIT(STAGE_READY, symbol_join(v_ident, v_queue_index, init));
+}
 
 void virtio_console_feature_select(uint64_t *features);
 void virtio_console_control_loop(struct virtio_console *console);
 void virtio_console_configure_internal(struct virtio_console *console);
 
-#define VIRTIO_CONSOLE_REGISTER(v_ident, v_region_id, v_data_rx, v_data_tx, v_rx_num, v_tx_num)                       \
-    VIRTIO_DEVICE_REGISTER(v_ident ## _device, v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select,         \
-                           6 /* room for queues 2,3,4,5 needed later */);                                             \
-    extern struct virtio_console v_ident;                                                                             \
-    TASK_REGISTER(v_ident ## _task, virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);                          \
-    CHART_REGISTER(v_ident ## _crx, sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)                  \
-                                        + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 4);                                        \
-    CHART_REGISTER(v_ident ## _ctx, sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent), 4);             \
-    CHART_SERVER_NOTIFY(v_ident ## _crx, task_rouse, &v_ident ## _task);                                              \
-    CHART_CLIENT_NOTIFY(v_ident ## _ctx, task_rouse, &v_ident ## _task);                                              \
-    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 2, /* control + rx */ QUEUE_INPUT,  v_ident ## _crx, 4);         \
-    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 3, /* control + tx */ QUEUE_OUTPUT, v_ident ## _ctx, 4);         \
-    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 4, /* data[1] + rx */ QUEUE_INPUT,  v_data_rx, v_rx_num);        \
-    VIRTIO_DEVICE_QUEUE_REGISTER(v_ident ## _device, 5, /* data[1] + tx */ QUEUE_OUTPUT, v_data_tx, v_tx_num);        \
-    struct virtio_console v_ident = {                                                                                 \
-        .devptr = &v_ident ## _device,                                                                                \
-        .control_rx = &v_ident ## _crx,                                                                               \
-        .control_tx = &v_ident ## _ctx,                                                                               \
-        .confirmed_port_present = false,                                                                              \
-    };                                                                                                                \
+macro_define(VIRTIO_CONSOLE_REGISTER,
+             v_ident, v_region_id, v_data_rx, v_data_tx, v_rx_num, v_tx_num) {
+    VIRTIO_DEVICE_REGISTER(symbol_join(v_ident, device), v_region_id, VIRTIO_CONSOLE_ID, virtio_console_feature_select,
+                           6 /* room for queues 2,3,4,5 needed later */);
+    extern struct virtio_console v_ident;
+    TASK_REGISTER(symbol_join(v_ident, task), virtio_console_control_loop, &v_ident, NOT_RESTARTABLE);
+    CHART_REGISTER(symbol_join(v_ident, crx), sizeof(struct virtio_console_control) + sizeof(struct io_rx_ent)
+                                        + VIRTIO_CONSOLE_CTRL_RECV_MARGIN, 4);
+    CHART_REGISTER(symbol_join(v_ident, ctx), sizeof(struct virtio_console_control) + sizeof(struct io_tx_ent), 4);
+    CHART_SERVER_NOTIFY(symbol_join(v_ident, crx), task_rouse, &symbol_join(v_ident, task));
+    CHART_CLIENT_NOTIFY(symbol_join(v_ident, ctx), task_rouse, &symbol_join(v_ident, task));
+    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 2, /* control + rx */
+                                 QUEUE_INPUT,  symbol_join(v_ident, crx), 4);
+    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 3, /* control + tx */
+                                 QUEUE_OUTPUT, symbol_join(v_ident, ctx), 4);
+    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 4, /* data[1] + rx */
+                                 QUEUE_INPUT,  v_data_rx, v_rx_num);
+    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 5, /* data[1] + tx */
+                                 QUEUE_OUTPUT, v_data_tx, v_tx_num);
+    struct virtio_console v_ident = {
+        .devptr = &symbol_join(v_ident, device),
+        .control_rx = &symbol_join(v_ident, crx),
+        .control_tx = &symbol_join(v_ident, ctx),
+        .confirmed_port_present = false,
+    };
     PROGRAM_INIT_PARAM(STAGE_CRAFT, virtio_console_configure_internal, v_ident, &v_ident)
+}
 
 // We have to schedule serial-ctrl before the virtio monitor, because while it isn't needed
 // during regular execution, it is on the critical path for activating the spacecraft bus.
 // The very first message it sends MUST go out immediately!
-#define VIRTIO_CONSOLE_SCHEDULE(v_ident)           \
-    TASK_SCHEDULE(v_ident ## _task, 25)            \
-    VIRTIO_DEVICE_SCHEDULE(v_ident ## _device, 75)
+macro_define(VIRTIO_CONSOLE_SCHEDULE, v_ident) {
+    TASK_SCHEDULE(symbol_join(v_ident, task), 25)
+    VIRTIO_DEVICE_SCHEDULE(symbol_join(v_ident, device), 75)
+}
 
 void *virtio_device_config_space(struct virtio_device *device);
 

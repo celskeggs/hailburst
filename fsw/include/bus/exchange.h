@@ -82,54 +82,63 @@ void fakewire_exc_init_internal(fw_exchange_t *fwe);
 void fakewire_exc_tx_clip(fw_exchange_t *fwe);
 void fakewire_exc_rx_clip(fw_exchange_t *fwe);
 
-#define FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_read_duct, e_write_duct, e_max_flow, e_buf_size)        \
-    static_assert(e_max_flow <= EXCHANGE_QUEUE_DEPTH, "exchange is not guaranteed to be able to transmit this fast"); \
-    /* in order to continously transmit N packets per cycle, there must be able to be 2N packets outstanding */       \
-    static_assert((e_max_flow) * 2 <= MAX_OUTSTANDING_TOKENS, "exchange protocol cannot transmit this fast");         \
-    extern fw_exchange_t e_ident;                                                                                     \
-    CLIP_REGISTER(e_ident ## _tx_clip, fakewire_exc_tx_clip, &e_ident);                                               \
-    CLIP_REGISTER(e_ident ## _rx_clip, fakewire_exc_rx_clip, &e_ident);                                               \
-    CHART_REGISTER(e_ident ## _transmit_chart, (e_buf_size) + 1024, EXCHANGE_QUEUE_DEPTH);                            \
-    CHART_CLIENT_NOTIFY(e_ident ## _transmit_chart, ignore_callback, NULL);                                           \
-    CHART_REGISTER(e_ident ## _receive_chart,  (e_buf_size) + 1024, EXCHANGE_QUEUE_DEPTH);                            \
-    CHART_SERVER_NOTIFY(e_ident ## _receive_chart, ignore_callback, NULL);                                            \
-    FAKEWIRE_LINK_REGISTER(e_ident ## _io_port, e_link_options,                                                       \
-                           e_ident ## _receive_chart, e_ident ## _transmit_chart,                                     \
-                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);                                               \
-    uint8_t e_ident ## _read_buffer[e_buf_size];                                                                      \
-    uint8_t e_ident ## _write_buffer[e_buf_size];                                                                     \
-    exchange_instance_t e_ident ## _instance;                                                                         \
-    fw_exchange_t e_ident = {                                                                                         \
-        .label = (e_link_options).label,                                                                              \
-        .instance = &e_ident ## _instance,                                                                            \
-        .buffers_length = (e_buf_size),                                                                               \
-        .read_buffer = e_ident ## _read_buffer,                                                                       \
-        .write_buffer = e_ident ## _write_buffer,                                                                     \
-        .transmit_chart = &e_ident ## _transmit_chart,                                                                \
-        .receive_chart = &e_ident ## _receive_chart,                                                                  \
-        .read_duct = &e_read_duct,                                                                                    \
-        .write_duct = &e_write_duct,                                                                                  \
+macro_define(FAKEWIRE_EXCHANGE_REGISTER,
+             e_ident, e_link_options, e_read_duct, e_write_duct, e_max_flow, e_buf_size) {
+    static_assert(e_max_flow <= EXCHANGE_QUEUE_DEPTH, "exchange is not guaranteed to be able to transmit this fast");
+    /* in order to continously transmit N packets per cycle, there must be able to be 2N packets outstanding */
+    static_assert((e_max_flow) * 2 <= MAX_OUTSTANDING_TOKENS, "exchange protocol cannot transmit this fast");
+    extern fw_exchange_t e_ident;
+    CLIP_REGISTER(symbol_join(e_ident, tx_clip), fakewire_exc_tx_clip, &e_ident);
+    CLIP_REGISTER(symbol_join(e_ident, rx_clip), fakewire_exc_rx_clip, &e_ident);
+    CHART_REGISTER(symbol_join(e_ident, transmit_chart), (e_buf_size) + 1024, EXCHANGE_QUEUE_DEPTH);
+    CHART_CLIENT_NOTIFY(symbol_join(e_ident, transmit_chart), ignore_callback, NULL);
+    CHART_REGISTER(symbol_join(e_ident, receive_chart),  (e_buf_size) + 1024, EXCHANGE_QUEUE_DEPTH);
+    CHART_SERVER_NOTIFY(symbol_join(e_ident, receive_chart), ignore_callback, NULL);
+    FAKEWIRE_LINK_REGISTER(symbol_join(e_ident, io_port), e_link_options,
+                           symbol_join(e_ident, receive_chart), symbol_join(e_ident, transmit_chart),
+                           EXCHANGE_QUEUE_DEPTH, EXCHANGE_QUEUE_DEPTH);
+    uint8_t symbol_join(e_ident, read_buffer)[e_buf_size];
+    uint8_t symbol_join(e_ident, write_buffer)[e_buf_size];
+    exchange_instance_t symbol_join(e_ident, instance);
+    fw_exchange_t e_ident = {
+        .label = (e_link_options).label,
+        .instance = &symbol_join(e_ident, instance),
+        .buffers_length = (e_buf_size),
+        .read_buffer = symbol_join(e_ident, read_buffer),
+        .write_buffer = symbol_join(e_ident, write_buffer),
+        .transmit_chart = &symbol_join(e_ident, transmit_chart),
+        .receive_chart = &symbol_join(e_ident, receive_chart),
+        .read_duct = &e_read_duct,
+        .write_duct = &e_write_duct,
     }
+}
 
-#define FAKEWIRE_EXCHANGE_ON_SWITCHES(e_ident, e_link_options, e_switch_in, e_switch_out, e_switch_port,              \
-                                      e_max_flow, e_max_size)                                                         \
-    DUCT_REGISTER(e_ident ## _read_duct,  1, SWITCH_REPLICAS, (e_max_flow) * 2, e_max_size, DUCT_SENDER_FIRST);       \
-    DUCT_REGISTER(e_ident ## _write_duct, SWITCH_REPLICAS, 1, (e_max_flow) * 2, e_max_size, DUCT_RECEIVER_FIRST);     \
-    FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options, e_ident ## _read_duct, e_ident ## _write_duct,                \
-                               e_max_flow, e_max_size);                                                               \
-    SWITCH_PORT_INBOUND(e_switch_in, e_switch_port, e_ident ## _read_duct);                                           \
-    SWITCH_PORT_OUTBOUND(e_switch_out, e_switch_port, e_ident ## _write_duct)
+macro_define(FAKEWIRE_EXCHANGE_ON_SWITCHES,
+             e_ident, e_link_options, e_switch_in, e_switch_out, e_switch_port, e_max_flow, e_max_size) {
+    DUCT_REGISTER(symbol_join(e_ident, read_duct),  1, SWITCH_REPLICAS,
+                  (e_max_flow) * 2, e_max_size, DUCT_SENDER_FIRST);
+    DUCT_REGISTER(symbol_join(e_ident, write_duct), SWITCH_REPLICAS, 1,
+                  (e_max_flow) * 2, e_max_size, DUCT_RECEIVER_FIRST);
+    FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options,
+                               symbol_join(e_ident, read_duct), symbol_join(e_ident, write_duct),
+                               e_max_flow, e_max_size);
+    SWITCH_PORT_INBOUND(e_switch_in, e_switch_port, symbol_join(e_ident, read_duct));
+    SWITCH_PORT_OUTBOUND(e_switch_out, e_switch_port, symbol_join(e_ident, write_duct))
+}
 
-#define FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE(e_ident)                                                                  \
-    CLIP_SCHEDULE(e_ident ## _tx_clip, 250)                                                                              \
-    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port)
+macro_define(FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE, e_ident) {
+    CLIP_SCHEDULE(symbol_join(e_ident, tx_clip), 250)
+    FAKEWIRE_LINK_SCHEDULE(symbol_join(e_ident, io_port))
+}
 
-#define FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE(e_ident)                                                                   \
-    FAKEWIRE_LINK_SCHEDULE(e_ident ## _io_port)                                                                       \
-    CLIP_SCHEDULE(e_ident ## _rx_clip, 250)
+macro_define(FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE, e_ident) {
+    FAKEWIRE_LINK_SCHEDULE(symbol_join(e_ident, io_port))
+    CLIP_SCHEDULE(symbol_join(e_ident, rx_clip), 250)
+}
 
-#define FAKEWIRE_EXCHANGE_SCHEDULE(e_ident)                                                                           \
-    FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE(e_ident)                                                                      \
+macro_define(FAKEWIRE_EXCHANGE_SCHEDULE, e_ident) {
+    FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE(e_ident)
     FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE(e_ident)
+}
 
 #endif /* FSW_FAKEWIRE_EXCHANGE_H */
