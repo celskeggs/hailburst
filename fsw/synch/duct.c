@@ -68,7 +68,9 @@ void duct_send_message(duct_txn_t *txn, void *message, size_t size, uint64_t tim
 
 void duct_send_commit(duct_txn_t *txn) {
     assert(txn != NULL && txn->duct != NULL);
-    assert(txn->mode == DUCT_TXN_SEND);
+    assertf(txn->mode == DUCT_TXN_SEND,
+            "Duct sender %s: transaction mode was %u instead of DUCT_TXN_SEND (%u)",
+            task_get_name(task_get_current()), txn->mode, DUCT_TXN_SEND);
     assert(txn->replica_id < txn->duct->sender_replicas);
     assert(txn->flow_current <= txn->duct->max_flow);
 
@@ -211,7 +213,9 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timest
 // asserts if we left any messages unprocessed
 void duct_receive_commit(duct_txn_t *txn) {
     assert(txn != NULL && txn->duct != NULL);
-    assert(txn->mode == DUCT_TXN_RECV);
+    assertf(txn->mode == DUCT_TXN_RECV,
+            "Duct receiver %s: transaction mode was %u instead of DUCT_TXN_RECV (%u)",
+            task_get_name(task_get_current()), txn->mode, DUCT_TXN_RECV);
     assert(txn->replica_id < txn->duct->receiver_replicas);
     assert(txn->flow_current <= txn->duct->max_flow);
 

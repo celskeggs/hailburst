@@ -14,6 +14,12 @@
 struct link_monitor {
     const char *label;
 
+    duct_flow_index loop_quantity;
+    uint8_t *packet_data;
+    size_t  *packet_lens;
+
+    size_t valid_epochs;
+
     duct_t *rx;
     duct_t *tx;
 
@@ -23,21 +29,29 @@ struct link_monitor {
     bool validated;
 };
 
-static void link_monitor_loop(struct link_monitor *mon);
+static void link_monitor_clip(struct link_monitor *mon);
 
-#define LINK_MONITOR(m_ident, m_receive, m_transmit, m_max_rate, m_max_packet)                                        \
-    struct link_monitor m_ident = {                                                                                   \
-        .label = #m_ident,                                                                                            \
-        .rx = &(m_receive),                                                                                           \
-        .tx = &(m_transmit),                                                                                          \
-        .max_rate = (m_max_rate),                                                                                     \
-        .max_packet = (m_max_packet),                                                                                 \
-        .validated = false,                                                                                           \
-    };                                                                                                                \
-    TASK_REGISTER(m_ident ## _task, link_monitor_loop, &m_ident, NOT_RESTARTABLE)
+macro_define(LINK_MONITOR, m_ident, m_receive, m_transmit, m_max_rate, m_max_packet) {
+    uint8_t symbol_join(m_ident, packet_data)[(m_max_rate) * (m_max_packet)];
+    size_t symbol_join(m_ident, packet_lens)[m_max_rate];
+    struct link_monitor m_ident = {
+        .label = symbol_str(m_ident),
+        .loop_quantity = 0,
+        .packet_data = symbol_join(m_ident, packet_data),
+        .packet_lens = symbol_join(m_ident, packet_lens),
+        .valid_epochs = 0,
+        .rx = &(m_receive),
+        .tx = &(m_transmit),
+        .max_rate = (m_max_rate),
+        .max_packet = (m_max_packet),
+        .validated = false,
+    };
+    CLIP_REGISTER(symbol_join(m_ident, clip), link_monitor_clip, &m_ident)
+}
 
-#define LINK_MONITOR_SCHEDULE(m_ident)                                                                                \
-    TASK_SCHEDULE(m_ident ## _task, 100)
+macro_define(LINK_MONITOR_SCHEDULE, m_ident) {
+    CLIP_SCHEDULE(symbol_join(m_ident, clip), 100)
+}
 
 static void random_packet_chain(uint8_t *packet_data_out, size_t *packet_lens_out, size_t count, size_t max_len) {
     // debugf(DEBUG, "Generating packets...");
@@ -56,90 +70,74 @@ static void random_packet_chain(uint8_t *packet_data_out, size_t *packet_lens_ou
     // debugf(INFO, "Generated packet chain of length %d", packet_count);
 }
 
-static void link_monitor_loop(struct link_monitor *mon) {
+static void link_monitor_clip(struct link_monitor *mon) {
     assert(mon != NULL);
 
-    assert(mon->validated == false);
-
-    duct_txn_t txn;
-    duct_receive_prepare(&txn, mon->rx, 0);
-    if (duct_receive_message(&txn, NULL, NULL) > 0) {
-        abortf("Received unexpected duct message before any had been sent.");
-    }
-    duct_receive_commit(&txn);
-
-    uint8_t packet_data[mon->max_rate * mon->max_packet];
-    size_t  packet_lens[mon->max_rate];
     uint8_t recv_data[mon->max_packet];
     size_t  recv_len;
 
-    size_t valid_epochs = 0;
+    duct_txn_t txn;
+    duct_receive_prepare(&txn, mon->rx, 0);
 
-    for (;;) {
-        duct_flow_index loop_quantity = rand() % (mon->max_rate + 1);
-        random_packet_chain(packet_data, packet_lens, loop_quantity, mon->max_packet);
-
-        duct_send_prepare(&txn, mon->tx, 0);
-
-        for (duct_flow_index i = 0; i < loop_quantity; i++) {
-            if (!duct_send_allowed(&txn)) {
-                abortf("Unable to transmit message at a point where it should be possible.");
-            }
-            duct_send_message(&txn, &packet_data[mon->max_packet * i], packet_lens[i], 0 /* no timestamp */);
+    size_t count_successes = 0;
+    for (duct_flow_index i = 0; i < mon->loop_quantity; i++) {
+        recv_len = duct_receive_message(&txn, recv_data, NULL);
+        if (recv_len == 0) {
+            break;
         }
-
-        duct_send_commit(&txn);
-
-        task_yield();
-
-        duct_receive_prepare(&txn, mon->rx, 0);
-
-        size_t count_successes = 0;
-        for (duct_flow_index i = 0; i < loop_quantity; i++) {
-            recv_len = duct_receive_message(&txn, recv_data, NULL);
-            if (recv_len == 0) {
-                break;
-            }
-            if (recv_len != packet_lens[i]) {
-                abortf("Packet mismatch: expected len=%zu, received len=%zu.", packet_lens[i], recv_len);
-            }
-            if (memcmp(&packet_data[mon->max_packet * i], recv_data, recv_len) != 0) {
-                abortf("Packet mismatch: data was not indentical despite indentical lengths.");
-            }
-            count_successes++;
+        if (recv_len != mon->packet_lens[i]) {
+            abortf("Packet mismatch: expected len=%zu, received len=%zu.", mon->packet_lens[i], recv_len);
         }
-
-        debugf(TRACE, "[%s] Packet flow: %zu/%u packets (valid_epochs=%zu).",
-               mon->label, count_successes, loop_quantity, valid_epochs);
-
-        recv_len = duct_receive_message(&txn, NULL, NULL);
-        if (recv_len > 0) {
-            abortf("[%s] Received unexpected packet of length %zu", mon->label, recv_len);
+        if (memcmp(&mon->packet_data[mon->max_packet * i], recv_data, recv_len) != 0) {
+            abortf("Packet mismatch: data was not indentical despite indentical lengths.");
         }
-
-        if (count_successes != loop_quantity) {
-            if (valid_epochs == 0) {
-                if (count_successes == 0) {
-                    // still not initialized; that's fine!
-                } else {
-                    // might have JUST been initialized, and only some messages went through! that's okay.
-                    valid_epochs = 1;
-                }
-            } else {
-                abortf("[%s] Experienced invalid epoch (%zu/%u) after %zu valid epochs; should keep working!",
-                       mon->label, count_successes, loop_quantity, valid_epochs);
-            }
-        } else if (loop_quantity > 0) {
-            valid_epochs++;
-            if (valid_epochs >= 1000 && !mon->validated) {
-                debugf(INFO, "[%s] Reached %zu valid epochs in link monitor; marking validated.",
-                       mon->label, valid_epochs);
-                atomic_store_relaxed(mon->validated, true);
-            }
-        }
-
-        duct_receive_commit(&txn);
+        count_successes++;
     }
+
+    debugf(TRACE, "[%s] Packet flow: %zu/%u packets (valid_epochs=%zu).",
+           mon->label, count_successes, mon->loop_quantity, mon->valid_epochs);
+
+    recv_len = duct_receive_message(&txn, NULL, NULL);
+    if (recv_len > 0) {
+        abortf("[%s] Received unexpected packet of length %zu", mon->label, recv_len);
+    }
+
+    if (count_successes != mon->loop_quantity) {
+        if (mon->valid_epochs == 0) {
+            if (count_successes == 0) {
+                // still not initialized; that's fine!
+            } else {
+                // might have JUST been initialized, and only some messages went through! that's okay.
+                mon->valid_epochs = 1;
+            }
+        } else {
+            abortf("[%s] Experienced invalid epoch (%zu/%u) after %zu valid epochs; should keep working!",
+                   mon->label, count_successes, mon->loop_quantity, mon->valid_epochs);
+        }
+    } else if (mon->loop_quantity > 0) {
+        mon->valid_epochs++;
+        if (mon->valid_epochs >= 1000 && !mon->validated) {
+            debugf(INFO, "[%s] Reached %zu valid epochs in link monitor; marking validated.",
+                   mon->label, mon->valid_epochs);
+            atomic_store_relaxed(mon->validated, true);
+        }
+    }
+
+    duct_receive_commit(&txn);
+
+    mon->loop_quantity = rand() % (mon->max_rate + 1);
+    random_packet_chain(mon->packet_data, mon->packet_lens, mon->loop_quantity, mon->max_packet);
+
+    duct_send_prepare(&txn, mon->tx, 0);
+
+    for (duct_flow_index i = 0; i < mon->loop_quantity; i++) {
+        if (!duct_send_allowed(&txn)) {
+            abortf("Unable to transmit message at a point where it should be possible.");
+        }
+        duct_send_message(&txn, &mon->packet_data[mon->max_packet * i], mon->packet_lens[i], 0 /* no timestamp */);
+    }
+
+    duct_send_commit(&txn);
 }
 
 /* TODO: USE SOMETHING LIKE THIS

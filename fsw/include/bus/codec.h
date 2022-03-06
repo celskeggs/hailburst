@@ -4,11 +4,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <synch/chart.h>
+#include <synch/duct.h>
 #include <synch/io.h>
 
 // THREAD SAFETY NOTE: none of this code is thread-safe.
-// You may free the memory used in any of these structures at any time, as long as the structure is not in use.
 
 typedef enum {
     FWC_NONE = 0,
@@ -48,9 +47,12 @@ typedef struct {
 } fw_decoded_ent_t;
 
 typedef struct {
-    chart_t          *rx_chart;
-    struct io_rx_ent *rx_entry;
-    uint32_t          rx_offset;
+    duct_t  * const rx_duct;
+    uint8_t * const rx_buffer;
+    const size_t    rx_buffer_capacity;
+    size_t          rx_length;
+    size_t          rx_offset;
+    uint64_t        rx_timestamp;
 
     // for internal decoder
     bool recv_in_escape;
@@ -62,28 +64,47 @@ typedef struct {
 } fw_decoder_t;
 
 // note: a decoder acts as the server side of data_rx
-void fakewire_dec_init(fw_decoder_t *fwd, chart_t *rx_chart);
-// no destroy function provided because it isn't needed; you can simply stop using the decoder.
+macro_define(FAKEWIRE_DECODER_REGISTER, d_ident, d_duct, d_duct_size) {
+    uint8_t symbol_join(d_ident, buffer)[d_duct_size];
+    fw_decoder_t d_ident = {
+        .rx_duct = &(d_duct),
+        .rx_buffer = symbol_join(d_ident, buffer),
+        .rx_buffer_capacity = (d_duct_size),
+        .rx_length = 0,
+        .rx_offset = 0,
+    }
+}
 
-// returns true if another character is available; false if waiting on the chart is recommended
+void fakewire_dec_reset(fw_decoder_t *fwd);
+
+void fakewire_dec_prepare(fw_decoder_t *fwd);
+// returns true if another character is available; false if yielding is recommended
 bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
+void fakewire_dec_commit(fw_decoder_t *fwd);
 
 typedef struct {
-    chart_t          *tx_chart;
-    struct io_tx_ent *tx_entry;
-
-    // set if we've written something besides just data bytes and START_PACKET characters
-    // (the idea is that there's no point in flushing those unless we also have other characters worth flushing)
-    bool is_flush_worthwhile;
+    duct_t  * const tx_duct;
+    uint8_t * const tx_buffer;
+    const size_t    tx_capacity;
+    size_t          tx_offset;
 } fw_encoder_t;
 
-void fakewire_enc_init(fw_encoder_t *fwe, chart_t *tx_chart);
-// no destroy function provided because it isn't needed; you can simply stop using the encoder.
+macro_define(FAKEWIRE_ENCODER_REGISTER, e_ident, e_duct, e_duct_size) {
+    uint8_t symbol_join(e_ident, buffer)[e_duct_size];
+    fw_encoder_t e_ident = {
+        .tx_duct = &(e_duct),
+        .tx_buffer = symbol_join(e_ident, buffer),
+        .tx_capacity = (e_duct_size),
+        .tx_offset = 0,
+    }
+}
 
-// returns how many bytes were successfully written (possibly 0, in which case waiting on the chart is recommended)
+void fakewire_enc_prepare(fw_encoder_t *fwe);
+// returns how many bytes were successfully written (possibly 0, in which case yielding is recommended)
 size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size_t byte_count);
 // returns true if control character was written, or false otherwise
 bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t param);
 void fakewire_enc_flush(fw_encoder_t *fwe);
+void fakewire_enc_commit(fw_encoder_t *fwe);
 
 #endif /* FSW_FAKEWIRE_CODEC_H */

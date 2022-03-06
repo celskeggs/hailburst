@@ -13,93 +13,106 @@
 
 //#define DEBUG
 
+enum {
+    REPLICA_ID = 0,
+};
+
 #define debug_printf(lvl,fmt, ...) (debugf(lvl, "[%s] " fmt, fwl->options.label, ## __VA_ARGS__))
 
-void fakewire_link_rx_loop(fw_link_t *fwl) {
+void fakewire_link_rx_clip(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    while (fwl->fd_in == -1 || fwl->fd_out == -1) {
-        task_doze();
-    }
+    assert(duct_message_size(fwl->rx_duct) == fwl->buffer_size);
 
-    while (true) {
-        struct io_rx_ent *entry = chart_request_start(fwl->rx_chart);
-        if (entry == NULL) {
-            // wait for another entry to be available
-            task_doze();
-            continue;
-        }
-        // read as many bytes as possible from the input port at once
-        assert(fwl->fd_in != -1);
-        size_t max = io_rx_size(fwl->rx_chart);
-        ssize_t actual = read(fwl->fd_in, entry->data, max);
+    duct_txn_t txn;
+    duct_send_prepare(&txn, fwl->rx_duct, REPLICA_ID);
 
-        if (actual == -1 && errno == EAGAIN) {
-            task_yield();
-            continue;
+    while (fwl->fd_in != -1 && duct_send_allowed(&txn)) {
+        size_t received = 0;
+        while (received < fwl->buffer_size) {
+            // read as many bytes as possible from the input port at once
+            ssize_t actual = read(fwl->fd_in, fwl->rx_buffer + received, fwl->buffer_size - received);
+            if (actual == -1 && errno == EAGAIN) {
+                break;
+            }
+
+            if (actual <= 0) { // 0 means EOF, <0 means error
+                abortf("Read failed: %zd when maximum was %zu", actual, fwl->buffer_size);
+                return;
+            }
+            received += actual;
         }
-        if (actual <= 0) { // 0 means EOF, <0 means error
-            debug_printf(CRITICAL, "Read failed: %zd when maximum was %zu", actual, max);
+
+        if (received == 0) {
             break;
         }
-#ifdef DEBUG
-        debug_printf(TRACE, "Read %zd bytes from file descriptor.", actual);
+#ifdef LINK_DEBUG
+        debug_printf(TRACE, "Read %zd bytes from file descriptor.", received);
 #endif
-        assert(actual > 0 && actual <= (ssize_t) max);
 
-        entry->receive_timestamp = clock_timestamp();
-        entry->actual_length = (uint32_t) actual;
-
-        chart_request_send(fwl->rx_chart, 1);
+        duct_send_message(&txn, fwl->rx_buffer, received, clock_timestamp());
     }
+
+    duct_send_commit(&txn);
 }
 
-void fakewire_link_tx_loop(fw_link_t *fwl) {
+void fakewire_link_tx_clip(fw_link_t *fwl) {
     assert(fwl != NULL);
 
-    while (fwl->fd_in == -1 || fwl->fd_out == -1) {
-        task_doze();
-    }
+    assert(duct_message_size(fwl->tx_duct) == fwl->buffer_size);
 
-    while (true) {
-        struct io_tx_ent *entry = chart_reply_start(fwl->tx_chart);
-        if (entry == NULL) {
-            // wait for another entry to be available
-            task_doze();
-            continue;
-        }
-        // read as many bytes as possible from the input port at once
-        assert(entry->actual_length > 0 && entry->actual_length <= io_tx_size(fwl->tx_chart));
+    duct_txn_t txn;
+    duct_receive_prepare(&txn, fwl->tx_duct, REPLICA_ID);
 
-        assert(fwl->fd_out != -1);
-        size_t remaining = entry->actual_length;
-        uint8_t *data = entry->data;
+    size_t total_blocked = 0;
+    size_t total_written = 0;
+    size_t size;
+    while (fwl->fd_out != -1 && (size = duct_receive_message(&txn, fwl->tx_buffer, NULL)) > 0) {
+        // write as many bytes as possible to the output port at once
+        assert(size > 0 && size <= fwl->buffer_size);
+
+        size_t remaining = size;
+        uint8_t *data = fwl->tx_buffer;
         while (remaining > 0) {
             ssize_t actual = write(fwl->fd_out, data, remaining);
             if (actual == -1 && errno == EAGAIN) {
-                task_yield();
-                continue;
+                total_blocked += remaining;
+                goto blocked;
             }
             if (actual <= 0) {
+                total_blocked += remaining;
                 debug_printf(CRITICAL, "Write failed: %zd", actual);
-                break;
+                goto blocked;
             }
             assert(0 < actual && actual <= (ssize_t) remaining);
             remaining -= actual;
             data += actual;
+            total_written += actual;
         }
-
-        if (remaining == 0) {
-            debug_printf(TRACE, "Finished writing %u bytes to file descriptor.", entry->actual_length);
-        }
-
-        chart_reply_send(fwl->tx_chart, 1);
     }
+blocked:
+    while ((size = duct_receive_message(&txn, NULL, NULL)) > 0) {
+        total_blocked += size;
+    }
+
+#ifdef LINK_DEBUG
+    if (total_written > 0) {
+        debug_printf(TRACE, "Wrote %zu bytes to file descriptor.", total_written);
+    }
+#endif
+
+    if (total_blocked > 0) {
+        debug_printf(WARNING, "Failed to write %zu bytes to file descriptor.", total_blocked);
+    }
+
+    duct_receive_commit(&txn);
 }
 
 void fakewire_link_configure(fw_link_t *fwl) {
     assert(fwl != NULL);
     fw_link_options_t opts = fwl->options;
+
+    int fd_in = -1, fd_out = -1;
 
     task_become_independent();
 
@@ -123,29 +136,29 @@ void fakewire_link_configure(fw_link_t *fwl) {
             perror("open");
             abortf("Failed to open pipes under '%s' for fakewire link.", opts.path);
         }
-        fwl->fd_in = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
-        fwl->fd_out = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
-        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
-        fcntl(fwl->fd_out, F_SETFL, O_NONBLOCK);
+        fd_in = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_p2c : fd_c2p;
+        fd_out = (opts.flags == FW_FLAG_FIFO_CONS) ? fd_c2p : fd_p2c;
+        fcntl(fd_in, F_SETFL, O_NONBLOCK);
+        fcntl(fd_out, F_SETFL, O_NONBLOCK);
     } else if (opts.flags == FW_FLAG_VIRTIO) {
-        fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY);
-        if (fwl->fd_in < 0) {
+        fd_out = fd_in = open(opts.path, O_RDWR | O_NOCTTY);
+        if (fd_in < 0) {
             perror("open");
             abortf("Failed to open VIRTIO serial port '%s' for fakewire link.", opts.path);
         }
-        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
+        fcntl(fd_in, F_SETFL, O_NONBLOCK);
     } else {
         assert(opts.flags == FW_FLAG_SERIAL);
-        fwl->fd_out = fwl->fd_in = open(opts.path, O_RDWR | O_NOCTTY | O_NDELAY);
-        if (fwl->fd_in < 0) {
+        fd_out = fd_in = open(opts.path, O_RDWR | O_NOCTTY | O_NDELAY);
+        if (fd_in < 0) {
             perror("open");
             abortf("Failed to open serial port '%s' for fakewire link.", opts.path);
         }
-        fcntl(fwl->fd_in, F_SETFL, O_NONBLOCK);
+        fcntl(fd_in, F_SETFL, O_NONBLOCK);
 
         struct termios options;
 
-        if (tcgetattr(fwl->fd_in, &options) < 0) {
+        if (tcgetattr(fd_in, &options) < 0) {
             perror("tcgetattr");
             abortf("Failed to retrieve serial port attributes from '%s' for fakewire link.", opts.path);
         }
@@ -167,15 +180,15 @@ void fakewire_link_configure(fw_link_t *fwl) {
         // raw output
         options.c_oflag &= ~OPOST;
 
-        if (tcsetattr(fwl->fd_in, TCSANOW, &options) < 0) {
+        if (tcsetattr(fd_in, TCSANOW, &options) < 0) {
             perror("tcsetattr");
             abortf("Failed to set serial port attributes from '%s' for fakewire link.", opts.path);
         }
     }
-    assert(fwl->fd_in > 0 && fwl->fd_out > 0);
+    assert(fd_in > 0 && fd_out > 0);
 
     task_become_dependent();
 
-    task_rouse(fwl->receive_task);
-    task_rouse(fwl->transmit_task);
+    atomic_store(fwl->fd_in, fd_in);
+    atomic_store(fwl->fd_out, fd_out);
 }

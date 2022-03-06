@@ -347,7 +347,9 @@ def symbol_str(args, name_token):
 
 
 def is_valid_variable_name(name):
-    return name.replace("_", "").isalnum() and name[0].isalpha()
+    if not name: return False
+    name = name.replace("_", "")
+    return name.isalnum() and name[0:1].isalpha()
 
 
 def macro_define(args, name_token, parser, is_block):
