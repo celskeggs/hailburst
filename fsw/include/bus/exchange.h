@@ -5,7 +5,7 @@
 #include <bus/link.h>
 #include <bus/switch.h>
 
-#define EXCHANGE_REPLICAS 1
+#define EXCHANGE_REPLICAS 3
 
 enum {
     EXCHANGE_QUEUE_DEPTH = 16,

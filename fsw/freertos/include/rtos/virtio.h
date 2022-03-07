@@ -218,8 +218,8 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
 // The very first message it sends MUST go out immediately!
 macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
     CLIP_SCHEDULE(symbol_join(v_ident, clip), 7)
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3, 5) /* control.tx */
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 5) /* data[1].tx */
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3,  5) /* control.tx */
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 50) /* data[1].tx */
 }
 
 macro_define(VIRTIO_CONSOLE_SCHEDULE_RECEIVE, v_ident) {
