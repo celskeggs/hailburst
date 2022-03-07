@@ -8,10 +8,6 @@
 #include <hal/thread.h>
 #include <bus/exchange.h>
 
-enum {
-    EXCHANGE_REPLICA_ID = 0,
-};
-
 //#define EXCHANGE_DEBUG
 
 #define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, exc->conf->label, ## __VA_ARGS__)
@@ -461,7 +457,7 @@ void fakewire_exc_tx_clip(const fw_exchange_t *conf) {
     exchange_instance_check_invariants(exc);
 
     duct_txn_t recv_txn;
-    duct_receive_prepare(&recv_txn, exc->conf->write_duct, EXCHANGE_REPLICA_ID);
+    duct_receive_prepare(&recv_txn, exc->conf->write_duct, exc->conf->exchange_replica_id);
     fakewire_enc_prepare(conf->encoder);
 
     exchange_instance_transmit_tokens(exc);
@@ -495,7 +491,7 @@ void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
     exchange_instance_check_timers(exc);
 
     duct_txn_t send_txn;
-    duct_send_prepare(&send_txn, exc->conf->read_duct, EXCHANGE_REPLICA_ID);
+    duct_send_prepare(&send_txn, exc->conf->read_duct, exc->conf->exchange_replica_id);
     fakewire_dec_prepare(conf->decoder);
     // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
     // nothing left, so that we can guarantee a wakeup will still be pending afterwards,

@@ -47,6 +47,7 @@ typedef struct {
 } fw_decoded_ent_t;
 
 typedef struct {
+    const uint8_t   rx_duct_replica;
     duct_t  * const rx_duct;
     uint8_t * const rx_buffer;
     const size_t    rx_buffer_capacity;
@@ -64,9 +65,10 @@ typedef struct {
 } fw_decoder_t;
 
 // note: a decoder acts as the server side of data_rx
-macro_define(FAKEWIRE_DECODER_REGISTER, d_ident, d_duct, d_duct_size) {
+macro_define(FAKEWIRE_DECODER_REGISTER, d_ident, d_duct, d_replica, d_duct_size) {
     uint8_t symbol_join(d_ident, buffer)[d_duct_size];
     fw_decoder_t d_ident = {
+        .rx_duct_replica = (d_replica),
         .rx_duct = &(d_duct),
         .rx_buffer = symbol_join(d_ident, buffer),
         .rx_buffer_capacity = (d_duct_size),
@@ -83,15 +85,17 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
 void fakewire_dec_commit(fw_decoder_t *fwd);
 
 typedef struct {
+    const uint8_t   tx_duct_replica;
     duct_t  * const tx_duct;
     uint8_t * const tx_buffer;
     const size_t    tx_capacity;
     size_t          tx_offset;
 } fw_encoder_t;
 
-macro_define(FAKEWIRE_ENCODER_REGISTER, e_ident, e_duct, e_duct_size) {
+macro_define(FAKEWIRE_ENCODER_REGISTER, e_ident, e_duct, e_replica, e_duct_size) {
     uint8_t symbol_join(e_ident, buffer)[e_duct_size];
     fw_encoder_t e_ident = {
+        .tx_duct_replica = (e_replica),
         .tx_duct = &(e_duct),
         .tx_buffer = symbol_join(e_ident, buffer),
         .tx_capacity = (e_duct_size),

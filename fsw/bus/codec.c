@@ -8,10 +8,6 @@
 
 //#define CODEC_DEBUG
 
-enum {
-    REPLICA_ID = 0,
-};
-
 const char *fakewire_codec_symbol(fw_ctrl_t c) {
     switch (c) {
     case FWC_HANDSHAKE_1:
@@ -52,7 +48,7 @@ void fakewire_dec_reset(fw_decoder_t *fwd) {
 void fakewire_dec_prepare(fw_decoder_t *fwd) {
     assert(fwd != NULL);
     duct_txn_t txn;
-    duct_receive_prepare(&txn, fwd->rx_duct, REPLICA_ID);
+    duct_receive_prepare(&txn, fwd->rx_duct, fwd->rx_duct_replica);
     fwd->rx_length = duct_receive_message(&txn, fwd->rx_buffer, &fwd->rx_timestamp);
     fwd->rx_offset = 0;
 #ifdef CODEC_DEBUG
@@ -231,7 +227,7 @@ void fakewire_enc_prepare(fw_encoder_t *fwe) {
 void fakewire_enc_commit(fw_encoder_t *fwe) {
     assert(fwe != NULL);
     duct_txn_t txn;
-    duct_send_prepare(&txn, fwe->tx_duct, REPLICA_ID);
+    duct_send_prepare(&txn, fwe->tx_duct, fwe->tx_duct_replica);
     if (fwe->tx_offset > 0) {
         duct_send_message(&txn, fwe->tx_buffer, fwe->tx_offset, 0);
 #ifdef CODEC_DEBUG

@@ -5,6 +5,8 @@
 #include <bus/link.h>
 #include <bus/switch.h>
 
+#define EXCHANGE_REPLICAS 1
+
 enum {
     EXCHANGE_QUEUE_DEPTH = 16,
     MAX_OUTSTANDING_TOKENS = 10,
@@ -59,6 +61,7 @@ typedef struct {
 } exchange_instance_t;
 
 typedef const struct fw_exchange_st {
+    uint8_t exchange_replica_id;
     const char *label;
 
     exchange_instance_t *instance;
@@ -84,38 +87,45 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
     static_assert(e_max_flow <= EXCHANGE_QUEUE_DEPTH, "exchange is not guaranteed to be able to transmit this fast");
     /* in order to continously transmit N packets per cycle, there must be able to be 2N packets outstanding */
     static_assert((e_max_flow) * 2 <= MAX_OUTSTANDING_TOKENS, "exchange protocol cannot transmit this fast");
-    DUCT_REGISTER(symbol_join(e_ident, transmit_duct), 1, 1, 1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
-    DUCT_REGISTER(symbol_join(e_ident, receive_duct),  1, 1, 1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
+    DUCT_REGISTER(symbol_join(e_ident, transmit_duct), EXCHANGE_REPLICAS, 1,
+                  1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
+    DUCT_REGISTER(symbol_join(e_ident, receive_duct),  1, EXCHANGE_REPLICAS,
+                  1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
     FAKEWIRE_LINK_REGISTER(symbol_join(e_ident, io_port), e_link_options,
                            symbol_join(e_ident, receive_duct), symbol_join(e_ident, transmit_duct),
                            (e_max_flow) * (e_buf_size) + 1024);
-    FAKEWIRE_ENCODER_REGISTER(symbol_join(e_ident, encoder), symbol_join(e_ident, transmit_duct),
-                              (e_max_flow) * (e_buf_size) + 1024);
-    FAKEWIRE_DECODER_REGISTER(symbol_join(e_ident, decoder), symbol_join(e_ident, receive_duct),
-                              (e_max_flow) * (e_buf_size) + 1024);
-    uint8_t symbol_join(e_ident, read_buffer)[e_buf_size];
-    uint8_t symbol_join(e_ident, write_buffer)[e_buf_size];
-    exchange_instance_t symbol_join(e_ident, instance);
-    fw_exchange_t e_ident = {
-        .label = (e_link_options).label,
-        .instance = &symbol_join(e_ident, instance),
-        .encoder = &symbol_join(e_ident, encoder),
-        .decoder = &symbol_join(e_ident, decoder),
-        .buffers_length = (e_buf_size),
-        .read_buffer = symbol_join(e_ident, read_buffer),
-        .write_buffer = symbol_join(e_ident, write_buffer),
-        .read_duct = &e_read_duct,
-        .write_duct = &e_write_duct,
-    };
-    CLIP_REGISTER(symbol_join(e_ident, tx_clip), fakewire_exc_tx_clip, &e_ident);
-    CLIP_REGISTER(symbol_join(e_ident, rx_clip), fakewire_exc_rx_clip, &e_ident)
+    static_repeat(EXCHANGE_REPLICAS, replica_id) {
+        FAKEWIRE_ENCODER_REGISTER(symbol_join(e_ident, encoder, replica_id),
+                                  symbol_join(e_ident, transmit_duct), replica_id, (e_max_flow) * (e_buf_size) + 1024);
+        FAKEWIRE_DECODER_REGISTER(symbol_join(e_ident, decoder, replica_id),
+                                  symbol_join(e_ident, receive_duct),  replica_id, (e_max_flow) * (e_buf_size) + 1024);
+        uint8_t symbol_join(e_ident, read_buffer,  replica_id)[e_buf_size];
+        uint8_t symbol_join(e_ident, write_buffer, replica_id)[e_buf_size];
+        exchange_instance_t symbol_join(e_ident, instance, replica_id);
+        fw_exchange_t symbol_join(e_ident, replica_id) = {
+            .exchange_replica_id = replica_id,
+            .label = (e_link_options).label,
+            .instance = &symbol_join(e_ident, instance, replica_id),
+            .encoder  = &symbol_join(e_ident, encoder,  replica_id),
+            .decoder  = &symbol_join(e_ident, decoder,  replica_id),
+            .buffers_length = (e_buf_size),
+            .read_buffer  = symbol_join(e_ident, read_buffer,  replica_id),
+            .write_buffer = symbol_join(e_ident, write_buffer, replica_id),
+            .read_duct  = &e_read_duct,
+            .write_duct = &e_write_duct,
+        };
+        CLIP_REGISTER(symbol_join(e_ident, tx_clip, replica_id),
+                      fakewire_exc_tx_clip, &symbol_join(e_ident, replica_id));
+        CLIP_REGISTER(symbol_join(e_ident, rx_clip, replica_id),
+                      fakewire_exc_rx_clip, &symbol_join(e_ident, replica_id));
+    }
 }
 
 macro_define(FAKEWIRE_EXCHANGE_ON_SWITCHES,
              e_ident, e_link_options, e_switch_in, e_switch_out, e_switch_port, e_max_flow, e_max_size) {
-    DUCT_REGISTER(symbol_join(e_ident, read_duct),  1, SWITCH_REPLICAS,
+    DUCT_REGISTER(symbol_join(e_ident, read_duct),  EXCHANGE_REPLICAS, SWITCH_REPLICAS,
                   (e_max_flow) * 2, e_max_size, DUCT_SENDER_FIRST);
-    DUCT_REGISTER(symbol_join(e_ident, write_duct), SWITCH_REPLICAS, 1,
+    DUCT_REGISTER(symbol_join(e_ident, write_duct), SWITCH_REPLICAS, EXCHANGE_REPLICAS,
                   (e_max_flow) * 2, e_max_size, DUCT_RECEIVER_FIRST);
     FAKEWIRE_EXCHANGE_REGISTER(e_ident, e_link_options,
                                symbol_join(e_ident, read_duct), symbol_join(e_ident, write_duct),
@@ -125,13 +135,17 @@ macro_define(FAKEWIRE_EXCHANGE_ON_SWITCHES,
 }
 
 macro_define(FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE, e_ident) {
-    CLIP_SCHEDULE(symbol_join(e_ident, tx_clip), 250)
+    static_repeat(EXCHANGE_REPLICAS, replica_id) {
+        CLIP_SCHEDULE(symbol_join(e_ident, tx_clip, replica_id), 250)
+    }
     FAKEWIRE_LINK_SCHEDULE_TRANSMIT(symbol_join(e_ident, io_port))
 }
 
 macro_define(FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE, e_ident) {
     FAKEWIRE_LINK_SCHEDULE_RECEIVE(symbol_join(e_ident, io_port))
-    CLIP_SCHEDULE(symbol_join(e_ident, rx_clip), 250)
+    static_repeat(EXCHANGE_REPLICAS, replica_id) {
+        CLIP_SCHEDULE(symbol_join(e_ident, rx_clip, replica_id), 250)
+    }
 }
 
 macro_define(FAKEWIRE_EXCHANGE_SCHEDULE, e_ident) {
