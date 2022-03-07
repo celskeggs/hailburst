@@ -58,6 +58,7 @@ enum {
 static uint32_t schedule_index = 0;
 uint64_t schedule_loads = 0;
 uint32_t schedule_ticks = 0;
+uint64_t schedule_period_start = 0;
 static uint64_t schedule_last = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
@@ -99,6 +100,9 @@ static void schedule_execute(bool validate)
         // make sure we aren't drifting from the schedule
         assert(schedule_last <= here && here <= new_time);
     }
+
+    // make the start of the scheduling period available to code that may be interested
+    schedule_period_start = schedule_last;
 
     schedule_last = new_time;
 

@@ -67,6 +67,13 @@ void clip_play_direct(void) {
     atomic_store(clip->mut->clip_running, false);
     clip->mut->needs_start = false;
 
+    int64_t elapsed = timer_now_ns() - schedule_period_start;
+    if (elapsed > 0 && (uint64_t) elapsed > clip->mut->clip_max_nanos) {
+        clip->mut->clip_max_nanos = elapsed;
+        debugf(DEBUG, "New longest clip duration for %s: %u.%03u microseconds.",
+               clip->pcTaskName, elapsed / 1000, elapsed % 1000);
+    }
+
     // yield until we are rescheduled, and start from the beginning.
     task_yield();
     abortf("It should be impossible for any clip to ever resume from yield!");

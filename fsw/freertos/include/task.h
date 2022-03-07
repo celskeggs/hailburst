@@ -71,6 +71,7 @@ typedef struct
     bool            clip_running;
     uint32_t        clip_next_tick;
     scrubber_pend_t clip_pend;
+    uint64_t        clip_max_nanos;
 
     // these are just 0 or 1, but in a full uint32_t to help with atomicity
     uint32_t roused_task;
@@ -116,6 +117,7 @@ typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
 
+extern uint64_t schedule_period_start;
 extern uint64_t schedule_loads;
 extern uint32_t schedule_ticks;
 
