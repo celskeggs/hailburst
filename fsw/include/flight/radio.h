@@ -33,6 +33,8 @@ struct radio_uplink_reads {
     uint32_t prime_read_length;
     uint32_t flipped_read_address;
     uint32_t flipped_read_length;
+    // may contain new values for REG_RX_PTR, REG_RX_LEN, REG_RX_PTR_ALT, REG_RX_LEN_ALT, REG_RX_STATE
+    uint32_t new_registers[5];
     bool needs_update_all; // if set, then register array has new values for all five core registers written back
     bool needs_alt_update; // if set, then register array has new values for PTR_ALT and LEN_ALT only
 };

@@ -78,6 +78,8 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
             .needs_update_all = true,
         };
 
+        memcpy(reads->new_registers, &reg[REG_RX_PTR], sizeof(reads->new_registers));
+
 #ifdef DEBUGIDX
         debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
@@ -189,6 +191,8 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
             reg[REG_RX_STATE] = RX_STATE_LISTENING;
             debugf(CRITICAL, "Radio: uplink OVERFLOW condition hit; clearing and resuming uplink.");
 
+            memcpy(reads->new_registers, &reg[REG_RX_PTR], sizeof(reads->new_registers));
+
 #ifdef DEBUGIDX
             debugf(TRACE, "Radio UPDATED indices: end_index_prime=%u, end_index_alt=%u",
                    reg[REG_RX_PTR] + reg[REG_RX_LEN], reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
@@ -199,6 +203,8 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
             assert(reg[REG_RX_STATE] == RX_STATE_LISTENING);
             reg[REG_RX_PTR_ALT] = new_region.base;
             reg[REG_RX_LEN_ALT] = new_region.size;
+
+            memcpy(reads->new_registers, &reg[REG_RX_PTR], sizeof(reads->new_registers));
 #ifdef DEBUGIDX
             debugf(TRACE, "Radio UPDATED indices: end_index_prime=<unchanged>, end_index_alt=%u",
                    reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT]);
@@ -378,14 +384,17 @@ void radio_uplink_clip(radio_t *radio) {
     case RAD_UL_REFILL_BUFFERS:
         assert(radio->read_plan.needs_update_all || radio->read_plan.needs_alt_update);
         if (radio->read_plan.needs_update_all) {
-            for (int i = REG_RX_PTR; i < REG_RX_PTR + 5; i++) {
-                registers[i] = htobe32(registers[i]);
+            for (int i = 0; i < 5; i++) {
+                registers[REG_RX_PTR + i] = htobe32(radio->read_plan.new_registers[i]);
+                debugf(TRACE, "Writing register %u <- 0x%08x", REG_RX_PTR + i, radio->read_plan.new_registers[i]);
             }
             rmap_write_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_RX_PTR * sizeof(uint32_t),
                              (uint8_t*) (registers + REG_RX_PTR), sizeof(uint32_t) * 5);
         } else {
-            for (int i = REG_RX_PTR_ALT; i < REG_RX_PTR_ALT + 2; i++) {
-                registers[i] = htobe32(registers[i]);
+            for (int i = 0; i < 2; i++) {
+                registers[REG_RX_PTR_ALT + i] =
+                        htobe32(radio->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
+                debugf(TRACE, "Writing register %u <- 0x%08x", REG_RX_PTR_ALT + i, radio->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
             }
             rmap_write_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_RX_PTR_ALT * sizeof(uint32_t),
                              (uint8_t*) (registers + REG_RX_PTR_ALT), sizeof(uint32_t) * 2);
