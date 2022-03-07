@@ -136,7 +136,7 @@ macro_define(FAKEWIRE_EXCHANGE_ON_SWITCHES,
 
 macro_define(FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE, e_ident) {
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
-        CLIP_SCHEDULE(symbol_join(e_ident, tx_clip, replica_id), 250)
+        CLIP_SCHEDULE(symbol_join(e_ident, tx_clip, replica_id), 116)
     }
     FAKEWIRE_LINK_SCHEDULE_TRANSMIT(symbol_join(e_ident, io_port))
 }
@@ -144,7 +144,7 @@ macro_define(FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE, e_ident) {
 macro_define(FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE, e_ident) {
     FAKEWIRE_LINK_SCHEDULE_RECEIVE(symbol_join(e_ident, io_port))
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
-        CLIP_SCHEDULE(symbol_join(e_ident, rx_clip, replica_id), 250)
+        CLIP_SCHEDULE(symbol_join(e_ident, rx_clip, replica_id), 49)
     }
 }
 

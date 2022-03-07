@@ -123,9 +123,9 @@ void radio_downlink_clip(radio_t *radio);
     RMAP_MAX_IO_PACKET(r_up_capacity, r_down_capacity)
 
 #define RADIO_UP_SCHEDULE(r_ident)                                                                                    \
-    CLIP_SCHEDULE(r_ident ## _up_clip, 150)
+    CLIP_SCHEDULE(r_ident ## _up_clip, 14)
 
 #define RADIO_DOWN_SCHEDULE(r_ident)                                                                                  \
-    CLIP_SCHEDULE(r_ident ## _down_clip, 150)
+    CLIP_SCHEDULE(r_ident ## _down_clip, 36)
 
 #endif /* FSW_RADIO_H */
