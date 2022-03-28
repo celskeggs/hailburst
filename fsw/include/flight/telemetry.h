@@ -4,12 +4,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <hal/clip.h>
 #include <hal/init.h>
-#include <hal/thread.h>
 #include <synch/multichart.h>
 #include <flight/comm.h>
 
 enum {
+    TELEMETRY_REPLICA_ID = 0,
+
     TLM_MAX_ASYNC_CLIENT_BUFFERS = 128,
     TLM_MAX_ASYNC_SIZE           = 16,
     TLM_MAX_SYNC_BUFFERS         = 1,
@@ -48,6 +50,11 @@ typedef struct {
 // initialize telemetry system
 void telemetry_init(comm_enc_t *encoder);
 
+macro_define(TELEMETRY_CONNECT, t_pipe) {
+    COMM_ENC_REGISTER(telemetry_encoder, t_pipe, TELEMETRY_REPLICA_ID);
+    PROGRAM_INIT_PARAM(STAGE_RAW, telemetry_init, t_pipe, &telemetry_encoder)
+}
+
 #define TELEMETRY_ASYNC_REGISTER(t_ident)                                                      \
     /* no notification needs to be sent; asynchronous telemetry messages do not block */       \
     MULTICHART_CLIENT_REGISTER(t_ident ## _client, telemetry_async_chart, sizeof(tlm_async_t), \
@@ -64,10 +71,11 @@ void telemetry_init(comm_enc_t *encoder);
         .sync_client = &t_ident ## _client,                                                  \
     }
 
-TASK_PROTO(telemetry_task);
+CLIP_PROTO(telemetry_task);
 
-#define TELEMETRY_SCHEDULE()                                                                 \
-    TASK_SCHEDULE(telemetry_task, 100)
+macro_define(TELEMETRY_SCHEDULE) {
+    CLIP_SCHEDULE(telemetry_task, 100)
+}
 
 // actual telemetry calls
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id);

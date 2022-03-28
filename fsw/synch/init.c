@@ -27,12 +27,6 @@ static void call_initpoints(enum init_stage stage) {
 
 void initialize_systems(void) {
     call_initpoints(STAGE_RAW);
-
     call_initpoints(STAGE_READY);
-
-    // initialize spacecraft tasks
-    debugf(INFO, "Preparing spacecraft for start...");
-    spacecraft_init();
-
     call_initpoints(STAGE_CRAFT);
 }

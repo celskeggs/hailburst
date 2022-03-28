@@ -12,10 +12,6 @@
 // so that we don't need a full clock implementation for the clock functions
 int64_t clock_offset_adj = 0;
 
-void spacecraft_init(void) {
-    // do nothing
-}
-
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "usage: %s <scratchdir>\n", argv[0]);

@@ -29,16 +29,13 @@ enum {
     MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
-TASK_PROTO(telemetry_task);
-
-MULTICHART_SERVER_REGISTER(telemetry_async_chart, sizeof(tlm_async_t), task_rouse, &telemetry_task);
-MULTICHART_SERVER_REGISTER(telemetry_sync_chart, sizeof(tlm_sync_t), task_rouse, &telemetry_task);
+MULTICHART_SERVER_REGISTER(telemetry_async_chart, sizeof(tlm_async_t), ignore_callback, NULL);
+MULTICHART_SERVER_REGISTER(telemetry_sync_chart, sizeof(tlm_sync_t), ignore_callback, NULL);
 
 void telemetry_init(comm_enc_t *encoder) {
     assert(!telemetry.initialized);
 
     telemetry.comm_encoder = encoder;
-    comm_enc_set_task(encoder, &telemetry_task);
 
     telemetry.initialized = true;
 }
@@ -83,18 +80,24 @@ static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, si
     }
 }
 
-void telemetry_mainloop(void) {
+void telemetry_main_clip(void) {
     assert(telemetry.initialized == true);
     assert(telemetry.comm_encoder != NULL);
 
-    for (;;) {
-        comm_packet_t packet;
+    if (clip_is_restart()) {
+        comm_enc_reset(telemetry.comm_encoder);
+    }
 
+    comm_enc_prepare(telemetry.comm_encoder);
+
+    comm_packet_t packet;
+
+    for (;;) {
         if (atomic_load_relaxed(telemetry.async_dropped) > 0) {
             // if we've been losing data from our ring buffer, we should probably report that first!
 
             // this fetches the lastest drop count and replaces it with zero by atomic binary-and with 0.
-            uint32_t drop_count = atomic_fetch_and_relaxed(telemetry.async_dropped, 0);
+            uint32_t drop_count = atomic_load_relaxed(telemetry.async_dropped);
 
             debugf(CRITICAL, "Telemetry dropped: MessagesLost=%u", drop_count);
 
@@ -108,7 +111,12 @@ void telemetry_mainloop(void) {
             packet.data_bytes   = (uint8_t*) &drop_count;
 
             // transmit this packet
-            comm_enc_encode(telemetry.comm_encoder, &packet);
+            if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
+                // if successful, mark that we downlinked this information. (but leave any new drops that just came in.)
+                atomic_fetch_sub_relaxed(telemetry.async_dropped, drop_count);
+            } else {
+                break;
+            }
 
             // fall through here so that we actually transmit at least one real async packet per loop
             // (and that we don't just keep dropping everything)
@@ -129,15 +137,19 @@ void telemetry_mainloop(void) {
                        (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
 
             // transmit this packet
-            comm_enc_encode(telemetry.comm_encoder, &packet);
+            if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
+                // if successful,
+                multichart_reply_send(&telemetry_async_chart, async_elm);
 
-            multichart_reply_send(&telemetry_async_chart, async_elm);
+                watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
 
-            watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
-
-            debugf(TRACE, "Transmitted async telemetry.");
+                debugf(TRACE, "Transmitted async telemetry.");
+            } else {
+                debugf(WARNING, "Failed to transmit async telemetry due to full buffer... will try again.");
+                break;
+            }
         } else {
-            // pull synchronous telemetry from wall
+            // pull synchronous telemetry from chart (only if all async telemetry is processed)
             tlm_sync_t *sync_elm = multichart_reply_start(&telemetry_sync_chart, &timestamp_ns_mono);
             if (sync_elm != NULL) {
                 assert(sync_elm->data_len <= TLM_MAX_SYNC_SIZE);
@@ -153,23 +165,26 @@ void telemetry_mainloop(void) {
                        (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
 
                 // transmit this packet
-                comm_enc_encode(telemetry.comm_encoder, &packet);
+                if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
+                    // let the synchronous sender know they can continue
+                    multichart_reply_send(&telemetry_sync_chart, sync_elm);
 
-                // let the synchronous sender know they can continue
-                multichart_reply_send(&telemetry_sync_chart, sync_elm);
-
-                debugf(TRACE, "Transmitted synchronous telemetry.");
+                    debugf(TRACE, "Transmitted synchronous telemetry.");
+                } else {
+                    debugf(WARNING, "Failed to transmit synchronous telemetry due to full buffer... will try again.");
+                    break;
+                }
             } else {
                 // no asynchronous telemetry AND no synchronous telemetry... time to sleep!
-                debugf(TRACE, "Telemetry loop dozing...");
-                task_doze();
-                debugf(TRACE, "Telemetry loop roused!");
+                break;
             }
         }
     }
+
+    comm_enc_commit(telemetry.comm_encoder);
 }
 
-TASK_REGISTER(telemetry_task, telemetry_mainloop, NULL, RESTARTABLE);
+CLIP_REGISTER(telemetry_task, telemetry_main_clip, NULL);
 
 void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id) {
     debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",

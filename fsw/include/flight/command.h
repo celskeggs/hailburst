@@ -6,17 +6,20 @@
 
 #include <flight/spacecraft.h>
 
-void cmd_mainloop(spacecraft_t *sc);
+void command_execution_clip(comm_dec_t *decoder);
+
+enum {
+    COMMAND_REPLICA_ID = 0,
+};
 
 // may only be used once
-#define COMMAND_REGISTER(c_ident, c_spacecraft)                                                                       \
-    TASK_REGISTER(c_ident ## _task, cmd_mainloop, &c_spacecraft, RESTARTABLE);                                        \
-    static void c_ident ## _init(void) {                                                                              \
-        comm_dec_set_task(&c_spacecraft.comm_decoder, &c_ident ## _task);                                             \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_CRAFT, c_ident ## _init);
+macro_define(COMMAND_REGISTER, c_ident, c_uplink_pipe) {
+    COMM_DEC_REGISTER(symbol_join(c_ident, decoder), c_uplink_pipe, COMMAND_REPLICA_ID);
+    CLIP_REGISTER(symbol_join(c_ident, task), command_execution_clip, &symbol_join(c_ident, decoder))
+}
 
-#define COMMAND_SCHEDULE(c_ident)                                                                                     \
-    TASK_SCHEDULE(c_ident ## _task, 100)
+macro_define(COMMAND_SCHEDULE, c_ident) {
+    CLIP_SCHEDULE(symbol_join(c_ident, task), 100)
+}
 
 #endif /* FSW_CMD_H */

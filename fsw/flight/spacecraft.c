@@ -3,16 +3,15 @@
 #include <hal/debug.h>
 #include <hal/system.h>
 #include <hal/watchdog.h>
+#include <bus/exchange.h>
 #include <bus/switch.h>
 #include <flight/command.h>
 #include <flight/heartbeat.h>
+#include <flight/radio.h>
 #include <flight/spacecraft.h>
 #include <flight/telemetry.h>
 
 enum {
-    UPLINK_STREAM_CAPACITY = 0x4000,
-    DOWNLINK_STREAM_CAPACITY = 0x4000,
-
     // physical component addresses
     PADDR_RADIO = 45,
     PADDR_MAG   = 46,
@@ -90,14 +89,11 @@ static const rmap_addr_t clock_routing = {
 };
 #endif
 
-static bool initialized = false;
-static spacecraft_t sc;
-
 // the following line should have the max of all IO packet lengths... since radio is the largest right now, we'll just
 // put that directly (to simplify the macros) and assert that we were right that it was largest, instead of trying to
 // do a compile-time comparison.
 enum {
-    max_bus_packet = RADIO_MAX_IO_PACKET(UPLINK_STREAM_CAPACITY, DOWNLINK_STREAM_CAPACITY),
+    max_bus_packet = RADIO_MAX_IO_PACKET(UPLINK_BUF_LOCAL_SIZE, DOWNLINK_BUF_LOCAL_SIZE),
 };
 static_assert(max_bus_packet >= MAGNETOMETER_MAX_IO_PACKET, "assumption violated about relative sizes of packets");
 static_assert(max_bus_packet >= CLOCK_MAX_IO_PACKET, "assumption violated about relative sizes of packets");
@@ -124,16 +120,17 @@ FAKEWIRE_EXCHANGE_ON_SWITCHES(fce_fw_exchange, exchange_options, fce_vin, fce_vo
 
 CLOCK_REGISTER(sc_clock, clock_routing, fce_vin, fce_vout, VPORT_CLOCK);
 
-STREAM_REGISTER(sc_uplink_stream, UPLINK_STREAM_CAPACITY);
-STREAM_REGISTER(sc_downlink_stream, DOWNLINK_STREAM_CAPACITY);
+PIPE_REGISTER(sc_uplink_pipe,   1, 1, UPLINK_BUF_LOCAL_SIZE,   PIPE_SENDER_FIRST);
+PIPE_REGISTER(sc_downlink_pipe, 1, 1, DOWNLINK_BUF_LOCAL_SIZE, PIPE_SENDER_FIRST);
 
 RADIO_REGISTER(sc_radio, fce_vin, fce_vout,
-               radio_up_routing,   VPORT_RADIO_UP,   UPLINK_STREAM_CAPACITY,   sc_uplink_stream,
-               radio_down_routing, VPORT_RADIO_DOWN, DOWNLINK_STREAM_CAPACITY, sc_downlink_stream);
+               radio_up_routing,   VPORT_RADIO_UP,   UPLINK_BUF_LOCAL_SIZE,   sc_uplink_pipe,
+               radio_down_routing, VPORT_RADIO_DOWN, DOWNLINK_BUF_LOCAL_SIZE, sc_downlink_pipe);
 
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vin, fce_vout, VPORT_MAG);
 
-COMMAND_REGISTER(sc_cmd, sc);
+COMMAND_REGISTER(sc_cmd, sc_uplink_pipe);
+TELEMETRY_CONNECT(sc_downlink_pipe);
 
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
@@ -148,14 +145,3 @@ TASK_SCHEDULING_ORDER(
     SWITCH_SCHEDULE(fce_vout)
     SYSTEM_MAINTENANCE_SCHEDULE()
 );
-
-void spacecraft_init(void) {
-    assert(!initialized);
-
-    debugf(INFO, "Initializing telecomm infrastructure...");
-    comm_dec_init(&sc.comm_decoder, &sc_uplink_stream);
-    comm_enc_init(&sc.comm_encoder, &sc_downlink_stream);
-    telemetry_init(&sc.comm_encoder);
-
-    initialized = true;
-}

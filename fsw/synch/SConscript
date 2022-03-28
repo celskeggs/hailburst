@@ -5,7 +5,8 @@ sources = [
     "duct.c",
     "init.c",
     "multichart.c",
-    "stream.c",
+    "pipe.c",
+    "pipebuf.c",
 ]
 
 libsynch = env.Library("synch", sources)

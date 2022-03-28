@@ -1,7 +1,7 @@
 #ifndef FSW_RADIO_H
 #define FSW_RADIO_H
 
-#include <synch/stream.h>
+#include <synch/pipe.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
 
@@ -69,18 +69,17 @@ typedef struct {
     rmap_t        *rmap_down;
 
     enum radio_uplink_state   uplink_state;
-    size_t                    uplink_offset;
     struct radio_uplink_reads read_plan;
     enum radio_downlink_state downlink_state;
     uint32_t                  downlink_length;
 
     flag_t uplink_query_status_flag;
 
-    uint32_t       bytes_extracted;
-    stream_t      *up_stream;
-    stream_t      *down_stream;
-    uint8_t        uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
-    uint8_t        downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
+    uint32_t bytes_extracted;
+    pipe_t  *up_pipe;
+    pipe_t  *down_pipe;
+    uint8_t  uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
+    uint8_t  downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
 } radio_t;
 
 void radio_uplink_clip(radio_t *radio);
@@ -106,12 +105,11 @@ void radio_downlink_clip(radio_t *radio);
         .rmap_down = &r_ident ## _down,                                                                               \
         .bytes_extracted = 0,                                                                                         \
         .uplink_state = RAD_UL_INITIAL_STATE,                                                                         \
-        .uplink_offset = 0,                                                                                           \
         .read_plan = { },                                                                                             \
         .downlink_state = RAD_DL_INITIAL_STATE,                                                                       \
         .downlink_length = 0,                                                                                         \
-        .up_stream = &r_uplink,                                                                                       \
-        .down_stream = &r_downlink,                                                                                   \
+        .up_pipe = &r_uplink,                                                                                         \
+        .down_pipe = &r_downlink,                                                                                     \
         .uplink_buf_local = { 0 },                                                                                    \
         .downlink_buf_local = { 0 },                                                                                  \
     }
@@ -125,9 +123,9 @@ void radio_downlink_clip(radio_t *radio);
     RMAP_MAX_IO_PACKET(r_up_capacity, r_down_capacity)
 
 #define RADIO_UP_SCHEDULE(r_ident)                                                                                    \
-    CLIP_SCHEDULE(r_ident ## _up_clip, 14)
+    CLIP_SCHEDULE(r_ident ## _up_clip, 40)
 
 #define RADIO_DOWN_SCHEDULE(r_ident)                                                                                  \
-    CLIP_SCHEDULE(r_ident ## _down_clip, 36)
+    CLIP_SCHEDULE(r_ident ## _down_clip, 50)
 
 #endif /* FSW_RADIO_H */

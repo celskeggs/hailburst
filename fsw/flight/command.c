@@ -113,16 +113,18 @@ static cmd_status_t cmd_execute(tlm_async_endpoint_t *telemetry,
 
 TELEMETRY_ASYNC_REGISTER(cmd_telemetry);
 
-void cmd_mainloop(spacecraft_t *sc) {
-    assert(sc != NULL);
+void command_execution_clip(comm_dec_t *decoder) {
+    assert(decoder != NULL);
     comm_packet_t packet;
     cmd_status_t status;
 
-    debugf(INFO, "Entering command main loop.");
+    if (clip_is_restart()) {
+        comm_dec_reset(decoder);
+    }
 
-    for (;;) {
-        // wait for and decode next command
-        comm_dec_decode(&sc->comm_decoder, &packet);
+    comm_dec_prepare(decoder);
+
+    while (comm_dec_decode(decoder, &packet)) {
         // report reception
         tlm_cmd_received(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
         // execute command
@@ -135,4 +137,6 @@ void cmd_mainloop(spacecraft_t *sc) {
             tlm_cmd_completed(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
         }
     }
+
+    comm_dec_commit(decoder);
 }

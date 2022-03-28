@@ -77,7 +77,7 @@ void magnetometer_telem_loop(magnetometer_t *mag);
     RMAP_MAX_IO_PACKET(8, 4)
 
 #define MAGNETOMETER_SCHEDULE(m_ident)                                                                                \
-    CLIP_SCHEDULE(m_ident ## _query, 11)                                                                              \
+    CLIP_SCHEDULE(m_ident ## _query, 20)                                                                              \
     TASK_SCHEDULE(m_ident ## _telem, 100)
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered);

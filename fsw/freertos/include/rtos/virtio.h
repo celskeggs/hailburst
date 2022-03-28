@@ -217,14 +217,14 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
 // during regular execution, it is on the critical path for activating the spacecraft bus.
 // The very first message it sends MUST go out immediately!
 macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
-    CLIP_SCHEDULE(symbol_join(v_ident, clip), 7)
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3,  5) /* control.tx */
+    CLIP_SCHEDULE(symbol_join(v_ident, clip), 15)
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3, 10) /* control.tx */
     VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 50) /* data[1].tx */
 }
 
 macro_define(VIRTIO_CONSOLE_SCHEDULE_RECEIVE, v_ident) {
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2, 5) /* control.rx */
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 4, 7) /* data[1].rx */
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2, 10) /* control.rx */
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 4, 20) /* data[1].rx */
 }
 
 void *virtio_device_config_space(struct virtio_device *device);
