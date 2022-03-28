@@ -65,11 +65,10 @@ static bool cmd_parse_bool(cmd_parser_t *parser) {
 
 typedef struct {
     uint32_t     id;
-    cmd_status_t (*cmd)(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p);
+    cmd_status_t (*cmd)(tlm_async_endpoint_t *telemetry, cmd_parser_t *p);
 } cmd_t;
 
-static cmd_status_t cmd_ping(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
-    (void) sc;
+static cmd_status_t cmd_ping(tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
     // parse
     uint32_t ping_id = cmd_parse_u32(p);
     if (!cmd_parser_wrapup(p)) {
@@ -80,8 +79,7 @@ static cmd_status_t cmd_ping(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, 
     return CMD_STATUS_OK;
 }
 
-static cmd_status_t cmd_mag_set_pwr_state(spacecraft_t *sc, tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
-    (void) sc;
+static cmd_status_t cmd_mag_set_pwr_state(tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
     (void) telemetry;
     // parse
     bool pwr_state = cmd_parse_bool(p);
@@ -98,7 +96,7 @@ static const cmd_t commands[] = {
     { .id = MAG_SET_PWR_STATE_CID, .cmd = cmd_mag_set_pwr_state },
 };
 
-static cmd_status_t cmd_execute(spacecraft_t *sc, tlm_async_endpoint_t *telemetry,
+static cmd_status_t cmd_execute(tlm_async_endpoint_t *telemetry,
                                 uint32_t cid, const uint8_t *args, size_t args_len) {
     cmd_parser_t parser = {
         .bytes_ptr = args,
@@ -107,7 +105,7 @@ static cmd_status_t cmd_execute(spacecraft_t *sc, tlm_async_endpoint_t *telemetr
     };
     for (size_t i = 0; i < sizeof(commands) / sizeof(commands[0]); i++) {
         if (commands[i].id == cid) {
-            return commands[i].cmd(sc, telemetry, &parser);
+            return commands[i].cmd(telemetry, &parser);
         }
     }
     return CMD_STATUS_UNRECOGNIZED;
@@ -128,7 +126,7 @@ void cmd_mainloop(spacecraft_t *sc) {
         // report reception
         tlm_cmd_received(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
         // execute command
-        status = cmd_execute(sc, &cmd_telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
+        status = cmd_execute(&cmd_telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
         // report completion
         if (status == CMD_STATUS_UNRECOGNIZED) {
             tlm_cmd_not_recognized(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
