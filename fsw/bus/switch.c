@@ -6,6 +6,7 @@
 #include <bus/switch.h>
 
 //#define SWITCH_DEBUG
+//#define SWITCH_TRACE
 
 // returns TRUE if packet is consumed.
 static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
@@ -65,8 +66,10 @@ static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
         return;
     }
     duct_send_message(&swport->outbound_txn, message_buffer, message_size, timestamp);
+#ifdef SWITCH_TRACE
     debugf(TRACE, "Switch replica %u port %u: forwarded packet (len=%zu) to destination port %u (address=%u).",
            replica_id, port, message_size, outport, destination);
+#endif
 }
 
 void switch_io_clip(const switch_replica_t *sr) {

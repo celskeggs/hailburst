@@ -10,7 +10,7 @@
 #include <hal/thread.h>
 #include <synch/io.h>
 
-// #define DEBUG_VIRTQ
+//#define DEBUG_VIRTQ
 
 enum {
     VIRTIO_MAGIC_VALUE    = 0x74726976,
@@ -102,8 +102,10 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
         duct_receive_commit(&txn);
         new_avail_idx = queue->last_used_idx + msg_index;
     } else if (queue->direction == QUEUE_INPUT) {
+#ifdef DEBUG_VIRTQ
         debugf(TRACE, "Monitor clip for input queue %u: received descriptor count is %u.",
                queue->queue_index, descriptor_count);
+#endif
         uint64_t timestamp = clock_timestamp();
         duct_txn_t txn;
         duct_send_prepare(&txn, queue->duct, REPLICA_ID);
@@ -134,7 +136,9 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
                     assert(current_offset <= duct_message_size(queue->duct));
                     if (current_offset == duct_message_size(queue->duct)) {
                         if (duct_send_allowed(&txn)) {
+#ifdef DEBUG_VIRTQ
                             debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+#endif
                             duct_send_message(&txn, current_buffer, current_offset, timestamp);
                         } else {
                             debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
@@ -152,7 +156,9 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
                     assert(current_offset == 0 && current_buffer == NULL);
                     if (elem->len == duct_message_size(queue->duct)) {
                         if (duct_send_allowed(&txn)) {
+#ifdef DEBUG_VIRTQ
                             debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+#endif
                             duct_send_message(&txn, current_buffer, current_offset, timestamp);
                         } else {
                             debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
@@ -171,7 +177,9 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
         if (allow_merge && current_buffer != NULL) {
             assert(current_offset > 0);
             if (duct_send_allowed(&txn)) {
+#ifdef DEBUG_VIRTQ
                 debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+#endif
                 duct_send_message(&txn, current_buffer, current_offset, timestamp);
             } else {
                 debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);

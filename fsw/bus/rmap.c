@@ -5,6 +5,8 @@
 #include <synch/io.h>
 #include <bus/rmap.h>
 
+//#define RMAP_TRACE
+
 enum {
     PROTOCOL_RMAP = 0x01,
     RMAP_REPLICA_ID = 0,
@@ -34,8 +36,10 @@ void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uin
     assert(rmap != NULL && buffer != NULL);
     assert(data_length <= duct_message_size(rmap->tx_duct) - SCRATCH_MARGIN_WRITE);
 
+#ifdef RMAP_TRACE
     debugf(TRACE, "RMAP (%10s) WRITE START: ADDR=0x%02x_%08x LEN=0x%zx",
            rmap->label, ext_addr, main_addr, data_length);
+#endif
 
     if (!duct_send_allowed(&txn->tx_send_txn)) {
         abortf("RMAP (%10s) not permitted to transmit another packet during this epoch.", rmap->label);
@@ -148,7 +152,9 @@ rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out) 
     size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
     if (packet_length == 0 || !rmap_validate_write_reply(rmap, rmap->scratch, packet_length, &status_byte)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
+#ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s) WRITE  FAIL: NO RESPONSE", rmap->label);
+#endif
         return RS_NO_RESPONSE;
     }
 
@@ -156,7 +162,9 @@ rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out) 
         *ack_timestamp_out = timestamp;
     }
 
+#ifdef RMAP_TRACE
     debugf(TRACE, "RMAP (%10s) WRITE  DONE: STATUS=%u", rmap->label, status_byte);
+#endif
 
     return status_byte;
 }
@@ -167,8 +175,10 @@ void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size
     assert(rmap != NULL);
     assert(data_length <= duct_message_size(rmap->rx_duct) - SCRATCH_MARGIN_READ);
 
+#ifdef RMAP_TRACE
     debugf(TRACE, "RMAP (%10s)  READ START: ADDR=0x%02x_%08x LEN=0x%zx",
            rmap->label, ext_addr, main_addr, data_length);
+#endif
 
     if (!duct_send_allowed(&txn->tx_send_txn)) {
         abortf("RMAP (%10s) not permitted to transmit another packet during this epoch.", rmap->label);
@@ -302,21 +312,29 @@ rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer
     if (packet_length == 0 || !rmap_validate_read_reply(rmap, rmap->scratch, packet_length,
                                                         &status_byte, buffer, &output_length)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
+#ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s)  READ  FAIL: NO RESPONSE", rmap->label);
+#endif
         return RS_NO_RESPONSE;
     }
     if (ack_timestamp_out) {
         *ack_timestamp_out = timestamp;
     }
     if (status_byte != RS_OK) {
+#ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s)  READ  FAIL: STATUS=%u", rmap->label, status_byte);
+#endif
         return status_byte;
     } else if (output_length != buffer_size) {
+#ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s)  READ  FAIL: READ LENGTH DIFFERS: %zu (EXPECTED) != %zu (RECEIVED)",
                rmap->label, buffer_size, output_length);
+#endif
         return RS_READ_LENGTH_DIFFERS;
     } else {
+#ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s)  READ  DONE: STATUS=OK", rmap->label);
+#endif
         return RS_OK;
     }
 }
