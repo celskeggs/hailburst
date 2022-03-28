@@ -4,6 +4,10 @@
 // clips are defined as part of the regular scheduler
 #include <hal/thread.h>
 
+macro_define(CLIP_PROTO, c_ident) {
+    TASK_PROTO(c_ident)
+}
+
 static inline bool clip_is_restart(void) {
     return task_get_current()->mut->needs_start;
 }

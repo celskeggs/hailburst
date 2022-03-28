@@ -13,6 +13,11 @@ typedef struct {
 
 void clip_loop(clip_t *clip);
 
+macro_define(CLIP_PROTO, c_ident) {
+    extern clip_t c_ident;
+    TASK_PROTO(symbol_join(c_ident, task))
+}
+
 macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
     clip_t c_ident = {
         .label = symbol_str(c_ident),

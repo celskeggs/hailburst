@@ -17,8 +17,9 @@
 
 typedef TCB_t *thread_t;
 
-#define TASK_PROTO(t_ident) \
+macro_define(TASK_PROTO, t_ident) {
     extern TCB_t t_ident;
+}
 
 macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
     StackType_t symbol_join(t_ident, stack)[RTOS_STACK_SIZE];
