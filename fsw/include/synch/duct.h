@@ -32,6 +32,7 @@ enum {
 typedef uint8_t duct_flow_index;
 
 typedef struct {
+    const char * const      label;
     const uint8_t           sender_replicas;
     const uint8_t           receiver_replicas;
     const duct_flow_index   max_flow;
@@ -86,6 +87,7 @@ macro_define(DUCT_REGISTER,
     flag_t symbol_join(d_ident, flags_receive)[(d_sender_replicas) * (d_receiver_replicas)];
     flag_t symbol_join(d_ident, flags_send)[(d_sender_replicas) * (d_receiver_replicas)];
     duct_t d_ident = {
+        .label = symbol_str(d_ident),
         .sender_replicas = (d_sender_replicas),
         .receiver_replicas = (d_receiver_replicas),
         .max_flow = (d_max_flow),

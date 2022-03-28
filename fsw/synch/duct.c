@@ -14,7 +14,7 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id) {
     assert(sender_id < duct->sender_replicas);
 
 #ifdef DUCT_DEBUG
-    debugf(TRACE, "duct send prepare: %p[%u]", duct, sender_id);
+    debugf(TRACE, "duct %s[sender=%u]: prepare send", duct->label, sender_id);
 #endif
 
     txn->mode = DUCT_TXN_SEND;
@@ -27,12 +27,12 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id) {
         uint32_t offset = sender_id * duct->receiver_replicas + receiver_id;
         if (atomic_load(duct->flow_status[offset]) != DUCT_MISSING_FLOW) {
             flag_raisef(&duct->flags_send[offset],
-                        "Duct sender %s: receiver has deviated from schedule.",
-                        task_get_name(task_get_current()));
+                        "duct %s[sender=%u]: receiver has deviated from schedule.",
+                        duct->label, sender_id);
         } else {
             flag_recoverf(&duct->flags_send[offset],
-                          "Duct sender %s: receiver has resumed acting on schedule.",
-                          task_get_name(task_get_current()));
+                          "duct %s[sender=%u]: receiver has resumed acting on schedule.",
+                          duct->label, sender_id);
         }
     }
 }
@@ -69,15 +69,16 @@ void duct_send_message(duct_txn_t *txn, void *message, size_t size, uint64_t tim
 void duct_send_commit(duct_txn_t *txn) {
     assert(txn != NULL && txn->duct != NULL);
     assertf(txn->mode == DUCT_TXN_SEND,
-            "Duct sender %s: transaction mode was %u instead of DUCT_TXN_SEND (%u)",
-            task_get_name(task_get_current()), txn->mode, DUCT_TXN_SEND);
+            "duct %s[sender=%u]: transaction mode was %u instead of DUCT_TXN_SEND (%u)",
+            txn->duct->label, txn->replica_id, txn->mode, DUCT_TXN_SEND);
     assert(txn->replica_id < txn->duct->sender_replicas);
     assert(txn->flow_current <= txn->duct->max_flow);
 
+    duct_flow_index flow = txn->flow_current;
+
     /* emit new counts */
     for (uint8_t receiver_id = 0; receiver_id < txn->duct->receiver_replicas; receiver_id++) {
-        atomic_store(txn->duct->flow_status[txn->replica_id * txn->duct->receiver_replicas + receiver_id],
-                     txn->flow_current);
+        atomic_store(txn->duct->flow_status[txn->replica_id * txn->duct->receiver_replicas + receiver_id], flow);
     }
 
     /* clear transaction */
@@ -85,7 +86,8 @@ void duct_send_commit(duct_txn_t *txn) {
     txn->flow_current = DUCT_MISSING_FLOW;
 
 #ifdef DUCT_DEBUG
-    debugf(TRACE, "duct send commit: %p[%u]", txn->duct, txn->replica_id);
+    debugf(TRACE, "duct %s[sender=%u]: commit send (%u/%u)",
+           txn->duct->label, txn->replica_id, flow, txn->duct->max_flow);
 #endif
 }
 
@@ -98,7 +100,7 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
     clip_assert();
 
 #ifdef DUCT_DEBUG
-    debugf(TRACE, "duct receive prepare: %p[%u]", duct, receiver_id);
+    debugf(TRACE, "duct %s[receiver=%u]: prepare receive", duct->label, receiver_id);
 #endif
 
     txn->mode = DUCT_TXN_RECV;
@@ -113,12 +115,12 @@ void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
         if (status == DUCT_MISSING_FLOW || status > duct->max_flow) {
             atomic_store_relaxed(duct->flow_status[offset], 0);
             flag_raisef(&duct->flags_receive[offset],
-                        "Duct receiver %s: sender has deviated from schedule.",
-                        task_get_name(task_get_current()));
+                        "duct %s[receiver=%u]: sender %u has deviated from schedule.",
+                        duct->label, receiver_id, sender_id);
         } else {
             flag_recoverf(&duct->flags_receive[offset],
-                          "Duct receiver %s: sender has resumed acting on schedule.",
-                          task_get_name(task_get_current()));
+                          "duct %s[receiver=%u]: sender %u has resumed acting on schedule.",
+                          duct->label, receiver_id, sender_id);
         }
     }
 }
@@ -187,8 +189,8 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timest
         }
         if (votes >= majority) {
             if (votes != txn->duct->sender_replicas) {
-                miscomparef("Voted for a message with %u/%u votes on index %u.",
-                            votes, txn->duct->sender_replicas, txn->flow_current);
+                miscomparef("duct %s[receiver=%u]: voted for a message with %u/%u votes on index %u.",
+                            txn->duct->label, txn->replica_id, votes, txn->duct->sender_replicas, txn->flow_current);
             }
             if (message_out != NULL) {
                 memcpy(message_out, candidate->body, candidate->size);
@@ -202,8 +204,9 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timest
     }
 
     if (valid_messages != 0) {
-        miscomparef("Could not agree on a message: best vote was %u/%u at index %u.",
-                    best_votes, txn->duct->sender_replicas, txn->flow_current);
+        miscomparef("duct %s[receiver=%u]: could not agree on a message: best vote was %u/%u/%u at index %u.",
+                    txn->duct->label, txn->replica_id,
+                    best_votes, valid_messages, txn->duct->sender_replicas, txn->flow_current);
     }
 
     /* indicate that there are no more valid messages for us to receive */
@@ -214,14 +217,14 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timest
 void duct_receive_commit(duct_txn_t *txn) {
     assert(txn != NULL && txn->duct != NULL);
     assertf(txn->mode == DUCT_TXN_RECV,
-            "Duct receiver %s: transaction mode was %u instead of DUCT_TXN_RECV (%u)",
-            task_get_name(task_get_current()), txn->mode, DUCT_TXN_RECV);
+            "duct %s[receiver=%u]: transaction mode was %u instead of DUCT_TXN_RECV (%u)",
+            txn->duct->label, txn->replica_id, txn->mode, DUCT_TXN_RECV);
     assert(txn->replica_id < txn->duct->receiver_replicas);
     assert(txn->flow_current <= txn->duct->max_flow);
 
     if (duct_receive_message(txn, NULL, NULL) > 0) {
-        malfunctionf("Did not consume all messages: consumed %u from space of %u, but there was at least one more.",
-                     txn->flow_current, txn->duct->max_flow);
+        malfunctionf("duct %s[receiver=%u]: did not consume all messages: consumed %u from space of %u, but there was "
+                     "at least one more.", txn->duct->label, txn->replica_id, txn->flow_current, txn->duct->max_flow);
     }
 
     /* ensure that counts match actual number processed, and mark everything as consumed. */
@@ -235,6 +238,6 @@ void duct_receive_commit(duct_txn_t *txn) {
     txn->flow_current = DUCT_MISSING_FLOW;
 
 #ifdef DUCT_DEBUG
-    debugf(TRACE, "duct receive commit: %p[%u]", txn->duct, txn->replica_id);
+    debugf(TRACE, "duct %s[receiver=%u]: commit receive", txn->duct->label, txn->replica_id);
 #endif
 }
