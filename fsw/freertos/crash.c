@@ -77,7 +77,7 @@ extern volatile uint32_t trap_recursive_flag;
 void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_mode) {
     uint64_t now = timer_now_ns();
 
-    const char *trap_name = trap_mode < 3 ? trap_mode_names[trap_mode] : "???????";
+    const char *trap_name = trap_mode < 4 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "%s", trap_name);
     bool task_recursive = false;
     if (!scheduler_has_started()) {
