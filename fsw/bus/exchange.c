@@ -6,6 +6,7 @@
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/thread.h>
+#include <synch/config.h>
 #include <bus/exchange.h>
 
 //#define EXCHANGE_DEBUG
@@ -18,9 +19,45 @@ static void rand_init(void) {
 }
 PROGRAM_INIT(STAGE_RAW, rand_init);
 
+void fakewire_exc_rand_clip(duct_t *rand_duct) {
+    assert(rand_duct != NULL);
+
+    uint32_t random_number = rand();
+
+    duct_txn_t txn;
+    duct_send_prepare(&txn, rand_duct, 0);
+    duct_send_message(&txn, &random_number, sizeof(random_number), 0);
+    duct_send_commit(&txn);
+}
+
+static uint32_t fakewire_exc_receive_random_number(const fw_exchange_t *conf) {
+    assert(conf != NULL);
+
+    uint32_t random_number;
+
+    duct_txn_t txn;
+    duct_receive_prepare(&txn, conf->rand_duct, conf->exchange_replica_id);
+    assert(duct_message_size(conf->rand_duct) == sizeof(random_number));
+    size_t length = duct_receive_message(&txn, &random_number, NULL);
+    if (length == sizeof(random_number)) {
+        // great! we have a random number.
+    } else {
+        // if no random number is available (such as due to a transient failure), use a default.
+        // this is okay because it's only used to randomize handshake timings; worst case is a series of colliding
+        // handshakes before the transient failure is repaired.
+        random_number = 0x12345678;
+        miscomparef("Did not receive random number from randomness task (len=%zu).", length);
+    }
+    duct_receive_commit(&txn);
+
+    return random_number;
+}
+
 // random interval in the range [1 tick, 5 ticks]
-static uint32_t handshake_period_ticks(void) {
-    return rand() % 4 + 1;
+static uint32_t exchange_handshake_period_ticks(exchange_instance_t *exc) {
+    assert(exc != NULL);
+
+    return exc->random_number % 4 + 1;
 }
 
 static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t *conf, uint32_t countdown_timeout) {
@@ -69,12 +106,12 @@ static void exchange_instance_check_timers(exchange_instance_t *exc) {
             exc->resend_fcts = true;
             exc->resend_pkts = true;
 
-            exc->countdown_timeout = handshake_period_ticks();
+            exc->countdown_timeout = exchange_handshake_period_ticks(exc);
         } else if (exc->exc_state == FW_EXC_HANDSHAKING || exc->exc_state == FW_EXC_CONNECTING) {
             // send a fresh handshake
             exc->send_primary_handshake = true;
 
-            exc->countdown_timeout = handshake_period_ticks();
+            exc->countdown_timeout = exchange_handshake_period_ticks(exc);
             debug_printf(DEBUG, "Next handshake scheduled for %u ticks in the future", exc->countdown_timeout);
         }
     }
@@ -318,7 +355,7 @@ static void exchange_instance_check_fcts(exchange_instance_t *exc) {
         exc->resend_fcts = true;
         exc->resend_pkts = true;
 
-        exc->countdown_timeout = handshake_period_ticks();
+        exc->countdown_timeout = exchange_handshake_period_ticks(exc);
     }
 }
 
@@ -356,14 +393,14 @@ static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
         debug_printf(DEBUG, "Sent secondary handshake with ID=0x%08x; transitioning to operating mode.",
                      exc->recv_handshake_id);
 
-        exc->countdown_timeout = handshake_period_ticks();
+        exc->countdown_timeout = exchange_handshake_period_ticks(exc);
     }
 
     if (exc->send_primary_handshake) {
         assert(exc->exc_state == FW_EXC_HANDSHAKING || exc->exc_state == FW_EXC_CONNECTING);
 
         // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
-        uint32_t gen_handshake_id = 0x80000000 + (0x7FFFFFFF & (uint32_t) clock_timestamp_monotonic());
+        uint32_t gen_handshake_id = 0x80000000 + (0x7FFFFFFF & exc->random_number);
 
         if (fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_HANDSHAKE_1, gen_handshake_id)) {
             exc->send_handshake_id = gen_handshake_id;
@@ -438,12 +475,17 @@ static void fakewire_exc_check_reinit(const fw_exchange_t *conf) {
     exchange_instance_t *exc = conf->instance;
     assert(exc != NULL);
 
+    uint32_t random_number = fakewire_exc_receive_random_number(conf);
+
     if (clip_is_restart()) {
         memset(exc, 0, sizeof(*exc));
-        exchange_instance_configure(exc, conf, handshake_period_ticks());
+        exc->random_number = random_number;
+        exchange_instance_configure(exc, conf, exchange_handshake_period_ticks(exc));
         fakewire_dec_reset(conf->decoder);
 
         debug_printf(DEBUG, "First handshake scheduled for %u ticks in the future", exc->countdown_timeout);
+    } else {
+        exc->random_number = random_number;
     }
 }
 
@@ -487,6 +529,8 @@ void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
     assert(exc != NULL);
 
     fakewire_exc_check_reinit(conf);
+
+    exchange_instance_check_invariants(exc);
 
     exchange_instance_check_timers(exc);
 

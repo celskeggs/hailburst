@@ -37,6 +37,8 @@ enum transmit_state {
 typedef struct {
     const struct fw_exchange_st *conf;
 
+    uint32_t random_number;
+
     enum exchange_state exc_state;
     enum receive_state  recv_state;
 
@@ -73,12 +75,14 @@ typedef const struct fw_exchange_st {
     uint8_t *read_buffer;
     uint8_t *write_buffer;
 
+    duct_t *rand_duct;     // sender: randomness task, recipient: exchange_thread
     duct_t *read_duct;     // sender: exchange_thread, recipient: switch task
     duct_t *write_duct;    // sender: switch task, recipient: exchange_thread
 } fw_exchange_t;
 
 void fakewire_exc_notify(fw_exchange_t *fwe);
 void fakewire_exc_init_internal(fw_exchange_t *fwe);
+void fakewire_exc_rand_clip(duct_t *rand_duct);
 void fakewire_exc_tx_clip(fw_exchange_t *fwe);
 void fakewire_exc_rx_clip(fw_exchange_t *fwe);
 
@@ -94,6 +98,10 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
     FAKEWIRE_LINK_REGISTER(symbol_join(e_ident, io_port), e_link_options,
                            symbol_join(e_ident, receive_duct), symbol_join(e_ident, transmit_duct),
                            (e_max_flow) * (e_buf_size) + 1024);
+    /* not replicated because replication isn't critical for a randomness source */
+    DUCT_REGISTER(symbol_join(e_ident, rand_duct), 1, EXCHANGE_REPLICAS, 1, sizeof(uint32_t), DUCT_SENDER_FIRST);
+    CLIP_REGISTER(symbol_join(e_ident, rand_clip_tx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
+    CLIP_REGISTER(symbol_join(e_ident, rand_clip_rx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
         FAKEWIRE_ENCODER_REGISTER(symbol_join(e_ident, encoder, replica_id),
                                   symbol_join(e_ident, transmit_duct), replica_id, (e_max_flow) * (e_buf_size) + 1024);
@@ -111,6 +119,7 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
             .buffers_length = (e_buf_size),
             .read_buffer  = symbol_join(e_ident, read_buffer,  replica_id),
             .write_buffer = symbol_join(e_ident, write_buffer, replica_id),
+            .rand_duct  = &symbol_join(e_ident, rand_duct),
             .read_duct  = &e_read_duct,
             .write_duct = &e_write_duct,
         };
@@ -135,16 +144,18 @@ macro_define(FAKEWIRE_EXCHANGE_ON_SWITCHES,
 }
 
 macro_define(FAKEWIRE_EXCHANGE_TRANSMIT_SCHEDULE, e_ident) {
+    CLIP_SCHEDULE(symbol_join(e_ident, rand_clip_tx), 10)
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
-        CLIP_SCHEDULE(symbol_join(e_ident, tx_clip, replica_id), 116)
+        CLIP_SCHEDULE(symbol_join(e_ident, tx_clip, replica_id), 120)
     }
     FAKEWIRE_LINK_SCHEDULE_TRANSMIT(symbol_join(e_ident, io_port))
 }
 
 macro_define(FAKEWIRE_EXCHANGE_RECEIVE_SCHEDULE, e_ident) {
+    CLIP_SCHEDULE(symbol_join(e_ident, rand_clip_rx), 10)
     FAKEWIRE_LINK_SCHEDULE_RECEIVE(symbol_join(e_ident, io_port))
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
-        CLIP_SCHEDULE(symbol_join(e_ident, rx_clip, replica_id), 49)
+        CLIP_SCHEDULE(symbol_join(e_ident, rx_clip, replica_id), 100)
     }
 }
 
