@@ -64,46 +64,50 @@ macro_define(SWITCH_REGISTER, v_ident, v_max_buffer) {
     }
 }
 
-#define SWITCH_SCHEDULE(v_ident)                                                                                      \
-    static_repeat(SWITCH_REPLICAS, switch_replica_id) {                                                               \
-        CLIP_SCHEDULE(symbol_join(v_ident, clip, switch_replica_id), 30)                                              \
+macro_define(SWITCH_SCHEDULE, v_ident) {
+    static_repeat(SWITCH_REPLICAS, switch_replica_id) {
+        CLIP_SCHEDULE(symbol_join(v_ident, clip, switch_replica_id), 30)
     }
+}
 
 // inbound is for packets TO the switch.
-#define SWITCH_PORT_INBOUND(v_ident, v_port, v_inbound)                                                               \
-    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,                         \
-                  "switch port must be valid");                                                                       \
-    static void v_ident ## _port_ ## v_port ## _init_inbound(void) {                                                  \
-        assert(duct_message_size(&(v_inbound)) <= v_ident.scratch_buffer_size);                                       \
-        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound == NULL);                                           \
-        v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound = &v_inbound;                                              \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_RAW, v_ident ## _port_ ## v_port ## _init_inbound)
+macro_define(SWITCH_PORT_INBOUND, v_ident, v_port, v_inbound) {
+    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,
+                  "switch port must be valid");
+    static void symbol_join(v_ident, port, v_port, init_inbound)(void) {
+        assert(duct_message_size(&(v_inbound)) <= v_ident.scratch_buffer_size);
+        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound == NULL);
+        v_ident.ports[(v_port) - SWITCH_PORT_BASE].inbound = &v_inbound;
+    }
+    PROGRAM_INIT(STAGE_RAW, symbol_join(v_ident, port, v_port, init_inbound))
+}
 
 // outbound is for packets FROM the switch.
-#define SWITCH_PORT_OUTBOUND(v_ident, v_port, v_outbound)                                                             \
-    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,                         \
-                  "switch port must be valid");                                                                       \
-    static void v_ident ## _port_ ## v_port ## _init_outbound(void) {                                                 \
-        /* no need to check outbound message size; we can detect if a truncation is necessary! */                     \
-        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound == NULL);                                          \
-        v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound = &v_outbound;                                            \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_RAW, v_ident ## _port_ ## v_port ## _init_outbound)
+macro_define(SWITCH_PORT_OUTBOUND, v_ident, v_port, v_outbound) {
+    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,
+                  "switch port must be valid");
+    static void symbol_join(v_ident, port, v_port, init_outbound)(void) {
+        /* no need to check outbound message size; we can detect if a truncation is necessary! */
+        assert(v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound == NULL);
+        v_ident.ports[(v_port) - SWITCH_PORT_BASE].outbound = &v_outbound;
+    }
+    PROGRAM_INIT(STAGE_RAW, symbol_join(v_ident, port, v_port, init_outbound))
+}
 
-#define SWITCH_ROUTE(v_ident, v_logical_address, v_port, v_address_pop)                                               \
-    static_assert(SWITCH_ROUTE_BASE <= (v_logical_address), "switch route must be valid");                            \
-    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,                         \
-                  "switch port must be valid");                                                                       \
-    static void v_ident ## _route_ ## v_logical_address ## _init(void) {                                              \
-        assert(v_ident.routing_table[(v_logical_address) - SWITCH_ROUTE_BASE] == 0);                                  \
-        uint8_t route = (v_port) | SWITCH_ROUTE_FLAG_ENABLED;                                                         \
-        if (v_address_pop) {                                                                                          \
-            route |= SWITCH_ROUTE_FLAG_POP;                                                                           \
-        }                                                                                                             \
-        assert((route & SWITCH_ROUTE_PORT_MASK) == (v_port));                                                         \
-        v_ident.routing_table[(v_logical_address) - SWITCH_ROUTE_BASE] = route;                                       \
-    }                                                                                                                 \
-    PROGRAM_INIT(STAGE_RAW, v_ident ## _route_ ## v_logical_address ## _init)
+macro_define(SWITCH_ROUTE, v_ident, v_logical_address, v_port, v_address_pop) {
+    static_assert(SWITCH_ROUTE_BASE <= (v_logical_address), "switch route must be valid");
+    static_assert(SWITCH_PORT_BASE <= (v_port) && (v_port) < SWITCH_PORT_BASE + SWITCH_PORTS,
+                  "switch port must be valid");
+    static void symbol_join(v_ident, route, v_logical_address, init)(void) {
+        assert(v_ident.routing_table[(v_logical_address) - SWITCH_ROUTE_BASE] == 0);
+        uint8_t route = (v_port) | SWITCH_ROUTE_FLAG_ENABLED;
+        if (v_address_pop) {
+            route |= SWITCH_ROUTE_FLAG_POP;
+        }
+        assert((route & SWITCH_ROUTE_PORT_MASK) == (v_port));
+        v_ident.routing_table[(v_logical_address) - SWITCH_ROUTE_BASE] = route;
+    }
+    PROGRAM_INIT(STAGE_RAW, symbol_join(v_ident, route, v_logical_address, init))
+}
 
 #endif /* FSW_FAKEWIRE_RMAP_H */

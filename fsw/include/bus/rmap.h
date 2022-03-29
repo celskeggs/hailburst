@@ -68,25 +68,27 @@ typedef struct {
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
-#define RMAP_ON_SWITCHES(r_ident, r_label, r_switch_in, r_switch_out, r_switch_port, r_routing,                       \
-                         r_max_read, r_max_write)                                                                     \
-    DUCT_REGISTER(r_ident ## _receive,  SWITCH_REPLICAS, 1, RMAP_MAX_IO_FLOW, SCRATCH_MARGIN_READ  + r_max_read,      \
-                  DUCT_SENDER_FIRST);                                                                                 \
-    DUCT_REGISTER(r_ident ## _transmit, 1, SWITCH_REPLICAS, RMAP_MAX_IO_FLOW, SCRATCH_MARGIN_WRITE + r_max_write,     \
-                  DUCT_SENDER_FIRST);                                                                                 \
-    SWITCH_PORT_INBOUND(r_switch_out, r_switch_port, r_ident ## _transmit);                                           \
-    SWITCH_PORT_OUTBOUND(r_switch_in, r_switch_port, r_ident ## _receive);                                            \
-    uint8_t r_ident ## _scratch[RMAP_MAX_IO_PACKET(r_max_read, r_max_write)];                                         \
-    rmap_t r_ident = {                                                                                                \
-        .label = (r_label),                                                                                           \
-        .rx_duct = &r_ident ## _receive,                                                                              \
-        .tx_duct = &r_ident ## _transmit,                                                                             \
-        .scratch = r_ident ## _scratch,                                                                               \
-        .routing = &(r_routing),                                                                                      \
+macro_define(RMAP_ON_SWITCHES,
+             r_ident, r_label, r_switch_in, r_switch_out, r_switch_port, r_routing, r_max_read, r_max_write) {
+    DUCT_REGISTER(symbol_join(r_ident, receive),      SWITCH_REPLICAS, 1, RMAP_MAX_IO_FLOW,
+                  SCRATCH_MARGIN_READ  + r_max_read,  DUCT_SENDER_FIRST);
+    DUCT_REGISTER(symbol_join(r_ident, transmit),     1, SWITCH_REPLICAS, RMAP_MAX_IO_FLOW,
+                  SCRATCH_MARGIN_WRITE + r_max_write, DUCT_SENDER_FIRST);
+    SWITCH_PORT_INBOUND(r_switch_out, r_switch_port, symbol_join(r_ident, transmit));
+    SWITCH_PORT_OUTBOUND(r_switch_in, r_switch_port, symbol_join(r_ident, receive));
+    uint8_t symbol_join(r_ident, scratch)[RMAP_MAX_IO_PACKET(r_max_read, r_max_write)];
+    rmap_t r_ident = {
+        .label = (r_label),
+        .rx_duct = &symbol_join(r_ident, receive),
+        .tx_duct = &symbol_join(r_ident, transmit),
+        .scratch = symbol_join(r_ident, scratch),
+        .routing = &(r_routing),
     }
+}
 
-#define RMAP_MAX_IO_PACKET(r_max_read, r_max_write)                                                                   \
+macro_define(RMAP_MAX_IO_PACKET, r_max_read, r_max_write) {
     PP_CONST_MAX(SCRATCH_MARGIN_READ + (r_max_read), SCRATCH_MARGIN_WRITE + (r_max_write))
+}
 
 // must be called every epoch before any uses of RMAP have been made, even if RMAP won't be used.
 void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap);
