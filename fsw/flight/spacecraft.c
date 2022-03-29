@@ -118,8 +118,8 @@ FAKEWIRE_EXCHANGE_ON_SWITCHES(fce_fw_exchange, exchange_options, fce_vin, fce_vo
 
 CLOCK_REGISTER(sc_clock, clock_routing, fce_vin, fce_vout, VPORT_CLOCK);
 
-PIPE_REGISTER(sc_uplink_pipe,   1, 1, UPLINK_BUF_LOCAL_SIZE,   PIPE_SENDER_FIRST);
-PIPE_REGISTER(sc_downlink_pipe, 1, 1, DOWNLINK_BUF_LOCAL_SIZE, PIPE_SENDER_FIRST);
+PIPE_REGISTER(sc_uplink_pipe,   1, 1, 1, UPLINK_BUF_LOCAL_SIZE,   PIPE_SENDER_FIRST);
+PIPE_REGISTER(sc_downlink_pipe, 1, 1, 1, DOWNLINK_BUF_LOCAL_SIZE, PIPE_SENDER_FIRST);
 
 RADIO_REGISTER(sc_radio, fce_vin, fce_vout,
                radio_up_routing,   VPORT_RADIO_UP,   UPLINK_BUF_LOCAL_SIZE,   sc_uplink_pipe,

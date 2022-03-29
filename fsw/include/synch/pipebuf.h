@@ -4,10 +4,10 @@
 /*
  * This file contains buffering support for both the send and receive ends of pipes. This allows output to be built up
  * incrementally and only transmitted when possible, and allows input to be consumed incrementally and only received as
- * necessary.
+ * necessary. Note that this treats data continuously, not discretely, so adjacent transmissions may be coalesced.
  *
- * The capacity of these buffers must be at least the transfer rate of the underlying pipes. However, it is recommended
- * that the buffers are sized at twice the transfer rate of the underlying pipes to avoid edge cases that slow down
+ * The capacity of these buffers must be at least the message size of the underlying pipes. However, it is recommended
+ * that the buffers are sized at twice the message size of the underlying pipes to avoid edge cases that slow down
  * transfers.
  */
 
@@ -34,6 +34,7 @@ typedef struct {
     // mutable
     size_t scratch_avail;
     size_t scratch_offset;
+    pipe_txn_t pipe_txn;
 } pipe_receiver_t;
 
 macro_define(PIPE_SENDER_REGISTER, s_ident, s_pipe, s_capacity, s_replica) {

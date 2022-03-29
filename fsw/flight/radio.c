@@ -320,22 +320,22 @@ void radio_uplink_clip(radio_t *radio) {
             && !radio->read_plan.needs_update_all && !radio->read_plan.needs_alt_update) {
         radio->uplink_state = RAD_UL_WRITE_TO_STREAM;
     }
-    if (radio->uplink_state != RAD_UL_WRITE_TO_STREAM) {
-        // we always have to service the pipe, even if we aren't going to send anything.
-        pipe_send_idle(radio->up_pipe, RADIO_REPLICA_ID);
-    } else {
+    pipe_txn_t txn;
+    pipe_send_prepare(&txn, radio->up_pipe, RADIO_REPLICA_ID);
+    if (radio->uplink_state == RAD_UL_WRITE_TO_STREAM) {
         uint32_t uplink_length = radio->read_plan.prime_read_length + radio->read_plan.flipped_read_length;
         if (uplink_length == 0) {
             radio->uplink_state = RAD_UL_QUERY_STATE;
-            pipe_send_idle(radio->up_pipe, RADIO_REPLICA_ID);
-        } else if (pipe_send_desired(radio->up_pipe, RADIO_REPLICA_ID)) {
-            assert(uplink_length <= UPLINK_BUF_LOCAL_SIZE && UPLINK_BUF_LOCAL_SIZE <= pipe_max_rate(radio->up_pipe));
+        } else if (pipe_send_allowed(&txn)) {
+            assert(uplink_length <= UPLINK_BUF_LOCAL_SIZE
+                     && UPLINK_BUF_LOCAL_SIZE <= pipe_message_size(radio->up_pipe));
             // write all the data we just pulled to the stream before continuing
-            pipe_send_data(radio->up_pipe, RADIO_REPLICA_ID, radio->uplink_buf_local, uplink_length);
+            pipe_send_message(&txn, radio->uplink_buf_local, uplink_length);
             radio->uplink_state = RAD_UL_QUERY_STATE;
             debugf(TRACE, "Radio uplink received %u bytes.", uplink_length);
         }
     }
+    pipe_send_commit(&txn);
 
     switch (radio->uplink_state) {
     case RAD_UL_QUERY_COMMON_CONFIG:
@@ -513,22 +513,21 @@ void radio_downlink_clip(radio_t *radio) {
     if (radio->downlink_state == RAD_DL_INITIAL_STATE) {
         radio->downlink_state = RAD_DL_QUERY_COMMON_CONFIG;
     }
-    if (radio->downlink_state != RAD_DL_WAITING_FOR_STREAM) {
-        pipe_receive_discard(radio->down_pipe, RADIO_REPLICA_ID);
-    } else {
+    pipe_txn_t txn;
+    pipe_receive_prepare(&txn, radio->down_pipe, RADIO_REPLICA_ID);
+    if (radio->downlink_state == RAD_DL_WAITING_FOR_STREAM) {
         assert(tx_region.size >= DOWNLINK_BUF_LOCAL_SIZE);
-        assert(pipe_max_rate(radio->down_pipe) <= DOWNLINK_BUF_LOCAL_SIZE);
-        radio->downlink_length = pipe_receive_data(radio->down_pipe, RADIO_REPLICA_ID, radio->downlink_buf_local);
+        assert(pipe_message_size(radio->down_pipe) <= DOWNLINK_BUF_LOCAL_SIZE);
+        radio->downlink_length = pipe_receive_message(&txn, radio->downlink_buf_local);
         if (radio->downlink_length > 0) {
             assert(radio->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
             radio->downlink_state = RAD_DL_VALIDATE_IDLE;
             debugf(TRACE, "Radio downlink received %u bytes for transmission.", radio->downlink_length);
         }
     }
-
     // we can only start requesting data once we know we can accept it.
     // (maybe there's a way to streamline this?)
-    pipe_receive_indicate(radio->down_pipe, RADIO_REPLICA_ID, (radio->downlink_state == RAD_DL_WAITING_FOR_STREAM));
+    pipe_receive_commit(&txn, (radio->downlink_state == RAD_DL_WAITING_FOR_STREAM) ? 1 : 0);
 
     switch (radio->downlink_state) {
     case RAD_DL_QUERY_COMMON_CONFIG:

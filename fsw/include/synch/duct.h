@@ -104,7 +104,7 @@ static inline size_t duct_message_size(duct_t *duct) {
     return duct->message_size;
 }
 
-static inline size_t duct_max_flow(duct_t *duct) {
+static inline duct_flow_index duct_max_flow(duct_t *duct) {
     assert(duct != NULL);
     return duct->max_flow;
 }
@@ -116,6 +116,11 @@ static inline duct_message_t *duct_lookup_message(duct_t *duct, uint8_t sender_i
     return (duct_message_t *) &duct->message_buffer[
         ((sender_id * duct->max_flow) + flow_index) * (sizeof(duct_message_t) + duct->message_size)
     ];
+}
+
+static inline uint8_t duct_txn_replica_id(duct_txn_t *txn) {
+    assert(txn != NULL);
+    return txn->replica_id;
 }
 
 void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id);
