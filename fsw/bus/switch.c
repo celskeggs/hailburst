@@ -2,7 +2,6 @@
 
 #include <hal/atomic.h>
 #include <hal/debug.h>
-#include <synch/io.h>
 #include <bus/switch.h>
 
 //#define SWITCH_DEBUG

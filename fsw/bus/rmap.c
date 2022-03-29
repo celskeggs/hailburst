@@ -2,7 +2,6 @@
 
 #include <hal/clock.h>
 #include <hal/debug.h>
-#include <synch/io.h>
 #include <bus/rmap.h>
 
 //#define RMAP_TRACE

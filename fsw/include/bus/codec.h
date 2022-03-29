@@ -5,7 +5,6 @@
 #include <stdbool.h>
 
 #include <synch/duct.h>
-#include <synch/io.h>
 
 // THREAD SAFETY NOTE: none of this code is thread-safe.
 

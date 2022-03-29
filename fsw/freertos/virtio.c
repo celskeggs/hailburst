@@ -8,7 +8,6 @@
 #include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
-#include <synch/io.h>
 
 //#define DEBUG_VIRTQ
 
