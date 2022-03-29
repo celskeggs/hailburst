@@ -3,10 +3,10 @@
 #include <string.h>
 
 #include <hal/atomic.h>
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
 #include <synch/retry.h>
+#include <flight/clock.h>
 #include <flight/magnetometer.h>
 #include <flight/telemetry.h>
 
@@ -52,7 +52,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
             mag->state = MS_ACTIVE;
-            mag->next_reading_time = clock_timestamp_monotonic() + READING_DELAY_NS;
+            mag->next_reading_time = timer_now_ns() + READING_DELAY_NS;
             tlm_mag_pwr_state_changed(mag->telemetry_async, true);
         } else {
             debugf(WARNING, "Failed to turn on magnetometer power, error=0x%03x", status);
@@ -74,7 +74,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         if (status == RS_OK) {
             assert(mag->actual_reading_time != 0);
             mag->state = MS_LATCHED_ON;
-            mag->check_latch_time = clock_timestamp_monotonic() + LATCHING_DELAY_NS;
+            mag->check_latch_time = timer_now_ns() + LATCHING_DELAY_NS;
         } else {
             debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
         }
@@ -89,7 +89,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
             if (registers[0] == LATCH_OFF) {
                 tlm_mag_reading_t *reading = chart_request_start(mag->readings);
                 if (reading != NULL) {
-                    reading->reading_time = mag->actual_reading_time;
+                    reading->reading_time = clock_mission_adjust(mag->actual_reading_time);
                     reading->mag_x = registers[REG_X - REG_LATCH];
                     reading->mag_y = registers[REG_Y - REG_LATCH];
                     reading->mag_z = registers[REG_Z - REG_LATCH];
@@ -115,11 +115,11 @@ void magnetometer_query_clip(magnetometer_t *mag) {
                     && !atomic_load_relaxed(mag->should_be_powered)) {
         debugf(DEBUG, "Turning off magnetometer power...");
         mag->state = MS_DEACTIVATING;
-    } else if (mag->state == MS_ACTIVE && clock_timestamp_monotonic() >= mag->next_reading_time) {
+    } else if (mag->state == MS_ACTIVE && timer_now_ns() >= mag->next_reading_time) {
         debugf(DEBUG, "Taking magnetometer reading...");
         mag->state = MS_LATCHING_ON;
         mag->next_reading_time += READING_DELAY_NS;
-    } else if (mag->state == MS_LATCHED_ON && clock_timestamp_monotonic() >= mag->check_latch_time) {
+    } else if (mag->state == MS_LATCHED_ON && timer_now_ns() >= mag->check_latch_time) {
         mag->state = MS_TAKING_READING;
     }
 
@@ -162,7 +162,7 @@ void magnetometer_telem_loop(magnetometer_t *mag) {
 
     // runs every 5.5 seconds to meet requirements
     for (;;) {
-        uint64_t last_telem_time = clock_timestamp_monotonic();
+        local_time_t last_telem_time = timer_now_ns();
 
         // see if we have readings to downlink
         size_t downlink_count = chart_reply_avail(mag->readings);

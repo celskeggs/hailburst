@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/celskeggs/hailburst/sim/model"
 	"io"
 	"log"
 	"net"
@@ -14,7 +13,7 @@ import (
 )
 
 type ProtocolImpl interface {
-	Sync(pendingReadBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte)
+	Sync(pendingReadBytes int, now int64, writeData []byte) (expireAt int64, readData []byte)
 }
 
 func OnCancel(ctx context.Context, cb func()) {
@@ -253,7 +252,7 @@ func HandleTimesyncProtocol(ctx context.Context, conn net.Conn, impl ProtocolImp
 			return fmt.Errorf("unexpected sequence number %v instead of %v", request.SeqNum, nextSeqNum)
 		}
 
-		expireAt, data := impl.Sync(int(request.PendingReadBytes), model.VirtualTime(request.Now), request.Data)
+		expireAt, data := impl.Sync(int(request.PendingReadBytes), request.Now, request.Data)
 		if request.PendingReadBytes > 0 && len(data) > 0 {
 			return fmt.Errorf(
 				"impermissible attempt to write %d bytes of data when %d were already pending",
@@ -261,7 +260,7 @@ func HandleTimesyncProtocol(ctx context.Context, conn net.Conn, impl ProtocolImp
 		}
 		replies <- TimesyncReply{
 			SeqNum:   request.SeqNum,
-			ExpireAt: int64(expireAt),
+			ExpireAt: expireAt,
 			Data:     data,
 		}
 

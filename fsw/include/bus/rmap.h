@@ -98,12 +98,12 @@ void rmap_epoch_commit(rmap_txn_t *txn);
 // uses ACKNOWLEDGE | VERIFY | INCREMENT flags
 void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t length);
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out);
+rmap_status_t rmap_write_complete(rmap_txn_t *txn, local_time_t *ack_timestamp_out);
 
 // uses INCREMENT flag
 void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size_t length);
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out);
+rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, local_time_t *ack_timestamp_out);
 
 // helper functions for main code (defined in rmap_helpers.c)
 uint8_t rmap_crc8(uint8_t *bytes, size_t len);

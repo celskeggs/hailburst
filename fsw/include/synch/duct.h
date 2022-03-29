@@ -57,10 +57,10 @@ typedef struct {
 } duct_txn_t;
 
 typedef struct {
-    size_t   size;
+    size_t       size;
     /* only included to simplify code migration from charts + io_rx_ent */
-    uint64_t timestamp;
-    uint8_t  body[];
+    local_time_t timestamp;
+    uint8_t      body[];
 } duct_message_t;
 
 enum duct_polarity {
@@ -122,12 +122,12 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id);
 // returns true if we're allowed to send at least one more message
 bool duct_send_allowed(duct_txn_t *txn);
 // asserts if we've used up our max flow in this transaction already
-void duct_send_message(duct_txn_t *txn, void *message, size_t size, uint64_t timestamp);
+void duct_send_message(duct_txn_t *txn, void *message, size_t size, local_time_t timestamp);
 void duct_send_commit(duct_txn_t *txn);
 
 void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id);
 // returns size > 0 if a message was successfully received. if size = 0, then we're done with this transaction.
-size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timestamp_out);
+size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *timestamp_out);
 // asserts if we left any messages unprocessed
 void duct_receive_commit(duct_txn_t *txn);
 

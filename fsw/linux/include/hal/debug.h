@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include <hal/loglevel.h>
+#include <flight/clock.h>
 
 #define TIMEFMT "%3.9f"
 #define TIMEARG(x) ((x) / 1000000000.0)

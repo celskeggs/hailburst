@@ -2,10 +2,10 @@
 #include <string.h>
 #include <time.h>
 
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 #include <synch/config.h>
 #include <bus/exchange.h>
 
@@ -164,7 +164,7 @@ static void exchange_recv_ctrl_char_while_handshaking(exchange_instance_t *exc, 
 }
 
 static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, duct_txn_t *send_txn,
-                                                    fw_ctrl_t symbol, uint32_t param, uint64_t receive_timestamp) {
+                                                    fw_ctrl_t symbol, uint32_t param, local_time_t receive_timestamp) {
     assert(exc != NULL);
 
     // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
@@ -250,7 +250,7 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, du
 }
 
 static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, duct_txn_t *send_txn,
-                                                fw_ctrl_t symbol, uint32_t param, uint64_t receive_timestamp) {
+                                                fw_ctrl_t symbol, uint32_t param, local_time_t receive_timestamp) {
     assert(exc != NULL);
     assert(param == 0 || fakewire_is_parametrized(symbol));
 

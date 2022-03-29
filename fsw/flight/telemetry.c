@@ -2,10 +2,10 @@
 #include <inttypes.h>
 
 #include <hal/atomic.h>
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
 #include <hal/watchdog.h>
+#include <flight/clock.h>
 #include <flight/telemetry.h>
 
 struct {
@@ -128,7 +128,7 @@ void telemetry_main_clip(void) {
         if (async_elm != NULL) {
             // convert async element to packet
             packet.cmd_tlm_id   = async_elm->telemetry_id;
-            packet.timestamp_ns = clock_adjust_monotonic(timestamp_ns_mono);
+            packet.timestamp_ns = clock_mission_adjust(timestamp_ns_mono);
             packet.data_len     = async_elm->data_len;
             packet.data_bytes   = async_elm->data_bytes; // array->pointer
 
@@ -156,7 +156,7 @@ void telemetry_main_clip(void) {
 
                 // convert sync element to packet
                 packet.cmd_tlm_id   = sync_elm->telemetry_id;
-                packet.timestamp_ns = clock_adjust_monotonic(timestamp_ns_mono);
+                packet.timestamp_ns = clock_mission_adjust(timestamp_ns_mono);
                 packet.data_len     = sync_elm->data_len;
                 packet.data_bytes   = sync_elm->data_bytes;
 

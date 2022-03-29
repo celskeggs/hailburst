@@ -33,9 +33,9 @@ typedef struct {
 
     // state saved between clip invocations
     enum magnetometer_state state;
-    uint64_t next_reading_time;
-    uint64_t actual_reading_time;
-    uint64_t check_latch_time;
+    local_time_t next_reading_time;
+    local_time_t actual_reading_time;
+    local_time_t check_latch_time;
 
     // telemetry output endpoint
     tlm_async_endpoint_t *telemetry_async;

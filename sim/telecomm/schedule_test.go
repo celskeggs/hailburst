@@ -11,7 +11,7 @@ import (
 )
 
 func TestByteScheduleSimple(t *testing.T) {
-	sim := component.MakeSimControllerSeeded(222)
+	sim := component.MakeSimControllerSeeded(222, model.TimeZero)
 	bsch := MakeByteSchedule(sim)
 
 	data := make([]byte, 4000)
@@ -42,7 +42,7 @@ func (ms mapSched) LastTime() model.VirtualTime {
 }
 
 func TestByteScheduleComplex(t *testing.T) {
-	sim := component.MakeSimControllerSeeded(444)
+	sim := component.MakeSimControllerSeeded(444, model.TimeZero)
 	bsch := MakeByteSchedule(sim)
 
 	byteDuration := time.Microsecond * 137

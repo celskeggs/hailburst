@@ -9,7 +9,6 @@ env["REPLICA_SCRIPT"] = File('replica.ld')
 
 sources = [
     "abort.c",
-    "clock.c",
     "crash.c",
     "entrypoint.s",
     "fakewire_link.c",

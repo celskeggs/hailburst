@@ -9,7 +9,6 @@
 #include <rtos/crash.h>
 #include <rtos/gic.h>
 #include <rtos/scrubber.h>
-#include <rtos/timer.h>
 #include <hal/debug.h>
 #include <hal/init.h>
 

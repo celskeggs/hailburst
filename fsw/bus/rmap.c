@@ -1,6 +1,5 @@
 #include <string.h>
 
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <bus/rmap.h>
 
@@ -141,13 +140,13 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, u
 }
 
 // this should be called one epoch later, to give the networking infrastructure time to respond
-rmap_status_t rmap_write_complete(rmap_txn_t *txn, uint64_t *ack_timestamp_out) {
+rmap_status_t rmap_write_complete(rmap_txn_t *txn, local_time_t *ack_timestamp_out) {
     assert(txn != NULL);
     rmap_t *rmap = txn->rmap;
     assert(rmap != NULL);
 
     uint8_t status_byte;
-    uint64_t timestamp = 0;
+    local_time_t timestamp = 0;
     size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
     if (packet_length == 0 || !rmap_validate_write_reply(rmap, rmap->scratch, packet_length, &status_byte)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
@@ -299,14 +298,14 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count,
     return true;
 }
 
-rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, uint64_t *ack_timestamp_out) {
+rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, local_time_t *ack_timestamp_out) {
     assert(txn != NULL);
     rmap_t *rmap = txn->rmap;
     assert(rmap != NULL && buffer != NULL);
 
     uint8_t status_byte;
     size_t output_length = buffer_size;
-    uint64_t timestamp = 0;
+    local_time_t timestamp = 0;
     size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
     if (packet_length == 0 || !rmap_validate_read_reply(rmap, rmap->scratch, packet_length,
                                                         &status_byte, buffer, &output_length)) {

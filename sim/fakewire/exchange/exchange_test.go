@@ -150,7 +150,7 @@ func Validator(sim model.SimContext, out fwmodel.PacketSink, in fwmodel.PacketSo
 }
 
 func InnerTestExchanges(t *testing.T, metered bool, count int, singleDir bool, duration time.Duration) {
-	sim := component.MakeSimControllerSeeded(12)
+	sim := component.MakeSimControllerSeeded(12, model.TimeZero)
 
 	lsink, rsink, lsource, rsource := InstantiateExchanges(sim, metered)
 

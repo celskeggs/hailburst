@@ -57,9 +57,9 @@ typedef struct {
     bool     resend_fcts;
     bool     resend_pkts;
 
-    size_t   read_offset;
-    uint64_t read_timestamp;
-    bool     write_needs_error;
+    size_t       read_offset;
+    local_time_t read_timestamp;
+    bool         write_needs_error;
 } exchange_instance_t;
 
 typedef const struct fw_exchange_st {

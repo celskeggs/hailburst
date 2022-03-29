@@ -142,13 +142,13 @@ func (sc *SimController) Advance(advanceTo model.VirtualTime) (nextTimer model.V
 	return sc.peekNextTimerExpiry()
 }
 
-func MakeSimControllerRandomized() *SimController {
-	return MakeSimControllerSeeded(time.Now().UnixNano())
+func MakeSimControllerRandomized(startTime model.VirtualTime) *SimController {
+	return MakeSimControllerSeeded(time.Now().UnixNano(), startTime)
 }
 
-func MakeSimControllerSeeded(seed int64) *SimController {
+func MakeSimControllerSeeded(seed int64, startTime model.VirtualTime) *SimController {
 	return &SimController{
-		currentTime: 0,
+		currentTime: startTime,
 		rand:        rand.New(rand.NewSource(seed)),
 	}
 }

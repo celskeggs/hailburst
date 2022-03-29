@@ -1,5 +1,5 @@
-#include <hal/clock_init.h>
 #include <hal/watchdog.h>
+#include <flight/clock_cal.h>
 #include <flight/telemetry.h>
 
 TELEMETRY_ASYNC_REGISTER(heartbeat_telemetry);

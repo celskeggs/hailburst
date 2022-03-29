@@ -3,9 +3,9 @@
 
 #include <stdlib.h>
 
-// for timer_now_ns() needed by debugf macro
-#include <rtos/timer.h>
 #include <hal/loglevel.h>
+// for clock_timestamp() needed by debugf macro
+#include <flight/clock.h>
 
 #ifndef __PYTHON_PREPROCESS__
 

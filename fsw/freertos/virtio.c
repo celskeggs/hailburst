@@ -5,9 +5,9 @@
 #include <rtos/gic.h>
 #include <rtos/virtio.h>
 #include <hal/atomic.h>
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 
 //#define DEBUG_VIRTQ
 
@@ -105,7 +105,7 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
         debugf(TRACE, "Monitor clip for input queue %u: received descriptor count is %u.",
                queue->queue_index, descriptor_count);
 #endif
-        uint64_t timestamp = clock_timestamp();
+        local_time_t timestamp = timer_now_ns();
         duct_txn_t txn;
         duct_send_prepare(&txn, queue->duct, REPLICA_ID);
         assert(descriptor_count <= queue->queue_num);

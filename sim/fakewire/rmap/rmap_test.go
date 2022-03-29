@@ -7,6 +7,7 @@ import (
 	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
 	"github.com/celskeggs/hailburst/sim/fakewire/rmap/packet"
 	"github.com/celskeggs/hailburst/sim/fakewire/router"
+	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/testpoint"
 	"testing"
 	"time"
@@ -131,7 +132,7 @@ func (td *TestDevice) AssumeAttemptWritePotentiallyCorrupted(extAddr uint8, writ
 }
 
 func runReadWriteTrials(t *testing.T, seed int64, numReads, numWrites int, destLogical, sourceLogical, destKey uint8, useLogical bool) {
-	sim := component.MakeSimControllerSeeded(seed)
+	sim := component.MakeSimControllerSeeded(seed, model.TimeZero)
 	// mocked local device
 	testDevice := &TestDevice{T: t}
 	var ra RemoteAddressing
@@ -299,7 +300,7 @@ func TestRmapReadCorruption(t *testing.T) {
 	var seed int64 = 345
 	var destLogical, sourceLogical, destKey uint8 = 100, 101, 102
 
-	sim := component.MakeSimControllerSeeded(seed)
+	sim := component.MakeSimControllerSeeded(seed, model.TimeZero)
 	// mocked local device
 	testDevice := &TestDevice{T: t}
 	// packet nodes
@@ -470,7 +471,7 @@ func TestRmapWriteCorruption(t *testing.T) {
 	var seed int64 = 456
 	var destLogical, sourceLogical, destKey uint8 = 200, 201, 202
 
-	sim := component.MakeSimControllerSeeded(seed)
+	sim := component.MakeSimControllerSeeded(seed, model.TimeZero)
 	// mocked local device
 	testDevice := &TestDevice{T: t}
 	// packet nodes

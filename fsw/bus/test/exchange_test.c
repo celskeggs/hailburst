@@ -2,11 +2,11 @@
 #include <string.h>
 
 #include <hal/atomic.h>
-#include <hal/clock.h>
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/system.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 #include <bus/exchange.h>
 
 #include "fifo.h"

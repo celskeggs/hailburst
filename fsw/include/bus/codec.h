@@ -37,12 +37,12 @@ static inline bool fakewire_is_parametrized(fw_ctrl_t ch) {
 }
 
 typedef struct {
-    fw_ctrl_t ctrl_out;
-    uint32_t  ctrl_param;
-    uint8_t  *data_out;     // pointer provided by caller; if NULL, data is discarded (but data_actual_len is still set)
-    size_t    data_max_len; // max len provided by caller
-    size_t    data_actual_len;
-    uint64_t  receive_timestamp;
+    fw_ctrl_t     ctrl_out;
+    uint32_t      ctrl_param;
+    uint8_t      *data_out;     // pointer provided by caller; if NULL, data is discarded (but data_actual_len is still set)
+    size_t        data_max_len; // max len provided by caller
+    size_t        data_actual_len;
+    local_time_t  receive_timestamp;
 } fw_decoded_ent_t;
 
 typedef struct {
@@ -52,15 +52,15 @@ typedef struct {
     const size_t    rx_buffer_capacity;
     size_t          rx_length;
     size_t          rx_offset;
-    uint64_t        rx_timestamp;
+    local_time_t    rx_timestamp;
 
     // for internal decoder
     bool recv_in_escape;
     // for external decoder
-    fw_ctrl_t recv_current; // parameterized control character
-    size_t    recv_count;   // 0-3: N bytes already processed
-    uint32_t  recv_param;
-    uint64_t  recv_timestamp_ns;
+    fw_ctrl_t    recv_current; // parameterized control character
+    size_t       recv_count;   // 0-3: N bytes already processed
+    uint32_t     recv_param;
+    local_time_t recv_timestamp_ns;
 } fw_decoder_t;
 
 // note: a decoder acts as the server side of data_rx

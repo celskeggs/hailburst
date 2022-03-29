@@ -14,7 +14,8 @@ type TestApp struct {
 	lastWrite     model.VirtualTime
 }
 
-func (t *TestApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte) (expireAt model.VirtualTime, readData []byte) {
+func (t *TestApp) Sync(pendingBytes int, nowRaw int64, writeData []byte) (expireAtRaw int64, readData []byte) {
+	now := model.VirtualTime(nowRaw)
 	if len(writeData) > 0 {
 		t.collectedData = append(t.collectedData, writeData...)
 		subslices := bytes.Split(t.collectedData, []byte("\n"))
@@ -28,13 +29,14 @@ func (t *TestApp) Sync(pendingBytes int, now model.VirtualTime, writeData []byte
 		readData = []byte(fmt.Sprintf("data written at time %v from timesync follower\n", now))
 		log.Printf("%v: wrote data to timesync leader: %q", now, string(readData))
 	}
+	var expireAt model.VirtualTime
 	if now.AtOrAfter(t.lastWrite.Add(time.Second)) {
 		expireAt = model.TimeNever
 	} else {
 		expireAt = t.lastWrite.Add(time.Second)
 	}
 	log.Printf("%v: next timer set for: %v", now, expireAt)
-	return expireAt, readData
+	return int64(expireAt), readData
 }
 
 func MakeTestApp() timesync.ProtocolImpl {

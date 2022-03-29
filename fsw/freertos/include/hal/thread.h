@@ -10,7 +10,7 @@
 
 #include <rtos/config.h>
 #include <rtos/replicate.h>
-#include <rtos/timer.h>
+#include <hal/timer.h>
 #include <hal/atomic.h>
 #include <hal/debug.h>
 #include <hal/preprocessor.h>
@@ -98,7 +98,7 @@ static inline uint32_t task_tick_index(void) {
 
 void task_suspend(void) __attribute__((noreturn));
 
-static inline void task_delay_abs(uint64_t deadline_ns) {
+static inline void task_delay_abs(local_time_t deadline_ns) {
     while (timer_now_ns() < deadline_ns) {
         task_yield();
     }

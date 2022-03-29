@@ -9,7 +9,7 @@
 
 // returns TRUE if packet is consumed.
 static void switch_packet(switch_t *sw, uint8_t replica_id, int port,
-                          size_t message_size, uint64_t timestamp, uint8_t *message_buffer) {
+                          size_t message_size, local_time_t timestamp, uint8_t *message_buffer) {
     uint8_t destination = message_buffer[0];
     if (destination < SWITCH_PORT_BASE) {
         debugf(WARNING, "Switch replica %u port %u: dropped packet (len=%zu) to invalid address %u.",
@@ -95,7 +95,7 @@ void switch_io_clip(const switch_replica_t *sr) {
     for (int port = SWITCH_PORT_BASE; port < SWITCH_PORT_BASE + SWITCH_PORTS; port++) {
         switch_port_t *swport = &sw->ports[port - SWITCH_PORT_BASE];
         if (swport->inbound != NULL) {
-            uint64_t timestamp = 0;
+            local_time_t timestamp = 0;
             size_t message_size;
             while ((message_size = duct_receive_message(&swport->inbound_txn, sr->scratch_buffer, &timestamp)) != 0) {
                 assert(message_size <= sw->scratch_buffer_size);

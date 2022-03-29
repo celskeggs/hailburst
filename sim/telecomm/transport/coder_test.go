@@ -2,13 +2,14 @@ package transport
 
 import (
 	"github.com/celskeggs/hailburst/sim/component"
+	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/telecomm"
 	"testing"
 	"time"
 )
 
 func TestCodersSimple(t *testing.T) {
-	sim := component.MakeSimControllerSeeded(88888888)
+	sim := component.MakeSimControllerSeeded(88888888, model.TimeZero)
 
 	var received []*CommPacket
 

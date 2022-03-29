@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #include <hal/atomic.h>
-#include <hal/clock.h>
+#include <hal/timer.h>
 #include <hal/preprocessor.h>
 
 #define THREAD_CHECK(x) (thread_check((x), #x))
@@ -60,14 +60,14 @@ static inline bool thread_check_ok(int fail, const char *note, int false_marker)
     }
 }
 
-static inline void task_delay_abs(uint64_t deadline_ns) {
-    while (clock_timestamp_monotonic() < deadline_ns) {
+static inline void task_delay_abs(local_time_t deadline_ns) {
+    while (timer_now_ns() < deadline_ns) {
         task_yield();
     }
 }
 
-static inline void task_delay(uint64_t nanoseconds) {
-    task_delay_abs(clock_timestamp_monotonic() + nanoseconds);
+static inline void task_delay(local_time_t nanoseconds) {
+    task_delay_abs(timer_now_ns() + nanoseconds);
 }
 
 #define mutex_init(x)     THREAD_CHECK(pthread_mutex_init((x), NULL))
@@ -137,10 +137,10 @@ static inline bool task_doze_try(void) {
     return true;
 }
 
-static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
+static inline bool task_doze_timed_abs(local_time_t deadline_ns) {
     thread_t task = task_get_current();
     while (!atomic_load(task->top_rouse)) {
-        if (clock_timestamp_monotonic() > deadline_ns) {
+        if (timer_now_ns() > deadline_ns) {
             return false;
         }
         task_yield();
@@ -149,8 +149,8 @@ static inline bool task_doze_timed_abs(uint64_t deadline_ns) {
     return true;
 }
 
-static inline bool task_doze_timed(uint64_t nanoseconds) {
-    return task_doze_timed_abs(clock_timestamp_monotonic() + nanoseconds);
+static inline bool task_doze_timed(duration_t nanoseconds) {
+    return task_doze_timed_abs(timer_now_ns() + nanoseconds);
 }
 
 // primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
@@ -178,10 +178,10 @@ static inline bool local_doze_try(thread_t task) {
     return true;
 }
 
-static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
+static inline bool local_doze_timed_abs(thread_t task, local_time_t deadline_ns) {
     assert(task == task_get_current());
     while (!atomic_load(task->local_rouse)) {
-        if (clock_timestamp_monotonic() > deadline_ns) {
+        if (timer_now_ns() > deadline_ns) {
             return false;
         }
         task_yield();
@@ -190,8 +190,8 @@ static inline bool local_doze_timed_abs(thread_t task, uint64_t deadline_ns) {
     return true;
 }
 
-static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
-    return local_doze_timed_abs(task, clock_timestamp_monotonic() + nanoseconds);
+static inline bool local_doze_timed(thread_t task, duration_t nanoseconds) {
+    return local_doze_timed_abs(task, timer_now_ns() + nanoseconds);
 }
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

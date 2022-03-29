@@ -7,6 +7,9 @@
 
 extern uint8_t embedded_kernel[];
 
+// to avoid needing to include clock code here, but still be able to use debugf
+int64_t clock_offset_adj = 0;
+
 enum {
     MEMORY_LOW = 0x40000000,
 };

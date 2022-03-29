@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"github.com/celskeggs/hailburst/sim/timesync"
 	"log"
@@ -43,8 +42,8 @@ func main() {
 		}
 		log.Printf("Wrote failure information to log file")
 	}, "reqs-raw.log", "activity.log", injectIOErrors, "io-dump.csv")
-	mon := MakeMonitor(app, time.Second*2, time.Second, func(lastTxmit model.VirtualTime) {
-		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", lastTxmit.Since(model.TimeZero).Seconds())
+	mon := MakeMonitor(app, time.Second*2, time.Second, func(lastTxmit int64) {
+		_, err := fmt.Fprintf(logFile, "Experiment: monitor reported I/O ceased at %f seconds\n", (time.Duration(lastTxmit) * time.Nanosecond).Seconds())
 		if err == nil {
 			err = logFile.Sync()
 		}

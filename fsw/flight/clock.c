@@ -1,15 +1,13 @@
-#include <assert.h>
 #include <endian.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 
 #include <hal/atomic.h>
-#include <hal/clock.h>
-#include <hal/clock_init.h>
 #include <hal/debug.h>
 #include <synch/retry.h>
+#include <flight/clock.h>
+#include <flight/clock_cal.h>
 #include <flight/telemetry.h>
 
 int64_t clock_offset_adj = 0;
@@ -33,7 +31,7 @@ void clock_wait_for_calibration(void) {
 
 TELEMETRY_ASYNC_REGISTER(clock_telemetry);
 
-static void clock_configure(uint64_t received_timestamp, uint64_t network_timestamp) {
+static void clock_configure(mission_time_t received_timestamp, local_time_t network_timestamp) {
     assert(!clock_calibrated);
 
     debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, received_timestamp, network_timestamp);
@@ -55,8 +53,8 @@ void clock_start_clip(clock_device_t *clock) {
     // temporary local variables for switch statements
     rmap_status_t status;
     uint32_t magic_number;
-    uint64_t received_timestamp;
-    uint64_t network_timestamp;
+    mission_time_t received_timestamp;
+    local_time_t network_timestamp;
 
     // this clip only does one thing during init, and then sits there doing nothing for the rest of the time.
     // TODO: can we reclaim this resource?

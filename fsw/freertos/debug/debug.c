@@ -2,7 +2,6 @@
 
 #include <rtos/arm.h>
 #include <hal/atomic.h>
-#include <hal/clock.h>
 #include <hal/debug.h>
 
 enum {

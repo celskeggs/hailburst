@@ -1,10 +1,10 @@
-#include <hal/clock.h>
-#include <hal/clock_init.h>
 #include <hal/debug.h>
 #include <hal/system.h>
 #include <hal/watchdog.h>
 #include <bus/exchange.h>
 #include <bus/switch.h>
+#include <flight/clock.h>
+#include <flight/clock_cal.h>
 #include <flight/command.h>
 #include <flight/heartbeat.h>
 #include <flight/radio.h>
@@ -73,7 +73,6 @@ static const rmap_addr_t magnetometer_routing = {
     .dest_key = 102,
 };
 
-#ifdef CLOCK_EXISTS
 static const rmap_addr_t clock_routing = {
     .destination = {
         .path_bytes = NULL,
@@ -87,7 +86,6 @@ static const rmap_addr_t clock_routing = {
     },
     .dest_key = 103,
 };
-#endif
 
 // the following line should have the max of all IO packet lengths... since radio is the largest right now, we'll just
 // put that directly (to simplify the macros) and assert that we were right that it was largest, instead of trying to

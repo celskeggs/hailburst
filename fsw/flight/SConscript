@@ -1,6 +1,7 @@
 Import('env')
 
 sources = [
+    "clock.c",
     "comm.c",
     "command.c",
     "heartbeat.c",

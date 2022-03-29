@@ -4,6 +4,7 @@ import (
 	"github.com/celskeggs/hailburst/sim/component"
 	"github.com/celskeggs/hailburst/sim/fakewire/fwmodel"
 	"github.com/celskeggs/hailburst/sim/fakewire/packetlink"
+	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/testpoint"
 	"math/rand"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 func SubTestRouterN(t *testing.T, numPorts int, hasICP bool, protocol RoutingProtocol) {
-	sim := component.MakeSimControllerSeeded(54321 + int64(numPorts))
+	sim := component.MakeSimControllerSeeded(54321 + int64(numPorts), model.TimeZero)
 
 	var wires []fwmodel.PacketWire
 	var offset int

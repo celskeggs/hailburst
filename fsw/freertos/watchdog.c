@@ -1,11 +1,11 @@
 #include <inttypes.h>
 #include <stdint.h>
 
-#include <rtos/timer.h>
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/system.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 #include <hal/watchdog.h>
 
 enum {

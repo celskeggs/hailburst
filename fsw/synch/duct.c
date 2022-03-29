@@ -2,8 +2,8 @@
 
 #include <hal/atomic.h>
 #include <hal/clip.h>
-#include <hal/clock.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 #include <synch/config.h>
 #include <synch/duct.h>
 
@@ -48,7 +48,7 @@ bool duct_send_allowed(duct_txn_t *txn) {
 }
 
 // asserts if we've used up our max flow in this transaction already
-void duct_send_message(duct_txn_t *txn, void *message, size_t size, uint64_t timestamp) {
+void duct_send_message(duct_txn_t *txn, void *message, size_t size, local_time_t timestamp) {
     assert(txn != NULL && txn->duct != NULL);
     assert(txn->mode == DUCT_TXN_SEND);
     assert(txn->replica_id < txn->duct->sender_replicas);
@@ -143,7 +143,7 @@ static duct_message_t *duct_check_message(duct_t *duct, uint8_t sender_id, uint8
 }
 
 // returns size > 0 if a message was successfully received. if size = 0, then we're done with this transaction.
-size_t duct_receive_message(duct_txn_t *txn, void *message_out, uint64_t *timestamp_out) {
+size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *timestamp_out) {
     assert(txn != NULL && txn->duct != NULL);
     assert(txn->mode == DUCT_TXN_RECV);
     assert(txn->replica_id < txn->duct->receiver_replicas);

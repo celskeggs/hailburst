@@ -2,6 +2,7 @@
 
 #include <hal/debug.h>
 #include <hal/thread.h>
+#include <hal/timer.h>
 
 static bool initialized = false;
 

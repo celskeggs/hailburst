@@ -32,10 +32,10 @@ typedef struct {
 } tlm_sync_t;
 
 typedef struct {
-    uint64_t reading_time;
-    int16_t  mag_x;
-    int16_t  mag_y;
-    int16_t  mag_z;
+    mission_time_t reading_time;
+    int16_t        mag_x;
+    int16_t        mag_y;
+    int16_t        mag_z;
 } tlm_mag_reading_t;
 
 typedef struct {

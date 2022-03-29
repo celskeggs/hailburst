@@ -1,8 +1,8 @@
 #ifndef FSW_SYNCH_FLAG_H
 #define FSW_SYNCH_FLAG_H
 
-#include <hal/clock.h>
 #include <hal/debug.h>
+#include <hal/timer.h>
 
 enum {
     // warn again every 100 milliseconds
@@ -13,13 +13,13 @@ enum {
 
 typedef struct {
     bool sustained;
-    uint64_t last_raised;
-    uint64_t last_sustained;
+    local_time_t last_raised;
+    local_time_t last_sustained;
 } flag_t;
 
 static inline bool flag_raise_check(flag_t *flag) {
     assert(flag != NULL);
-    uint64_t now = clock_timestamp();
+    local_time_t now = timer_now_ns();
     flag->last_raised = now;
     // we include 'now < last_sustained' here so that, if last_sustained is corrupted, this won't get stuck
     // indefinitely.
@@ -34,7 +34,7 @@ static inline bool flag_raise_check(flag_t *flag) {
 
 static inline bool flag_recover_check(flag_t *flag) {
     assert(flag != NULL);
-    uint64_t now = clock_timestamp();
+    local_time_t now = timer_now_ns();
     // same reason for including 'now < last_raised' as above.
     if (flag->sustained && (now < flag->last_raised || now >= flag->last_raised + FLAG_RECOVER_PERIOD_NS)) {
         flag->sustained = false;
