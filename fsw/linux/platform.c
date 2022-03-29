@@ -4,6 +4,8 @@
 #include <hal/thread.h>
 #include <hal/timer.h>
 
+//#define SCHED_DEBUG
+
 static bool initialized = false;
 
 static pthread_key_t task_current_key;
@@ -151,17 +153,19 @@ void enter_scheduler(void) {
         total += task_scheduling_order[i].nanos;
     }
 
-    uint64_t last = clock_timestamp_monotonic();
+    uint64_t last = timer_now_ns();
     for (;;) {
         // debugf(TRACE, "beginning cycle of schedule");
         for (uint32_t i = 0; i < task_scheduling_order_length; i++) {
             task_schedule(task_scheduling_order[i]);
         }
-        uint64_t here = clock_timestamp_monotonic();
+        uint64_t here = timer_now_ns();
         if (here - last > total) {
-            debugf(TRACE, "relative: %" PRIu64 " > %" PRIu64, here - last, total);
+            debugf(TRACE, "Epoch too long:   %" PRIu64 " > %" PRIu64, here - last, total);
         } else {
-            debugf(TRACE, "relative: %" PRIu64 " < %" PRIu64, here - last, total);
+#ifdef SCHED_DEBUG
+            debugf(TRACE, "Epoch acceptable: %" PRIu64 " < %" PRIu64, here - last, total);
+#endif
         }
         last = here;
         schedule_index++;
