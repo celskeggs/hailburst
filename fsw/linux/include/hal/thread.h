@@ -20,13 +20,6 @@
 
 typedef pthread_mutex_t mutex_t;
 
-// although there are semaphores available under POSIX, they are counting semaphores, and not binary semaphores.
-typedef struct {
-    mutex_t        mut;
-    pthread_cond_t cond;
-    bool           is_available;
-} semaphore_t;
-
 typedef struct thread_st {
     const char *name;
     void (*start_routine)(void *);
@@ -118,23 +111,6 @@ macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     };                                                                            \
     const uint32_t task_scheduling_order_length =                                 \
         sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
-
-#define SEMAPHORE_REGISTER(s_ident) \
-    semaphore_t s_ident; \
-    PROGRAM_INIT_PARAM(STAGE_RAW, semaphore_init, s_ident, &s_ident);
-
-// semaphores are created empty, such that an initial take will block
-void semaphore_init(semaphore_t *sema);
-void semaphore_destroy(semaphore_t *sema);
-
-void semaphore_take(semaphore_t *sema);
-// returns true if taken, false if not available
-bool semaphore_take_try(semaphore_t *sema);
-// returns true if taken, false if timed out
-bool semaphore_take_timed(semaphore_t *sema, uint64_t nanoseconds);
-// returns true if taken, false if timed out
-bool semaphore_take_timed_abs(semaphore_t *sema, uint64_t deadline_ns);
-bool semaphore_give(semaphore_t *sema);
 
 // top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
 

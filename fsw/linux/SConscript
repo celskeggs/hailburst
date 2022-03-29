@@ -8,7 +8,6 @@ sources = [
     "clip.c",
     "fakewire_link.c",
     "platform.c",
-    "semaphore.c",
 ]
 
 objects = [env.Object(source) for source in sources]
