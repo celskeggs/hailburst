@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include <hal/thread.h>
+#include <synch/circular.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
 #include <flight/telemetry.h>
@@ -29,7 +30,7 @@ typedef struct {
     bool should_be_powered;
 
     // telemetry buffer
-    chart_t *readings;
+    circ_buf_t *readings;
 
     // state saved between clip invocations
     enum magnetometer_state state;
@@ -47,10 +48,7 @@ void magnetometer_query_clip(magnetometer_t *mag);
 void magnetometer_telem_loop(magnetometer_t *mag);
 
 #define MAGNETOMETER_REGISTER(m_ident, m_address, m_switch_in, m_switch_out, m_switch_port)                           \
-    CHART_REGISTER(m_ident ## _readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);                       \
-    /* we're only using the chart as a datastructure, so no need for notifications. */                                \
-    CHART_SERVER_NOTIFY(m_ident ## _readings, ignore_callback, NULL);                                                 \
-    CHART_CLIENT_NOTIFY(m_ident ## _readings, ignore_callback, NULL);                                                 \
+    CIRC_BUF_REGISTER(m_ident ## _readings, sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);                    \
     TELEMETRY_ASYNC_REGISTER(m_ident ## _telemetry_async);                                                            \
     extern magnetometer_t m_ident;                                                                                    \
     TASK_REGISTER(m_ident ## _telem, magnetometer_telem_loop, &m_ident, RESTARTABLE);                                 \
@@ -67,7 +65,7 @@ void magnetometer_telem_loop(magnetometer_t *mag);
         .check_latch_time = 0,                                                                                        \
         .telemetry_async = &m_ident ## _telemetry_async,                                                              \
         .telemetry_sync = &m_ident ## _telemetry_sync,                                                                \
-    };                                                                                                                \
+    }
 
 // one RMAP channel
 #define MAGNETOMETER_MAX_IO_FLOW       RMAP_MAX_IO_FLOW

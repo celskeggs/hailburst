@@ -36,6 +36,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         mag->next_reading_time = 0;
         mag->actual_reading_time = 0;
         mag->check_latch_time = 0;
+        circ_buf_reset(mag->readings);
     }
 
     // scratch variables for use in switch statements
@@ -87,13 +88,13 @@ void magnetometer_query_clip(magnetometer_t *mag) {
                 registers[i] = be16toh(registers[i]);
             }
             if (registers[0] == LATCH_OFF) {
-                tlm_mag_reading_t *reading = chart_request_start(mag->readings);
+                tlm_mag_reading_t *reading = circ_buf_write_peek(mag->readings, 0);
                 if (reading != NULL) {
                     reading->reading_time = clock_mission_adjust(mag->actual_reading_time);
                     reading->mag_x = registers[REG_X - REG_LATCH];
                     reading->mag_y = registers[REG_Y - REG_LATCH];
                     reading->mag_z = registers[REG_Z - REG_LATCH];
-                    chart_request_send(mag->readings, 1);
+                    circ_buf_write_done(mag->readings, 1);
                 }
                 mag->state = MS_ACTIVE;
             }
@@ -154,23 +155,27 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     magnetometer_t *mag = (magnetometer_t *) mag_opaque;
     assert(mag != NULL && reading_out != NULL);
 
-    *reading_out = *(tlm_mag_reading_t*) chart_reply_peek(mag->readings, index);
+    tlm_mag_reading_t *reading = circ_buf_read_peek(mag->readings, index);
+    assert(reading != NULL);
+    *reading_out = *reading;
 }
 
 void magnetometer_telem_loop(magnetometer_t *mag) {
     assert(mag != NULL);
+
+    circ_buf_reset(mag->readings);
 
     // runs every 5.5 seconds to meet requirements
     for (;;) {
         local_time_t last_telem_time = timer_now_ns();
 
         // see if we have readings to downlink
-        size_t downlink_count = chart_reply_avail(mag->readings);
+        circ_index_t downlink_count = circ_buf_read_avail(mag->readings);
         if (downlink_count > 0) {
             size_t write_count = downlink_count;
             tlm_sync_mag_readings_map(mag->telemetry_sync, &write_count, magnetometer_telem_iterator_fetch, mag);
             assert(write_count >= 1 && write_count <= downlink_count);
-            chart_reply_send(mag->readings, write_count);
+            circ_buf_read_done(mag->readings, write_count);
         }
 
         task_delay_abs(last_telem_time + (uint64_t) 5500000000);
