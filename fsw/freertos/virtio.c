@@ -244,7 +244,7 @@ void virtio_device_setup_queue_internal(struct virtio_device_queue *queue) {
 
     atomic_store(mmio->queue_ready, 1);
 
-    // configure descriptors to refer to chart memory directly
+    // configure descriptors to refer to buffer memory
     for (uint32_t i = 0; i < queue->queue_num; i++) {
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */

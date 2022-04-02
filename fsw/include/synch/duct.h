@@ -58,7 +58,7 @@ typedef struct {
 
 typedef struct {
     size_t       size;
-    /* only included to simplify code migration from charts + io_rx_ent */
+    /* TODO: consider eliminating this, and requiring users incorporate timestamp information in the body itself */
     local_time_t timestamp;
     uint8_t      body[];
 } duct_message_t;

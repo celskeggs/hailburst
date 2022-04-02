@@ -5,7 +5,6 @@
 #include <hal/atomic.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
-#include <synch/retry.h>
 #include <flight/clock.h>
 #include <flight/magnetometer.h>
 #include <flight/telemetry.h>

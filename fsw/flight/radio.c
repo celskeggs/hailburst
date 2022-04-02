@@ -4,7 +4,6 @@
 
 #include <hal/debug.h>
 #include <hal/watchdog.h>
-#include <synch/retry.h>
 #include <flight/radio.h>
 
 // #define DEBUGIDX
