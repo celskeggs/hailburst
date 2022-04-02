@@ -5,6 +5,7 @@ import (
 	"github.com/celskeggs/hailburst/sim/telecomm"
 	"github.com/celskeggs/hailburst/sim/telecomm/transport"
 	"github.com/celskeggs/hailburst/sim/verifier/collector"
+	"log"
 )
 
 func AttachTelemetryCollector(ctx model.SimContext, input *telecomm.Connection, ac collector.ActivityCollector) {
@@ -13,6 +14,7 @@ func AttachTelemetryCollector(ctx model.SimContext, input *telecomm.Connection, 
 		if err == nil {
 			ac.OnTelemetryDownlink(telem, timestamp)
 		} else {
+			log.Printf("Telemetry error details: %v", err)
 			ac.OnTelemetryErrors(0, 1)
 		}
 	}, func(errorCount int) {
