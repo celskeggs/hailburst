@@ -47,6 +47,8 @@ void magnetometer_query_clip(magnetometer_t *mag) {
 
     rmap_txn_t rmap_txn;
     rmap_epoch_prepare(&rmap_txn, mag->endpoint);
+    tlm_txn_t telem;
+    telemetry_prepare(&telem, mag->telemetry_async, MAGNETOMETER_REPLICA_ID);
 
     switch (mag->state) {
     case MS_ACTIVATING:
@@ -54,7 +56,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         if (status == RS_OK) {
             mag->state = MS_ACTIVE;
             mag->next_reading_time = timer_now_ns() + READING_DELAY_NS;
-            tlm_mag_pwr_state_changed(mag->telemetry_async, true);
+            tlm_mag_pwr_state_changed(&telem, true);
         } else {
             debugf(WARNING, "Failed to turn on magnetometer power, error=0x%03x", status);
         }
@@ -63,7 +65,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
             mag->state = MS_INACTIVE;
-            tlm_mag_pwr_state_changed(mag->telemetry_async, false);
+            tlm_mag_pwr_state_changed(&telem, false);
         } else {
             debugf(WARNING, "Failed to turn off magnetometer power, error=0x%03x", status);
         }
@@ -148,6 +150,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         break;
     }
 
+    telemetry_commit(&telem);
     rmap_epoch_commit(&rmap_txn);
 }
 
@@ -160,26 +163,40 @@ static void magnetometer_telem_iterator_fetch(void *mag_opaque, size_t index, tl
     *reading_out = *reading;
 }
 
-void magnetometer_telem_loop(magnetometer_t *mag) {
+void magnetometer_telem_clip(magnetometer_t *mag) {
     assert(mag != NULL);
 
-    circ_buf_reset(mag->readings);
+    local_time_t now = timer_now_ns();
 
-    // runs every 5.5 seconds to meet requirements
-    for (;;) {
-        local_time_t last_telem_time = timer_now_ns();
+    if (clip_is_restart()) {
+        circ_buf_reset(mag->readings);
+        // make sure this can't get corrupted to a value that prevents us from sending telemetry
+        if (mag->last_telem_time > now) {
+            mag->last_telem_time = now;
+        }
+    }
 
-        // see if we have readings to downlink
-        circ_index_t downlink_count = circ_buf_read_avail(mag->readings);
-        if (downlink_count > 0) {
+    tlm_txn_t telem;
+    telemetry_prepare(&telem, mag->telemetry_sync, MAGNETOMETER_REPLICA_ID);
+
+    circ_index_t downlink_count = circ_buf_read_avail(mag->readings);
+    if (downlink_count == 0) {
+        // nothing to downlink, so a send is unnecessary.
+        mag->last_telem_time = now;
+    } else {
+        // something to downlink... but only downlink at most every 5.5 seconds (to meet requirements), and only if
+        // there's room in the telemetry buffer to actually transmit data.
+        if (now >= mag->last_telem_time + (uint64_t) 5500 * CLOCK_NS_PER_MS && telemetry_can_send(&telem)) {
             size_t write_count = downlink_count;
-            tlm_sync_mag_readings_map(mag->telemetry_sync, &write_count, magnetometer_telem_iterator_fetch, mag);
+            tlm_mag_readings_map(&telem, &write_count, magnetometer_telem_iterator_fetch, mag);
             assert(write_count >= 1 && write_count <= downlink_count);
             circ_buf_read_done(mag->readings, write_count);
-        }
 
-        task_delay_abs(last_telem_time + (uint64_t) 5500000000);
+            mag->last_telem_time = now;
+        }
     }
+
+    telemetry_commit(&telem);
 }
 
 void magnetometer_set_powered(magnetometer_t *mag, bool powered) {

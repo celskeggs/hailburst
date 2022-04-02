@@ -127,8 +127,16 @@ RADIO_REGISTER(sc_radio, fce_vin, fce_vout,
 
 MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vin, fce_vout, VPORT_MAG);
 
+HEARTBEAT_REGISTER(sc_heart);
+
 COMMAND_REGISTER(sc_cmd, sc_uplink_pipe);
-TELEMETRY_CONNECT(sc_downlink_pipe);
+
+TELEMETRY_REGISTER(sc_telemetry, sc_downlink_pipe, {
+    COMMAND_TELEMETRY(sc_cmd)
+    MAGNETOMETER_TELEMETRY(sc_mag)
+    CLOCK_TELEMETRY(sc_clock)
+    HEARTBEAT_TELEMETRY(sc_heart)
+});
 
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
@@ -137,8 +145,8 @@ TASK_SCHEDULING_ORDER(
     COMMAND_SCHEDULE(sc_cmd)
     MAGNETOMETER_SCHEDULE(sc_mag)
     CLOCK_SCHEDULE(sc_clock)
-    HEARTBEAT_SCHEDULE()
-    TELEMETRY_SCHEDULE()
+    HEARTBEAT_SCHEDULE(sc_heart)
+    TELEMETRY_SCHEDULE(sc_telemetry)
     RADIO_DOWN_SCHEDULE(sc_radio)
     SWITCH_SCHEDULE(fce_vout)
     SYSTEM_MAINTENANCE_SCHEDULE()

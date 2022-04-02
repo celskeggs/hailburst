@@ -65,10 +65,10 @@ static bool cmd_parse_bool(cmd_parser_t *parser) {
 
 typedef struct {
     uint32_t     id;
-    cmd_status_t (*cmd)(tlm_async_endpoint_t *telemetry, cmd_parser_t *p);
+    cmd_status_t (*cmd)(tlm_txn_t *telemetry, cmd_parser_t *p);
 } cmd_t;
 
-static cmd_status_t cmd_ping(tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
+static cmd_status_t cmd_ping(tlm_txn_t *telemetry, cmd_parser_t *p) {
     // parse
     uint32_t ping_id = cmd_parse_u32(p);
     if (!cmd_parser_wrapup(p)) {
@@ -79,7 +79,7 @@ static cmd_status_t cmd_ping(tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
     return CMD_STATUS_OK;
 }
 
-static cmd_status_t cmd_mag_set_pwr_state(tlm_async_endpoint_t *telemetry, cmd_parser_t *p) {
+static cmd_status_t cmd_mag_set_pwr_state(tlm_txn_t *telemetry, cmd_parser_t *p) {
     (void) telemetry;
     // parse
     bool pwr_state = cmd_parse_bool(p);
@@ -96,8 +96,7 @@ static const cmd_t commands[] = {
     { .id = MAG_SET_PWR_STATE_CID, .cmd = cmd_mag_set_pwr_state },
 };
 
-static cmd_status_t cmd_execute(tlm_async_endpoint_t *telemetry,
-                                uint32_t cid, const uint8_t *args, size_t args_len) {
+static cmd_status_t cmd_execute(tlm_txn_t *telemetry, uint32_t cid, const uint8_t *args, size_t args_len) {
     cmd_parser_t parser = {
         .bytes_ptr = args,
         .bytes_remaining = args_len,
@@ -111,32 +110,34 @@ static cmd_status_t cmd_execute(tlm_async_endpoint_t *telemetry,
     return CMD_STATUS_UNRECOGNIZED;
 }
 
-TELEMETRY_ASYNC_REGISTER(cmd_telemetry);
-
-void command_execution_clip(comm_dec_t *decoder) {
-    assert(decoder != NULL);
+void command_execution_clip(cmd_system_t *cs) {
+    assert(cs != NULL);
     comm_packet_t packet;
     cmd_status_t status;
 
     if (clip_is_restart()) {
-        comm_dec_reset(decoder);
+        comm_dec_reset(cs->decoder);
     }
 
-    comm_dec_prepare(decoder);
+    comm_dec_prepare(cs->decoder);
+    tlm_txn_t telem;
+    telemetry_prepare(&telem, cs->telemetry, COMMAND_REPLICA_ID);
 
-    while (comm_dec_decode(decoder, &packet)) {
+    // only process one command per epoch
+    if (comm_dec_decode(cs->decoder, &packet)) {
         // report reception
-        tlm_cmd_received(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id);
+        tlm_cmd_received(&telem, packet.timestamp_ns, packet.cmd_tlm_id);
         // execute command
-        status = cmd_execute(&cmd_telemetry, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
+        status = cmd_execute(&telem, packet.cmd_tlm_id, packet.data_bytes, packet.data_len);
         // report completion
         if (status == CMD_STATUS_UNRECOGNIZED) {
-            tlm_cmd_not_recognized(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
+            tlm_cmd_not_recognized(&telem, packet.timestamp_ns, packet.cmd_tlm_id, packet.data_len);
         } else {
             assert(status == CMD_STATUS_OK || status == CMD_STATUS_FAIL);
-            tlm_cmd_completed(&cmd_telemetry, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
+            tlm_cmd_completed(&telem, packet.timestamp_ns, packet.cmd_tlm_id, status == CMD_STATUS_OK);
         }
     }
 
-    comm_dec_commit(decoder);
+    telemetry_commit(&telem);
+    comm_dec_commit(cs->decoder);
 }

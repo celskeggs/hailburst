@@ -10,28 +10,24 @@
 #include <flight/clock_cal.h>
 #include <flight/telemetry.h>
 
+bool clock_calibrated = false;
 int64_t clock_offset_adj = 0;
 
 enum {
     CLOCK_MAGIC_NUM = 0x71CC70CC, /* tick-tock */
+
+    CLOCK_REPLICA_ID = 0,
 
     REG_MAGIC  = 0x00,
     REG_CLOCK  = 0x04,
     REG_ERRORS = 0x0C,
 };
 
-static bool clock_calibrated = false;
-
-void clock_wait_for_calibration(void) {
-    while (!atomic_load(clock_calibrated)) {
-        debugf(DEBUG, "Stuck waiting for clock calibration before telemetry can be timestamped.");
-        local_doze(clock_cal_notify_task);
-    }
+bool clock_is_calibrated(void) {
+    return atomic_load(clock_calibrated);
 }
 
-TELEMETRY_ASYNC_REGISTER(clock_telemetry);
-
-static void clock_configure(mission_time_t received_timestamp, local_time_t network_timestamp) {
+static void clock_configure(tlm_txn_t *telem, mission_time_t received_timestamp, local_time_t network_timestamp) {
     assert(!clock_calibrated);
 
     debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, received_timestamp, network_timestamp);
@@ -41,10 +37,9 @@ static void clock_configure(mission_time_t received_timestamp, local_time_t netw
 
     // notify anyone waiting
     atomic_store(clock_calibrated, true);
-    local_rouse(clock_cal_notify_task);
 
     // and log our success, which will include a time using our new adjustment
-    tlm_clock_calibrated(&clock_telemetry, clock_offset_adj);
+    tlm_clock_calibrated(telem, clock_offset_adj);
 }
 
 void clock_start_clip(clock_device_t *clock) {
@@ -61,6 +56,8 @@ void clock_start_clip(clock_device_t *clock) {
 
     rmap_txn_t rmap_txn;
     rmap_epoch_prepare(&rmap_txn, clock->rmap);
+    tlm_txn_t telem_txn;
+    telemetry_prepare(&telem_txn, clock->telem, CLOCK_REPLICA_ID);
 
     switch (clock->state) {
     case CLOCK_READ_MAGIC_NUMBER:
@@ -81,7 +78,7 @@ void clock_start_clip(clock_device_t *clock) {
         if (status == RS_OK) {
             received_timestamp = be64toh(received_timestamp);
 
-            clock_configure(received_timestamp, network_timestamp);
+            clock_configure(&telem_txn, received_timestamp, network_timestamp);
 
             clock->state = CLOCK_IDLE;
         } else {
@@ -109,5 +106,6 @@ void clock_start_clip(clock_device_t *clock) {
         break;
     }
 
+    telemetry_commit(&telem_txn);
     rmap_epoch_commit(&rmap_txn);
 }

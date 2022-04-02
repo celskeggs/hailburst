@@ -8,15 +8,6 @@
 #include <flight/clock.h>
 #include <flight/telemetry.h>
 
-struct {
-    bool        initialized;
-    uint32_t    async_dropped; // atomic
-    comm_enc_t *comm_encoder;
-} telemetry = {
-    .initialized   = false,
-    .async_dropped = 0,
-};
-
 enum {
     CMD_RECEIVED_TID          = 0x01000001,
     CMD_COMPLETED_TID         = 0x01000002,
@@ -29,291 +20,304 @@ enum {
     MAG_READINGS_ARRAY_TID    = 0x02000002,
 };
 
-MULTICHART_SERVER_REGISTER(telemetry_async_chart, sizeof(tlm_async_t), ignore_callback, NULL);
-MULTICHART_SERVER_REGISTER(telemetry_sync_chart, sizeof(tlm_sync_t), ignore_callback, NULL);
-
-void telemetry_init(comm_enc_t *encoder) {
-    assert(!telemetry.initialized);
-
-    telemetry.comm_encoder = encoder;
-
-    telemetry.initialized = true;
-}
-
-static tlm_async_t *telemetry_async_start(tlm_async_endpoint_t *tep) {
-    assert(tep != NULL);
-    tlm_async_t *async = multichart_request_start(tep->client);
-    if (async == NULL) {
-        // can be relaxed because we don't care about previous writes being retired first
-        atomic_fetch_add_relaxed(telemetry.async_dropped, 1);
-    }
-    return async;
-}
-
-static void telemetry_async_send(tlm_async_endpoint_t *tep, tlm_async_t *async) {
-    assert(tep != NULL && async != NULL);
-
-    multichart_request_send(tep->client, async);
-}
-
-static tlm_sync_t *telemetry_start_sync(tlm_sync_endpoint_t *tep) {
-    assert(tep != NULL);
-    for (;;) {
-        tlm_sync_t *sync = multichart_request_start(tep->sync_client);
-        if (sync != NULL) {
-            return sync;
-        }
-        local_doze(tep->client_task);
+void telemetry_prepare(tlm_txn_t *txn, tlm_endpoint_t *ep, uint8_t sender_id) {
+    assert(txn != NULL && ep != NULL);
+    txn->ep = ep;
+    txn->replica_id = sender_id;
+    if (ep->is_synchronous) {
+        pipe_send_prepare(&txn->sync_txn, ep->sync_pipe, sender_id);
+    } else {
+        duct_send_prepare(&txn->async_txn, ep->async_duct, sender_id);
     }
 }
 
-static void telemetry_record_sync(tlm_sync_endpoint_t *tep, tlm_sync_t *sync, size_t data_len) {
-    assert(telemetry.initialized);
-
-    sync->data_len = data_len;
-    multichart_request_send(tep->sync_client, sync);
-
-    // wait for request to complete
-    assert(multichart_client_note_count(tep->sync_client) == 1);
-    while (multichart_request_start(tep->sync_client) == NULL) {
-        local_doze(tep->client_task);
+bool telemetry_can_send(tlm_txn_t *txn) {
+    assert(txn != NULL && txn->ep != NULL);
+    if (txn->ep->is_synchronous) {
+        return pipe_send_allowed(&txn->sync_txn);
+    } else {
+        return duct_send_allowed(&txn->async_txn);
     }
 }
 
-void telemetry_main_clip(void) {
-    assert(telemetry.initialized == true);
-    assert(telemetry.comm_encoder != NULL);
+void telemetry_commit(tlm_txn_t *txn) {
+    assert(txn != NULL && txn->ep != NULL);
+    if (txn->ep->is_synchronous) {
+        pipe_send_commit(&txn->sync_txn);
+    } else {
+        duct_send_commit(&txn->async_txn);
+    }
+}
 
+static void telemetry_small_submit(tlm_txn_t *txn, uint32_t telemetry_id, void *data_bytes, size_t data_len) {
+    assert(txn != NULL && txn->ep != NULL);
+    assert(data_len <= TLM_MAX_ASYNC_SIZE);
+    tlm_async_t message = {
+        .telemetry_id = telemetry_id,
+    };
+    if (data_len > 0) {
+        assert(data_bytes != NULL);
+        memcpy(message.data_bytes, data_bytes, data_len);
+    }
+    if (txn->ep->is_synchronous) {
+        pipe_send_message(&txn->sync_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_now_ns());
+    } else {
+        duct_send_message(&txn->async_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_now_ns());
+    }
+}
+
+static uint8_t *telemetry_large_start(tlm_txn_t *txn, uint32_t telemetry_id) {
+    assert(txn != NULL && txn->ep != NULL);
+    assert(telemetry_can_send(txn) && txn->ep->is_synchronous);
+    tlm_sync_t *scratch = &txn->ep->sender_scratch[txn->replica_id];
+    scratch->telemetry_id = telemetry_id;
+    return scratch->data_bytes;
+}
+
+static void telemetry_large_submit(tlm_txn_t *txn, size_t data_len) {
+    assert(txn != NULL);
+    assert(data_len <= TLM_MAX_SYNC_SIZE && txn->ep->is_synchronous);
+    tlm_sync_t *scratch = &txn->ep->sender_scratch[txn->replica_id];
+    pipe_send_message(&txn->sync_txn, scratch, offsetof(tlm_sync_t, data_bytes) + data_len, timer_now_ns());
+}
+
+void telemetry_pump(tlm_system_t *ts) {
     if (clip_is_restart()) {
-        comm_enc_reset(telemetry.comm_encoder);
+        // reset encoder
+        comm_enc_reset(ts->comm_encoder);
+        // clear out all buffered synchronous telemetry
+        for (size_t i = 0; i < ts->num_endpoints; i++) {
+            tlm_endpoint_t *ep = ts->endpoints[i];
+            assert(ep != NULL);
+
+            if (ep->is_synchronous) {
+                circ_buf_reset(ep->receiver_scratch[TELEMETRY_REPLICA_ID]);
+            }
+        }
     }
 
-    comm_enc_prepare(telemetry.comm_encoder);
+    comm_enc_prepare(ts->comm_encoder);
 
-    comm_packet_t packet;
+    // stage 1: downlink any reports of dropped telemetry
+    if (ts->mut->async_dropped > 0) {
+        // if we've been losing data from our ring buffer, report that!
 
-    for (;;) {
-        if (atomic_load_relaxed(telemetry.async_dropped) > 0) {
-            // if we've been losing data from our ring buffer, we should probably report that first!
+        // convert to big-endian
+        uint32_t drop_count = htobe32(ts->mut->async_dropped);
 
-            // this fetches the lastest drop count and replaces it with zero by atomic binary-and with 0.
-            uint32_t drop_count = atomic_load_relaxed(telemetry.async_dropped);
+        // fill in telemetry packet
+        comm_packet_t packet = {
+            .cmd_tlm_id = TLM_DROPPED_TID,
+            .timestamp_ns = clock_timestamp(),
+            .data_len = sizeof(drop_count),
+            .data_bytes = (uint8_t*) &drop_count,
+        };
 
+        // transmit this packet
+        if (comm_enc_encode(ts->comm_encoder, &packet)) {
             debugf(CRITICAL, "Telemetry dropped: MessagesLost=%u", drop_count);
+            // if successful, mark that we downlinked this information.
+            ts->mut->async_dropped = 0;
+        }
+    }
 
-            // convert to big-endian
-            drop_count = htobe32(drop_count);
+    // stage 2: transmit any asynchronous telemetry, and record how many we have to drop
+    for (size_t i = 0; i < ts->num_endpoints; i++) {
+        tlm_endpoint_t *ep = ts->endpoints[i];
+        assert(ep != NULL);
 
-            // fill in telemetry packet
-            packet.cmd_tlm_id   = TLM_DROPPED_TID;
-            packet.timestamp_ns = clock_timestamp();
-            packet.data_len     = sizeof(drop_count);
-            packet.data_bytes   = (uint8_t*) &drop_count;
-
-            // transmit this packet
-            if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
-                // if successful, mark that we downlinked this information. (but leave any new drops that just came in.)
-                atomic_fetch_sub_relaxed(telemetry.async_dropped, drop_count);
-            } else {
-                break;
-            }
-
-            // fall through here so that we actually transmit at least one real async packet per loop
-            // (and that we don't just keep dropping everything)
+        // handle synchronous telemetry later
+        if (ep->is_synchronous) {
+            continue;
         }
 
-        // pull telemetry from multichart
-        uint64_t timestamp_ns_mono = 0;
-        tlm_async_t *async_elm = multichart_reply_start(&telemetry_async_chart, &timestamp_ns_mono);
-        if (async_elm != NULL) {
-            // convert async element to packet
-            packet.cmd_tlm_id   = async_elm->telemetry_id;
-            packet.timestamp_ns = clock_mission_adjust(timestamp_ns_mono);
-            packet.data_len     = async_elm->data_len;
-            packet.data_bytes   = async_elm->data_bytes; // array->pointer
+        tlm_async_t message;
+        duct_txn_t txn;
+        duct_receive_prepare(&txn, ep->async_duct, TELEMETRY_REPLICA_ID);
+        size_t length = 0;
+        local_time_t timestamp = 0;
+        while ((length = duct_receive_message(&txn, &message, &timestamp)) > 0) {
+            // fill in telemetry packet
+            comm_packet_t packet = {
+                .cmd_tlm_id = message.telemetry_id,
+                .timestamp_ns = clock_mission_adjust(timestamp),
+                .data_len = length - offsetof(tlm_async_t, data_bytes),
+                .data_bytes = (uint8_t*) message.data_bytes,
+            };
+            assert(packet.data_len <= TLM_MAX_ASYNC_SIZE);
 
-            debugf(TRACE, "Transmitting async telemetry, timestamp=%u.%09u",
-                       (uint32_t) (packet.timestamp_ns / CLOCK_NS_PER_SEC),
-                       (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
+            debugf(TRACE, "Transmitting async telemetry, timestamp=" TIMEFMT, TIMEARG(packet.timestamp_ns));
 
             // transmit this packet
-            if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
-                // if successful,
-                multichart_reply_send(&telemetry_async_chart, async_elm);
-
+            if (comm_enc_encode(ts->comm_encoder, &packet)) {
                 watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
 
                 debugf(TRACE, "Transmitted async telemetry.");
             } else {
-                debugf(WARNING, "Failed to transmit async telemetry due to full buffer... will try again.");
-                break;
-            }
-        } else {
-            // pull synchronous telemetry from chart (only if all async telemetry is processed)
-            tlm_sync_t *sync_elm = multichart_reply_start(&telemetry_sync_chart, &timestamp_ns_mono);
-            if (sync_elm != NULL) {
-                assert(sync_elm->data_len <= TLM_MAX_SYNC_SIZE);
-
-                // convert sync element to packet
-                packet.cmd_tlm_id   = sync_elm->telemetry_id;
-                packet.timestamp_ns = clock_mission_adjust(timestamp_ns_mono);
-                packet.data_len     = sync_elm->data_len;
-                packet.data_bytes   = sync_elm->data_bytes;
-
-                debugf(TRACE, "Transmitting synchronous telemetry, timestamp=%u.%09u",
-                       (uint32_t) (packet.timestamp_ns / CLOCK_NS_PER_SEC),
-                       (uint32_t) (packet.timestamp_ns % CLOCK_NS_PER_SEC));
-
-                // transmit this packet
-                if (comm_enc_encode(telemetry.comm_encoder, &packet)) {
-                    // let the synchronous sender know they can continue
-                    multichart_reply_send(&telemetry_sync_chart, sync_elm);
-
-                    debugf(TRACE, "Transmitted synchronous telemetry.");
-                } else {
-                    debugf(WARNING, "Failed to transmit synchronous telemetry due to full buffer... will try again.");
-                    break;
-                }
-            } else {
-                // no asynchronous telemetry AND no synchronous telemetry... time to sleep!
-                break;
+                debugf(WARNING, "Failed to transmit async telemetry due to full buffer.");
+                ts->mut->async_dropped++;
             }
         }
+        duct_receive_commit(&txn);
     }
 
-    comm_enc_commit(telemetry.comm_encoder);
+    // stage 3: transmit any synchronous telemetry if we can
+    for (size_t i = 0; i < ts->num_endpoints; i++) {
+        tlm_endpoint_t *ep = ts->endpoints[i];
+        assert(ep != NULL);
+
+        // already handled asynchronous telemetry
+        if (!ep->is_synchronous) {
+            continue;
+        }
+
+        // first: pull telemetry from endpoint into the circular buffer
+        pipe_txn_t txn;
+        pipe_receive_prepare(&txn, ep->sync_pipe, TELEMETRY_REPLICA_ID);
+
+        circ_buf_t *circ = ep->receiver_scratch[TELEMETRY_REPLICA_ID];
+        tlm_sync_slot_t *slot;
+        assert(sizeof(*slot) == circ_buf_elem_size(circ));
+        while (
+            (slot = circ_buf_write_peek(circ, 0)) != NULL
+            && (slot->data_length = pipe_receive_message(&txn, &slot->sync_data, &slot->timestamp)) > 0
+        ) {
+            circ_buf_write_done(circ, 1);
+        }
+
+        // second: attempt to transmit as much telemetry as we can
+        while ((slot = circ_buf_read_peek(circ, 0)) != NULL) {
+            // fill in telemetry packet
+            comm_packet_t packet = {
+                .cmd_tlm_id = slot->sync_data.telemetry_id,
+                .timestamp_ns = clock_mission_adjust(slot->timestamp),
+                .data_len = slot->data_length - offsetof(tlm_sync_t, data_bytes),
+                .data_bytes = (uint8_t*) slot->sync_data.data_bytes,
+            };
+            // TODO: better handling of the cases where the pipe or duct receive length is less than header length
+            assert(packet.data_len <= TLM_MAX_SYNC_SIZE);
+
+            debugf(TRACE, "Transmitting synchronous telemetry, timestamp=" TIMEFMT, TIMEARG(packet.timestamp_ns));
+
+            // transmit this packet
+            if (!comm_enc_encode(ts->comm_encoder, &packet)) {
+                debugf(WARNING, "Failed to transmit synchronous telemetry due to full buffer... will try again.");
+                break;
+            }
+
+            debugf(TRACE, "Transmitted synchronous telemetry.");
+            circ_buf_read_done(circ, 1);
+        }
+
+        // third: tell the endpoint how much data we're ready to receive
+        pipe_receive_commit(&txn, circ_buf_write_avail(circ));
+    }
+
+    comm_enc_commit(ts->comm_encoder);
 }
 
-CLIP_REGISTER(telemetry_task, telemetry_main_clip, NULL);
-
-void tlm_cmd_received(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id) {
+void tlm_cmd_received(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id) {
     debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
            original_timestamp, original_command_id);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = CMD_RECEIVED_TID;
-    tlm->data_len = 12;
-    uint32_t *out = (uint32_t*) tlm->data_bytes;
-    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
-    *out++ = htobe32((uint32_t) original_timestamp);
-    *out++ = htobe32(original_command_id);
-    telemetry_async_send(tep, tlm);
+    struct {
+        uint64_t original_timestamp;
+        uint32_t original_command_id;
+    } __attribute__((packed)) data = {
+        .original_timestamp  = htobe64(original_timestamp),
+        .original_command_id = htobe32(original_command_id),
+    };
+    telemetry_small_submit(txn, CMD_RECEIVED_TID, &data, sizeof(data));
 }
 
-void tlm_cmd_completed(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id,
-                       bool success) {
+void tlm_cmd_completed(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id, bool success) {
     debugf(DEBUG, "Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
            original_timestamp, original_command_id, success);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = CMD_COMPLETED_TID;
-    tlm->data_len = 13;
-    uint32_t *out = (uint32_t*) tlm->data_bytes;
-    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
-    *out++ = htobe32((uint32_t) original_timestamp);
-    *out++ = htobe32(original_command_id);
-    tlm->data_bytes[12] = (success ? 1 : 0);
-    telemetry_async_send(tep, tlm);
+    struct {
+        uint64_t original_timestamp;
+        uint32_t original_command_id;
+        uint8_t  success;
+    } __attribute__((packed)) data = {
+        .original_timestamp  = htobe64(original_timestamp),
+        .original_command_id = htobe32(original_command_id),
+        .success             = (success ? 1 : 0),
+    };
+    telemetry_small_submit(txn, CMD_COMPLETED_TID, &data, sizeof(data));
 }
 
-void tlm_cmd_not_recognized(tlm_async_endpoint_t *tep, uint64_t original_timestamp, uint32_t original_command_id,
+void tlm_cmd_not_recognized(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id,
                             uint32_t length) {
     debugf(CRITICAL, "Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
            original_timestamp, original_command_id, length);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = CMD_NOT_RECOGNIZED_TID;
-    tlm->data_len = 16;
-    uint32_t *out = (uint32_t*) tlm->data_bytes;
-    *out++ = htobe32((uint32_t) (original_timestamp >> 32));
-    *out++ = htobe32((uint32_t) original_timestamp);
-    *out++ = htobe32(original_command_id);
-    *out++ = htobe32(length);
-    telemetry_async_send(tep, tlm);
+    struct {
+        uint64_t original_timestamp;
+        uint32_t original_command_id;
+        uint32_t length;
+    } __attribute__((packed)) data = {
+        .original_timestamp  = htobe64(original_timestamp),
+        .original_command_id = htobe32(original_command_id),
+        .length              = htobe32(length),
+    };
+    telemetry_small_submit(txn, CMD_NOT_RECOGNIZED_TID, &data, sizeof(data));
 }
 
-void tlm_pong(tlm_async_endpoint_t *tep, uint32_t ping_id) {
+void tlm_pong(tlm_txn_t *txn, uint32_t ping_id) {
     debugf(INFO, "Pong: PingId=%08x", ping_id);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = PONG_TID;
-    tlm->data_len = 4;
-    uint32_t *out = (uint32_t*) tlm->data_bytes;
-    *out++ = htobe32(ping_id);
-    telemetry_async_send(tep, tlm);
+    struct {
+        uint32_t ping_id;
+    } __attribute__((packed)) data = {
+        .ping_id = htobe32(ping_id),
+    };
+    telemetry_small_submit(txn, PONG_TID, &data, sizeof(data));
 }
 
-void tlm_clock_calibrated(tlm_async_endpoint_t *tep, int64_t adjustment) {
+void tlm_clock_calibrated(tlm_txn_t *txn, int64_t adjustment) {
     debugf(INFO, "ClockCalibrated: Adjustment=%"PRId64"", adjustment);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = CLOCK_CALIBRATED_TID;
-    tlm->data_len = 8;
-    uint32_t *out = (uint32_t*) tlm->data_bytes;
-    *out++ = htobe32((uint32_t) (adjustment >> 32));
-    *out++ = htobe32((uint32_t) (adjustment >> 0));
-    telemetry_async_send(tep, tlm);
+    struct {
+        int64_t adjustment;
+    } __attribute__((packed)) data = {
+        .adjustment = htobe64(adjustment),
+    };
+    telemetry_small_submit(txn, CLOCK_CALIBRATED_TID, &data, sizeof(data));
 }
 
-void tlm_heartbeat(tlm_async_endpoint_t *tep) {
+void tlm_heartbeat(tlm_txn_t *txn) {
     debugf(DEBUG, "Heartbeat");
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = HEARTBEAT_TID;
-    tlm->data_len = 0;
-    telemetry_async_send(tep, tlm);
+    telemetry_small_submit(txn, HEARTBEAT_TID, NULL, 0);
 }
 
-void tlm_mag_pwr_state_changed(tlm_async_endpoint_t *tep, bool power_state) {
+void tlm_mag_pwr_state_changed(tlm_txn_t *txn, bool power_state) {
     debugf(INFO, "Magnetometer Power State Changed: PowerState=%d", power_state);
 
-    tlm_async_t *tlm = telemetry_async_start(tep);
-    if (!tlm) {
-        return;
-    }
-    tlm->telemetry_id = MAG_PWR_STATE_CHANGED_TID;
-    tlm->data_len = 1;
-    tlm->data_bytes[0] = (power_state ? 1 : 0);
-    telemetry_async_send(tep, tlm);
+    struct {
+        uint8_t power_state;
+    } __attribute__((packed)) data = {
+        .power_state = (power_state ? 1 : 0),
+    };
+    telemetry_small_submit(txn, MAG_PWR_STATE_CHANGED_TID, &data, sizeof(data));
 }
 
-void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
-                               void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param) {
-    assert(tep != NULL && fetch_count != NULL && fetch != NULL);
+void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
+                          void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param) {
+    assert(txn != NULL && fetch_count != NULL && fetch != NULL);
 
     // get the buffer
-    tlm_sync_t *sync = telemetry_start_sync(tep);
+    uint8_t *data_bytes = telemetry_large_start(txn, MAG_READINGS_ARRAY_TID);
 
     // now fill up the buffer
-    sync->telemetry_id = MAG_READINGS_ARRAY_TID;
-    uint16_t *out = (uint16_t*) sync->data_bytes;
     size_t num_readings = *fetch_count;
-    assert(multichart_client_note_size(tep->sync_client) == sizeof(tlm_sync_t));
-    static_assert(sizeof(tlm_sync_t) == TLM_MAX_SYNC_SIZE + offsetof(tlm_sync_t, data_bytes), "size validity");
     if (num_readings * 14 > TLM_MAX_SYNC_SIZE) {
         num_readings = TLM_MAX_SYNC_SIZE / 14;
     }
     assert(num_readings > 0);
     debugf(DEBUG, "Magnetometer Readings Array: %zu readings", num_readings);
     *fetch_count = num_readings;
+    uint16_t *out = (uint16_t*) data_bytes;
     for (size_t i = 0; i < num_readings; i++) {
         tlm_mag_reading_t rd;
 
@@ -331,8 +335,8 @@ void tlm_sync_mag_readings_map(tlm_sync_endpoint_t *tep, size_t *fetch_count,
         *out++ = htobe16(rd.mag_y);
         *out++ = htobe16(rd.mag_z);
     }
-    assert((uint8_t*) out - sync->data_bytes == (ssize_t) (num_readings * 14));
+    assert((uint8_t*) out - data_bytes == (ssize_t) (num_readings * 14));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream
-    telemetry_record_sync(tep, sync, (uint8_t*) out - sync->data_bytes);
+    telemetry_large_submit(txn, (uint8_t*) out - data_bytes);
 }
