@@ -372,9 +372,35 @@ def macro_define(args, name_token, parser, is_block):
     body_name = param_names.pop() if is_block else None
 
     def accept_body(body):
-        def substitute(lookup):
+        def substitute(lookup, call_site):
             substitution = []
+            blame_caller_flag = -1
             for token in body:
+                # if we're supposed to make sure the caller is blamed for any errors, rewrite the tokens
+                if blame_caller_flag == -1 and token.token == "blame_caller":
+                    blame_caller_flag = 0
+                    continue
+                elif blame_caller_flag == 0:
+                    if token.token == "{":
+                        blame_caller_flag = 1
+                        # make sure not to let this closing { pass through
+                        continue
+                    elif token.is_whitespace():
+                        # skip intervening whitespace too
+                        continue
+                    else:
+                        raise MacroError("unexpected symbol %r when expecting { after blame_caller" % token)
+                elif token.token == "}" and blame_caller_flag == 1:
+                    blame_caller_flag = -1
+                    # make sure not to let this opening } pass through
+                    continue
+                elif blame_caller_flag >= 1:
+                    if token.token == "{":
+                        blame_caller_flag += 1
+                    elif token.token == "}":
+                        blame_caller_flag -= 1
+                    # rewrite token to refer to the call site itself
+                    token = new_token(token.token, call_site)
                 # eliminate any trailing comma that's going to cause a problem with the vararg substitution.
                 if token.token == vararg and len(lookup[vararg]) == 0:
                     count = 1
@@ -402,9 +428,9 @@ def macro_define(args, name_token, parser, is_block):
 
             def macro_accept_body(body):
                 lookup[body_name] = body
-                return substitute(lookup)
+                return substitute(lookup, call_token)
 
-            return macro_accept_body if is_block else substitute(lookup)
+            return macro_accept_body if is_block else substitute(lookup, call_token)
 
         if not parser.try_add_macro(macro_name, defined_macro_callback):
             raise MacroError("macro already defined: %r" % macro_name)

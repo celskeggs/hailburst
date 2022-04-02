@@ -21,7 +21,7 @@ macro_define(CLIP_PROTO, c_ident) {
 macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
     clip_t c_ident = {
         .label = symbol_str(c_ident),
-        .clip_play = PP_ERASE_TYPE(c_play, c_arg),
+        .clip_play = blame_caller { PP_ERASE_TYPE(c_play, c_arg) },
         .clip_argument = (void *) (c_arg),
         .clip_just_started = true,
     };

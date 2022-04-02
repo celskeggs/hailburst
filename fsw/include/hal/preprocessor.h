@@ -18,7 +18,7 @@ macro_define(PP_CHECK_TYPE, expr, type) {
 }
 
 macro_define(PP_ERASE_TYPE, callback, param) {
-    (void (*)(void*))
+    blame_caller { (void (*)(void*)) }
             __builtin_choose_expr(
                     __builtin_types_compatible_p(typeof(&callback), void (*)(void)),
                     &callback, /* if function takes void, it's safe to cast to taking void* */
