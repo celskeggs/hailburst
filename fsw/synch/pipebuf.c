@@ -20,7 +20,7 @@ void pipe_sender_commit(pipe_sender_t *s) {
         if (send_len > pipe_message_size(s->pipe)) {
             send_len = pipe_message_size(s->pipe);
         }
-        pipe_send_message(&txn, s->scratch, send_len);
+        pipe_send_message(&txn, s->scratch, send_len, 0);
         if (send_len < s->scratch_offset) {
             s->scratch_offset -= send_len;
             memmove(s->scratch, s->scratch + send_len, s->scratch_offset);
@@ -67,7 +67,7 @@ void pipe_receiver_prepare(pipe_receiver_t *r) {
         assertf(r->scratch_avail + pipe_message_size(r->pipe) * refills <= r->scratch_capacity,
                 "avail=%zu, offset=%zu, message_size=%zu, refills=%zu, capacity=%zu",
                 r->scratch_avail, r->scratch_offset, pipe_message_size(r->pipe), refills, r->scratch_capacity);
-        r->scratch_avail += pipe_receive_message(&r->pipe_txn, r->scratch + r->scratch_avail);
+        r->scratch_avail += pipe_receive_message(&r->pipe_txn, r->scratch + r->scratch_avail, NULL);
         refills -= 1;
     }
     assert(r->scratch_avail <= r->scratch_capacity);

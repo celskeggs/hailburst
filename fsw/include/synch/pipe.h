@@ -60,11 +60,11 @@ static inline duct_flow_index pipe_max_flow(pipe_t *pipe) {
 
 void pipe_send_prepare(pipe_txn_t *txn, pipe_t *pipe, uint8_t sender_id);
 bool pipe_send_allowed(pipe_txn_t *txn);
-void pipe_send_message(pipe_txn_t *txn, void *message, size_t size);
+void pipe_send_message(pipe_txn_t *txn, void *message, size_t size, local_time_t timestamp);
 void pipe_send_commit(pipe_txn_t *txn);
 
 void pipe_receive_prepare(pipe_txn_t *txn, pipe_t *pipe, uint8_t receiver_id);
-size_t pipe_receive_message(pipe_txn_t *txn, void *message_out);
+size_t pipe_receive_message(pipe_txn_t *txn, void *message_out, local_time_t *timestamp_out);
 void pipe_receive_commit(pipe_txn_t *txn, duct_flow_index requested_count);
 
 #endif /* FSW_SYNCH_PIPE_H */

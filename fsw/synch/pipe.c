@@ -24,10 +24,10 @@ bool pipe_send_allowed(pipe_txn_t *txn) {
     return txn->available > 0;
 }
 
-void pipe_send_message(pipe_txn_t *txn, void *message, size_t size) {
+void pipe_send_message(pipe_txn_t *txn, void *message, size_t size, local_time_t timestamp) {
     assert(txn != NULL && message != NULL && size >= 1);
     assert(txn->available > 0);
-    duct_send_message(&txn->data_txn, message, size, 0);
+    duct_send_message(&txn->data_txn, message, size, timestamp);
     txn->available -= 1;
 }
 
@@ -45,9 +45,9 @@ void pipe_receive_prepare(pipe_txn_t *txn, pipe_t *pipe, uint8_t receiver_id) {
     duct_receive_prepare(&txn->data_txn, pipe->dataflow, receiver_id);
 }
 
-size_t pipe_receive_message(pipe_txn_t *txn, void *message_out) {
+size_t pipe_receive_message(pipe_txn_t *txn, void *message_out, local_time_t *timestamp_out) {
     assert(txn != NULL);
-    size_t count = duct_receive_message(&txn->data_txn, message_out, NULL);
+    size_t count = duct_receive_message(&txn->data_txn, message_out, timestamp_out);
     if (count > 0 && txn->available > 0) {
         txn->available -= 1;
     }

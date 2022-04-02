@@ -330,7 +330,7 @@ void radio_uplink_clip(radio_t *radio) {
             assert(uplink_length <= UPLINK_BUF_LOCAL_SIZE
                      && UPLINK_BUF_LOCAL_SIZE <= pipe_message_size(radio->up_pipe));
             // write all the data we just pulled to the stream before continuing
-            pipe_send_message(&txn, radio->uplink_buf_local, uplink_length);
+            pipe_send_message(&txn, radio->uplink_buf_local, uplink_length, 0);
             radio->uplink_state = RAD_UL_QUERY_STATE;
             debugf(TRACE, "Radio uplink received %u bytes.", uplink_length);
         }
@@ -518,7 +518,7 @@ void radio_downlink_clip(radio_t *radio) {
     if (radio->downlink_state == RAD_DL_WAITING_FOR_STREAM) {
         assert(tx_region.size >= DOWNLINK_BUF_LOCAL_SIZE);
         assert(pipe_message_size(radio->down_pipe) <= DOWNLINK_BUF_LOCAL_SIZE);
-        radio->downlink_length = pipe_receive_message(&txn, radio->downlink_buf_local);
+        radio->downlink_length = pipe_receive_message(&txn, radio->downlink_buf_local, NULL);
         if (radio->downlink_length > 0) {
             assert(radio->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
             radio->downlink_state = RAD_DL_VALIDATE_IDLE;
