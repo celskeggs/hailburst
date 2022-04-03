@@ -139,7 +139,7 @@ static void task_schedule(schedule_entry_t entry) {
     }
     mutex_unlock(&scheduling_lock);
 
-    // uint64_t total_time = clock_timestamp_monotonic() - start_ns;
+    // uint64_t total_time = timer_now_ns() - start_ns;
     // if (total_time > entry.nanos) {
     //     debugf(TRACE, "task %s consumed %" PRIu64 " > %u", entry.task->name, total_time, entry.nanos);
     // }

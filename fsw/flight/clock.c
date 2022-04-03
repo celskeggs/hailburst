@@ -9,8 +9,9 @@
 #include <flight/clock_cal.h>
 #include <flight/telemetry.h>
 
-bool clock_calibrated = false;
-int64_t clock_offset_adj = 0;
+int64_t clock_offset_adj_slow[CLOCK_REPLICAS] = { [0 ... CLOCK_REPLICAS-1] = CLOCK_UNCALIBRATED, };
+int64_t clock_offset_adj_fast = CLOCK_UNCALIBRATED;
+bool clock_calibration_required = true;
 
 enum {
     CLOCK_MAGIC_NUM = 0x71CC70CC, /* tick-tock */
@@ -22,23 +23,37 @@ enum {
     REG_ERRORS = 0x0C,
 };
 
-bool clock_is_calibrated(void) {
-    return atomic_load(clock_calibrated);
-}
-
 static void clock_configure(tlm_txn_t *telem, mission_time_t received_timestamp, local_time_t network_timestamp) {
-    assert(!clock_calibrated);
-
     debugf(INFO, "Timing details: ref=%"PRIu64" local=%"PRIu64, received_timestamp, network_timestamp);
 
     // now compute the appropriate offset
-    clock_offset_adj = received_timestamp - network_timestamp;
-
-    // notify anyone waiting
-    atomic_store(clock_calibrated, true);
+    int64_t adjustment = received_timestamp - network_timestamp;
+    if (adjustment == CLOCK_UNCALIBRATED) {
+        // make sure that 0 is reserved for the actual state of not being calibrated; a 1ns discrepancy is fine.
+        adjustment++;
+    }
+    clock_offset_adj_slow[CLOCK_REPLICA_ID] = adjustment;
 
     // and log our success, which will include a time using our new adjustment
-    tlm_clock_calibrated(telem, clock_offset_adj);
+    tlm_clock_calibrated(telem, adjustment);
+}
+
+void clock_voter_clip(void) {
+    clock_offset_adj_fast = clock_offset_adj_vote();
+    size_t mismatches = 0;
+    for (size_t i = 0; i < CLOCK_REPLICAS; i++) {
+        debugf(TRACE, "slow[%zu] = " TIMEFMT, i, TIMEARG(clock_offset_adj_slow[i]));
+        if (clock_offset_adj_fast != clock_offset_adj_slow[i]) {
+            mismatches++;
+        }
+    }
+    bool calibration_required_local = (clock_offset_adj_fast == CLOCK_UNCALIBRATED || mismatches > 0);
+    debugf(TRACE, "Clock calibration info: " TIMEFMT ", %zu, %u", TIMEARG(clock_offset_adj_fast), mismatches, calibration_required_local);
+    if (calibration_required_local != clock_calibration_required) {
+        debugf(DEBUG, "Setting clock_calibration_required = %u (offset_fast=" TIMEFMT ", mismatches=%zu)",
+               calibration_required_local, TIMEARG(clock_offset_adj_fast), mismatches);
+        atomic_store(clock_calibration_required, calibration_required_local);
+    }
 }
 
 void clock_start_clip(clock_device_t *clock) {
@@ -49,9 +64,6 @@ void clock_start_clip(clock_device_t *clock) {
     uint32_t magic_number;
     mission_time_t received_timestamp;
     local_time_t network_timestamp;
-
-    // this clip only does one thing during init, and then sits there doing nothing for the rest of the time.
-    // TODO: can we reclaim this resource?
 
     rmap_txn_t rmap_txn;
     rmap_epoch_prepare(&rmap_txn, clock->rmap);
@@ -79,7 +91,7 @@ void clock_start_clip(clock_device_t *clock) {
 
             clock_configure(&telem_txn, received_timestamp, network_timestamp);
 
-            clock->state = CLOCK_IDLE;
+            clock->state = CLOCK_CALIBRATED;
         } else {
             debugf(WARNING, "Failed to query clock current time, error=0x%03x", status);
         }
@@ -89,8 +101,10 @@ void clock_start_clip(clock_device_t *clock) {
         break;
     }
 
-    if (clock->state == CLOCK_INITIAL_STATE) {
+    if (clock->state == CLOCK_IDLE && atomic_load(clock_calibration_required)) {
         clock->state = CLOCK_READ_MAGIC_NUMBER;
+    } else if (clock->state == CLOCK_CALIBRATED) {
+        clock->state = CLOCK_IDLE;
     }
 
     switch (clock->state) {

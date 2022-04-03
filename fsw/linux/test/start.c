@@ -8,9 +8,10 @@
 
 #include <hal/init.h>
 #include <hal/thread.h>
+#include <flight/clock.h>
 
 // so that we don't need a full clock implementation for the clock functions
-int64_t clock_offset_adj = 0;
+int64_t clock_offset_adj_fast = 0;
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {

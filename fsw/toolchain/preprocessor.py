@@ -256,7 +256,7 @@ def debugf_core(args, name_token):
     tokens += [
         python_token("} __attribute__((packed)) _msg_state = {"),
         python_token(".metadata = &_msg_metadata,"),
-        python_token(".timestamp = clock_timestamp(),"),
+        python_token(".timestamp = clock_timestamp_fast(),"),
     ]
     for i, (arg_type, arg_expr) in enumerate(zip(arg_types, args)):
         if arg_type != ARG_STRING:

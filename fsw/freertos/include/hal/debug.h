@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #include <hal/loglevel.h>
-// for clock_timestamp() needed by debugf macro
+// for clock_timestamp_fast() needed by debugf macro
 #include <flight/clock.h>
 
 #ifndef __PYTHON_PREPROCESS__

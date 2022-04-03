@@ -12,7 +12,7 @@
 
 /* note: should not use TIMEARG like this in general; the argument must not be a function call on FreeRTOS */
 #define debugf(level, fmt, ...)                                                                                       \
-        ({ printf("[" TIMEFMT "] " fmt "\n", TIMEARG(clock_timestamp()), ## __VA_ARGS__); fflush(stdout); })
+        ({ printf("[" TIMEFMT "] " fmt "\n", TIMEARG(clock_timestamp_fast()), ## __VA_ARGS__); fflush(stdout); })
 #define debugf_stable(level, stable_id, fmt, ...) debugf(level, fmt, ## __VA_ARGS)
 
 // generic but messier implementation
