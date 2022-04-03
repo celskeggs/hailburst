@@ -6,6 +6,7 @@ sources = [
     "command.c",
     "heartbeat.c",
     "magnetometer.c",
+    "pingback.c",
     "radio.c",
     "spacecraft.c",
     "telemetry.c",

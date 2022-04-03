@@ -7,6 +7,7 @@
 #include <flight/clock_cal.h>
 #include <flight/command.h>
 #include <flight/heartbeat.h>
+#include <flight/pingback.h>
 #include <flight/radio.h>
 #include <flight/spacecraft.h>
 #include <flight/telemetry.h>
@@ -129,12 +130,18 @@ MAGNETOMETER_REGISTER(sc_mag, magnetometer_routing, fce_vin, fce_vout, VPORT_MAG
 
 HEARTBEAT_REGISTER(sc_heart);
 
-COMMAND_REGISTER(sc_cmd, sc_uplink_pipe);
+PINGBACK_REGISTER(sc_pingback);
 
-TELEMETRY_REGISTER(sc_telemetry, sc_downlink_pipe, {
+COMMAND_SYSTEM_REGISTER(sc_cmd, sc_uplink_pipe, {
+    PINGBACK_COMMAND(sc_pingback)
+    MAGNETOMETER_COMMAND(sc_mag)
+});
+
+TELEMETRY_SYSTEM_REGISTER(sc_telemetry, sc_downlink_pipe, {
     COMMAND_TELEMETRY(sc_cmd)
     MAGNETOMETER_TELEMETRY(sc_mag)
     CLOCK_TELEMETRY(sc_clock)
+    PINGBACK_TELEMETRY(sc_pingback)
     HEARTBEAT_TELEMETRY(sc_heart)
 });
 
@@ -145,6 +152,7 @@ TASK_SCHEDULING_ORDER(
     COMMAND_SCHEDULE(sc_cmd)
     MAGNETOMETER_SCHEDULE(sc_mag)
     CLOCK_SCHEDULE(sc_clock)
+    PINGBACK_SCHEDULE(sc_pingback)
     HEARTBEAT_SCHEDULE(sc_heart)
     TELEMETRY_SCHEDULE(sc_telemetry)
     RADIO_DOWN_SCHEDULE(sc_radio)

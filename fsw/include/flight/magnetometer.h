@@ -7,6 +7,7 @@
 #include <synch/circular.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
+#include <flight/command.h>
 #include <flight/telemetry.h>
 
 #define MAGNETOMETER_REPLICAS 1
@@ -44,19 +45,20 @@ typedef struct {
     // state saved between telemetry clip invocations
     local_time_t last_telem_time;
 
-    // telemetry output endpoint
+    // telemetry and command endpoints
     tlm_endpoint_t *telemetry_async;
     tlm_endpoint_t *telemetry_sync;
+    cmd_endpoint_t *command_endpoint;
 } magnetometer_t;
 
-void magnetometer_drop_notification(void);
 void magnetometer_query_clip(magnetometer_t *mag);
 void magnetometer_telem_clip(magnetometer_t *mag);
 
 macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_out, m_switch_port) {
     CIRC_BUF_REGISTER(symbol_join(m_ident, readings), sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
-    TELEMETRY_ASYNC_REGISTER(symbol_join(m_ident, telemetry_async), MAGNETOMETER_REPLICAS, 1);
+    TELEMETRY_ASYNC_REGISTER(symbol_join(m_ident, telemetry_async), MAGNETOMETER_REPLICAS, 2);
     TELEMETRY_SYNC_REGISTER(symbol_join(m_ident, telemetry_sync), MAGNETOMETER_REPLICAS, 1);
+    COMMAND_ENDPOINT(symbol_join(m_ident, command), MAG_SET_PWR_STATE_CID, MAGNETOMETER_REPLICAS);
     RMAP_ON_SWITCHES(symbol_join(m_ident, endpoint), "magnet", m_switch_in, m_switch_out, m_switch_port, m_address,
                      8, 4);
     magnetometer_t m_ident = {
@@ -70,6 +72,7 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
         .last_telem_time = 0,
         .telemetry_async = &symbol_join(m_ident, telemetry_async),
         .telemetry_sync = &symbol_join(m_ident, telemetry_sync),
+        .command_endpoint = &symbol_join(m_ident, command),
     };
     CLIP_REGISTER(symbol_join(m_ident, query), magnetometer_query_clip, &m_ident);
     CLIP_REGISTER(symbol_join(m_ident, telem), magnetometer_telem_clip, &m_ident)
@@ -91,6 +94,8 @@ macro_define(MAGNETOMETER_TELEMETRY, m_ident) {
     &symbol_join(m_ident, telemetry_sync),
 }
 
-void magnetometer_set_powered(magnetometer_t *mag, bool powered);
+macro_define(MAGNETOMETER_COMMAND, m_ident) {
+    &symbol_join(m_ident, command),
+}
 
 #endif /* FSW_MAGNETOMETER_H */

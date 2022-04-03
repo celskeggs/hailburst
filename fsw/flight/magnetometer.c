@@ -2,9 +2,7 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include <hal/atomic.h>
 #include <hal/debug.h>
-#include <hal/thread.h>
 #include <flight/clock.h>
 #include <flight/magnetometer.h>
 #include <flight/telemetry.h>
@@ -109,12 +107,23 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         break;
     }
 
-    if ((mag->state == MS_INACTIVE || mag->state == MS_DEACTIVATING)
-                    && atomic_load_relaxed(mag->should_be_powered)) {
+    size_t command_length = 0;
+    uint8_t *command_bytes = command_receive(mag->command_endpoint, MAGNETOMETER_REPLICA_ID, &command_length);
+    if (command_bytes != NULL) {
+        if (command_length == 1 && (command_bytes[0] == 0 || command_bytes[0] == 1)) {
+            mag->should_be_powered = (command_bytes[0] == 1);
+            debugf(DEBUG, "Command set magnetometer power state to %u.", mag->should_be_powered);
+            command_reply(mag->command_endpoint, &telem, CMD_STATUS_OK);
+        } else {
+            // wrong length or invalid byte
+            command_reply(mag->command_endpoint, &telem, CMD_STATUS_UNRECOGNIZED);
+        }
+    }
+
+    if ((mag->state == MS_INACTIVE || mag->state == MS_DEACTIVATING) && mag->should_be_powered) {
         debugf(DEBUG, "Turning on magnetometer power...");
         mag->state = MS_ACTIVATING;
-    } else if ((mag->state == MS_ACTIVATING || mag->state == MS_ACTIVE)
-                    && !atomic_load_relaxed(mag->should_be_powered)) {
+    } else if ((mag->state == MS_ACTIVATING || mag->state == MS_ACTIVE) && !mag->should_be_powered) {
         debugf(DEBUG, "Turning off magnetometer power...");
         mag->state = MS_DEACTIVATING;
     } else if (mag->state == MS_ACTIVE && timer_now_ns() >= mag->next_reading_time) {
@@ -196,12 +205,4 @@ void magnetometer_telem_clip(magnetometer_t *mag) {
     }
 
     telemetry_commit(&telem);
-}
-
-void magnetometer_set_powered(magnetometer_t *mag, bool powered) {
-    assert(mag != NULL);
-    if (powered != mag->should_be_powered) {
-        debugf(DEBUG, "Notifying mag_query_loop about new requested power state: %u.", powered);
-        atomic_store_relaxed(mag->should_be_powered, powered);
-    }
 }

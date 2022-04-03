@@ -78,7 +78,7 @@ typedef const struct {
 
 void telemetry_pump(tlm_system_t *ts);
 
-macro_define(TELEMETRY_REGISTER, t_ident, t_pipe, t_components) {
+macro_define(TELEMETRY_SYSTEM_REGISTER, t_ident, t_pipe, t_components) {
     COMM_ENC_REGISTER(symbol_join(t_ident, encoder), t_pipe, TELEMETRY_REPLICA_ID);
     tlm_endpoint_t * const symbol_join(t_ident, endpoints)[] = t_components;
     struct tlm_system_mut symbol_join(t_ident, mutable) = {
