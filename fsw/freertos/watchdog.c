@@ -2,7 +2,6 @@
 #include <stdint.h>
 
 #include <hal/debug.h>
-#include <hal/init.h>
 #include <hal/system.h>
 #include <hal/thread.h>
 #include <hal/timer.h>
@@ -10,12 +9,7 @@
 #include <synch/duct.h>
 
 enum {
-    WATCHDOG_VOTER_REPLICAS = 1,
-    WATCHDOG_VOTER_ID = 0,
-
     WATCHDOG_BASE_ADDRESS = 0x090c0000,
-
-    WATCHDOG_ASPECT_MAX_AGE = CLOCK_NS_PER_SEC,
 };
 
 struct watchdog_mmio_region {
@@ -24,10 +18,6 @@ struct watchdog_mmio_region {
     uint32_t r_deadline;     // read-only, variable
     uint32_t r_early_offset; // read-only, constant
 };
-
-bool watchdog_initialized = false;
-uint64_t watchdog_init_window_end;
-uint64_t watchdog_aspect_timestamps[WATCHDOG_ASPECT_NUM] = { 0 };
 
 /************** BEGIN WATCHDOG FOOD PREPARATION CODE FROM QEMU IMPLEMENTATION **************/
 static uint32_t integer_power_truncated(uint32_t base, uint16_t power)
@@ -57,80 +47,61 @@ static uint32_t wdt_strict_food_from_recipe(uint32_t recipe)
 }
 /*************** END WATCHDOG FOOD PREPARATION CODE FROM QEMU IMPLEMENTATION ***************/
 
-void watchdog_ok(watchdog_aspect_t aspect) {
-    size_t offset = (size_t) aspect;
-    assert(offset < WATCHDOG_ASPECT_NUM);
-    atomic_store_relaxed(watchdog_aspect_timestamps[offset], timer_now_ns());
+void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok) {
+    assert(aspect != NULL);
+    duct_txn_t txn;
+    duct_send_prepare(&txn, aspect->duct, replica_id);
+    uint8_t ok_byte = (ok ? 1 : 0);
+    duct_send_message(&txn, &ok_byte, sizeof(ok_byte), 0);
+    duct_send_commit(&txn);
 }
 
-static const char *watchdog_aspect_name(watchdog_aspect_t w) {
-    static_assert(WATCHDOG_ASPECT_NUM == 4, "watchdog_aspect_name should be updated alongside watchdog_aspect_t");
-    assert(w < WATCHDOG_ASPECT_NUM);
-
-    switch (w) {
-    case WATCHDOG_ASPECT_RADIO_UPLINK:
-        return "RADIO_UPLINK";
-    case WATCHDOG_ASPECT_RADIO_DOWNLINK:
-        return "RADIO_DOWNLINK";
-    case WATCHDOG_ASPECT_TELEMETRY:
-        return "TELEMETRY";
-    case WATCHDOG_ASPECT_HEARTBEAT:
-        return "HEARTBEAT";
-    default:
-        assert(false);
-    }
-}
-
-static bool watchdog_aspects_ok(void) {
-    uint64_t now = timer_now_ns();
-    bool ok = true;
+static bool watchdog_aspects_ok(watchdog_t *w) {
+    bool bypass = false;
 
     // allow one time unit after init for watchdog aspects to be populated, because the init value of 0 isn't valid
     // for subsequent reboots
-    if (watchdog_init_window_end > now) {
-        assert(watchdog_init_window_end < now + WATCHDOG_ASPECT_MAX_AGE);
-        return true;
+    local_time_t now = timer_now_ns();
+    if (now < w->mut->init_window_end) {
+        assert(w->mut->init_window_end < now + WATCHDOG_ASPECT_MAX_AGE);
+        // override any previous issues
+        bypass = true;
     }
 
-    for (watchdog_aspect_t w = 0; w < WATCHDOG_ASPECT_NUM; w++) {
-        uint64_t timestamp = atomic_load_relaxed(watchdog_aspect_timestamps[w]);
-        if (timestamp + WATCHDOG_ASPECT_MAX_AGE < now || timestamp > now) {
-            debugf(CRITICAL, "Aspect %s not confirmed OK.", watchdog_aspect_name(w));
-            ok = false;
-        }
-    }
-    return ok;
-}
-
-// only sent when it's time to decide whether to feed the watchdog.
-struct watchdog_recipe_message {
-    uint32_t recipe;
-};
-
-// sent in response to a recipe message OR if it's time to force-reset the watchdog. (a message is sent, instead of
-// directly forcing a reset, so that voting can take place.)
-struct watchdog_food_message {
-    bool force_reset;
-    uint32_t food; // only populated if force_reset is false.
-};
-
-DUCT_REGISTER(watchdog_recipe_duct, 1, WATCHDOG_VOTER_REPLICAS, 1, sizeof(struct watchdog_recipe_message),
-              DUCT_RECEIVER_FIRST);
-DUCT_REGISTER(watchdog_food_duct, WATCHDOG_VOTER_REPLICAS, 1, 1, sizeof(struct watchdog_food_message),
-              DUCT_SENDER_FIRST);
-
-void watchdog_voter_clip(void) {
+    bool all_ok = true;
     duct_txn_t txn;
 
-    duct_receive_prepare(&txn, &watchdog_recipe_duct, WATCHDOG_VOTER_ID);
+    for (size_t i = 0; i < w->num_aspects; i++) {
+        watchdog_aspect_t *aspect = w->aspects[i];
+        assert(aspect != NULL);
+        duct_receive_prepare(&txn, aspect->duct, WATCHDOG_VOTER_ID);
+        uint8_t ok_byte = 0;
+        if (duct_receive_message(&txn, &ok_byte, NULL) == sizeof(ok_byte) && ok_byte == 1) {
+            aspect->last_known_ok[WATCHDOG_VOTER_ID] = now;
+        } else if (bypass) {
+            // don't do anything yet
+        } else if (now < aspect->last_known_ok[WATCHDOG_VOTER_ID]
+                    || now > aspect->last_known_ok[WATCHDOG_VOTER_ID] + WATCHDOG_ASPECT_MAX_AGE) {
+            debugf(CRITICAL, "Aspect %s not confirmed OK.", aspect->label);
+            all_ok = false;
+        }
+        duct_receive_commit(&txn);
+    }
+
+    return all_ok;
+}
+
+void watchdog_voter_clip(watchdog_t *w) {
+    duct_txn_t txn;
+
+    duct_receive_prepare(&txn, w->recipe_duct, WATCHDOG_VOTER_ID);
     struct watchdog_recipe_message recipe_msg;
     bool has_recipe_msg = (duct_receive_message(&txn, &recipe_msg, NULL) == sizeof(recipe_msg));
     duct_receive_commit(&txn);
 
-    // TODO: change this to use ducts
-    bool aspects_ok = watchdog_aspects_ok();
+    bool aspects_ok = watchdog_aspects_ok(w);
 
-    duct_send_prepare(&txn, &watchdog_food_duct, WATCHDOG_VOTER_ID);
+    duct_send_prepare(&txn, w->food_duct, WATCHDOG_VOTER_ID);
     if (!aspects_ok) {
         struct watchdog_food_message food_msg = {
             .force_reset = true,
@@ -168,12 +139,12 @@ static bool watchdog_check_can_feed_yet(struct watchdog_mmio_region *mmio) {
     return delay_until_earliest <= 0;
 }
 
-void watchdog_monitor_clip(void) {
+void watchdog_monitor_clip(watchdog_t *w) {
     duct_txn_t txn;
 
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
 
-    duct_receive_prepare(&txn, &watchdog_food_duct, 0);
+    duct_receive_prepare(&txn, w->food_duct, 0);
     struct watchdog_food_message food_msg;
     bool has_food_msg = (duct_receive_message(&txn, &food_msg, NULL) == sizeof(food_msg));
     duct_receive_commit(&txn);
@@ -196,7 +167,7 @@ void watchdog_monitor_clip(void) {
         }
     }
 
-    duct_send_prepare(&txn, &watchdog_recipe_duct, 0);
+    duct_send_prepare(&txn, w->recipe_duct, 0);
     if (can_feed_yet) {
         struct watchdog_recipe_message recipe_msg = {
             .recipe = atomic_load_relaxed(mmio->r_greet),
@@ -205,18 +176,6 @@ void watchdog_monitor_clip(void) {
     }
     duct_send_commit(&txn);
 }
-
-static void watchdog_init(void) {
-    assert(!watchdog_initialized);
-    watchdog_initialized = true;
-
-    watchdog_init_window_end = timer_now_ns() + WATCHDOG_ASPECT_MAX_AGE;
-}
-
-PROGRAM_INIT(STAGE_RAW, watchdog_init);
-
-CLIP_REGISTER(watchdog_voter, watchdog_voter_clip, NULL);
-CLIP_REGISTER(watchdog_monitor, watchdog_monitor_clip, NULL);
 
 void watchdog_force_reset(void) {
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;

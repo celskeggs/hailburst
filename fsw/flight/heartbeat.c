@@ -16,12 +16,17 @@ void heartbeat_main_clip(heartbeat_t *h) {
     tlm_txn_t telem;
     telemetry_prepare(&telem, h->telemetry, HEARTBEAT_REPLICA_ID);
 
+    bool watchdog_ok = false;
+
     if (clock_is_calibrated() && timer_now_ns() >= h->mut->last_heartbeat_time + HEARTBEAT_PERIOD) {
         tlm_heartbeat(&telem);
-        watchdog_ok(WATCHDOG_ASPECT_HEARTBEAT);
+
+        watchdog_ok = true;
 
         h->mut->last_heartbeat_time = timer_now_ns();
     }
+
+    watchdog_indicate(h->aspect, HEARTBEAT_REPLICA_ID, watchdog_ok);
 
     telemetry_commit(&telem);
 }

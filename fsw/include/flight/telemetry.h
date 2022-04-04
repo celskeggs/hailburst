@@ -6,6 +6,7 @@
 
 #include <hal/clip.h>
 #include <hal/init.h>
+#include <hal/watchdog.h>
 #include <synch/circular.h>
 #include <synch/duct.h>
 #include <synch/pipe.h>
@@ -74,6 +75,7 @@ typedef const struct {
     comm_enc_t             *comm_encoder;
     tlm_endpoint_t * const *endpoints;
     size_t                  num_endpoints;
+    watchdog_aspect_t      *aspect;
 } tlm_system_t;
 
 void telemetry_pump(tlm_system_t *ts);
@@ -84,17 +86,23 @@ macro_define(TELEMETRY_SYSTEM_REGISTER, t_ident, t_pipe, t_components) {
     struct tlm_system_mut symbol_join(t_ident, mutable) = {
         .async_dropped = 0,
     };
+    WATCHDOG_ASPECT(symbol_join(t_ident, aspect), TELEMETRY_REPLICAS);
     tlm_system_t t_ident = {
         .mut = &symbol_join(t_ident, mutable),
         .comm_encoder = &symbol_join(t_ident, encoder),
         .endpoints = symbol_join(t_ident, endpoints),
         .num_endpoints = sizeof(symbol_join(t_ident, endpoints)) / sizeof(*symbol_join(t_ident, endpoints)),
+        .aspect = &symbol_join(t_ident, aspect),
     };
     CLIP_REGISTER(symbol_join(t_ident, clip), telemetry_pump, &t_ident)
 }
 
 macro_define(TELEMETRY_SCHEDULE, t_ident) {
     CLIP_SCHEDULE(symbol_join(t_ident, clip), 100)
+}
+
+macro_define(TELEMETRY_WATCH, t_ident) {
+    &symbol_join(t_ident, aspect),
 }
 
 macro_define(TELEMETRY_ASYNC_REGISTER, e_ident, e_replicas, e_max_flow) {

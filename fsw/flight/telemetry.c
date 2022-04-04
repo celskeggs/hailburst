@@ -121,6 +121,8 @@ void telemetry_pump(tlm_system_t *ts) {
         }
     }
 
+    bool watchdog_ok = false;
+
     // stage 2: transmit any asynchronous telemetry, and record how many we have to drop
     for (size_t i = 0; i < ts->num_endpoints; i++) {
         tlm_endpoint_t *ep = ts->endpoints[i];
@@ -150,7 +152,7 @@ void telemetry_pump(tlm_system_t *ts) {
 
             // transmit this packet
             if (comm_enc_encode(ts->comm_encoder, &packet)) {
-                watchdog_ok(WATCHDOG_ASPECT_TELEMETRY);
+                watchdog_ok = true;
 
                 debugf(TRACE, "Transmitted async telemetry.");
             } else {
@@ -160,6 +162,8 @@ void telemetry_pump(tlm_system_t *ts) {
         }
         duct_receive_commit(&txn);
     }
+
+    watchdog_indicate(ts->aspect, TELEMETRY_REPLICA_ID, watchdog_ok);
 
     // stage 3: transmit any synchronous telemetry if we can
     for (size_t i = 0; i < ts->num_endpoints; i++) {

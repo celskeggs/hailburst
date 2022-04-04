@@ -145,6 +145,12 @@ TELEMETRY_SYSTEM_REGISTER(sc_telemetry, sc_downlink_pipe, {
     HEARTBEAT_TELEMETRY(sc_heart)
 });
 
+WATCHDOG_REGISTER(sc_watchdog, {
+    HEARTBEAT_WATCH(sc_heart)
+    RADIO_WATCH(sc_radio)
+    TELEMETRY_WATCH(sc_telemetry)
+});
+
 TASK_SCHEDULING_ORDER(
     FAKEWIRE_EXCHANGE_SCHEDULE(fce_fw_exchange)
     SWITCH_SCHEDULE(fce_vin)
@@ -157,5 +163,6 @@ TASK_SCHEDULING_ORDER(
     TELEMETRY_SCHEDULE(sc_telemetry)
     RADIO_DOWN_SCHEDULE(sc_radio)
     SWITCH_SCHEDULE(fce_vout)
+    WATCHDOG_SCHEDULE(sc_watchdog)
     SYSTEM_MAINTENANCE_SCHEDULE()
 );

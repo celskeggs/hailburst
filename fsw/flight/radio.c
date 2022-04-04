@@ -77,6 +77,7 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
             .prime_read_length = 0,
             .flipped_read_length = 0,
             .needs_update_all = true,
+            .watchdog_ok = false,
         };
 
         memcpy(reads->new_registers, &reg[REG_RX_PTR], sizeof(reads->new_registers));
@@ -155,6 +156,7 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
         .flipped_read_length = read_length_flip,
         .needs_update_all = false, /* updated later if necessary */
         .needs_alt_update = false, /* updated later if necessary */
+        .watchdog_ok = true,
     };
 
     uint32_t total_read = read_length + read_length_flip;
@@ -215,9 +217,6 @@ static void radio_uplink_compute_reads(radio_t *radio, uint32_t reg[NUM_REGISTER
             // or, in this case, no refill is actually necessary!
         }
     }
-
-    // run this here, so that it only happens AFTER we initialize out of idle mode.
-    watchdog_ok(WATCHDOG_ASPECT_RADIO_UPLINK);
 }
 
 void radio_uplink_clip(radio_t *radio) {
@@ -232,6 +231,8 @@ void radio_uplink_clip(radio_t *radio) {
 
     rmap_txn_t rmap_txn;
     rmap_epoch_prepare(&rmap_txn, radio->rmap_up);
+
+    bool watchdog_ok = false;
 
     switch (radio->uplink_state) {
     case RAD_UL_QUERY_COMMON_CONFIG:
@@ -274,6 +275,7 @@ void radio_uplink_clip(radio_t *radio) {
             radio_uplink_compute_reads(radio, registers, &radio->read_plan);
             radio->uplink_state = RAD_UL_PRIME_READ;
             flag_recoverf(&radio->uplink_query_status_flag, "Radio status queries recovered.");
+            watchdog_ok = radio->read_plan.watchdog_ok;
         } else {
             flag_raisef(&radio->uplink_query_status_flag, "Failed to query radio status, error=0x%03x", status);
         }
@@ -307,6 +309,8 @@ void radio_uplink_clip(radio_t *radio) {
         /* nothing to do */
         break;
     }
+
+    watchdog_indicate(radio->up_aspect, RADIO_REPLICA_ID, watchdog_ok);
 
     if (radio->uplink_state == RAD_UL_INITIAL_STATE) {
         radio->uplink_state = RAD_UL_QUERY_COMMON_CONFIG;
@@ -421,6 +425,8 @@ void radio_downlink_clip(radio_t *radio) {
     rmap_txn_t rmap_txn;
     rmap_epoch_prepare(&rmap_txn, radio->rmap_down);
 
+    bool watchdog_ok = false;
+
     switch (radio->downlink_state) {
     case RAD_DL_QUERY_COMMON_CONFIG:
         status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t) * 3, NULL);
@@ -498,7 +504,7 @@ void radio_downlink_clip(radio_t *radio) {
                 radio->downlink_state = RAD_DL_WAITING_FOR_STREAM;
                 debugf(TRACE, "Radio downlink completed transmitting %u bytes.", radio->downlink_length);
                 radio->downlink_length = 0;
-                watchdog_ok(WATCHDOG_ASPECT_RADIO_DOWNLINK);
+                watchdog_ok = true;
             }
         } else {
             debugf(WARNING, "Failed to query radio transmit status, error=0x%03x", status);
@@ -508,6 +514,8 @@ void radio_downlink_clip(radio_t *radio) {
         /* nothing to do */
         break;
     }
+
+    watchdog_indicate(radio->down_aspect, RADIO_REPLICA_ID, watchdog_ok);
 
     if (radio->downlink_state == RAD_DL_INITIAL_STATE) {
         radio->downlink_state = RAD_DL_QUERY_COMMON_CONFIG;

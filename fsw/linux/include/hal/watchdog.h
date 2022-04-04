@@ -1,22 +1,31 @@
 #ifndef FSW_FREERTOS_HAL_WATCHDOG_H
 #define FSW_FREERTOS_HAL_WATCHDOG_H
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
-typedef enum {
-    WATCHDOG_ASPECT_RADIO_UPLINK = 0,
-    WATCHDOG_ASPECT_RADIO_DOWNLINK,
-    WATCHDOG_ASPECT_TELEMETRY,
-    WATCHDOG_ASPECT_HEARTBEAT,
-
-    WATCHDOG_ASPECT_NUM,
-} watchdog_aspect_t;
+typedef struct {} watchdog_aspect_t;
 
 // TODO: implement watchdog support on Linux
 
-static inline void watchdog_ok(watchdog_aspect_t aspect) {
+macro_define(WATCHDOG_ASPECT, a_ident, a_sender_replicas) {
+    watchdog_aspect_t a_ident = {}
+}
+
+macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
+    // no support on Linux
+}
+
+macro_define(WATCHDOG_SCHEDULE, w_ident) {
+    // no support on Linux
+}
+
+static inline void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok) {
+    // no support on Linux
     (void) aspect;
-    // do nothing
+    (void) replica_id;
+    (void) ok;
 }
 
 static inline void watchdog_force_reset(void) {

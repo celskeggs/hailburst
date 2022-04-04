@@ -14,18 +14,21 @@ typedef const struct {
         local_time_t    last_heartbeat_time;
     } *mut;
     tlm_endpoint_t *telemetry;
+    watchdog_aspect_t *aspect;
 } heartbeat_t;
 
 void heartbeat_main_clip(heartbeat_t *h);
 
 macro_define(HEARTBEAT_REGISTER, h_ident) {
     TELEMETRY_ASYNC_REGISTER(symbol_join(h_ident, telemetry), HEARTBEAT_REPLICAS, 1);
+    WATCHDOG_ASPECT(symbol_join(h_ident, aspect), HEARTBEAT_REPLICAS);
     struct heartbeat_mut symbol_join(h_ident, mut) = {
         .last_heartbeat_time = 0,
     };
     heartbeat_t h_ident = {
         .mut = &symbol_join(h_ident, mut),
         .telemetry = &symbol_join(h_ident, telemetry),
+        .aspect = &symbol_join(h_ident, aspect),
     };
     CLIP_REGISTER(symbol_join(h_ident, clip), heartbeat_main_clip, &h_ident)
 }
@@ -36,6 +39,10 @@ macro_define(HEARTBEAT_SCHEDULE, h_ident) {
 
 macro_define(HEARTBEAT_TELEMETRY, h_ident) {
     &symbol_join(h_ident, telemetry),
+}
+
+macro_define(HEARTBEAT_WATCH, h_ident) {
+    &symbol_join(h_ident, aspect),
 }
 
 #endif /* FSW_HEARTBEAT_H */
