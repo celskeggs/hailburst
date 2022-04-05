@@ -12,6 +12,10 @@ static inline bool clip_is_restart(void) {
     return task_get_current()->mut->needs_start;
 }
 
+static inline uint32_t clip_remaining_ns(void) {
+    return (uint32_t) (schedule_last - timer_now_ns());
+}
+
 // asserts if the current task is not executing within a clip
 static inline void clip_assert(void) {
     assertf(task_get_current()->restartable == RESTART_ON_RESCHEDULE,

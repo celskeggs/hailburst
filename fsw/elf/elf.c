@@ -32,7 +32,7 @@ bool elf_validate_header(uint8_t *kernel) {
 }
 
 // returns pointer to free space after loaded segments.
-uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_scan_cb_t visitor) {
+uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_scan_cb_t visitor, void *opaque) {
     Elf32_Ehdr *header = (Elf32_Ehdr*) kernel;
 
     uint32_t next_load_address = lowest_address;
@@ -59,7 +59,8 @@ uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_sc
             return 0;
         }
 
-        visitor(segment->p_vaddr, kernel + segment->p_offset, segment->p_filesz, segment->p_memsz, segment->p_flags);
+        visitor(segment->p_vaddr, kernel + segment->p_offset, segment->p_filesz, segment->p_memsz, segment->p_flags,
+                opaque);
 
         next_load_address = segment->p_vaddr + segment->p_memsz;
     }

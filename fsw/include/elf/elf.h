@@ -82,9 +82,10 @@ enum {
     PF_R = 0x4, /* read */
 };
 
-typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags);
+typedef void (*elf_scan_cb_t)(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags,
+                              void *opaque);
 
 bool elf_validate_header(uint8_t *kernel);
-uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_scan_cb_t visitor);
+uint32_t elf_scan_load_segments(uint8_t *kernel, uint32_t lowest_address, elf_scan_cb_t visitor, void *opaque);
 
 #endif /* FSW_ELF_ELF_H */

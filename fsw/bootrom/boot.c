@@ -15,18 +15,21 @@ enum {
     MEMORY_LOW = 0x40000000,
 };
 
-static void no_load(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags) {
+static void no_load(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags, void *opaque) {
     (void) vaddr;
     (void) load_source;
     (void) filesz;
     (void) memsz;
     (void) flags;
+    (void) opaque;
 
     // do nothing
 }
 
-static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags) {
+static void load_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags,
+                         void *opaque) {
     (void) flags; // no distinction between permission types in main memory (flags are only needed by the scrubber)
+    (void) opaque;
 
     void *load_target = (void *) vaddr;
     memcpy(load_target, load_source, filesz);
@@ -42,7 +45,7 @@ uint32_t boot_phase_1(void) {
     }
 
     // scan segments to find a place to put our stack
-    uint32_t stack_relocate_to = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, no_load);
+    uint32_t stack_relocate_to = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, no_load, NULL);
     if (stack_relocate_to == 0) {
         debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();
@@ -54,7 +57,7 @@ uint32_t boot_phase_1(void) {
 // second entrypoint from assembly; returns address of kernel entrypoint.
 void *boot_phase_2(void) {
     // with our stack safely out of the way, we can now load the kernel
-    uint32_t end_ptr = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, load_segment);
+    uint32_t end_ptr = elf_scan_load_segments(embedded_kernel, MEMORY_LOW, load_segment, NULL);
     if (end_ptr == 0) {
         debugf(CRITICAL, "[BOOT ROM] Halting for repair");
         abort();

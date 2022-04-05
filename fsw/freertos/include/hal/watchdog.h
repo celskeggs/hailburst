@@ -42,6 +42,10 @@ typedef const struct {
 void watchdog_voter_clip(watchdog_t *w);
 void watchdog_monitor_clip(watchdog_t *w);
 
+macro_define(WATCHDOG_ASPECT_PROTO, a_ident) {
+    extern watchdog_aspect_t a_ident
+}
+
 macro_define(WATCHDOG_ASPECT, a_ident, a_sender_replicas) {
     DUCT_REGISTER(symbol_join(a_ident, duct), a_sender_replicas, WATCHDOG_VOTER_REPLICAS, 1, sizeof(uint8_t),
                   DUCT_SENDER_FIRST);

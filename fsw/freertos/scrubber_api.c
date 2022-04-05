@@ -13,7 +13,7 @@ static uint64_t start_scrub_wait(struct scrubber_task_data *scrubber) {
     uint64_t start_iteration = atomic_load_relaxed(scrubber->iteration);
 
     // encourage the scrubber to start a cycle immediately
-    task_rouse(scrubber->scrubber_task);
+    atomic_store_relaxed(scrubber->encourage_immediate_cycle, true);
 
     return start_iteration;
 }

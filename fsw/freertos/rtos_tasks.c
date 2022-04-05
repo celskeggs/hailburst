@@ -59,7 +59,7 @@ static uint32_t schedule_index = 0;
 uint64_t schedule_loads = 0;
 uint32_t schedule_ticks = 0;
 uint64_t schedule_period_start = 0;
-static uint64_t schedule_last = 0;
+uint64_t schedule_last = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /*-----------------------------------------------------------*/

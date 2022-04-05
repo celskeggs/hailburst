@@ -42,13 +42,11 @@ void clock_voter_clip(void) {
     clock_offset_adj_fast = clock_offset_adj_vote();
     size_t mismatches = 0;
     for (size_t i = 0; i < CLOCK_REPLICAS; i++) {
-        debugf(TRACE, "slow[%zu] = " TIMEFMT, i, TIMEARG(clock_offset_adj_slow[i]));
         if (clock_offset_adj_fast != clock_offset_adj_slow[i]) {
             mismatches++;
         }
     }
     bool calibration_required_local = (clock_offset_adj_fast == CLOCK_UNCALIBRATED || mismatches > 0);
-    debugf(TRACE, "Clock calibration info: " TIMEFMT ", %zu, %u", TIMEARG(clock_offset_adj_fast), mismatches, calibration_required_local);
     if (calibration_required_local != clock_calibration_required) {
         debugf(DEBUG, "Setting clock_calibration_required = %u (offset_fast=" TIMEFMT ", mismatches=%zu)",
                calibration_required_local, TIMEARG(clock_offset_adj_fast), mismatches);

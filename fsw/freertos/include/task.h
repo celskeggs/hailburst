@@ -117,9 +117,10 @@ typedef TCB_t * TaskHandle_t;
 
 extern TCB_t * volatile pxCurrentTCB;
 
-extern uint64_t schedule_period_start;
 extern uint64_t schedule_loads;
 extern uint32_t schedule_ticks;
+extern uint64_t schedule_period_start;
+extern uint64_t schedule_last;
 
 /*
  * Resume a task, restoring registers from the specified stack pointer.
