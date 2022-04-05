@@ -43,7 +43,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
     uint16_t registers[4];
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, mag->endpoint, MAGNETOMETER_REPLICA_ID);
+    rmap_epoch_prepare(&rmap_txn, mag->endpoint);
     tlm_txn_t telem;
     telemetry_prepare(&telem, mag->telemetry_async, MAGNETOMETER_REPLICA_ID);
 

@@ -11,10 +11,10 @@
 #include <flight/telemetry.h>
 
 #define MAGNETOMETER_REPLICAS 1
+#define MAGNETOMETER_REPLICA_ID 0
 
 enum {
     MAGNETOMETER_MAX_READINGS = 100,
-    MAGNETOMETER_REPLICA_ID = 0,
 };
 
 enum magnetometer_state {
@@ -28,7 +28,7 @@ enum magnetometer_state {
 };
 
 typedef struct {
-    rmap_t *endpoint;
+    rmap_replica_t *endpoint;
 
     // synchronization
     bool should_be_powered;
@@ -59,10 +59,10 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
     TELEMETRY_ASYNC_REGISTER(symbol_join(m_ident, telemetry_async), MAGNETOMETER_REPLICAS, 2);
     TELEMETRY_SYNC_REGISTER(symbol_join(m_ident, telemetry_sync), MAGNETOMETER_REPLICAS, 1);
     COMMAND_ENDPOINT(symbol_join(m_ident, command), MAG_SET_PWR_STATE_CID, MAGNETOMETER_REPLICAS);
-    RMAP_ON_SWITCHES(symbol_join(m_ident, endpoint), "magnet", m_switch_in, m_switch_out, m_switch_port, m_address,
-                     8, 4);
+    RMAP_ON_SWITCHES(symbol_join(m_ident, endpoint), MAGNETOMETER_REPLICAS, m_switch_in, m_switch_out,
+                     m_switch_port, m_address, 8, 4);
     magnetometer_t m_ident = {
-        .endpoint = &symbol_join(m_ident, endpoint),
+        .endpoint = RMAP_REPLICA_REF(symbol_join(m_ident, endpoint), MAGNETOMETER_REPLICA_ID),
         .should_be_powered = false,
         .readings = &symbol_join(m_ident, readings),
         .state = MS_INACTIVE,

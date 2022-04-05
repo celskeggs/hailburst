@@ -24,7 +24,7 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
     }
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, rdr->rmap_down, rdr->replica_id);
+    rmap_epoch_prepare(&rmap_txn, rdr->rmap_down);
 
     bool watchdog_ok = false;
 

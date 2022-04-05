@@ -16,8 +16,6 @@ bool clock_calibration_required = true;
 enum {
     CLOCK_MAGIC_NUM = 0x71CC70CC, /* tick-tock */
 
-    CLOCK_REPLICA_ID = 0,
-
     REG_MAGIC  = 0x00,
     REG_CLOCK  = 0x04,
     REG_ERRORS = 0x0C,
@@ -64,7 +62,7 @@ void clock_start_clip(clock_device_t *clock) {
     local_time_t network_timestamp;
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, clock->rmap, CLOCK_REPLICA_ID);
+    rmap_epoch_prepare(&rmap_txn, clock->rmap);
     tlm_txn_t telem_txn;
     telemetry_prepare(&telem_txn, clock->telem, CLOCK_REPLICA_ID);
 

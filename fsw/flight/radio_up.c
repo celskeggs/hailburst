@@ -198,7 +198,7 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     }
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, rur->rmap_up, rur->replica_id);
+    rmap_epoch_prepare(&rmap_txn, rur->rmap_up);
 
     bool watchdog_ok = false;
 

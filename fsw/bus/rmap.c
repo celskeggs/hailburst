@@ -7,17 +7,13 @@
 
 enum {
     PROTOCOL_RMAP = 0x01,
-    RMAP_REPLICA_ID = 0,
 };
 
-void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap, uint8_t replica_id) {
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_replica_t *rmap) {
     assert(txn != NULL && rmap != NULL);
-    if (replica_id != 0) {
-        abortf("unimplemented: support for replicated RMAP");
-    }
     txn->rmap = rmap;
-    duct_send_prepare(&txn->tx_send_txn, rmap->tx_duct, RMAP_REPLICA_ID);
-    duct_receive_prepare(&txn->rx_recv_txn, rmap->rx_duct, RMAP_REPLICA_ID);
+    duct_send_prepare(&txn->tx_send_txn, rmap->tx_duct, rmap->replica_id);
+    duct_receive_prepare(&txn->rx_recv_txn, rmap->rx_duct, rmap->replica_id);
 }
 
 void rmap_epoch_commit(rmap_txn_t *txn) {
@@ -33,7 +29,7 @@ void rmap_epoch_commit(rmap_txn_t *txn) {
 
 void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uint8_t *buffer, size_t data_length) {
     assert(txn != NULL);
-    rmap_t *rmap = txn->rmap;
+    rmap_replica_t *rmap = txn->rmap;
     assert(rmap != NULL && buffer != NULL);
     assert(data_length <= duct_message_size(rmap->tx_duct) - SCRATCH_MARGIN_WRITE);
 
@@ -65,10 +61,10 @@ void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uin
     rmap_encode_source_path(&out, &rmap->routing->source);
     *out++ = rmap->routing->source.logical_address;
 
-    rmap->current_txn_id += 1;
+    rmap->mut->current_txn_id += 1;
 
-    *out++ = (rmap->current_txn_id >> 8) & 0xFF;
-    *out++ = (rmap->current_txn_id >> 0) & 0xFF;
+    *out++ = (rmap->mut->current_txn_id >> 8) & 0xFF;
+    *out++ = (rmap->mut->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
@@ -93,7 +89,7 @@ void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uin
 }
 
 // returns true if packet is a valid reply, and false otherwise.
-static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, uint8_t *status_byte_out) {
+static bool rmap_validate_write_reply(rmap_replica_t *rmap, uint8_t *in, size_t count, uint8_t *status_byte_out) {
     assert(rmap != NULL && in != NULL && status_byte_out != NULL);
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
@@ -126,9 +122,9 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, u
     }
     // verify transaction ID
     uint16_t txn_id = (in[5] << 8) | in[6];
-    if (txn_id != rmap->current_txn_id) {
+    if (txn_id != rmap->mut->current_txn_id) {
         debugf(WARNING, "RMAP (%10s) dropped write reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
-               rmap->label, txn_id, rmap->current_txn_id);
+               rmap->label, txn_id, rmap->mut->current_txn_id);
         return false;
     }
     // make sure routing addresses match
@@ -145,7 +141,7 @@ static bool rmap_validate_write_reply(rmap_t *rmap, uint8_t *in, size_t count, u
 // this should be called one epoch later, to give the networking infrastructure time to respond
 rmap_status_t rmap_write_complete(rmap_txn_t *txn, local_time_t *ack_timestamp_out) {
     assert(txn != NULL);
-    rmap_t *rmap = txn->rmap;
+    rmap_replica_t *rmap = txn->rmap;
     assert(rmap != NULL);
 
     uint8_t status_byte;
@@ -172,7 +168,7 @@ rmap_status_t rmap_write_complete(rmap_txn_t *txn, local_time_t *ack_timestamp_o
 
 void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size_t data_length) {
     assert(txn != NULL);
-    rmap_t *rmap = txn->rmap;
+    rmap_replica_t *rmap = txn->rmap;
     assert(rmap != NULL);
     assert(data_length <= duct_message_size(rmap->rx_duct) - SCRATCH_MARGIN_READ);
 
@@ -205,10 +201,10 @@ void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size
     rmap_encode_source_path(&out, &rmap->routing->source);
     *out++ = rmap->routing->source.logical_address;
 
-    rmap->current_txn_id += 1;
+    rmap->mut->current_txn_id += 1;
 
-    *out++ = (rmap->current_txn_id >> 8) & 0xFF;
-    *out++ = (rmap->current_txn_id >> 0) & 0xFF;
+    *out++ = (rmap->mut->current_txn_id >> 8) & 0xFF;
+    *out++ = (rmap->mut->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
@@ -229,7 +225,7 @@ void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size
 }
 
 // returns true if packet is a valid reply, and false otherwise.
-static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count,
+static bool rmap_validate_read_reply(rmap_replica_t *rmap, uint8_t *in, size_t count,
                                      uint8_t *status_byte_out, uint8_t *packet_out, size_t *packet_length_io) {
     assert(rmap != NULL && in != NULL && status_byte_out != NULL && packet_out != NULL && packet_length_io != NULL);
     // validate basic parameters of a valid RMAP packet
@@ -279,9 +275,9 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count,
     }
     // verify transaction ID
     uint16_t txn_id = (in[5] << 8) | in[6];
-    if (txn_id != rmap->current_txn_id) {
+    if (txn_id != rmap->mut->current_txn_id) {
         debugf(WARNING, "RMAP (%10s) dropped read reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
-               rmap->label, txn_id, rmap->current_txn_id);
+               rmap->label, txn_id, rmap->mut->current_txn_id);
         return false;
     }
     // make sure routing addresses match
@@ -303,7 +299,7 @@ static bool rmap_validate_read_reply(rmap_t *rmap, uint8_t *in, size_t count,
 
 rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer_size, local_time_t *ack_timestamp_out) {
     assert(txn != NULL);
-    rmap_t *rmap = txn->rmap;
+    rmap_replica_t *rmap = txn->rmap;
     assert(rmap != NULL && buffer != NULL);
 
     uint8_t status_byte;

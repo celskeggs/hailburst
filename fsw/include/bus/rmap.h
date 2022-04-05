@@ -46,19 +46,23 @@ typedef enum {
     RS_INVALID_ERR         = 0xFFF, // used as a marker for error variables
 } rmap_status_t;
 
+typedef const struct {
+    struct rmap_mut {
+        uint16_t current_txn_id;
+    } *mut;
+
+    const char *label;
+    duct_t     *rx_duct;
+    duct_t     *tx_duct;
+    uint8_t    *scratch;
+    uint8_t     replica_id;
+
+    const rmap_addr_t *routing;
+
+} rmap_replica_t;
+
 typedef struct {
-    const char * const label;
-    duct_t     * const rx_duct;
-    duct_t     * const tx_duct;
-    uint8_t    * const scratch;
-
-    const rmap_addr_t * const routing;
-
-    uint16_t current_txn_id;
-} rmap_t;
-
-typedef struct {
-    rmap_t    *rmap;
+    rmap_replica_t *rmap;
     duct_txn_t rx_recv_txn;
     duct_txn_t tx_send_txn;
 } rmap_txn_t;
@@ -68,22 +72,32 @@ typedef struct {
 
 // a single-user RMAP handler; only one transaction may be in progress at a time.
 // rx is for packets received by the RMAP handler; tx is for packets sent by the RMAP handler.
-macro_define(RMAP_ON_SWITCHES,
-             r_ident, r_label, r_switch_in, r_switch_out, r_switch_port, r_routing, r_max_read, r_max_write) {
-    DUCT_REGISTER(symbol_join(r_ident, receive),      SWITCH_REPLICAS, 1, RMAP_MAX_IO_FLOW,
+macro_define(RMAP_ON_SWITCHES, r_ident, r_replicas, r_switch_in, r_switch_out, r_switch_port, r_routing, r_max_read, r_max_write) {
+    DUCT_REGISTER(symbol_join(r_ident, receive),      SWITCH_REPLICAS, r_replicas, RMAP_MAX_IO_FLOW,
                   SCRATCH_MARGIN_READ  + r_max_read,  DUCT_SENDER_FIRST);
-    DUCT_REGISTER(symbol_join(r_ident, transmit),     1, SWITCH_REPLICAS, RMAP_MAX_IO_FLOW,
+    DUCT_REGISTER(symbol_join(r_ident, transmit),     r_replicas, SWITCH_REPLICAS, RMAP_MAX_IO_FLOW,
                   SCRATCH_MARGIN_WRITE + r_max_write, DUCT_SENDER_FIRST);
     SWITCH_PORT_INBOUND(r_switch_out, r_switch_port, symbol_join(r_ident, transmit));
     SWITCH_PORT_OUTBOUND(r_switch_in, r_switch_port, symbol_join(r_ident, receive));
     uint8_t symbol_join(r_ident, scratch)[RMAP_MAX_IO_PACKET(r_max_read, r_max_write)];
-    rmap_t r_ident = {
-        .label = (r_label),
-        .rx_duct = &symbol_join(r_ident, receive),
-        .tx_duct = &symbol_join(r_ident, transmit),
-        .scratch = symbol_join(r_ident, scratch),
-        .routing = &(r_routing),
+    static_repeat(r_replicas, r_replica_id) {
+        struct rmap_mut symbol_join(r_ident, replica, r_replica_id, mut) = {
+            .current_txn_id = 0,
+        };
+        rmap_replica_t symbol_join(r_ident, replica, r_replica_id) = {
+            .mut = &symbol_join(r_ident, replica, r_replica_id, mut),
+            .label = symbol_str(r_ident),
+            .rx_duct = &symbol_join(r_ident, receive),
+            .tx_duct = &symbol_join(r_ident, transmit),
+            .scratch = symbol_join(r_ident, scratch),
+            .replica_id = r_replica_id,
+            .routing = &(r_routing),
+        };
     }
+}
+
+macro_define(RMAP_REPLICA_REF, r_ident, r_replica_id) {
+    &symbol_join(r_ident, replica, r_replica_id)
 }
 
 macro_define(RMAP_MAX_IO_PACKET, r_max_read, r_max_write) {
@@ -91,7 +105,7 @@ macro_define(RMAP_MAX_IO_PACKET, r_max_read, r_max_write) {
 }
 
 // must be called every epoch before any uses of RMAP have been made, even if RMAP won't be used.
-void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap, uint8_t replica_id);
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_replica_t *rmap);
 // must be called every epoch after all uses of RMAP have been completed, even if RMAP didn't get used.
 void rmap_epoch_commit(rmap_txn_t *txn);
 
