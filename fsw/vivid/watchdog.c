@@ -132,7 +132,7 @@ static bool watchdog_check_can_feed_yet(struct watchdog_mmio_region *mmio) {
     // how long until then?
     int32_t delay_until_earliest = earliest - now;
 
-    debugf(DEBUG, "now=%" PRIu64 ", deadline=%+d, earliest=%+d",
+    debugf(TRACE, "Watchdog status: now=%" PRIu64 ", deadline=%+d, earliest=%+d.",
            now_full, delay_until_deadline, delay_until_earliest);
 
     // not equivalent to 'earliest <= now' because of overflow

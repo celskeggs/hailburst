@@ -93,7 +93,8 @@ void duct_send_commit(duct_txn_t *txn) {
 
 void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id) {
     assert(txn != NULL && duct != NULL);
-    assert(receiver_id < duct->receiver_replicas);
+    assertf(receiver_id < duct->receiver_replicas,
+            "duct %s: invalid receiver ID %u >= %u replicas", duct->label, receiver_id, duct->receiver_replicas);
 
     // ensure that all receives run inside clips, so that if they get descheduled, they don't keep trying to interpret
     // received data that might be actively changing.
@@ -162,7 +163,10 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
     for (uint8_t candidate_id = 0; candidate_id < txn->duct->sender_replicas; candidate_id++) {
         duct_message_t *candidate = duct_check_message(txn->duct, candidate_id, txn->replica_id, txn->flow_current);
         if (candidate == NULL) {
-            // invalid data; skip this one.
+#ifdef DUCT_DEBUG
+            debugf(TRACE, "duct %s[receiver=%u]: candidate %u: missing or invalid message; skipping.",
+                   txn->duct->label, txn->replica_id, candidate_id);
+#endif
             continue;
         }
         valid_messages++;
@@ -170,19 +174,33 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
         for (uint8_t compare_id = candidate_id + 1; compare_id < txn->duct->sender_replicas; compare_id++) {
             duct_message_t *compare = duct_check_message(txn->duct, compare_id, txn->replica_id, txn->flow_current);
             if (compare == NULL) {
-                // invalid data; skip this one.
+#ifdef DUCT_DEBUG
+                debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: missing or invalid message; skipping.",
+                       txn->duct->label, txn->replica_id, candidate_id, compare_id);
+#endif
                 continue;
             }
             if (compare->size != candidate->size || compare->timestamp != candidate->timestamp) {
-                // metadata mismatch
+#ifdef DUCT_DEBUG
+                debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: "
+                       "metadata mismatch (size %zu ? %zu, timestamp %zu ? %zu); skipping.",
+                       txn->duct->label, txn->replica_id, candidate_id, compare_id,
+                       candidate->size, compare->size, candidate->timestamp, compare->timestamp);
+#endif
                 continue;
             }
             if (memcmp(candidate->body, compare->body, compare->size) != 0) {
-                // data mismatch
+#ifdef DUCT_DEBUG
+                debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: data mismatch; skipping.",
+                       txn->duct->label, txn->replica_id, candidate_id, compare_id);
+#endif
                 continue;
             }
-            // data and metadata match!
             votes++;
+#ifdef DUCT_DEBUG
+            debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: data match; voting.",
+                   txn->duct->label, txn->replica_id, candidate_id, compare_id);
+#endif
         }
         if (votes >= best_votes) {
             best_votes = votes;
