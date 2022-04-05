@@ -8,7 +8,7 @@
 #include <flight/comm.h>
 #include <flight/telemetry.h>
 
-#define COMMAND_REPLICAS 1
+#define COMMAND_REPLICAS 3
 
 enum {
     // none of the currently-defined commands exceed this length
