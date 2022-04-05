@@ -91,7 +91,7 @@ macro_define(RMAP_MAX_IO_PACKET, r_max_read, r_max_write) {
 }
 
 // must be called every epoch before any uses of RMAP have been made, even if RMAP won't be used.
-void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap);
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap, uint8_t replica_id);
 // must be called every epoch after all uses of RMAP have been completed, even if RMAP didn't get used.
 void rmap_epoch_commit(rmap_txn_t *txn);
 

@@ -10,8 +10,11 @@ enum {
     RMAP_REPLICA_ID = 0,
 };
 
-void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap) {
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_t *rmap, uint8_t replica_id) {
     assert(txn != NULL && rmap != NULL);
+    if (replica_id != 0) {
+        abortf("unimplemented: support for replicated RMAP");
+    }
     txn->rmap = rmap;
     duct_send_prepare(&txn->tx_send_txn, rmap->tx_duct, RMAP_REPLICA_ID);
     duct_receive_prepare(&txn->rx_recv_txn, rmap->rx_duct, RMAP_REPLICA_ID);

@@ -17,6 +17,8 @@ typedef struct {
     local_time_t last_sustained;
 } flag_t;
 
+#define FLAG_INITIALIZER ((flag_t) { .sustained = false, .last_raised = 0, .last_sustained = 0 })
+
 static inline bool flag_raise_check(flag_t *flag) {
     assert(flag != NULL);
     local_time_t now = timer_now_ns();

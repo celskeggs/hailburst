@@ -6,6 +6,8 @@
 #include <bus/rmap.h>
 #include <bus/switch.h>
 
+#define RADIO_REPLICAS 1
+
 typedef enum {
     REG_MAGIC      = 0,
     REG_MEM_BASE   = 1,
@@ -30,9 +32,6 @@ enum {
 
     UPLINK_BUF_LOCAL_SIZE   = 0x1000,
     DOWNLINK_BUF_LOCAL_SIZE = 0x1000,
-
-    RADIO_REPLICAS = 1,
-    RADIO_REPLICA_ID = 0,
 
     REG_IO_BUFFER_SIZE = sizeof(uint32_t) * NUM_REGISTERS,
 };
@@ -78,65 +77,97 @@ enum radio_downlink_state {
     RAD_DL_MONITOR_TRANSMIT,
 };
 
-typedef struct {
-    // separate RMAP handlers so that the tasks can operate independently
-    rmap_t        *rmap_up;
-    rmap_t        *rmap_down;
-
-    enum radio_uplink_state   uplink_state;
-    struct radio_uplink_reads read_plan;
-    enum radio_downlink_state downlink_state;
-    uint32_t                  downlink_length;
-
-    flag_t uplink_query_status_flag;
-
-    uint32_t bytes_extracted;
-    pipe_t  *up_pipe;
-    pipe_t  *down_pipe;
-    uint8_t  uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
-    uint8_t  downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
-
+typedef const struct {
+    struct radio_uplink_mut {
+        enum radio_uplink_state   uplink_state;
+        struct radio_uplink_reads read_plan;
+        flag_t                    uplink_query_status_flag;
+        uint32_t                  bytes_extracted;
+        uint8_t                   uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
+    } *mut;
+    uint8_t            replica_id;
+    rmap_t            *rmap_up;
+    pipe_t            *up_pipe;
     watchdog_aspect_t *up_aspect;
+} radio_uplink_replica_t;
+
+typedef const struct {
+    struct radio_downlink_mut {
+        enum radio_downlink_state downlink_state;
+        uint32_t                  downlink_length;
+        uint8_t                   downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
+    } *mut;
+    uint8_t            replica_id;
+    rmap_t            *rmap_down;
+    pipe_t            *down_pipe;
     watchdog_aspect_t *down_aspect;
-} radio_t;
+} radio_downlink_replica_t;
 
 // internal common function
 bool radio_validate_common_config(uint32_t config_data[3]);
 
-void radio_uplink_clip(radio_t *radio);
-void radio_downlink_clip(radio_t *radio);
+void radio_uplink_clip(radio_uplink_replica_t *radio);
+void radio_downlink_clip(radio_downlink_replica_t *radio);
 
 // uplink: ground -> spacecraft radio; downlink: spacecraft radio -> ground
+
+macro_define(RADIO_UPLINK_REGISTER, r_ident,   r_switch_in, r_switch_out,
+                                    r_up_addr, r_up_port,   r_up_capacity, r_uplink) {
+    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity
+                    && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
+    RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_up), "radio_up", r_switch_in, r_switch_out,
+                     r_up_port, r_up_addr, UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);
+    WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect), RADIO_REPLICAS);
+    static_repeat(RADIO_REPLICAS, r_replica_id) {
+        struct radio_uplink_mut symbol_join(r_ident, uplink, r_replica_id, mut) = {
+            .uplink_state = RAD_UL_INITIAL_STATE,
+            .read_plan = { },
+            .uplink_query_status_flag = FLAG_INITIALIZER,
+            .bytes_extracted = 0,
+            .uplink_buf_local = { 0 },
+        };
+        radio_uplink_replica_t symbol_join(r_ident, uplink, r_replica_id) = {
+            .mut = &symbol_join(r_ident, uplink, r_replica_id, mut),
+            .replica_id = r_replica_id,
+            .rmap_up = &symbol_join(r_ident, rmap_up),
+            .up_pipe = &r_uplink,
+            .up_aspect = &symbol_join(r_ident, up_aspect),
+        };
+        CLIP_REGISTER(symbol_join(r_ident, up_clip, r_replica_id),
+                      radio_uplink_clip, &symbol_join(r_ident, uplink, r_replica_id));
+    }
+}
+
+macro_define(RADIO_DOWNLINK_REGISTER, r_ident,     r_switch_in, r_switch_out,
+                                      r_down_addr, r_down_port, r_down_capacity, r_downlink) {
+    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity
+                    && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
+    RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_down), "radio_down", r_switch_in, r_switch_out,
+                     r_down_port, r_down_addr, REG_IO_BUFFER_SIZE, DOWNLINK_BUF_LOCAL_SIZE);
+    WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), RADIO_REPLICAS);
+    static_repeat(RADIO_REPLICAS, r_replica_id) {
+        struct radio_downlink_mut symbol_join(r_ident, downlink, r_replica_id, mut) = {
+            .downlink_state = RAD_DL_INITIAL_STATE,
+            .downlink_length = 0,
+            .downlink_buf_local = { 0 },
+        };
+        radio_downlink_replica_t symbol_join(r_ident, downlink, r_replica_id) = {
+            .mut = &symbol_join(r_ident, downlink, r_replica_id, mut),
+            .replica_id = r_replica_id,
+            .rmap_down = &symbol_join(r_ident, rmap_down),
+            .down_pipe = &r_downlink,
+            .down_aspect = &symbol_join(r_ident, down_aspect),
+        };
+        CLIP_REGISTER(symbol_join(r_ident, down_clip, r_replica_id),
+                      radio_downlink_clip, &symbol_join(r_ident, downlink, r_replica_id));
+    }
+}
+
 macro_define(RADIO_REGISTER, r_ident,     r_switch_in, r_switch_out,
                              r_up_addr,   r_up_port,   r_up_capacity,   r_uplink,
                              r_down_addr, r_down_port, r_down_capacity, r_downlink) {
-    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_up_capacity
-                    && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
-    static_assert(REG_IO_BUFFER_SIZE <= (size_t) r_down_capacity
-                    && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
-    RMAP_ON_SWITCHES(symbol_join(r_ident, up),   "radio_up",   r_switch_in, r_switch_out, r_up_port,   r_up_addr,
-                     UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);
-    RMAP_ON_SWITCHES(symbol_join(r_ident, down), "radio_down", r_switch_in, r_switch_out, r_down_port, r_down_addr,
-                     REG_IO_BUFFER_SIZE,         DOWNLINK_BUF_LOCAL_SIZE);
-    WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect),   RADIO_REPLICAS);
-    WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), RADIO_REPLICAS);
-    radio_t r_ident = {
-        .rmap_up = &symbol_join(r_ident, up),
-        .rmap_down = &symbol_join(r_ident, down),
-        .bytes_extracted = 0,
-        .uplink_state = RAD_UL_INITIAL_STATE,
-        .read_plan = { },
-        .downlink_state = RAD_DL_INITIAL_STATE,
-        .downlink_length = 0,
-        .up_pipe = &r_uplink,
-        .down_pipe = &r_downlink,
-        .uplink_buf_local = { 0 },
-        .downlink_buf_local = { 0 },
-        .up_aspect = &symbol_join(r_ident, up_aspect),
-        .down_aspect = &symbol_join(r_ident, down_aspect),
-    };
-    CLIP_REGISTER(symbol_join(r_ident, up_clip),   radio_uplink_clip,   &r_ident);
-    CLIP_REGISTER(symbol_join(r_ident, down_clip), radio_downlink_clip, &r_ident)
+    RADIO_UPLINK_REGISTER(r_ident,   r_switch_in, r_switch_out, r_up_addr,   r_up_port,   r_up_capacity,   r_uplink);
+    RADIO_DOWNLINK_REGISTER(r_ident, r_switch_in, r_switch_out, r_down_addr, r_down_port, r_down_capacity, r_downlink)
 }
 
 // two RMAP channels, so twice the flow
@@ -148,11 +179,15 @@ macro_define(RADIO_REGISTER, r_ident,     r_switch_in, r_switch_out,
     RMAP_MAX_IO_PACKET(r_up_capacity, r_down_capacity)
 
 macro_define(RADIO_UP_SCHEDULE, r_ident) {
-    CLIP_SCHEDULE(symbol_join(r_ident, up_clip), 40)
+    static_repeat(RADIO_REPLICAS, r_replica_id) {
+        CLIP_SCHEDULE(symbol_join(r_ident, up_clip, r_replica_id), 40)
+    }
 }
 
 macro_define(RADIO_DOWN_SCHEDULE, r_ident) {
-    CLIP_SCHEDULE(symbol_join(r_ident, down_clip), 50)
+    static_repeat(RADIO_REPLICAS, r_replica_id) {
+        CLIP_SCHEDULE(symbol_join(r_ident, down_clip, r_replica_id), 50)
+    }
 }
 
 macro_define(RADIO_WATCH, r_ident) {
