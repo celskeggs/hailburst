@@ -58,8 +58,9 @@ enum {
 static uint32_t schedule_index = 0;
 uint64_t schedule_loads = 0;
 uint32_t schedule_ticks = 0;
-uint64_t schedule_period_start = 0;
-uint64_t schedule_last = 0;
+local_time_t schedule_period_start = 0;
+local_time_t schedule_last = 0;
+local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
 /*-----------------------------------------------------------*/
@@ -84,6 +85,10 @@ static void schedule_execute(bool validate)
     pxCurrentTCB = sched.task;
     assert(pxCurrentTCB != NULL && pxCurrentTCB >= tasktable_start && pxCurrentTCB < tasktable_end);
     schedule_loads++;
+
+    if (schedule_index == 0) {
+        schedule_epoch_start = schedule_last;
+    }
 
     // update the next callback time to the next timing tick
     uint64_t new_time = schedule_last + sched.nanos;

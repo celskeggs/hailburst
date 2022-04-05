@@ -70,6 +70,12 @@ static inline void task_delay(local_time_t nanoseconds) {
     task_delay_abs(timer_now_ns() + nanoseconds);
 }
 
+extern local_time_t schedule_epoch_start;
+
+static inline local_time_t timer_epoch_ns(void) {
+    return schedule_epoch_start;
+}
+
 #define mutex_init(x)     THREAD_CHECK(pthread_mutex_init((x), NULL))
 #define mutex_destroy(x)  THREAD_CHECK(pthread_mutex_destroy(x))
 #define mutex_lock(x)     THREAD_CHECK(pthread_mutex_lock(x))

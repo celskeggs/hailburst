@@ -127,7 +127,7 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 	}
 	// now check ReqTelemOrdered, which is about remote timestamps
 	if lastTDE != nil {
-		orderOk := lastTDE.(TelemetryDownlinkEvent).RemoteTimestamp.Before(remoteTimestamp)
+		orderOk := lastTDE.(TelemetryDownlinkEvent).RemoteTimestamp.AtOrBefore(remoteTimestamp)
 		v.rqt.Immediate(ReqTelemOrdered, orderOk)
 	}
 

@@ -60,9 +60,9 @@ static void telemetry_small_submit(tlm_txn_t *txn, uint32_t telemetry_id, void *
         memcpy(message.data_bytes, data_bytes, data_len);
     }
     if (txn->ep->is_synchronous) {
-        pipe_send_message(&txn->sync_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_now_ns());
+        pipe_send_message(&txn->sync_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_epoch_ns());
     } else {
-        duct_send_message(&txn->async_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_now_ns());
+        duct_send_message(&txn->async_txn, &message, offsetof(tlm_async_t, data_bytes) + data_len, timer_epoch_ns());
     }
 }
 
@@ -78,7 +78,7 @@ static void telemetry_large_submit(tlm_txn_t *txn, size_t data_len) {
     assert(txn != NULL);
     assert(data_len <= TLM_MAX_SYNC_SIZE && txn->ep->is_synchronous);
     tlm_sync_t *scratch = &txn->ep->sender_scratch[txn->replica_id];
-    pipe_send_message(&txn->sync_txn, scratch, offsetof(tlm_sync_t, data_bytes) + data_len, timer_now_ns());
+    pipe_send_message(&txn->sync_txn, scratch, offsetof(tlm_sync_t, data_bytes) + data_len, timer_epoch_ns());
 }
 
 void telemetry_pump(tlm_system_t *ts) {

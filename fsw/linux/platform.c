@@ -17,6 +17,8 @@ static mutex_t        scheduling_lock;
 static thread_t       scheduled_task;
 static uint32_t       schedule_index;
 
+local_time_t   schedule_epoch_start = 0;
+
 thread_t task_get_current(void) {
     thread_t thread = (thread_t) pthread_getspecific(task_current_key);
     assert(thread != NULL && thread->thread == pthread_self());
@@ -156,6 +158,7 @@ void enter_scheduler(void) {
     uint64_t last = timer_now_ns();
     for (;;) {
         // debugf(TRACE, "beginning cycle of schedule");
+        schedule_epoch_start = timer_now_ns();
         for (uint32_t i = 0; i < task_scheduling_order_length; i++) {
             task_schedule(task_scheduling_order[i]);
         }

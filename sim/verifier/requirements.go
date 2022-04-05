@@ -74,8 +74,8 @@ const (
 	// The flight software shall not downlink any telemetry sequences containing validation errors.
 	ReqNoTelemErrs = "ReqNoTelemErrs"
 	// ReqTelemOrdered requires:
-	// The telemetry packets received shall be in strictly increasing temporal order. (In particular, telemetry packets
-	// shall not have identical timestamps.)
+	// The telemetry packets received shall be in monotonically increasing temporal order. Identical timestamps are
+	// acceptable.
 	ReqTelemOrdered = "ReqTelemOrdered"
 	// ReqTelemRecent requires:
 	// Every downlinked telemetry packet shall have a remote timestamp within the last 15ms.

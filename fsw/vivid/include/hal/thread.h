@@ -108,6 +108,10 @@ static inline void task_delay(uint64_t nanoseconds) {
     task_delay_abs(timer_now_ns() + nanoseconds);
 }
 
+static inline local_time_t timer_epoch_ns(void) {
+    return schedule_epoch_start;
+}
+
 // top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
 
 enum {
