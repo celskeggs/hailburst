@@ -52,19 +52,6 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
             debugf(WARNING, "Failed to disable radio transmitter, error=0x%03x", status);
         }
         break;
-    case RAD_DL_VALIDATE_IDLE:
-        status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t), NULL);
-        if (status == RS_OK) {
-            registers[0] = be32toh(registers[0]);
-            if (registers[0] != TX_STATE_IDLE) {
-                debugf(WARNING, "Radio transmitter is unexpectedly not IDLE (%u).", registers[0]);
-                return;
-            }
-            rdr->mut->downlink_state = RAD_DL_WRITE_RADIO_MEMORY;
-        } else {
-            debugf(WARNING, "Failed to query radio transmit state, error=0x%03x", status);
-        }
-        break;
     case RAD_DL_WRITE_RADIO_MEMORY:
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
@@ -121,7 +108,7 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
         rdr->mut->downlink_length = pipe_receive_message(&txn, rdr->mut->downlink_buf_local, NULL);
         if (rdr->mut->downlink_length > 0) {
             assert(rdr->mut->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
-            rdr->mut->downlink_state = RAD_DL_VALIDATE_IDLE;
+            rdr->mut->downlink_state = RAD_DL_WRITE_RADIO_MEMORY;
             debugf(TRACE, "Radio downlink received %u bytes for transmission.", rdr->mut->downlink_length);
         }
     }
@@ -144,10 +131,6 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
         rmap_write_start(&rmap_txn, 0x00, REG_TX_PTR * sizeof(uint32_t), (uint8_t*) registers, sizeof(uint32_t) * 3);
         static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
         static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
-        break;
-    case RAD_DL_VALIDATE_IDLE:
-        // validate that radio is idle
-        rmap_read_start(&rmap_txn, 0x00, RADIO_REG_BASE_ADDR + REG_TX_STATE * sizeof(uint32_t), sizeof(uint32_t));
         break;
     case RAD_DL_WRITE_RADIO_MEMORY:
         // place data into radio memory
