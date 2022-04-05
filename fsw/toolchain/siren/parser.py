@@ -2,6 +2,7 @@ import hashlib
 import os
 import sys
 
+from siren.core import MacroError
 from siren.language import decode_string
 from siren.macro import BraceExpr, MacroExpr, ParenExpr
 from siren.tokenize import tokenize
