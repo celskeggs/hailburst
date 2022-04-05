@@ -64,7 +64,6 @@ enum radio_downlink_state {
     RAD_DL_WRITE_RADIO_MEMORY,
     RAD_DL_START_TRANSMIT,
     RAD_DL_MONITOR_TRANSMIT,
-    RAD_DL_VERIFY_COMPLETE,
 };
 
 typedef struct {

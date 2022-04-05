@@ -481,30 +481,22 @@ void radio_downlink_clip(radio_t *radio) {
         }
         break;
     case RAD_DL_MONITOR_TRANSMIT:
-        status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t), NULL);
+        assert(radio->downlink_length >= 1 && radio->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
+        status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t) * 2, NULL);
         if (status == RS_OK) {
             registers[0] = be32toh(registers[0]);
+            registers[1] = be32toh(registers[1]);
             if (registers[0] == 0) {
-                radio->downlink_state = RAD_DL_VERIFY_COMPLETE;
+                if (registers[1] != TX_STATE_IDLE) {
+                    debugf(WARNING, "Radio has not yet reached IDLE (%u).", registers[1]);
+                } else {
+                    radio->downlink_state = RAD_DL_WAITING_FOR_STREAM;
+                    debugf(TRACE, "Radio downlink completed transmitting %u bytes.", radio->downlink_length);
+                    radio->downlink_length = 0;
+                    watchdog_ok = true;
+                }
             } else {
                 debugf(TRACE, "Remaining bytes to transmit: %u/%u.", registers[0], radio->downlink_length);
-            }
-        } else {
-            debugf(WARNING, "Failed to query radio transmit bytes remaining, error=0x%03x", status);
-        }
-        break;
-    case RAD_DL_VERIFY_COMPLETE:
-        status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t), NULL);
-        if (status == RS_OK) {
-            registers[0] = be32toh(registers[0]);
-            assert(radio->downlink_length >= 1 && radio->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
-            if (registers[0] != TX_STATE_IDLE) {
-                debugf(WARNING, "Radio has not yet reached IDLE (%u).", registers[0]);
-            } else {
-                radio->downlink_state = RAD_DL_WAITING_FOR_STREAM;
-                debugf(TRACE, "Radio downlink completed transmitting %u bytes.", radio->downlink_length);
-                radio->downlink_length = 0;
-                watchdog_ok = true;
             }
         } else {
             debugf(WARNING, "Failed to query radio transmit status, error=0x%03x", status);
@@ -539,8 +531,7 @@ void radio_downlink_clip(radio_t *radio) {
     switch (radio->downlink_state) {
     case RAD_DL_QUERY_COMMON_CONFIG:
         // validate basic radio configuration settings
-        rmap_read_start(&rmap_txn, 0x00,
-                        REG_BASE_ADDR + REG_MAGIC * sizeof(uint32_t), sizeof(uint32_t) * 3);
+        rmap_read_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_MAGIC * sizeof(uint32_t), sizeof(uint32_t) * 3);
         static_assert(REG_MAGIC + 1 == REG_MEM_BASE, "register layout assumptions");
         static_assert(REG_MAGIC + 2 == REG_MEM_SIZE, "register layout assumptions");
         break;
@@ -549,8 +540,7 @@ void radio_downlink_clip(radio_t *radio) {
         registers[0] = 0;
         registers[1] = 0;
         registers[2] = htobe32(TX_STATE_IDLE);
-        rmap_write_start(&rmap_txn, 0x00, REG_TX_PTR * sizeof(uint32_t),
-                         (uint8_t*) registers, sizeof(uint32_t) * 3);
+        rmap_write_start(&rmap_txn, 0x00, REG_TX_PTR * sizeof(uint32_t), (uint8_t*) registers, sizeof(uint32_t) * 3);
         static_assert(REG_TX_PTR + 1 == REG_TX_LEN, "register layout assumptions");
         static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
         break;
@@ -577,12 +567,9 @@ void radio_downlink_clip(radio_t *radio) {
         static_assert(REG_TX_PTR + 2 == REG_TX_STATE, "register layout assumptions");
         break;
     case RAD_DL_MONITOR_TRANSMIT:
-        // check how many bytes remain to be transmitted
-        rmap_read_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_TX_LEN * sizeof(uint32_t), sizeof(uint32_t));
-        break;
-    case RAD_DL_VERIFY_COMPLETE:
-        // validate that radio is idle
-        rmap_read_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_TX_STATE * sizeof(uint32_t), sizeof(uint32_t));
+        // check how many bytes remain to be transmitted, and validate that the radio is idle
+        rmap_read_start(&rmap_txn, 0x00, REG_BASE_ADDR + REG_TX_LEN * sizeof(uint32_t), sizeof(uint32_t) * 2);
+        static_assert(REG_TX_LEN + 1 == REG_TX_STATE, "register layout assumptions");
         break;
     default:
         /* nothing to do */
