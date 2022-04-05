@@ -25,14 +25,16 @@ env["STRIPCOMSTR"] = "[${PLATFORM} -   STRIP] ${SOURCE}"
 env["BIN2OBJCOMSTR"] = "[${PLATFORM} - BIN2OBJ] ${SOURCE}"
 env["OBJ2BINCOMSTR"] = "[${PLATFORM} - OBJ2BIN] ${SOURCE}"
 
-env["PYTHONPP"] = File('preprocessor.py')
+
+siren_deps = Glob("siren/*.py") + Glob("siren/*/*.py")
+env["PYTHONPATH"] = Dir('#/toolchain')
 env["PPSUFFIX"] = ".iraw"
 env["RWSUFFIX"] = ".i"
 env["PPCOM"] = '$CC -o $TARGET -E $CFLAGS $CCFLAGS -D__PYTHON_PREPROCESS__ $_CCCOMCOM $SOURCES'
 env["PYTHONPPFLAGS"] = []
 if os.getenv("PP_RAWLINES"):
     env["PYTHONPPFLAGS"] += ["--rawlines"]
-env["PPMODCOM"] = 'python3 $PYTHONPP $PYTHONPPFLAGS $SOURCES $TARGET'
+env["PPMODCOM"] = 'env PYTHONPATH=$PYTHONPATH python3 -m siren $PYTHONPPFLAGS $SOURCES $TARGET'
 # eliminate $_CCCOMCOM here because it's used for preprocessor flags that are not needed here
 env["OBJCOM"] = '$CC -o $TARGET -c $CFLAGS $CCFLAGS $SOURCES'
 
@@ -46,7 +48,7 @@ env['BUILDERS']['PP'] = Builder(
 
 
 def plugin_dep_emitter(target, source, env):
-    env.Depends(target, "$PYTHONPP")
+    env.Depends(target, siren_deps)
     return target, source
 
 

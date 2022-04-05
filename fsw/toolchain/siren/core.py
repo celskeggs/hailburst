@@ -1,0 +1,2 @@
+class MacroError(RuntimeError):
+    pass
