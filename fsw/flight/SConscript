@@ -7,7 +7,9 @@ sources = [
     "heartbeat.c",
     "magnetometer.c",
     "pingback.c",
-    "radio.c",
+    "radio_common.c",
+    "radio_down.c",
+    "radio_up.c",
     "spacecraft.c",
     "telemetry.c",
 ]

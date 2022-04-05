@@ -1,6 +1,7 @@
 #ifndef FSW_RADIO_H
 #define FSW_RADIO_H
 
+#include <hal/watchdog.h>
 #include <synch/pipe.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
@@ -22,13 +23,24 @@ typedef enum {
 } radio_register_t;
 
 enum {
+    RADIO_MAGIC         = 0x7E1ECA11,
+    RADIO_REG_BASE_ADDR = 0x0000,
+    RADIO_MEM_BASE_ADDR = 0x1000,
+    RADIO_MEM_SIZE      = 0x4000,
+
     UPLINK_BUF_LOCAL_SIZE   = 0x1000,
     DOWNLINK_BUF_LOCAL_SIZE = 0x1000,
 
     RADIO_REPLICAS = 1,
+    RADIO_REPLICA_ID = 0,
 
     REG_IO_BUFFER_SIZE = sizeof(uint32_t) * NUM_REGISTERS,
 };
+
+typedef struct {
+    uint32_t base;
+    uint32_t size;
+} radio_memregion_t;
 
 struct radio_uplink_reads {
     uint32_t prime_read_address;
@@ -87,6 +99,9 @@ typedef struct {
     watchdog_aspect_t *up_aspect;
     watchdog_aspect_t *down_aspect;
 } radio_t;
+
+// internal common function
+bool radio_validate_common_config(uint32_t config_data[3]);
 
 void radio_uplink_clip(radio_t *radio);
 void radio_downlink_clip(radio_t *radio);
