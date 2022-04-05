@@ -1,7 +1,7 @@
 #ifndef FSW_VIVID_HAL_FAKEWIRE_LINK_H
 #define FSW_VIVID_HAL_FAKEWIRE_LINK_H
 
-#include <rtos/virtio.h>
+#include <rtos/virtio_console.h>
 #include <hal/thread.h>
 #include <bus/codec.h>
 

@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include <rtos/gic.h>
-#include <rtos/virtio.h>
+#include <rtos/virtio_console.h>
 #include <hal/debug.h>
 #include <hal/thread.h>
 #include <hal/timer.h>
