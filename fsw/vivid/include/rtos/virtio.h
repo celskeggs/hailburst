@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_RTOS_VIRTIO_H
-#define FSW_FREERTOS_RTOS_VIRTIO_H
+#ifndef FSW_VIVID_RTOS_VIRTIO_H
+#define FSW_VIVID_RTOS_VIRTIO_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -232,4 +232,4 @@ void *virtio_device_config_space(struct virtio_device *device);
 // for a queue already set up using virtio_device_setup_queue, this function spuriously notifies the queue.
 void virtio_device_force_notify_queue(struct virtio_device_queue *queue);
 
-#endif /* FSW_FREERTOS_RTOS_VIRTIO_H */
+#endif /* FSW_VIVID_RTOS_VIRTIO_H */

@@ -8,7 +8,7 @@
 #endif
 
 typedef struct {
-    // these stages are defined to make sense for FreeRTOS, because there are more constraints there.
+    // these stages are defined to make sense for Vivid, because there are more constraints there.
     enum init_stage {
         STAGE_RAW = 0, // no kernel yet; do not attempt to register anything; do not use floating-point operations.
         STAGE_READY,   // kernel initialized; registration functions allowable.

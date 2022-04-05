@@ -10,7 +10,7 @@
 #define TIMEFMT "%3.9f"
 #define TIMEARG(x) ((x) / 1000000000.0)
 
-/* note: should not use TIMEARG like this in general; the argument must not be a function call on FreeRTOS */
+/* note: should not use TIMEARG like this in general; the argument must not be a function call on Vivid */
 #define debugf(level, fmt, ...)                                                                                       \
         ({ printf("[" TIMEFMT "] " fmt "\n", TIMEARG(clock_timestamp_fast()), ## __VA_ARGS__); fflush(stdout); })
 #define debugf_stable(level, stable_id, fmt, ...) debugf(level, fmt, ## __VA_ARGS)

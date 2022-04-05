@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_HAL_WATCHDOG_H
-#define FSW_FREERTOS_HAL_WATCHDOG_H
+#ifndef FSW_VIVID_HAL_WATCHDOG_H
+#define FSW_VIVID_HAL_WATCHDOG_H
 
 #include <hal/init.h>
 #include <synch/duct.h>
@@ -91,4 +91,4 @@ void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok);
 
 void watchdog_force_reset(void) __attribute__((noreturn));
 
-#endif /* FSW_FREERTOS_HAL_WATCHDOG_H */
+#endif /* FSW_VIVID_HAL_WATCHDOG_H */

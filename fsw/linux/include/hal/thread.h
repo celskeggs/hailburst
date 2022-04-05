@@ -81,7 +81,7 @@ extern void enter_scheduler(void);
 #define TASK_PROTO(t_ident) \
     extern struct thread_st t_ident;
 
-// 'restartable' goes unused on POSIX; it is only used on FreeRTOS
+// 'restartable' goes unused on POSIX; it is only used on Vivid
 macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
     __attribute__((section("tasktable")))
     __attribute__((__aligned__(16)))

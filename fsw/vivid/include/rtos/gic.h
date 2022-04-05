@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_RTOS_GIC_H
-#define FSW_FREERTOS_RTOS_GIC_H
+#ifndef FSW_VIVID_RTOS_GIC_H
+#define FSW_VIVID_RTOS_GIC_H
 
 enum {
     IRQ_SGI_BASE = 0,  // software-generated interrupts
@@ -12,4 +12,4 @@ typedef void (*gic_callback_t)(void *);
 void shutdown_gic(void);
 void enable_irq(uint32_t irq, gic_callback_t callback, void *param);
 
-#endif /* FSW_FREERTOS_RTOS_GIC_H */
+#endif /* FSW_VIVID_RTOS_GIC_H */

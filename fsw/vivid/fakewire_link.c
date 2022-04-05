@@ -5,7 +5,7 @@
 static bool fakewire_link_attached = false;
 
 void fakewire_link_init_check(const fw_link_options_t *options) {
-    assert(options->flags == FW_FLAG_VIRTIO); // only option supported on FreeRTOS
+    assert(options->flags == FW_FLAG_VIRTIO); // only option supported on Vivid
 
     // ensure that this is only called once, because multiple VIRTIO configurations for the same memory would conflict
     assert(!fakewire_link_attached);

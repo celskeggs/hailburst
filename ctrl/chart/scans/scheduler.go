@@ -82,7 +82,7 @@ func ScanScheduler(guestLogPath string) ([]*SchedScan, error) {
 			return nil, err
 		}
 		if strings.HasPrefix(line, "[") {
-			parts := strings.Split(line[1:len(line)-1], "] FreeRTOS scheduling ")
+			parts := strings.Split(line[1:len(line)-1], "] VIVID scheduling ")
 			timestampSec, err := strconv.ParseFloat(parts[0], 64)
 			if len(parts) == 2 && err == nil {
 				p2 := strings.Split(parts[1], " at priority ")

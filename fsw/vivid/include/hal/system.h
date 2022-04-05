@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_HAL_SYSTEM_H
-#define FSW_FREERTOS_HAL_SYSTEM_H
+#ifndef FSW_VIVID_HAL_SYSTEM_H
+#define FSW_VIVID_HAL_SYSTEM_H
 
 #include <rtos/scrubber.h>
 #include <hal/thread.h>
@@ -20,4 +20,4 @@ macro_define(SYSTEM_MAINTENANCE_WATCH) {
     SCRUBBER_WATCH(scrubber_2)
 }
 
-#endif /* FSW_FREERTOS_HAL_SYSTEM_H */
+#endif /* FSW_VIVID_HAL_SYSTEM_H */

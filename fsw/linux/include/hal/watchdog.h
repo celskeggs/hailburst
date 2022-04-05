@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_HAL_WATCHDOG_H
-#define FSW_FREERTOS_HAL_WATCHDOG_H
+#ifndef FSW_LINUX_HAL_WATCHDOG_H
+#define FSW_LINUX_HAL_WATCHDOG_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -33,4 +33,4 @@ static inline void watchdog_force_reset(void) {
     abort();
 }
 
-#endif /* FSW_FREERTOS_HAL_WATCHDOG_H */
+#endif /* FSW_LINUX_HAL_WATCHDOG_H */

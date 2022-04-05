@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_FSW_CLIP_H
-#define FSW_FREERTOS_FSW_CLIP_H
+#ifndef FSW_VIVID_HAL_CLIP_H
+#define FSW_VIVID_HAL_CLIP_H
 
 // clips are defined as part of the regular scheduler
 #include <hal/thread.h>
@@ -22,4 +22,4 @@ static inline void clip_assert(void) {
             "running in task %s, which is not a clip", task_get_name(task_get_current()));
 }
 
-#endif /* FSW_FREERTOS_FSW_CLIP_H */
+#endif /* FSW_VIVID_HAL_CLIP_H */

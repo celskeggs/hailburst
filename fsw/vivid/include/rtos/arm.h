@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_RTOS_ARM_H
-#define FSW_FREERTOS_RTOS_ARM_H
+#ifndef FSW_VIVID_RTOS_ARM_H
+#define FSW_VIVID_RTOS_ARM_H
 
 #include <stdint.h>
 
@@ -86,4 +86,4 @@ static inline uint32_t arm_get_fpexc(void) {
     return v;
 }
 
-#endif /* FSW_FREERTOS_RTOS_ARM_H */
+#endif /* FSW_VIVID_RTOS_ARM_H */

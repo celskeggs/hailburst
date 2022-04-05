@@ -9,7 +9,7 @@
 #define CONFIG_SYNCH_MODE_STRICT 0
 
 // Note: on Linux, only strict mode is available.
-#if ( CONFIG_SYNCH_MODE_STRICT == 0 ) && defined(__FREERTOS__)
+#if ( CONFIG_SYNCH_MODE_STRICT == 0 ) && defined(__VIVID__)
 #define malfunctionf(fmt, ...) restartf("Malfunction: " fmt, ## __VA_ARGS__)
 #define miscomparef(fmt, ...) debugf(WARNING, "Miscompare: " fmt, ## __VA_ARGS__)
 #else

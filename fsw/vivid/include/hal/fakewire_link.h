@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_HAL_FAKEWIRE_LINK_H
-#define FSW_FREERTOS_HAL_FAKEWIRE_LINK_H
+#ifndef FSW_VIVID_HAL_FAKEWIRE_LINK_H
+#define FSW_VIVID_HAL_FAKEWIRE_LINK_H
 
 #include <rtos/virtio.h>
 #include <hal/thread.h>
@@ -25,4 +25,4 @@ macro_define(FAKEWIRE_LINK_SCHEDULE_RECEIVE, l_ident) {
     VIRTIO_CONSOLE_SCHEDULE_RECEIVE(symbol_join(l_ident, port))
 }
 
-#endif /* FSW_FREERTOS_HAL_FAKEWIRE_LINK_H */
+#endif /* FSW_VIVID_HAL_FAKEWIRE_LINK_H */

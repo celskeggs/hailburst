@@ -62,7 +62,7 @@ func main() {
 		os.Exit(1)
 	}
 	if len(binaries) == 0 {
-		binaries = []string{"fsw/build-freertos/kernel", "fsw/build-freertos/bootrom-elf"}
+		binaries = []string{"fsw/build-vivid/kernel", "fsw/build-vivid/bootrom-elf"}
 	}
 	input, err := os.Open(guestLog)
 	if err != nil {

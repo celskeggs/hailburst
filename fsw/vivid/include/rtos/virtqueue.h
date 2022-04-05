@@ -1,5 +1,5 @@
-#ifndef VIRTQUEUE_H
-#define VIRTQUEUE_H
+#ifndef FSW_VIVID_RTOS_VIRTQUEUE_H
+#define FSW_VIVID_RTOS_VIRTQUEUE_H
 /* An interface for efficient virtio implementation.
  *
  * This header is BSD licensed so anyone can use the definitions
@@ -96,4 +96,4 @@ struct virtq_used {
         /* Only if VIRTIO_F_EVENT_IDX: le16 avail_event; */
 };
 
-#endif /* VIRTQUEUE_H */
+#endif /* FSW_VIVID_RTOS_VIRTQUEUE_H */

@@ -1,10 +1,10 @@
 Import('env')
 
 env["CPPPATH"] += [
-    Dir("#/freertos/include/"),
+    Dir("#/vivid/include/"),
 ]
 
-env["FREERTOS_LINKSCRIPT"] = File('link.ld')
+env["VIVID_LINKSCRIPT"] = File('link.ld')
 env["REPLICA_SCRIPT"] = File('replica.ld')
 
 sources = [

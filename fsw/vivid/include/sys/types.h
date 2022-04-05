@@ -1,0 +1,4 @@
+#ifndef FSW_VIVID_SYS_TYPES_H
+#define FSW_VIVID_SYS_TYPES_H
+
+#endif /* FSW_VIVID_SYS_TYPES_H */

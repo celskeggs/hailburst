@@ -1,7 +1,7 @@
 #ifndef HAL_ATOMIC_H
 #define HAL_ATOMIC_H
 
-// we can use the builtins available in GCC to make this the same across both FreeRTOS and Linux
+// we can use the builtins available in GCC to make this the same across both Vivid and Linux
 
 #define atomic_load(x) (__atomic_load_n(&(x), __ATOMIC_ACQUIRE))
 #define atomic_store(x, v) (__atomic_store_n(&(x), (v), __ATOMIC_RELEASE))

@@ -69,7 +69,7 @@ func main() {
 			i++
 		} else if os.Args[i] == "--platform" {
 			platform := os.Args[i+1]
-			if platform == "freertos" {
+			if platform == "vivid" {
 				options.Linux = false
 			} else if platform == "linux" {
 				options.Linux = true

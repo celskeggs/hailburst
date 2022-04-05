@@ -34,4 +34,4 @@ def build_modules(env, modules):
 Export('build_modules')
 
 SConscript('linux/SPlatform', variant_dir='build-linux/', duplicate=False)
-SConscript('freertos/SPlatform', variant_dir='build-freertos/', duplicate=False)
+SConscript('vivid/SPlatform', variant_dir='build-vivid/', duplicate=False)

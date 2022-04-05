@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_RTOS_SCRUBBER_H
-#define FSW_FREERTOS_RTOS_SCRUBBER_H
+#ifndef FSW_VIVID_RTOS_SCRUBBER_H
+#define FSW_VIVID_RTOS_SCRUBBER_H
 
 #include <stdbool.h>
 
@@ -48,4 +48,4 @@ bool scrubber_is_pend_done(scrubber_pend_t *pend);
 // wait until the next (unstarted) scrubber cycle completes.
 void scrubber_cycle_wait(void);
 
-#endif /* FSW_FREERTOS_RTOS_SCRUBBER_H */
+#endif /* FSW_VIVID_RTOS_SCRUBBER_H */

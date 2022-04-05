@@ -45,16 +45,10 @@
     .extern ulICCEOIR
 
     /* Variables and functions. */
-    .extern _freertos_vector_table
     .extern pxCurrentTCB
     .extern vTaskSwitchContext
     .extern vApplicationIRQHandler
     .extern ulPortInterruptNesting
-
-    .global FreeRTOS_IRQ_Handler
-    .global vPortRestoreTaskContext
-
-
 
 
 .macro SAVE_CONTEXT

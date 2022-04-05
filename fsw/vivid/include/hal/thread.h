@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_HAL_THREAD_H
-#define FSW_FREERTOS_HAL_THREAD_H
+#ifndef FSW_VIVID_HAL_THREAD_H
+#define FSW_VIVID_HAL_THREAD_H
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -183,4 +183,4 @@ static inline bool local_doze_timed(thread_t task, uint64_t nanoseconds) {
     return local_doze_timed_abs(task, timer_now_ns() + nanoseconds);
 }
 
-#endif /* FSW_FREERTOS_HAL_THREAD_H */
+#endif /* FSW_VIVID_HAL_THREAD_H */

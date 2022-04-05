@@ -132,7 +132,7 @@ static void configure_gic(void) {
 // re-enabled until the initialization is complete.
 PROGRAM_INIT(STAGE_RAW, configure_gic);
 
-// entrypoint via FreeRTOS
+// entrypoint via FreeRTOS-derived code
 void vApplicationIRQHandler(uint32_t irq) {
     asm volatile("CPSIE I"); // TODO: do I need dsb; isb?
     assertf(callbacks[irq] != NULL, "missing callback function for IRQ %u", irq);

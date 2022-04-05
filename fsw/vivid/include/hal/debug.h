@@ -1,5 +1,5 @@
-#ifndef FSW_FREERTOS_FSW_DEBUG_H
-#define FSW_FREERTOS_FSW_DEBUG_H
+#ifndef FSW_VIVID_HAL_DEBUG_H
+#define FSW_VIVID_HAL_DEBUG_H
 
 #include <stdlib.h>
 
@@ -60,4 +60,4 @@ extern void restart_current_task(void) __attribute__((noreturn));
 
 #define static_assert _Static_assert
 
-#endif /* FSW_FREERTOS_FSW_DEBUG_H */
+#endif /* FSW_VIVID_HAL_DEBUG_H */

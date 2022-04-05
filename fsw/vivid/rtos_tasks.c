@@ -92,7 +92,7 @@ static void schedule_execute(bool validate)
     arm_set_cntp_ctl(ARM_TIMER_ENABLE);
 
 #ifdef TASK_DEBUG
-    debugf(TRACE, "FreeRTOS scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
+    debugf(TRACE, "VIVID scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
 #endif
 
     if (validate) {

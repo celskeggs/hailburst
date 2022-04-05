@@ -1,7 +1,7 @@
-#ifndef FSW_FREERTOS_RTOS_REPLICATE_H
-#define FSW_FREERTOS_RTOS_REPLICATE_H
+#ifndef FSW_VIVID_RTOS_REPLICATE_H
+#define FSW_VIVID_RTOS_REPLICATE_H
 
-// This file co-operates with the replication linker under toolchain/ (as configured by the FreeRTOS SConscript) to
+// This file co-operates with the replication linker under toolchain/ (as configured by the Vivid SConscript) to
 // allow object code replication of particular functions, without any of their associated mutable data.
 
 struct replication {
@@ -17,4 +17,4 @@ macro_define(REPLICATE_OBJECT_CODE, original_function, replica_name) {
     }
 }
 
-#endif /* FSW_FREERTOS_RTOS_REPLICATE_H */
+#endif /* FSW_VIVID_RTOS_REPLICATE_H */

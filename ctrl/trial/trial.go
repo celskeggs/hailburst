@@ -75,7 +75,7 @@ func (opt Options) BuildLinux() {
 	}
 }
 
-func (opt Options) BuildFreeRTOS() {
+func (opt Options) BuildVivid() {
 	if opt.Clean {
 		log.Printf("Cleaning FSW directory...")
 		RunBuildCmd(opt.FswSourceDir(), "scons", "-c")
@@ -113,7 +113,7 @@ func (opt Options) Build() {
 	if opt.Linux {
 		opt.BuildLinux()
 	} else {
-		opt.BuildFreeRTOS()
+		opt.BuildVivid()
 	}
 	opt.BuildHostTools()
 }
@@ -124,7 +124,7 @@ func (opt Options) RAM() (megabytes int) {
 		// need more memory for Linux
 		return 20
 	} else {
-		// need a lot less memory for FreeRTOS
+		// need a lot less memory for Vivid
 		return 4
 	}
 }
@@ -136,7 +136,7 @@ func (opt Options) QemuLoadFswArg() []string {
 		}
 	} else {
 		return []string{
-			"-bios", path.Join(opt.FswSourceDir(), "build-freertos/bootrom-bin"),
+			"-bios", path.Join(opt.FswSourceDir(), "build-vivid/bootrom-bin"),
 		}
 	}
 }
@@ -145,7 +145,7 @@ func (opt Options) SymbolFile() string {
 	if opt.Linux {
 		return path.Join(opt.HailburstDir, "tree/build/apps-1.0/build-linux/app")
 	} else {
-		return path.Join(opt.FswSourceDir(), "build-freertos/kernel")
+		return path.Join(opt.FswSourceDir(), "build-vivid/kernel")
 	}
 }
 
@@ -290,7 +290,7 @@ func (opt Options) QemuMachineType() string {
 		// Linux needs the device tree blob to boot
 		return "virt,x-enable-load-dtb=true,x-enable-watchdog=false"
 	} else {
-		// FreeRTOS supports the strict watchdog
+		// Vivid supports the strict watchdog
 		return "virt,x-enable-load-dtb=false,x-enable-watchdog=true"
 	}
 }
@@ -376,8 +376,8 @@ func (opt Options) StartViewer(p *util.Processes) {
 				"--srcdir", opt.FswSourceDir(),
 				"--loglevel", "INFO",
 				opt.GuestLog(),
-				path.Join(opt.FswSourceDir(), "build-freertos/kernel"),
-				path.Join(opt.FswSourceDir(), "build-freertos/bootrom-elf"),
+				path.Join(opt.FswSourceDir(), "build-vivid/kernel"),
+				path.Join(opt.FswSourceDir(), "build-vivid/bootrom-elf"),
 			},
 			"Decoded Guest Log",
 			opt.TrialDir,

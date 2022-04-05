@@ -8,15 +8,15 @@ app_modules = [
     'bus',
     'elf',
     'flight',
-    'freertos',
-    'freertos/debug',
-    'freertos/libgcc',
-    'freertos/zlib',
+    'vivid',
+    'vivid/debug',
+    'vivid/libgcc',
+    'vivid/zlib',
     'include',
     'synch',
 
     # ealibc last so that it is pulled in wherever needed
-    'freertos/ealibc',
+    'vivid/ealibc',
 ]
 
 bootrom_modules = [
@@ -26,12 +26,12 @@ bootrom_modules = [
     # code modules can come afterwards
     'bootrom',
     'elf',
-    'freertos/debug',
-    'freertos/libgcc',
+    'vivid/debug',
+    'vivid/libgcc',
     'include',
 
     # ealibc last so that it is pulled in wherever needed
-    'freertos/ealibc',
+    'vivid/ealibc',
 ]
 
 common_flags = [
@@ -56,7 +56,7 @@ env = Environment(
         "-nostdlib", "-nostdinc", "-ffreestanding",
         "-std=gnu11",
         "-O1",
-        "-D_BITSIZE=32", "-D__FREERTOS__",
+        "-D_BITSIZE=32", "-D__VIVID__",
     ],
     ASFLAGS=common_flags + [
         "-c",
@@ -68,10 +68,10 @@ env = Environment(
 
 
 rtos_kernel = env.Program("kernel", build_modules(env, app_modules),
-                          LINK="$REPLICA_LINK", LINKSCRIPT="$FREERTOS_LINKSCRIPT")
+                          LINK="$REPLICA_LINK", LINKSCRIPT="$VIVID_LINKSCRIPT")
 env.Depends(rtos_kernel, "$REPLICA_LINK_PY")
 env.Depends(rtos_kernel, "$EXCISE")
-env.Depends(rtos_kernel, "$FREERTOS_LINKSCRIPT")
+env.Depends(rtos_kernel, "$VIVID_LINKSCRIPT")
 env.Depends(rtos_kernel, "$REPLICA_SCRIPT")
 env.Default(rtos_kernel)
 
