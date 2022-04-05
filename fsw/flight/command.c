@@ -7,20 +7,20 @@
 #include <flight/command.h>
 #include <flight/telemetry.h>
 
-void command_execution_clip(cmd_system_t *cs) {
-    assert(cs != NULL && cs->endpoints != NULL);
+void command_execution_clip(cmd_replica_t *cr) {
+    assert(cr != NULL && cr->system != NULL && cr->system->endpoints != NULL && cr->decoder != NULL);
 
     if (clip_is_restart()) {
-        comm_dec_reset(cs->decoder);
+        comm_dec_reset(cr->decoder);
     }
 
-    comm_dec_prepare(cs->decoder);
+    comm_dec_prepare(cr->decoder);
     tlm_txn_t telem;
-    telemetry_prepare(&telem, cs->telemetry, COMMAND_REPLICA_ID);
+    telemetry_prepare(&telem, cr->system->telemetry, cr->replica_id);
 
     // only process one command per epoch
     comm_packet_t packet;
-    bool has_command = comm_dec_decode(cs->decoder, &packet);
+    bool has_command = comm_dec_decode(cr->decoder, &packet);
 
     if (has_command) {
         // confirm reception
@@ -29,11 +29,11 @@ void command_execution_clip(cmd_system_t *cs) {
 
     // search through endpoints for a match, and service the ducts while we're at it.
     bool matched = false;
-    for (size_t i = 0; i < cs->num_endpoints; i++) {
-        cmd_endpoint_t *ce = cs->endpoints[i];
+    for (size_t i = 0; i < cr->system->num_endpoints; i++) {
+        cmd_endpoint_t *ce = cr->system->endpoints[i];
         assert(ce != NULL);
         duct_txn_t txn;
-        duct_send_prepare(&txn, ce->duct, COMMAND_REPLICA_ID);
+        duct_send_prepare(&txn, ce->duct, cr->replica_id);
         if (has_command && packet.cmd_tlm_id == ce->cid && packet.data_len <= COMMAND_MAX_PARAM_LENGTH) {
             struct cmd_duct_msg duct_msg = {
                 .timestamp = packet.timestamp_ns,
@@ -53,16 +53,18 @@ void command_execution_clip(cmd_system_t *cs) {
     }
 
     telemetry_commit(&telem);
-    comm_dec_commit(cs->decoder);
+    comm_dec_commit(cr->decoder);
 }
 
 void *command_receive(cmd_endpoint_t *ce, uint8_t replica_id, size_t *size_out) {
     assert(ce != NULL && size_out != NULL);
 
+    struct cmd_endpoint_mut *mut = &ce->mut_replicas[replica_id];
+
     duct_txn_t txn;
     duct_receive_prepare(&txn, ce->duct, replica_id);
-    assert(duct_message_size(ce->duct) == sizeof(ce->last_received));
-    size_t msg_size = duct_receive_message(&txn, &ce->last_received, NULL);
+    assert(duct_message_size(ce->duct) == sizeof(mut->last_received));
+    size_t msg_size = duct_receive_message(&txn, &mut->last_received, NULL);
     duct_receive_commit(&txn);
     if (msg_size == 0) {
         // discard message
@@ -72,17 +74,23 @@ void *command_receive(cmd_endpoint_t *ce, uint8_t replica_id, size_t *size_out) 
         miscomparef("endpoint received command from command switch without complete header");
         return NULL;
     } else {
-        *size_out = ce->last_data_length = msg_size - sizeof(mission_time_t);
-        return ce->last_received.data;
+        mut->has_outstanding_reply = true;
+        *size_out = mut->last_data_length = msg_size - sizeof(mission_time_t);
+        return mut->last_received.data;
     }
 }
 
 // to indicate completion (OK, FAIL, or UNRECOGNIZED), call this function. it will transmit one telemetry message.
-void command_reply(cmd_endpoint_t *ce, tlm_txn_t *telem, cmd_status_t status) {
+void command_reply(cmd_endpoint_t *ce, uint8_t replica_id, tlm_txn_t *telem, cmd_status_t status) {
+    assert(ce != NULL && telem != NULL);
+    struct cmd_endpoint_mut *mut = &ce->mut_replicas[replica_id];
+
+    assert(mut->has_outstanding_reply == true);
+    mut->has_outstanding_reply = false;
     if (status == CMD_STATUS_UNRECOGNIZED) {
-        tlm_cmd_not_recognized(telem, ce->last_received.timestamp, ce->cid, ce->last_data_length);
+        tlm_cmd_not_recognized(telem, mut->last_received.timestamp, ce->cid, mut->last_data_length);
     } else if (status == CMD_STATUS_OK || status == CMD_STATUS_FAIL) {
-        tlm_cmd_completed(telem, ce->last_received.timestamp, ce->cid, status == CMD_STATUS_OK);
+        tlm_cmd_completed(telem, mut->last_received.timestamp, ce->cid, status == CMD_STATUS_OK);
     } else {
         abortf("invalid command status: %u", status);
     }

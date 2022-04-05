@@ -113,10 +113,10 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         if (command_length == 1 && (command_bytes[0] == 0 || command_bytes[0] == 1)) {
             mag->should_be_powered = (command_bytes[0] == 1);
             debugf(DEBUG, "Command set magnetometer power state to %u.", mag->should_be_powered);
-            command_reply(mag->command_endpoint, &telem, CMD_STATUS_OK);
+            command_reply(mag->command_endpoint, MAGNETOMETER_REPLICA_ID, &telem, CMD_STATUS_OK);
         } else {
             // wrong length or invalid byte
-            command_reply(mag->command_endpoint, &telem, CMD_STATUS_UNRECOGNIZED);
+            command_reply(mag->command_endpoint, MAGNETOMETER_REPLICA_ID, &telem, CMD_STATUS_UNRECOGNIZED);
         }
     }
 
