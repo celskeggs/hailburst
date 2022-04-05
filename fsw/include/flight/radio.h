@@ -6,7 +6,7 @@
 #include <bus/rmap.h>
 #include <bus/switch.h>
 
-#define RADIO_REPLICAS 1
+#define RADIO_REPLICAS 3
 
 typedef enum {
     REG_MAGIC      = 0,
