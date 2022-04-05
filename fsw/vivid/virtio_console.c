@@ -15,8 +15,6 @@ enum {
     VIRTIO_CONSOLE_VQ_TRANSMIT = 1,
 
     VIRTIO_CONSOLE_VQ_CTRL_BASE = 2,
-
-    REPLICA_ID = 0,
 };
 
 enum {
@@ -87,41 +85,46 @@ static inline uint32_t virtio_console_port_to_queue_index(uint32_t port) {
     return port;
 }
 
-void virtio_console_control_clip(struct virtio_console *console) {
-    assert(console != NULL);
+void virtio_console_control_clip(virtio_console_replica_t *vcr) {
+    assert(vcr != NULL && vcr->console != NULL && vcr->mut != NULL);
 
     duct_txn_t recv_txn;
     duct_txn_t send_txn;
 
-    duct_receive_prepare(&recv_txn, console->control_rx, REPLICA_ID);
-    duct_send_prepare(&send_txn, console->control_tx, REPLICA_ID);
+    // TODO: how to handle restarts/resynchronization?
 
-    if (!console->sent_initial) {
+    duct_receive_prepare(&recv_txn, vcr->console->control_rx, vcr->replica_id);
+    duct_send_prepare(&send_txn, vcr->console->control_tx, vcr->replica_id);
+
+    if (!vcr->mut->sent_initial) {
         // request initialization
         virtio_console_send_ctrl_msg(&send_txn, 0xFFFFFFFF, VIRTIO_CONSOLE_DEVICE_READY, 1);
-        console->sent_initial = true;
+        vcr->mut->sent_initial = true;
     }
 
     struct {
         struct virtio_console_control recv;
         uint8_t extra[VIRTIO_CONSOLE_CTRL_RECV_MARGIN];
     } raw;
-    assert(duct_message_size(console->control_rx) == sizeof(raw));
+    assert(duct_message_size(vcr->console->control_rx) == sizeof(raw));
     size_t length;
     while ((length = duct_receive_message(&recv_txn, &raw, NULL)) > 0) {
-        debugf(DEBUG, "Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
-               raw.recv.id, raw.recv.event, raw.recv.value, length);
+        debugf(DEBUG, "[%u] Received CONTROL message on queue: id=%u, event=%u, value=%u (chain_bytes=%u)",
+               vcr->replica_id, raw.recv.id, raw.recv.event, raw.recv.value, length);
 
         if (raw.recv.event == VIRTIO_CONSOLE_DEVICE_ADD) {
             assert(length == sizeof(struct virtio_console_control));
 
             if (raw.recv.id != VIRTIO_FAKEWIRE_PORT_INDEX) {
-                debugf(CRITICAL, "WARNING: Did not expect to find serial port %u attached to anything.", raw.recv.id);
-            } else if (console->confirmed_port_present) {
-                debugf(CRITICAL, "WARNING: Did not expect to receive duplicate message about port %u.", raw.recv.id);
+                debugf(CRITICAL, "[%u] WARNING: Did not expect to find serial port %u attached to anything.",
+                       vcr->replica_id, raw.recv.id);
+            } else if (vcr->mut->confirmed_port_present) {
+                debugf(CRITICAL, "[%u] WARNING: Did not expect to receive duplicate message about port %u.",
+                       vcr->replica_id, raw.recv.id);
             } else {
-                debugf(DEBUG, "Discovered serial port %u as expected for fakewire connection.", raw.recv.id);
-                console->confirmed_port_present = true;
+                debugf(DEBUG, "[%u] Discovered serial port %u as expected for fakewire connection.",
+                       vcr->replica_id, raw.recv.id);
+                vcr->mut->confirmed_port_present = true;
 
                 // send messages to allow the serial port to receive data.
                 virtio_console_send_ctrl_msg(&send_txn, VIRTIO_FAKEWIRE_PORT_INDEX, VIRTIO_CONSOLE_PORT_READY, 1);
@@ -144,11 +147,11 @@ void virtio_console_control_clip(struct virtio_console *console) {
             // so we need to remind the virtio device that, yes, we DID give it a bunch of descriptors, and could
             // you please load those now, thank you. so I've added virtio_device_force_notify_queue as a "backdoor"
             // function to let us send this seemingly-spurious notification.
-            debugf(DEBUG, "Serial port %u confirmed open for fakewire connection; re-notifying queue %u.",
-                   raw.recv.id, console->data_receive_queue->queue_index);
-            virtio_device_force_notify_queue(console->data_receive_queue);
+            debugf(DEBUG, "[%u] Serial port %u confirmed open for fakewire connection; re-notifying queue %u.",
+                   vcr->replica_id, raw.recv.id, vcr->console->data_receive_queue->queue_index);
+            virtio_device_force_notify_queue(vcr->console->data_receive_queue);
         } else {
-            debugf(CRITICAL, "Unhandled console control event: %u.", raw.recv.event);
+            debugf(CRITICAL, "[%u] Unhandled console control event: %u.", vcr->replica_id, raw.recv.event);
         }
     }
 
@@ -156,11 +159,11 @@ void virtio_console_control_clip(struct virtio_console *console) {
     duct_send_commit(&send_txn);
 }
 
-void virtio_console_configure_internal(struct virtio_console *console) {
-    struct virtio_console_config *config =
-            (struct virtio_console_config *) virtio_device_config_space(console->devptr);
+void virtio_console_configure_internal(virtio_console_t *vc) {
+    assert(vc != NULL);
+    struct virtio_console_config *config = virtio_device_config_space(vc->devptr);
 
     debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %d", config->max_nr_ports);
     // TODO: should I really be treating 'num_queues' as public?
-    assert(console->devptr->num_queues <= (config->max_nr_ports + 1) * 2);
+    assert(vc->devptr->num_queues <= (config->max_nr_ports + 1) * 2);
 }
