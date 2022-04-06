@@ -4,10 +4,7 @@
 #include <hal/thread.h>
 #include <flight/clock_cal.h>
 
-enum {
-    HEARTBEAT_REPLICAS = 1,
-    HEARTBEAT_REPLICA_ID = 0,
-};
+#define HEARTBEAT_REPLICAS 3
 
 typedef const struct {
     struct heartbeat_mut {
@@ -15,26 +12,33 @@ typedef const struct {
     } *mut;
     tlm_endpoint_t *telemetry;
     watchdog_aspect_t *aspect;
-} heartbeat_t;
+    uint8_t replica_id;
+} heartbeat_replica_t;
 
-void heartbeat_main_clip(heartbeat_t *h);
+void heartbeat_main_clip(heartbeat_replica_t *h);
 
 macro_define(HEARTBEAT_REGISTER, h_ident) {
     TELEMETRY_ASYNC_REGISTER(symbol_join(h_ident, telemetry), HEARTBEAT_REPLICAS, 1);
     WATCHDOG_ASPECT(symbol_join(h_ident, aspect), HEARTBEAT_REPLICAS);
-    struct heartbeat_mut symbol_join(h_ident, mut) = {
-        .last_heartbeat_time = 0,
-    };
-    heartbeat_t h_ident = {
-        .mut = &symbol_join(h_ident, mut),
-        .telemetry = &symbol_join(h_ident, telemetry),
-        .aspect = &symbol_join(h_ident, aspect),
-    };
-    CLIP_REGISTER(symbol_join(h_ident, clip), heartbeat_main_clip, &h_ident)
+    static_repeat(HEARTBEAT_REPLICAS, h_replica_id) {
+        struct heartbeat_mut symbol_join(h_ident, replica, h_replica_id, mut) = {
+            .last_heartbeat_time = 0,
+        };
+        heartbeat_replica_t symbol_join(h_ident, replica, h_replica_id) = {
+            .mut = &symbol_join(h_ident, replica, h_replica_id, mut),
+            .telemetry = &symbol_join(h_ident, telemetry),
+            .aspect = &symbol_join(h_ident, aspect),
+            .replica_id = h_replica_id,
+        };
+        CLIP_REGISTER(symbol_join(h_ident, clip, h_replica_id),
+                      heartbeat_main_clip, &symbol_join(h_ident, replica, h_replica_id));
+    }
 }
 
 macro_define(HEARTBEAT_SCHEDULE, h_ident) {
-    CLIP_SCHEDULE(symbol_join(h_ident, clip), 10)
+    static_repeat(HEARTBEAT_REPLICAS, h_replica_id) {
+        CLIP_SCHEDULE(symbol_join(h_ident, clip, h_replica_id), 10)
+    }
 }
 
 macro_define(HEARTBEAT_TELEMETRY, h_ident) {

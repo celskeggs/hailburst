@@ -7,14 +7,14 @@ enum {
     HEARTBEAT_PERIOD = 120 * CLOCK_NS_PER_MS,
 };
 
-void heartbeat_main_clip(heartbeat_t *h) {
+void heartbeat_main_clip(heartbeat_replica_t *h) {
     if (clip_is_restart()) {
         // heartbeat immediately on restart
         h->mut->last_heartbeat_time = timer_now_ns() - HEARTBEAT_PERIOD;
     }
 
     tlm_txn_t telem;
-    telemetry_prepare(&telem, h->telemetry, HEARTBEAT_REPLICA_ID);
+    telemetry_prepare(&telem, h->telemetry, h->replica_id);
 
     bool watchdog_ok = false;
 
@@ -26,7 +26,7 @@ void heartbeat_main_clip(heartbeat_t *h) {
         h->mut->last_heartbeat_time = timer_now_ns();
     }
 
-    watchdog_indicate(h->aspect, HEARTBEAT_REPLICA_ID, watchdog_ok);
+    watchdog_indicate(h->aspect, h->replica_id, watchdog_ok);
 
     telemetry_commit(&telem);
 }
