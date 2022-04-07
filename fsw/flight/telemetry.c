@@ -115,7 +115,7 @@ void telemetry_pump(tlm_system_t *ts) {
 
         // transmit this packet
         if (comm_enc_encode(ts->comm_encoder, &packet)) {
-            debugf(CRITICAL, "Telemetry dropped: MessagesLost=%u", drop_count);
+            debugf(CRITICAL, "[%u] Telemetry dropped: MessagesLost=%u", TELEMETRY_REPLICA_ID, drop_count);
             // if successful, mark that we downlinked this information.
             ts->mut->async_dropped = 0;
         }
@@ -148,15 +148,16 @@ void telemetry_pump(tlm_system_t *ts) {
             };
             assert(packet.data_len <= TLM_MAX_ASYNC_SIZE);
 
-            debugf(TRACE, "Transmitting async telemetry, timestamp=" TIMEFMT, TIMEARG(packet.timestamp_ns));
+            debugf(TRACE, "[%u] Transmitting async telemetry, timestamp=" TIMEFMT,
+                   TELEMETRY_REPLICA_ID, TIMEARG(packet.timestamp_ns));
 
             // transmit this packet
             if (comm_enc_encode(ts->comm_encoder, &packet)) {
                 watchdog_ok = true;
 
-                debugf(TRACE, "Transmitted async telemetry.");
+                debugf(TRACE, "[%u] Transmitted async telemetry.", TELEMETRY_REPLICA_ID);
             } else {
-                debugf(WARNING, "Failed to transmit async telemetry due to full buffer.");
+                debugf(WARNING, "[%u] Failed to transmit async telemetry due to full buffer.", TELEMETRY_REPLICA_ID);
                 ts->mut->async_dropped++;
             }
         }
@@ -201,15 +202,17 @@ void telemetry_pump(tlm_system_t *ts) {
             // TODO: better handling of the cases where the pipe or duct receive length is less than header length
             assert(packet.data_len <= TLM_MAX_SYNC_SIZE);
 
-            debugf(TRACE, "Transmitting synchronous telemetry, timestamp=" TIMEFMT, TIMEARG(packet.timestamp_ns));
+            debugf(TRACE, "[%u] Transmitting synchronous telemetry, timestamp=" TIMEFMT,
+                   TELEMETRY_REPLICA_ID, TIMEARG(packet.timestamp_ns));
 
             // transmit this packet
             if (!comm_enc_encode(ts->comm_encoder, &packet)) {
-                debugf(WARNING, "Failed to transmit synchronous telemetry due to full buffer... will try again.");
+                debugf(WARNING, "[%u] Failed to transmit synchronous telemetry due to full buffer... will try again.",
+                       TELEMETRY_REPLICA_ID);
                 break;
             }
 
-            debugf(TRACE, "Transmitted synchronous telemetry.");
+            debugf(TRACE, "[%u] Transmitted synchronous telemetry.", TELEMETRY_REPLICA_ID);
             circ_buf_read_done(circ, 1);
         }
 
@@ -221,8 +224,8 @@ void telemetry_pump(tlm_system_t *ts) {
 }
 
 void tlm_cmd_received(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id) {
-    debugf(DEBUG, "Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
-           original_timestamp, original_command_id);
+    debugf(DEBUG, "[%u] Command Received: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x",
+           txn->replica_id, original_timestamp, original_command_id);
 
     struct {
         uint64_t original_timestamp;
@@ -235,8 +238,8 @@ void tlm_cmd_received(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t orig
 }
 
 void tlm_cmd_completed(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id, bool success) {
-    debugf(DEBUG, "Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
-           original_timestamp, original_command_id, success);
+    debugf(DEBUG, "[%u] Command Completed: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Success=%d",
+           txn->replica_id, original_timestamp, original_command_id, success);
 
     struct {
         uint64_t original_timestamp;
@@ -252,8 +255,8 @@ void tlm_cmd_completed(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t ori
 
 void tlm_cmd_not_recognized(tlm_txn_t *txn, uint64_t original_timestamp, uint32_t original_command_id,
                             uint32_t length) {
-    debugf(CRITICAL, "Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
-           original_timestamp, original_command_id, length);
+    debugf(CRITICAL, "[%u] Command Not Recognized: OriginalTimestamp=%"PRIu64" OriginalCommandId=%08x Length=%u",
+           txn->replica_id, original_timestamp, original_command_id, length);
 
     struct {
         uint64_t original_timestamp;
@@ -268,7 +271,7 @@ void tlm_cmd_not_recognized(tlm_txn_t *txn, uint64_t original_timestamp, uint32_
 }
 
 void tlm_pong(tlm_txn_t *txn, uint32_t ping_id) {
-    debugf(INFO, "Pong: PingId=%08x", ping_id);
+    debugf(INFO, "[%u] Pong: PingId=%08x", txn->replica_id, ping_id);
 
     struct {
         uint32_t ping_id;
@@ -279,7 +282,7 @@ void tlm_pong(tlm_txn_t *txn, uint32_t ping_id) {
 }
 
 void tlm_clock_calibrated(tlm_txn_t *txn, int64_t adjustment) {
-    debugf(INFO, "ClockCalibrated: Adjustment=%"PRId64"", adjustment);
+    debugf(INFO, "[%u] ClockCalibrated: Adjustment=%"PRId64"", txn->replica_id, adjustment);
 
     struct {
         int64_t adjustment;
@@ -290,13 +293,13 @@ void tlm_clock_calibrated(tlm_txn_t *txn, int64_t adjustment) {
 }
 
 void tlm_heartbeat(tlm_txn_t *txn) {
-    debugf(DEBUG, "Heartbeat");
+    debugf(DEBUG, "[%u] Heartbeat", txn->replica_id);
 
     telemetry_small_submit(txn, HEARTBEAT_TID, NULL, 0);
 }
 
 void tlm_mag_pwr_state_changed(tlm_txn_t *txn, bool power_state) {
-    debugf(INFO, "Magnetometer Power State Changed: PowerState=%d", power_state);
+    debugf(INFO, "[%u] Magnetometer Power State Changed: PowerState=%d", txn->replica_id, power_state);
 
     struct {
         uint8_t power_state;
@@ -319,7 +322,7 @@ void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
         num_readings = TLM_MAX_SYNC_SIZE / 14;
     }
     assert(num_readings > 0);
-    debugf(DEBUG, "Magnetometer Readings Array: %zu readings", num_readings);
+    debugf(DEBUG, "[%u] Magnetometer Readings Array: %zu readings", txn->replica_id, num_readings);
     *fetch_count = num_readings;
     uint16_t *out = (uint16_t*) data_bytes;
     for (size_t i = 0; i < num_readings; i++) {
@@ -327,7 +330,7 @@ void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
 
         fetch(param, i, &rd);
 
-        debugf(DEBUG, "  Readings[%zu]={%"PRIu64", %d, %d, %d}",
+        debugf(DEBUG, "    Readings[%zu]={%"PRIu64", %d, %d, %d}",
                i, rd.reading_time, rd.mag_x, rd.mag_y, rd.mag_z);
 
         *out++ = htobe16((uint16_t) (rd.reading_time >> 48));
