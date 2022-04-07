@@ -1,6 +1,5 @@
 #include <hal/debug.h>
 #include <hal/init.h>
-#include <flight/spacecraft.h>
 
 extern program_init initpoints_start[];
 extern program_init initpoints_end[];

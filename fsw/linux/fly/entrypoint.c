@@ -2,7 +2,7 @@
 
 #include <hal/debug.h>
 #include <hal/init.h>
-#include <flight/spacecraft.h>
+#include <hal/thread.h>
 
 int main(int argc, char *argv[]) {
     (void) argc;

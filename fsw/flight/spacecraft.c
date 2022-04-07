@@ -7,9 +7,9 @@
 #include <flight/clock_cal.h>
 #include <flight/command.h>
 #include <flight/heartbeat.h>
+#include <flight/magnetometer.h>
 #include <flight/pingback.h>
 #include <flight/radio.h>
-#include <flight/spacecraft.h>
 #include <flight/telemetry.h>
 
 enum {
