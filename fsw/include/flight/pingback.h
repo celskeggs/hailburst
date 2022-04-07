@@ -5,7 +5,7 @@
 #include <flight/command.h>
 #include <flight/telemetry.h>
 
-#define PINGBACK_REPLICAS 1
+#define PINGBACK_REPLICAS 3
 
 typedef const struct {
     tlm_endpoint_t *telemetry;
@@ -22,6 +22,7 @@ macro_define(PINGBACK_REGISTER, p_ident) {
         pingback_replica_t symbol_join(p_ident, replica, p_replica_id) = {
             .telemetry = &symbol_join(p_ident, telemetry),
             .command = &symbol_join(p_ident, command),
+            .replica_id = p_replica_id,
         };
         CLIP_REGISTER(symbol_join(p_ident, clip, p_replica_id),
                       pingback_clip, &symbol_join(p_ident, replica, p_replica_id));
