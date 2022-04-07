@@ -52,7 +52,6 @@ void magnetometer_query_clip(magnetometer_t *mag) {
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
             mag->state = MS_ACTIVE;
-            mag->next_reading_time = timer_now_ns() + READING_DELAY_NS;
             tlm_mag_pwr_state_changed(&telem, true);
         } else {
             debugf(WARNING, "Failed to turn on magnetometer power, error=0x%03x", status);
@@ -126,7 +125,7 @@ void magnetometer_query_clip(magnetometer_t *mag) {
     } else if ((mag->state == MS_ACTIVATING || mag->state == MS_ACTIVE) && !mag->should_be_powered) {
         debugf(DEBUG, "Turning off magnetometer power...");
         mag->state = MS_DEACTIVATING;
-    } else if (mag->state == MS_ACTIVE && timer_now_ns() >= mag->next_reading_time) {
+    } else if (mag->state == MS_ACTIVE && timer_epoch_ns() >= mag->next_reading_time) {
         debugf(DEBUG, "Taking magnetometer reading...");
         mag->state = MS_LATCHING_ON;
         mag->next_reading_time += READING_DELAY_NS;
@@ -138,6 +137,9 @@ void magnetometer_query_clip(magnetometer_t *mag) {
     case MS_ACTIVATING:
         single_value = htobe16(POWER_ON);
         rmap_write_start(&rmap_txn, 0x00, REG_POWER, (uint8_t*) &single_value, sizeof(single_value));
+        // we set this here -- rather than next cycle -- so that we can avoid the single-epoch discrepancy a delay
+        // would imply
+        mag->next_reading_time = timer_epoch_ns() + READING_DELAY_NS;
         break;
     case MS_DEACTIVATING:
         single_value = htobe16(POWER_OFF);
