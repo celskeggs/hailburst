@@ -43,7 +43,7 @@ macro_define(CLOCK_SCHEDULE, c_ident) {
 }
 
 macro_define(CLOCK_TELEMETRY, c_ident) {
-    &symbol_join(c_ident, telemetry),
+    TELEMETRY_ENDPOINT_REF(symbol_join(c_ident, telemetry))
 }
 
 // one RMAP channel

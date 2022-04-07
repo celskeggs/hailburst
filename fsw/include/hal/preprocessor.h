@@ -9,6 +9,10 @@ macro_define(PP_CONST_MAX, a, b) {
     __builtin_choose_expr((a) > (b), (a), (b))
 }
 
+macro_define(PP_ARRAY_SIZE, x) {
+    (sizeof(x) / sizeof(*(x)))
+}
+
 macro_define(PP_CHECK_TYPE, expr, type) {
     __builtin_choose_expr(
         __builtin_types_compatible_p(typeof(expr), type),

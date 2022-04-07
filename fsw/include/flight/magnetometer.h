@@ -90,8 +90,8 @@ macro_define(MAGNETOMETER_SCHEDULE, m_ident) {
 }
 
 macro_define(MAGNETOMETER_TELEMETRY, m_ident) {
-    &symbol_join(m_ident, telemetry_async),
-    &symbol_join(m_ident, telemetry_sync),
+    TELEMETRY_ENDPOINT_REF(symbol_join(m_ident, telemetry_async))
+    TELEMETRY_ENDPOINT_REF(symbol_join(m_ident, telemetry_sync))
 }
 
 macro_define(MAGNETOMETER_COMMAND, m_ident) {

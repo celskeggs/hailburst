@@ -42,7 +42,7 @@ macro_define(HEARTBEAT_SCHEDULE, h_ident) {
 }
 
 macro_define(HEARTBEAT_TELEMETRY, h_ident) {
-    &symbol_join(h_ident, telemetry),
+    TELEMETRY_ENDPOINT_REF(symbol_join(h_ident, telemetry))
 }
 
 macro_define(HEARTBEAT_WATCH, h_ident) {

@@ -81,17 +81,18 @@ static void telemetry_large_submit(tlm_txn_t *txn, size_t data_len) {
     pipe_send_message(&txn->sync_txn, scratch, offsetof(tlm_sync_t, data_bytes) + data_len, timer_epoch_ns());
 }
 
-void telemetry_pump(tlm_system_t *ts) {
+void telemetry_pump(tlm_replica_t *ts) {
+    assert(ts != NULL && ts->mut != NULL && ts->registrations != NULL && ts->replica_id < TELEMETRY_REPLICAS);
+
     if (clip_is_restart()) {
         // reset encoder
         comm_enc_reset(ts->comm_encoder);
         // clear out all buffered synchronous telemetry
-        for (size_t i = 0; i < ts->num_endpoints; i++) {
-            tlm_endpoint_t *ep = ts->endpoints[i];
-            assert(ep != NULL);
+        for (size_t i = 0; i < ts->num_registrations; i++) {
+            tlm_registration_replica_t *r = &ts->registrations[i]->replicas[ts->replica_id];
 
-            if (ep->is_synchronous) {
-                circ_buf_reset(ep->receiver_scratch[TELEMETRY_REPLICA_ID]);
+            if (r->is_synchronous) {
+                circ_buf_reset(r->receiver_scratch);
             }
         }
     }
@@ -108,14 +109,14 @@ void telemetry_pump(tlm_system_t *ts) {
         // fill in telemetry packet
         comm_packet_t packet = {
             .cmd_tlm_id = TLM_DROPPED_TID,
-            .timestamp_ns = clock_timestamp(),
+            .timestamp_ns = clock_mission_adjust(timer_epoch_ns()),
             .data_len = sizeof(drop_count),
             .data_bytes = (uint8_t*) &drop_count,
         };
 
         // transmit this packet
         if (comm_enc_encode(ts->comm_encoder, &packet)) {
-            debugf(CRITICAL, "[%u] Telemetry dropped: MessagesLost=%u", TELEMETRY_REPLICA_ID, drop_count);
+            debugf(CRITICAL, "[%u] Telemetry dropped: MessagesLost=%u", ts->replica_id, drop_count);
             // if successful, mark that we downlinked this information.
             ts->mut->async_dropped = 0;
         }
@@ -124,18 +125,17 @@ void telemetry_pump(tlm_system_t *ts) {
     bool watchdog_ok = false;
 
     // stage 2: transmit any asynchronous telemetry, and record how many we have to drop
-    for (size_t i = 0; i < ts->num_endpoints; i++) {
-        tlm_endpoint_t *ep = ts->endpoints[i];
-        assert(ep != NULL);
+    for (size_t i = 0; i < ts->num_registrations; i++) {
+        tlm_registration_replica_t *r = &ts->registrations[i]->replicas[ts->replica_id];
 
         // handle synchronous telemetry later
-        if (ep->is_synchronous) {
+        if (r->is_synchronous) {
             continue;
         }
 
         tlm_async_t message;
         duct_txn_t txn;
-        duct_receive_prepare(&txn, ep->async_duct, TELEMETRY_REPLICA_ID);
+        duct_receive_prepare(&txn, r->async_duct, ts->replica_id);
         size_t length = 0;
         local_time_t timestamp = 0;
         while ((length = duct_receive_message(&txn, &message, &timestamp)) > 0) {
@@ -149,38 +149,37 @@ void telemetry_pump(tlm_system_t *ts) {
             assert(packet.data_len <= TLM_MAX_ASYNC_SIZE);
 
             debugf(TRACE, "[%u] Transmitting async telemetry, timestamp=" TIMEFMT,
-                   TELEMETRY_REPLICA_ID, TIMEARG(packet.timestamp_ns));
+                   ts->replica_id, TIMEARG(packet.timestamp_ns));
 
             // transmit this packet
             if (comm_enc_encode(ts->comm_encoder, &packet)) {
                 watchdog_ok = true;
 
-                debugf(TRACE, "[%u] Transmitted async telemetry.", TELEMETRY_REPLICA_ID);
+                debugf(TRACE, "[%u] Transmitted async telemetry.", ts->replica_id);
             } else {
-                debugf(WARNING, "[%u] Failed to transmit async telemetry due to full buffer.", TELEMETRY_REPLICA_ID);
+                debugf(WARNING, "[%u] Failed to transmit async telemetry due to full buffer.", ts->replica_id);
                 ts->mut->async_dropped++;
             }
         }
         duct_receive_commit(&txn);
     }
 
-    watchdog_indicate(ts->aspect, TELEMETRY_REPLICA_ID, watchdog_ok);
+    watchdog_indicate(ts->aspect, ts->replica_id, watchdog_ok);
 
     // stage 3: transmit any synchronous telemetry if we can
-    for (size_t i = 0; i < ts->num_endpoints; i++) {
-        tlm_endpoint_t *ep = ts->endpoints[i];
-        assert(ep != NULL);
+    for (size_t i = 0; i < ts->num_registrations; i++) {
+        tlm_registration_replica_t *r = &ts->registrations[i]->replicas[ts->replica_id];
 
         // already handled asynchronous telemetry
-        if (!ep->is_synchronous) {
+        if (!r->is_synchronous) {
             continue;
         }
 
         // first: pull telemetry from endpoint into the circular buffer
         pipe_txn_t txn;
-        pipe_receive_prepare(&txn, ep->sync_pipe, TELEMETRY_REPLICA_ID);
+        pipe_receive_prepare(&txn, r->sync_pipe, ts->replica_id);
 
-        circ_buf_t *circ = ep->receiver_scratch[TELEMETRY_REPLICA_ID];
+        circ_buf_t *circ = r->receiver_scratch;
         tlm_sync_slot_t *slot;
         assert(sizeof(*slot) == circ_buf_elem_size(circ));
         while (
@@ -203,16 +202,16 @@ void telemetry_pump(tlm_system_t *ts) {
             assert(packet.data_len <= TLM_MAX_SYNC_SIZE);
 
             debugf(TRACE, "[%u] Transmitting synchronous telemetry, timestamp=" TIMEFMT,
-                   TELEMETRY_REPLICA_ID, TIMEARG(packet.timestamp_ns));
+                   ts->replica_id, TIMEARG(packet.timestamp_ns));
 
             // transmit this packet
             if (!comm_enc_encode(ts->comm_encoder, &packet)) {
                 debugf(WARNING, "[%u] Failed to transmit synchronous telemetry due to full buffer... will try again.",
-                       TELEMETRY_REPLICA_ID);
+                       ts->replica_id);
                 break;
             }
 
-            debugf(TRACE, "[%u] Transmitted synchronous telemetry.", TELEMETRY_REPLICA_ID);
+            debugf(TRACE, "[%u] Transmitted synchronous telemetry.", ts->replica_id);
             circ_buf_read_done(circ, 1);
         }
 

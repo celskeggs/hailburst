@@ -12,11 +12,9 @@
 #include <synch/pipe.h>
 #include <flight/comm.h>
 
-#define TELEMETRY_REPLICAS 1
+#define TELEMETRY_REPLICAS 3
 
 enum {
-    TELEMETRY_REPLICA_ID = 0,
-
     TLM_MAX_ASYNC_SIZE = 16,
     TLM_MAX_SYNC_SIZE  = 64 * 1024,
 };
@@ -54,10 +52,24 @@ typedef const struct {
         struct {
             pipe_t     *sync_pipe;
             tlm_sync_t *sender_scratch;
-            circ_buf_t *receiver_scratch[TELEMETRY_REPLICAS];
         };
     };
 } tlm_endpoint_t;
+
+typedef const struct {
+    bool is_synchronous;
+    union {
+        duct_t *async_duct;
+        struct {
+            pipe_t     *sync_pipe;
+            circ_buf_t *receiver_scratch;
+        };
+    };
+} tlm_registration_replica_t;
+
+typedef const struct {
+    tlm_registration_replica_t replicas[TELEMETRY_REPLICAS];
+} tlm_registration_t;
 
 typedef struct {
     tlm_endpoint_t *ep;
@@ -72,33 +84,40 @@ typedef const struct {
     struct tlm_system_mut {
         uint32_t async_dropped;
     } *mut;
-    comm_enc_t             *comm_encoder;
-    tlm_endpoint_t * const *endpoints;
-    size_t                  num_endpoints;
-    watchdog_aspect_t      *aspect;
-} tlm_system_t;
+    uint8_t                     replica_id;
+    comm_enc_t                 *comm_encoder;
+    tlm_registration_t * const *registrations;
+    size_t                      num_registrations;
+    watchdog_aspect_t          *aspect;
+} tlm_replica_t;
 
-void telemetry_pump(tlm_system_t *ts);
+void telemetry_pump(tlm_replica_t *ts);
 
 macro_define(TELEMETRY_SYSTEM_REGISTER, t_ident, t_pipe, t_components) {
-    COMM_ENC_REGISTER(symbol_join(t_ident, encoder), t_pipe, TELEMETRY_REPLICA_ID);
-    tlm_endpoint_t * const symbol_join(t_ident, endpoints)[] = t_components;
-    struct tlm_system_mut symbol_join(t_ident, mutable) = {
-        .async_dropped = 0,
-    };
     WATCHDOG_ASPECT(symbol_join(t_ident, aspect), TELEMETRY_REPLICAS);
-    tlm_system_t t_ident = {
-        .mut = &symbol_join(t_ident, mutable),
-        .comm_encoder = &symbol_join(t_ident, encoder),
-        .endpoints = symbol_join(t_ident, endpoints),
-        .num_endpoints = sizeof(symbol_join(t_ident, endpoints)) / sizeof(*symbol_join(t_ident, endpoints)),
-        .aspect = &symbol_join(t_ident, aspect),
-    };
-    CLIP_REGISTER(symbol_join(t_ident, clip), telemetry_pump, &t_ident)
+    static_repeat(TELEMETRY_REPLICAS, t_replica_id) {
+        COMM_ENC_REGISTER(symbol_join(t_ident, encoder, t_replica_id), t_pipe, t_replica_id);
+        tlm_registration_t * const symbol_join(t_ident, registrations, t_replica_id)[] = t_components;
+        struct tlm_system_mut symbol_join(t_ident, mutable, t_replica_id) = {
+            .async_dropped = 0,
+        };
+        tlm_replica_t symbol_join(t_ident, replica, t_replica_id) = {
+            .mut = &symbol_join(t_ident, mutable, t_replica_id),
+            .replica_id = t_replica_id,
+            .comm_encoder = &symbol_join(t_ident, encoder, t_replica_id),
+            .registrations = symbol_join(t_ident, registrations, t_replica_id),
+            .num_registrations = PP_ARRAY_SIZE(symbol_join(t_ident, registrations, t_replica_id)),
+            .aspect = &symbol_join(t_ident, aspect),
+        };
+        CLIP_REGISTER(symbol_join(t_ident, clip, t_replica_id),
+                      telemetry_pump, &symbol_join(t_ident, replica, t_replica_id));
+    }
 }
 
 macro_define(TELEMETRY_SCHEDULE, t_ident) {
-    CLIP_SCHEDULE(symbol_join(t_ident, clip), 100)
+    static_repeat(TELEMETRY_REPLICAS, t_replica_id) {
+        CLIP_SCHEDULE(symbol_join(t_ident, clip, t_replica_id), 100)
+    }
 }
 
 macro_define(TELEMETRY_WATCH, t_ident) {
@@ -111,6 +130,14 @@ macro_define(TELEMETRY_ASYNC_REGISTER, e_ident, e_replicas, e_max_flow) {
     tlm_endpoint_t e_ident = {
         .is_synchronous = false,
         .async_duct = &symbol_join(e_ident, duct),
+    };
+    tlm_registration_t symbol_join(e_ident, reg) = {
+        .replicas = {
+            [0 ... TELEMETRY_REPLICAS-1] = {
+                .is_synchronous = false,
+                .async_duct = &symbol_join(e_ident, duct),
+            },
+        },
     }
 }
 
@@ -118,19 +145,29 @@ macro_define(TELEMETRY_SYNC_REGISTER, e_ident, e_replicas, e_max_flow) {
     PIPE_REGISTER(symbol_join(e_ident, pipe), e_replicas, TELEMETRY_REPLICAS, e_max_flow, sizeof(tlm_sync_t),
                   PIPE_SENDER_FIRST);
     tlm_sync_t symbol_join(e_ident, sender_scratch)[e_replicas];
-    static_repeat(TELEMETRY_REPLICAS, replica_id) {
-        CIRC_BUF_REGISTER(symbol_join(e_ident, receiver_scratch, replica_id), sizeof(tlm_sync_slot_t), e_max_flow);
-    }
     tlm_endpoint_t e_ident = {
         .is_synchronous = true,
         .sync_pipe = &symbol_join(e_ident, pipe),
         .sender_scratch = symbol_join(e_ident, sender_scratch),
-        .receiver_scratch = {
+    };
+    static_repeat(TELEMETRY_REPLICAS, replica_id) {
+        CIRC_BUF_REGISTER(symbol_join(e_ident, receiver_scratch, replica_id), sizeof(tlm_sync_slot_t), e_max_flow);
+    }
+    tlm_registration_t symbol_join(e_ident, reg) = {
+        .replicas = {
             static_repeat(TELEMETRY_REPLICAS, replica_id) {
-                &symbol_join(e_ident, receiver_scratch, replica_id),
+                {
+                    .is_synchronous = true,
+                    .sync_pipe = &symbol_join(e_ident, pipe),
+                    .receiver_scratch = &symbol_join(e_ident, receiver_scratch, replica_id),
+                },
             }
         },
     }
+}
+
+macro_define(TELEMETRY_ENDPOINT_REF, e_ident) {
+    &symbol_join(e_ident, reg),
 }
 
 void telemetry_prepare(tlm_txn_t *txn, tlm_endpoint_t *ep, uint8_t sender_id);

@@ -36,7 +36,7 @@ macro_define(PINGBACK_SCHEDULE, p_ident) {
 }
 
 macro_define(PINGBACK_TELEMETRY, p_ident) {
-    &symbol_join(p_ident, telemetry),
+    TELEMETRY_ENDPOINT_REF(symbol_join(p_ident, telemetry))
 }
 
 macro_define(PINGBACK_COMMAND, p_ident) {

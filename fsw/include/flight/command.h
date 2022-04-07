@@ -108,7 +108,7 @@ macro_define(COMMAND_SCHEDULE, c_ident) {
 }
 
 macro_define(COMMAND_TELEMETRY, c_ident) {
-    &symbol_join(c_ident, telemetry),
+    TELEMETRY_ENDPOINT_REF(symbol_join(c_ident, telemetry))
 }
 
 // must be called every epoch. returns NULL if no command is available.

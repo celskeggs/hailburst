@@ -185,7 +185,7 @@ macro_define(RADIO_UP_SCHEDULE, r_ident) {
 
 macro_define(RADIO_DOWN_SCHEDULE, r_ident) {
     static_repeat(RADIO_REPLICAS, r_replica_id) {
-        CLIP_SCHEDULE(symbol_join(r_ident, down_clip, r_replica_id), 50)
+        CLIP_SCHEDULE(symbol_join(r_ident, down_clip, r_replica_id), 70)
     }
 }
 
