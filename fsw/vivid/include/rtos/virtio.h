@@ -65,7 +65,6 @@ typedef const struct {
 } virtio_device_queue_t;
 
 void virtio_device_init_internal(virtio_device_t *device);
-void virtio_device_start_internal(virtio_device_t *device);
 void virtio_monitor_clip(virtio_device_t *device);
 
 macro_define(VIRTIO_DEVICE_REGISTER,
@@ -82,8 +81,7 @@ macro_define(VIRTIO_DEVICE_REGISTER,
         .irq = VIRTIO_MMIO_IRQS_BASE + (v_region_id),
         .expected_device_id = (v_device_id),
     };
-    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident);
-    PROGRAM_INIT_PARAM(STAGE_READY, virtio_device_start_internal, v_ident, &v_ident)
+    PROGRAM_INIT_PARAM(STAGE_RAW, virtio_device_init_internal, v_ident, &v_ident)
 }
 
 void virtio_device_setup_queue_internal(virtio_device_queue_t *queue);

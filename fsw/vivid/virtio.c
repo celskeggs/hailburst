@@ -199,17 +199,6 @@ void virtio_queue_monitor_clip(virtio_device_queue_t *queue) {
     }
 }
 
-static void virtio_device_irq_callback(void *opaque_device) {
-    virtio_device_t *device = (virtio_device_t *) opaque_device;
-    assert(device != NULL && device->mut->initialized == true);
-
-    uint32_t status = device->mmio->interrupt_status;
-    if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
-        // TODO: do we need to notify ANYTHING here?
-    }
-    device->mmio->interrupt_ack = status;
-}
-
 void virtio_device_setup_queue_internal(virtio_device_queue_t *queue) {
     assert(queue != NULL);
     assert(queue->parent_device != NULL);
@@ -353,13 +342,6 @@ void virtio_device_init_internal(virtio_device_t *device) {
 
     assert(device->mut->initialized == false);
     device->mut->initialized = true;
-}
-
-void virtio_device_start_internal(virtio_device_t *device) {
-    assert(device != NULL && device->mut->initialized == true);
-    // it's okay to run this here, even before the task is necessarily created, because interrupts will not be enabled
-    // until the scheduler starts running
-    enable_irq(device->irq, virtio_device_irq_callback, (void *) device);
 }
 
 void *virtio_device_config_space(virtio_device_t *device) {
