@@ -94,7 +94,7 @@ typedef const struct {
 void telemetry_pump(tlm_replica_t *ts);
 
 macro_define(TELEMETRY_SYSTEM_REGISTER, t_ident, t_pipe, t_components) {
-    WATCHDOG_ASPECT(symbol_join(t_ident, aspect), TELEMETRY_REPLICAS);
+    WATCHDOG_ASPECT(symbol_join(t_ident, aspect), 1 * CLOCK_NS_PER_SEC, TELEMETRY_REPLICAS);
     static_repeat(TELEMETRY_REPLICAS, t_replica_id) {
         COMM_ENC_REGISTER(symbol_join(t_ident, encoder, t_replica_id), t_pipe, t_replica_id);
         tlm_registration_t * const symbol_join(t_ident, registrations, t_replica_id)[] = t_components;

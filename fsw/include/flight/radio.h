@@ -116,7 +116,7 @@ macro_define(RADIO_UPLINK_REGISTER, r_ident,   r_switch_in, r_switch_out,
                     && (size_t) r_up_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_up), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_up_port, r_up_addr, UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);
-    WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect), RADIO_REPLICAS);
+    WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_uplink_mut symbol_join(r_ident, uplink, r_replica_id, mut) = {
             .uplink_state = RAD_UL_INITIAL_STATE,
@@ -143,7 +143,7 @@ macro_define(RADIO_DOWNLINK_REGISTER, r_ident,     r_switch_in, r_switch_out,
                     && (size_t) r_down_capacity <= RMAP_MAX_DATA_LEN, "capacity check");
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_down), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_down_port, r_down_addr, REG_IO_BUFFER_SIZE, DOWNLINK_BUF_LOCAL_SIZE);
-    WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), RADIO_REPLICAS);
+    WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_downlink_mut symbol_join(r_ident, downlink, r_replica_id, mut) = {
             .downlink_state = RAD_DL_INITIAL_STATE,

@@ -9,7 +9,7 @@ typedef struct {} watchdog_aspect_t;
 
 // TODO: implement watchdog support on Linux
 
-macro_define(WATCHDOG_ASPECT, a_ident, a_sender_replicas) {
+macro_define(WATCHDOG_ASPECT, a_ident, a_timeout_ns, a_sender_replicas) {
     watchdog_aspect_t a_ident = {}
 }
 

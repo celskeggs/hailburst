@@ -20,7 +20,7 @@ struct scrubber_task_data {
 void scrubber_main_clip(struct scrubber_task_data *local);
 
 macro_define(SCRUBBER_REGISTER, s_ident) {
-    WATCHDOG_ASPECT(symbol_join(s_ident, aspect), 1);
+    WATCHDOG_ASPECT(symbol_join(s_ident, aspect), 1 * CLOCK_NS_PER_SEC, 1);
     struct scrubber_task_data s_ident = {
         .kernel_elf_rom = NULL,
         .iteration = 0,

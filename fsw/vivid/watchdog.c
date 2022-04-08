@@ -63,7 +63,7 @@ static bool watchdog_aspects_ok(watchdog_t *w) {
     // for subsequent reboots
     local_time_t now = timer_now_ns();
     if (now < w->mut->init_window_end) {
-        assert(w->mut->init_window_end < now + WATCHDOG_ASPECT_MAX_AGE);
+        assert(w->mut->init_window_end < now + WATCHDOG_STARTUP_GRACE_PERIOD);
         // override any previous issues
         bypass = true;
     }
@@ -81,7 +81,7 @@ static bool watchdog_aspects_ok(watchdog_t *w) {
         } else if (bypass) {
             // don't do anything yet
         } else if (now < aspect->last_known_ok[WATCHDOG_VOTER_ID]
-                    || now > aspect->last_known_ok[WATCHDOG_VOTER_ID] + WATCHDOG_ASPECT_MAX_AGE) {
+                    || now > aspect->last_known_ok[WATCHDOG_VOTER_ID] + aspect->timeout_ns) {
             debugf(CRITICAL, "Aspect %s not confirmed OK.", aspect->label);
             all_ok = false;
         }

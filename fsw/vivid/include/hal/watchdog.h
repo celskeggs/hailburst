@@ -8,12 +8,13 @@ enum {
     WATCHDOG_VOTER_REPLICAS = 1,
     WATCHDOG_VOTER_ID = 0,
 
-    WATCHDOG_ASPECT_MAX_AGE = 1 * CLOCK_NS_PER_SEC,
+    WATCHDOG_STARTUP_GRACE_PERIOD = 1 * CLOCK_NS_PER_SEC,
 };
 
 typedef const struct {
     const char   *label;
     duct_t       *duct;
+    duration_t    timeout_ns;
     local_time_t *last_known_ok;
 } watchdog_aspect_t;
 
@@ -46,13 +47,14 @@ macro_define(WATCHDOG_ASPECT_PROTO, a_ident) {
     extern watchdog_aspect_t a_ident
 }
 
-macro_define(WATCHDOG_ASPECT, a_ident, a_sender_replicas) {
+macro_define(WATCHDOG_ASPECT, a_ident, a_timeout_ns, a_sender_replicas) {
     DUCT_REGISTER(symbol_join(a_ident, duct), a_sender_replicas, WATCHDOG_VOTER_REPLICAS, 1, sizeof(uint8_t),
                   DUCT_SENDER_FIRST);
     local_time_t symbol_join(a_ident, last_known_ok)[WATCHDOG_VOTER_REPLICAS];
     watchdog_aspect_t a_ident = {
         .label = symbol_str(a_ident),
         .duct = &symbol_join(a_ident, duct),
+        .timeout_ns = (a_timeout_ns),
         .last_known_ok = symbol_join(a_ident, last_known_ok),
     }
 }
@@ -74,7 +76,7 @@ macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
         .food_duct = &symbol_join(w_ident, food_duct),
     };
     static inline void symbol_join(w_ident, init)(void) {
-        w_ident.mut->init_window_end = timer_now_ns() + WATCHDOG_ASPECT_MAX_AGE;
+        w_ident.mut->init_window_end = timer_now_ns() + WATCHDOG_STARTUP_GRACE_PERIOD;
     }
     PROGRAM_INIT(STAGE_RAW, symbol_join(w_ident, init));
     CLIP_REGISTER(symbol_join(w_ident, voter),   watchdog_voter_clip, &w_ident);
