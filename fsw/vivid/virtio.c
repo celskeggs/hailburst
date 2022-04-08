@@ -68,25 +68,25 @@ static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struc
 
 // TODO: go back through and add all the missing conversions from LE32 to CPU
 
-void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
+void virtio_queue_monitor_clip(virtio_device_queue_t *queue) {
     assert(queue != NULL && queue->duct != NULL && queue->parent_device != NULL);
 
     assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
 
     uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
-    uint16_t descriptor_count = (uint16_t) (new_used_idx - queue->last_used_idx);
+    uint16_t descriptor_count = (uint16_t) (new_used_idx - queue->mut->last_used_idx);
     uint16_t new_avail_idx;
     if (queue->direction == QUEUE_OUTPUT) {
         // make sure that all data was written out successfully.
-        queue->last_used_idx += descriptor_count;
-        assert(queue->last_used_idx == queue->avail->idx);
+        queue->mut->last_used_idx += descriptor_count;
+        assert(queue->mut->last_used_idx == queue->avail->idx);
         // (note: we *could* consider validating that the lengths are zero, and that the IDs match the ring indexes.)
         duct_txn_t txn;
         duct_receive_prepare(&txn, queue->duct, REPLICA_ID);
         // write out all messages
         uint16_t msg_index;
         for (msg_index = 0; msg_index < queue->queue_num; msg_index++) {
-            uint16_t ring_index = (queue->last_used_idx + msg_index) % queue->queue_num;
+            uint16_t ring_index = (queue->mut->last_used_idx + msg_index) % queue->queue_num;
             uint8_t *buffer = &queue->buffer[ring_index * duct_message_size(queue->duct)];
             size_t size = 0;
             if (!(size = duct_receive_message(&txn, buffer, NULL))) {
@@ -99,7 +99,7 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
             abortf("should never receive more than the maximum flow in one clip execution");
         }
         duct_receive_commit(&txn);
-        new_avail_idx = queue->last_used_idx + msg_index;
+        new_avail_idx = queue->mut->last_used_idx + msg_index;
     } else if (queue->direction == QUEUE_INPUT) {
 #ifdef DEBUG_VIRTQ
         debugf(TRACE, "Monitor clip for input queue %u: received descriptor count is %u.",
@@ -114,7 +114,7 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
         size_t current_offset = 0;
         for (uint16_t i = 0; i < descriptor_count; i++) {
             // process descriptor
-            uint32_t ring_index = (queue->last_used_idx + i) % queue->queue_num;
+            uint32_t ring_index = (queue->mut->last_used_idx + i) % queue->queue_num;
             struct virtq_used_elem *elem = &queue->used->ring[ring_index];
             assert(ring_index == elem->id);
             assert(elem->len > 0 && elem->len <= duct_message_size(queue->duct));
@@ -185,8 +185,8 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
             }
         }
         duct_send_commit(&txn);
-        queue->last_used_idx += descriptor_count;
-        new_avail_idx = queue->last_used_idx + queue->queue_num;
+        queue->mut->last_used_idx += descriptor_count;
+        new_avail_idx = queue->mut->last_used_idx + queue->queue_num;
     } else {
         abortf("invalid direction for queue");
     }
@@ -200,8 +200,8 @@ void virtio_queue_monitor_clip(struct virtio_device_queue *queue) {
 }
 
 static void virtio_device_irq_callback(void *opaque_device) {
-    struct virtio_device *device = (struct virtio_device *) opaque_device;
-    assert(device != NULL && device->initialized == true);
+    virtio_device_t *device = (virtio_device_t *) opaque_device;
+    assert(device != NULL && device->mut->initialized == true);
 
     uint32_t status = device->mmio->interrupt_status;
     if (status & VIRTIO_IRQ_BIT_USED_BUFFER) {
@@ -210,7 +210,7 @@ static void virtio_device_irq_callback(void *opaque_device) {
     device->mmio->interrupt_ack = status;
 }
 
-void virtio_device_setup_queue_internal(struct virtio_device_queue *queue) {
+void virtio_device_setup_queue_internal(virtio_device_queue_t *queue) {
     assert(queue != NULL);
     assert(queue->parent_device != NULL);
     assert(queue->duct != NULL);
@@ -236,7 +236,7 @@ void virtio_device_setup_queue_internal(struct virtio_device_queue *queue) {
 
     mmio->queue_num = queue->queue_num;
 
-    queue->last_used_idx = 0;
+    queue->mut->last_used_idx = 0;
 
     mmio->queue_desc   = (uint64_t) (uintptr_t) queue->desc;
     mmio->queue_driver = (uint64_t) (uintptr_t) queue->avail;
@@ -265,11 +265,11 @@ void virtio_device_setup_queue_internal(struct virtio_device_queue *queue) {
     debugf(DEBUG, "VIRTIO queue %d now configured", queue->queue_index);
 }
 
-void virtio_device_force_notify_queue(struct virtio_device_queue *queue) {
+void virtio_device_force_notify_queue(virtio_device_queue_t *queue) {
     // validate device initialized
-    assert(queue != NULL && queue->parent_device != NULL && queue->parent_device->initialized == true);
+    assert(queue != NULL && queue->parent_device != NULL && queue->parent_device->mut->initialized == true);
     // validate queue index
-    assert(queue->queue_index < queue->parent_device->num_queues);
+    assert(queue->queue_index < queue->parent_device->mut->num_queues);
     // make sure this queue has actually been set up.
     assert(queue->duct != NULL);
 
@@ -278,8 +278,8 @@ void virtio_device_force_notify_queue(struct virtio_device_queue *queue) {
 }
 
 // this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
-void virtio_device_init_internal(struct virtio_device *device) {
-    assert(device != NULL && device->initialized == false && device->num_queues == 0);
+void virtio_device_init_internal(virtio_device_t *device) {
+    assert(device != NULL && device->mut->initialized == false && device->mut->num_queues == 0);
     struct virtio_mmio_registers *mmio = device->mmio;
 
     debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", (uintptr_t) device->mmio, device->irq);
@@ -337,32 +337,32 @@ void virtio_device_init_internal(struct virtio_device *device) {
             abortf("VIRTIO device already had virtqueue %d initialized; failing.", queue_i);
         }
         if (device->mmio->queue_num_max == 0) {
-            device->num_queues = queue_i;
+            device->mut->num_queues = queue_i;
             break;
         }
     }
 
-    if (device->num_queues == 0) {
+    if (device->mut->num_queues == 0) {
         abortf("VIRTIO device discovered to have 0 queues; failing.");
     }
 
-    debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->num_queues);
+    debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->mut->num_queues);
 
     // enable driver
     mmio->status |= htole32(VIRTIO_DEVSTAT_DRIVER_OK);
 
-    assert(device->initialized == false);
-    device->initialized = true;
+    assert(device->mut->initialized == false);
+    device->mut->initialized = true;
 }
 
-void virtio_device_start_internal(struct virtio_device *device) {
-    assert(device != NULL && device->initialized == true);
+void virtio_device_start_internal(virtio_device_t *device) {
+    assert(device != NULL && device->mut->initialized == true);
     // it's okay to run this here, even before the task is necessarily created, because interrupts will not be enabled
     // until the scheduler starts running
-    enable_irq(device->irq, virtio_device_irq_callback, device);
+    enable_irq(device->irq, virtio_device_irq_callback, (void *) device);
 }
 
-void *virtio_device_config_space(struct virtio_device *device) {
-    assert(device != NULL && device->initialized && device->mmio != NULL);
+void *virtio_device_config_space(virtio_device_t *device) {
+    assert(device != NULL && device->mut->initialized && device->mmio != NULL);
     return device->mmio + 1;
 }

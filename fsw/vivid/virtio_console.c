@@ -165,5 +165,5 @@ void virtio_console_configure_internal(virtio_console_t *vc) {
 
     debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %d", config->max_nr_ports);
     // TODO: should I really be treating 'num_queues' as public?
-    assert(vc->devptr->num_queues <= (config->max_nr_ports + 1) * 2);
+    assert(vc->devptr->mut->num_queues <= (config->max_nr_ports + 1) * 2);
 }

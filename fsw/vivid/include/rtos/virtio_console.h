@@ -14,8 +14,8 @@ enum {
 };
 
 typedef const struct {
-    struct virtio_device *devptr;
-    struct virtio_device_queue *data_receive_queue;
+    virtio_device_t       *devptr;
+    virtio_device_queue_t *data_receive_queue;
 
     duct_t *control_rx;
     duct_t *control_tx;
