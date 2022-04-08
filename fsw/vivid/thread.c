@@ -13,7 +13,14 @@
 void task_entrypoint(TCB_t *state) {
     if (state->mut->hit_restart) {
         debugf(WARNING, "Pending restart on next scrubber cycle.");
-        scrubber_cycle_wait();
+
+        scrubber_pend_t pend;
+        scrubber_start_pend(&pend);
+
+        while (!scrubber_is_pend_done(&pend)) {
+            task_yield();
+        }
+
         debugf(WARNING, "Task %s resuming after scrubber cycle completion.", state->pcTaskName);
     }
 

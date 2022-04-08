@@ -47,10 +47,11 @@ typedef enum {
     RESTART_ON_RESCHEDULE,
 } restartable_t;
 
+#define SCRUBBER_COPIES 2
+
 typedef struct {
-    uint64_t iteration_1;
-    uint64_t iteration_2;
-    uint8_t max_attempts;
+    uint64_t iteration[SCRUBBER_COPIES];
+    uint8_t  max_attempts;
 } scrubber_pend_t;
 
 /**
