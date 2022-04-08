@@ -30,6 +30,7 @@ type Options struct {
 	Run          bool
 	Monitor      bool
 	Interactive  bool
+	QemuTrace    string
 }
 
 func RemoveIfExists(path string) {
@@ -323,6 +324,11 @@ func (opt Options) QemuArgs() []string {
 		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
 	)
+	if len(opt.QemuTrace) > 0 {
+		cmd = append(cmd,
+			"--trace", opt.QemuTrace,
+		)
+	}
 	return cmd
 }
 
