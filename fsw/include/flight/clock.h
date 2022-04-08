@@ -7,7 +7,7 @@
 #include <hal/time.h>
 #include <hal/timer.h>
 
-#define CLOCK_REPLICAS 1
+#define CLOCK_REPLICAS 3
 
 extern int64_t clock_offset_adj_slow[CLOCK_REPLICAS];
 extern int64_t clock_offset_adj_fast;
