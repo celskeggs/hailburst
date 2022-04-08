@@ -97,6 +97,10 @@ void virtio_console_control_clip(virtio_console_replica_t *vcr) {
     duct_send_prepare(&send_txn, vcr->console->control_tx, vcr->replica_id);
 
     if (!vcr->mut->sent_initial) {
+        struct virtio_console_config *config = virtio_device_config_space(vcr->console->devptr);
+        debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %u", config->max_nr_ports);
+        assert(config->max_nr_ports >= 2);
+
         // request initialization
         virtio_console_send_ctrl_msg(&send_txn, 0xFFFFFFFF, VIRTIO_CONSOLE_DEVICE_READY, 1);
         vcr->mut->sent_initial = true;
@@ -157,13 +161,4 @@ void virtio_console_control_clip(virtio_console_replica_t *vcr) {
 
     duct_receive_commit(&recv_txn);
     duct_send_commit(&send_txn);
-}
-
-void virtio_console_configure_internal(virtio_console_t *vc) {
-    assert(vc != NULL);
-    struct virtio_console_config *config = virtio_device_config_space(vc->devptr);
-
-    debugf(DEBUG, "Maximum number of ports supported by VIRTIO console device: %d", config->max_nr_ports);
-    // TODO: should I really be treating 'num_queues' as public?
-    assert(vc->devptr->mut->num_queues <= (config->max_nr_ports + 1) * 2);
 }

@@ -30,11 +30,6 @@ typedef enum {
 typedef void (*virtio_feature_select_cb)(uint64_t *features);
 
 typedef const struct {
-    struct virtio_device_mut {
-        bool initialized;
-        uint32_t num_queues;
-    } *mut;
-
     struct virtio_mmio_registers *mmio;
     virtio_feature_select_cb      feature_select_cb;
 
@@ -69,12 +64,7 @@ void virtio_monitor_clip(virtio_device_t *device);
 
 macro_define(VIRTIO_DEVICE_REGISTER,
              v_ident, v_region_id, v_device_id, v_feature_select) {
-    struct virtio_device_mut symbol_join(v_ident, mut) = {
-        .initialized = false,
-        .num_queues = 0, /* to be populated */
-    };
     virtio_device_t v_ident = {
-        .mut = &symbol_join(v_ident, mut),
         .mmio = (struct virtio_mmio_registers *)
                     (VIRTIO_MMIO_ADDRESS_BASE + VIRTIO_MMIO_ADDRESS_STRIDE * (v_region_id)),
         .feature_select_cb = (v_feature_select),
@@ -129,8 +119,6 @@ macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
         .used = &symbol_join(v_ident, v_queue_index, used).used,
     };
     static void symbol_join(v_ident, v_queue_index, init)(void) {
-        assert(v_ident.mut->initialized == true);
-        assert((v_queue_index) < v_ident.mut->num_queues);
         if ((v_direction) == QUEUE_INPUT) {
             assert((v_duct_flow) <= (v_queue_flow));
         } else {

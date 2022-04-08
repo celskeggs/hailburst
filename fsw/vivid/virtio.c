@@ -215,8 +215,9 @@ void virtio_device_setup_queue_internal(virtio_device_queue_t *queue) {
     if (mmio->queue_ready != 0) {
         abortf("VIRTIO device apparently already had virtqueue %d initialized; failing.", queue->queue_index);
     }
-    // inconsistency if we hit this: we already checked this condition during discovery!
-    assert(mmio->queue_num_max != 0);
+    if (mmio->queue_num_max == 0) {
+        abortf("VIRTIO device does not have queue %u that it was expected to have.", queue->queue_index);
+    }
 
     if (queue->queue_num > mmio->queue_num_max) {
         abortf("VIRTIO device supports up to %u entries in a queue buffer, but max flow is %u.",
@@ -255,12 +256,7 @@ void virtio_device_setup_queue_internal(virtio_device_queue_t *queue) {
 }
 
 void virtio_device_force_notify_queue(virtio_device_queue_t *queue) {
-    // validate device initialized
-    assert(queue != NULL && queue->parent_device != NULL && queue->parent_device->mut->initialized == true);
-    // validate queue index
-    assert(queue->queue_index < queue->parent_device->mut->num_queues);
-    // make sure this queue has actually been set up.
-    assert(queue->duct != NULL);
+    assert(queue != NULL && queue->parent_device != NULL && queue->duct != NULL);
 
     // spuriously notify the queue.
     atomic_store_relaxed(queue->parent_device->mmio->queue_notify, queue->queue_index);
@@ -268,7 +264,7 @@ void virtio_device_force_notify_queue(virtio_device_queue_t *queue) {
 
 // this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
 void virtio_device_init_internal(virtio_device_t *device) {
-    assert(device != NULL && device->mut->initialized == false && device->mut->num_queues == 0);
+    assert(device != NULL);
     struct virtio_mmio_registers *mmio = device->mmio;
 
     debugf(DEBUG, "VIRTIO device: addr=%x, irq=%u.", (uintptr_t) device->mmio, device->irq);
@@ -319,32 +315,11 @@ void virtio_device_init_internal(virtio_device_t *device) {
         abortf("VIRTIO device did not set FEATURES_OK: read back status=%08x; failing.", mmio->status);
     }
 
-    // discover number of queues
-    for (uint32_t queue_i = 0; ; queue_i++) {
-        device->mmio->queue_sel = queue_i;
-        if (device->mmio->queue_ready != 0) {
-            abortf("VIRTIO device already had virtqueue %d initialized; failing.", queue_i);
-        }
-        if (device->mmio->queue_num_max == 0) {
-            device->mut->num_queues = queue_i;
-            break;
-        }
-    }
-
-    if (device->mut->num_queues == 0) {
-        abortf("VIRTIO device discovered to have 0 queues; failing.");
-    }
-
-    debugf(DEBUG, "VIRTIO device discovered to have %u queues.", device->mut->num_queues);
-
     // enable driver
     mmio->status |= htole32(VIRTIO_DEVSTAT_DRIVER_OK);
-
-    assert(device->mut->initialized == false);
-    device->mut->initialized = true;
 }
 
 void *virtio_device_config_space(virtio_device_t *device) {
-    assert(device != NULL && device->mut->initialized && device->mmio != NULL);
+    assert(device != NULL && device->mmio != NULL);
     return device->mmio + 1;
 }

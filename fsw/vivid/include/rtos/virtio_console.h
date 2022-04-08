@@ -40,7 +40,6 @@ static_assert(sizeof(struct virtio_console_control) == 8, "wrong sizeof(struct v
 
 void virtio_console_feature_select(uint64_t *features);
 void virtio_console_control_clip(virtio_console_replica_t *vcr);
-void virtio_console_configure_internal(virtio_console_t *vc);
 
 #define VIRTIO_CONSOLE_CRX_SIZE (sizeof(struct virtio_console_control) + VIRTIO_CONSOLE_CTRL_RECV_MARGIN)
 #define VIRTIO_CONSOLE_CRX_FLOW    4
@@ -86,7 +85,6 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
         CLIP_REGISTER(symbol_join(v_ident, clip, v_replica_id),
                       virtio_console_control_clip, &symbol_join(v_ident, replica, v_replica_id));
     }
-    PROGRAM_INIT_PARAM(STAGE_CRAFT, virtio_console_configure_internal, v_ident, &v_ident);
 }
 
 // We have to schedule serial-ctrl before the virtio monitor, because while it isn't needed
