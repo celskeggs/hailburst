@@ -11,7 +11,8 @@ enum {
 
     SCRUBBER_ESCAPE_CHECK_INTERVAL = 128,
     SCRUBBER_ESCAPE_TIMEOUT        = 4 * CLOCK_NS_PER_US,
-    SCRUBBER_CYCLE_DELAY           = 200 * CLOCK_NS_PER_MS, // must be small enough to work well with watchdog timeouts
+    // TODO: adjust watchdog timeouts so this next number can be increased back to ~1 second
+    SCRUBBER_CYCLE_DELAY           = 1 * CLOCK_NS_PER_MS, // must be small enough to work well with watchdog timeouts
 };
 
 static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags,

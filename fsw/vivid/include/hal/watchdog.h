@@ -82,7 +82,7 @@ macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
 }
 
 macro_define(WATCHDOG_SCHEDULE, w_ident) {
-    CLIP_SCHEDULE(symbol_join(w_ident, voter),   10)
+    CLIP_SCHEDULE(symbol_join(w_ident, voter),   30)
     CLIP_SCHEDULE(symbol_join(w_ident, monitor), 10)
 }
 

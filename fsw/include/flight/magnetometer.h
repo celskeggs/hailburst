@@ -10,7 +10,7 @@
 #include <flight/command.h>
 #include <flight/telemetry.h>
 
-#define MAGNETOMETER_REPLICAS 1
+#define MAGNETOMETER_REPLICAS 3
 
 enum {
     MAGNETOMETER_MAX_READINGS = 100,
