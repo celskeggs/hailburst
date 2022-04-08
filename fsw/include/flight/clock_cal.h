@@ -5,9 +5,6 @@
 #include <bus/switch.h>
 #include <flight/telemetry.h>
 
-#define CLOCK_REPLICAS 1
-#define CLOCK_REPLICA_ID 0
-
 enum clock_state {
     CLOCK_IDLE,
     CLOCK_READ_MAGIC_NUMBER,
@@ -15,30 +12,42 @@ enum clock_state {
     CLOCK_CALIBRATED,
 };
 
-typedef struct {
-    enum clock_state state;
-    rmap_replica_t  *rmap;
-    tlm_endpoint_t  *telem;
-} clock_device_t;
+typedef const struct {
+    struct clock_replica_mut {
+        enum clock_state state;
+    } *mut;
+    uint8_t replica_id;
+    rmap_replica_t *rmap;
+    tlm_endpoint_t *telem;
+} clock_replica_t;
 
-void clock_start_clip(clock_device_t *clock);
+void clock_start_clip(clock_replica_t *cr);
 void clock_voter_clip(void);
 
 macro_define(CLOCK_REGISTER, c_ident, c_address, c_switch_in, c_switch_out, c_switch_port) {
     RMAP_ON_SWITCHES(symbol_join(c_ident, rmap), CLOCK_REPLICAS, c_switch_in, c_switch_out, c_switch_port, c_address,
                      sizeof(uint64_t), 0);
-    TELEMETRY_ASYNC_REGISTER(symbol_join(c_ident, telemetry), 1, 1);
-    clock_device_t c_ident = {
-        .rmap = RMAP_REPLICA_REF(symbol_join(c_ident, rmap), CLOCK_REPLICA_ID),
-        .state = CLOCK_IDLE,
-        .telem = &symbol_join(c_ident, telemetry),
-    };
-    CLIP_REGISTER(symbol_join(c_ident, clip), clock_start_clip, &c_ident);
+    TELEMETRY_ASYNC_REGISTER(symbol_join(c_ident, telemetry), CLOCK_REPLICAS, 1);
+    static_repeat(CLOCK_REPLICAS, c_replica_id) {
+        struct clock_replica_mut symbol_join(c_ident, mutable, c_replica_id) = {
+            .state = CLOCK_IDLE,
+        };
+        clock_replica_t symbol_join(c_ident, replica, c_replica_id) = {
+            .mut = &symbol_join(c_ident, mutable, c_replica_id),
+            .replica_id = c_replica_id,
+            .rmap = RMAP_REPLICA_REF(symbol_join(c_ident, rmap), c_replica_id),
+            .telem = &symbol_join(c_ident, telemetry),
+        };
+        CLIP_REGISTER(symbol_join(c_ident, clip, c_replica_id),
+                      clock_start_clip, &symbol_join(c_ident, replica, c_replica_id));
+    }
     CLIP_REGISTER(symbol_join(c_ident, voter), clock_voter_clip, NULL)
 }
 
 macro_define(CLOCK_SCHEDULE, c_ident) {
-    CLIP_SCHEDULE(symbol_join(c_ident, clip), 100)
+    static_repeat(CLOCK_REPLICAS, c_replica_id) {
+        CLIP_SCHEDULE(symbol_join(c_ident, clip, c_replica_id), 10)
+    }
     CLIP_SCHEDULE(symbol_join(c_ident, voter), 10)
 }
 
