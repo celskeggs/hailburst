@@ -13,6 +13,14 @@ macro_define(PP_ARRAY_SIZE, x) {
     (sizeof(x) / sizeof(*(x)))
 }
 
+macro_define(PP_IF_ELSE, cond, expr_true, expr_false) {
+    __builtin_choose_expr(
+        cond,
+        expr_true,
+        expr_false
+    )
+}
+
 macro_define(PP_CHECK_TYPE, expr, type) {
     __builtin_choose_expr(
         __builtin_types_compatible_p(typeof(expr), type),

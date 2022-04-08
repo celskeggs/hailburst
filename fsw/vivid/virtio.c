@@ -68,128 +68,140 @@ static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struc
 
 // TODO: go back through and add all the missing conversions from LE32 to CPU
 
-void virtio_queue_monitor_clip(virtio_device_queue_t *queue) {
-    assert(queue != NULL && queue->duct != NULL && queue->parent_device != NULL);
-
+void virtio_input_queue_monitor_clip(virtio_device_queue_t *queue) {
+    assert(queue != NULL && queue->duct != NULL && queue->parent_device != NULL && queue->direction == QUEUE_INPUT);
     assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
 
     uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
     uint16_t descriptor_count = (uint16_t) (new_used_idx - queue->mut->last_used_idx);
     uint16_t new_avail_idx;
-    if (queue->direction == QUEUE_OUTPUT) {
-        // make sure that all data was written out successfully.
-        queue->mut->last_used_idx += descriptor_count;
-        assert(queue->mut->last_used_idx == queue->avail->idx);
-        // (note: we *could* consider validating that the lengths are zero, and that the IDs match the ring indexes.)
-        duct_txn_t txn;
-        duct_receive_prepare(&txn, queue->duct, REPLICA_ID);
-        // write out all messages
-        uint16_t msg_index;
-        for (msg_index = 0; msg_index < queue->queue_num; msg_index++) {
-            uint16_t ring_index = (queue->mut->last_used_idx + msg_index) % queue->queue_num;
-            uint8_t *buffer = &queue->buffer[ring_index * duct_message_size(queue->duct)];
-            size_t size = 0;
-            if (!(size = duct_receive_message(&txn, buffer, NULL))) {
-                break;
-            }
-            assert(size >= 1 && size <= duct_message_size(queue->duct));
-            queue->desc[ring_index].len = size;
-        }
-        if (duct_receive_message(&txn, NULL, NULL) > 0) {
-            abortf("should never receive more than the maximum flow in one clip execution");
-        }
-        duct_receive_commit(&txn);
-        new_avail_idx = queue->mut->last_used_idx + msg_index;
-    } else if (queue->direction == QUEUE_INPUT) {
+
 #ifdef DEBUG_VIRTQ
-        debugf(TRACE, "Monitor clip for input queue %u: received descriptor count is %u.",
-               queue->queue_index, descriptor_count);
+    debugf(TRACE, "Monitor clip for input queue %u: received descriptor count is %u.",
+           queue->queue_index, descriptor_count);
 #endif
-        local_time_t timestamp = timer_now_ns();
-        duct_txn_t txn;
-        duct_send_prepare(&txn, queue->duct, REPLICA_ID);
-        assert(descriptor_count <= queue->queue_num);
-        bool allow_merge = (queue->queue_num) != duct_max_flow(queue->duct);
-        uint8_t *current_buffer = NULL;
-        size_t current_offset = 0;
-        for (uint16_t i = 0; i < descriptor_count; i++) {
-            // process descriptor
-            uint32_t ring_index = (queue->mut->last_used_idx + i) % queue->queue_num;
-            struct virtq_used_elem *elem = &queue->used->ring[ring_index];
-            assert(ring_index == elem->id);
-            assert(elem->len > 0 && elem->len <= duct_message_size(queue->duct));
-            uint8_t *elem_data = &queue->buffer[ring_index * duct_message_size(queue->duct)];
-            if (!allow_merge) {
-                // if merging is disabled, then transmit once for each descriptor
-                duct_send_message(&txn, elem_data, elem->len, timestamp);
+    local_time_t timestamp = timer_now_ns();
+    duct_txn_t txn;
+    duct_send_prepare(&txn, queue->duct, REPLICA_ID);
+    assert(descriptor_count <= queue->queue_num);
+    bool allow_merge = (queue->queue_num) != duct_max_flow(queue->duct);
+    uint8_t *current_buffer = NULL;
+    size_t current_offset = 0;
+    for (uint16_t i = 0; i < descriptor_count; i++) {
+        // process descriptor
+        uint32_t ring_index = (queue->mut->last_used_idx + i) % queue->queue_num;
+        struct virtq_used_elem *elem = &queue->used->ring[ring_index];
+        assert(ring_index == elem->id);
+        assert(elem->len > 0 && elem->len <= duct_message_size(queue->duct));
+        uint8_t *elem_data = &queue->buffer[ring_index * duct_message_size(queue->duct)];
+        if (!allow_merge) {
+            // if merging is disabled, then transmit once for each descriptor
+            duct_send_message(&txn, elem_data, elem->len, timestamp);
+        } else {
+            // if merging is enabled, then make sure we combine descriptor data
+            if (current_buffer != NULL) {
+                assert(0 < current_offset && current_offset < duct_message_size(queue->duct));
+                size_t merge_count = duct_message_size(queue->duct) - current_offset;
+                if (merge_count > elem->len) {
+                    merge_count = elem->len;
+                }
+                memcpy(current_buffer + current_offset, elem_data, merge_count);
+                current_offset += merge_count;
+                assert(current_offset <= duct_message_size(queue->duct));
+                if (current_offset == duct_message_size(queue->duct)) {
+                    if (duct_send_allowed(&txn)) {
+#ifdef DEBUG_VIRTQ
+                        debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+#endif
+                        duct_send_message(&txn, current_buffer, current_offset, timestamp);
+                    } else {
+                        debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
+                    }
+                    current_buffer = NULL;
+                    current_offset = 0;
+                }
+                if (merge_count < elem->len) {
+                    assert(current_offset == 0 && current_buffer == NULL);
+                    current_offset = elem->len - merge_count;
+                    current_buffer = elem_data;
+                    memmove(current_buffer, current_buffer + merge_count, current_offset);
+                }
             } else {
-                // if merging is enabled, then make sure we combine descriptor data
-                if (current_buffer != NULL) {
-                    assert(0 < current_offset && current_offset < duct_message_size(queue->duct));
-                    size_t merge_count = duct_message_size(queue->duct) - current_offset;
-                    if (merge_count > elem->len) {
-                        merge_count = elem->len;
-                    }
-                    memcpy(current_buffer + current_offset, elem_data, merge_count);
-                    current_offset += merge_count;
-                    assert(current_offset <= duct_message_size(queue->duct));
-                    if (current_offset == duct_message_size(queue->duct)) {
-                        if (duct_send_allowed(&txn)) {
+                assert(current_offset == 0 && current_buffer == NULL);
+                if (elem->len == duct_message_size(queue->duct)) {
+                    if (duct_send_allowed(&txn)) {
 #ifdef DEBUG_VIRTQ
-                            debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+                        debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
 #endif
-                            duct_send_message(&txn, current_buffer, current_offset, timestamp);
-                        } else {
-                            debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
-                        }
-                        current_buffer = NULL;
-                        current_offset = 0;
-                    }
-                    if (merge_count < elem->len) {
-                        assert(current_offset == 0 && current_buffer == NULL);
-                        current_offset = elem->len - merge_count;
-                        current_buffer = elem_data;
-                        memmove(current_buffer, current_buffer + merge_count, current_offset);
+                        duct_send_message(&txn, current_buffer, current_offset, timestamp);
+                    } else {
+                        debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
                     }
                 } else {
-                    assert(current_offset == 0 && current_buffer == NULL);
-                    if (elem->len == duct_message_size(queue->duct)) {
-                        if (duct_send_allowed(&txn)) {
-#ifdef DEBUG_VIRTQ
-                            debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
-#endif
-                            duct_send_message(&txn, current_buffer, current_offset, timestamp);
-                        } else {
-                            debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
-                        }
-                    } else {
-                        current_offset = elem->len;
-                        current_buffer = elem_data;
-                    }
+                    current_offset = elem->len;
+                    current_buffer = elem_data;
                 }
             }
-
-            // prepare descriptor
-            assert(queue->avail->ring[ring_index] == ring_index);
         }
 
-        if (allow_merge && current_buffer != NULL) {
-            assert(current_offset > 0);
-            if (duct_send_allowed(&txn)) {
-#ifdef DEBUG_VIRTQ
-                debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
-#endif
-                duct_send_message(&txn, current_buffer, current_offset, timestamp);
-            } else {
-                debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
-            }
-        }
-        duct_send_commit(&txn);
-        queue->mut->last_used_idx += descriptor_count;
-        new_avail_idx = queue->mut->last_used_idx + queue->queue_num;
-    } else {
-        abortf("invalid direction for queue");
+        // prepare descriptor
+        assert(queue->avail->ring[ring_index] == ring_index);
     }
+
+    if (allow_merge && current_buffer != NULL) {
+        assert(current_offset > 0);
+        if (duct_send_allowed(&txn)) {
+#ifdef DEBUG_VIRTQ
+            debugf(TRACE, "VIRTIO queue with merge enabled transmitted %u bytes.", current_offset);
+#endif
+            duct_send_message(&txn, current_buffer, current_offset, timestamp);
+        } else {
+            debugf(WARNING, "VIRTIO queue with merge enabled discarded %u bytes.", current_offset);
+        }
+    }
+    duct_send_commit(&txn);
+    queue->mut->last_used_idx += descriptor_count;
+    new_avail_idx = queue->mut->last_used_idx + queue->queue_num;
+
+    if (new_avail_idx != queue->avail->idx) {
+        atomic_store(queue->avail->idx, new_avail_idx);
+        if (!atomic_load(queue->avail->flags)) {
+            atomic_store_relaxed(queue->parent_device->mmio->queue_notify, queue->queue_index);
+        }
+    }
+}
+
+void virtio_output_queue_monitor_clip(virtio_device_queue_t *queue) {
+    assert(queue != NULL && queue->duct != NULL && queue->parent_device != NULL && queue->direction == QUEUE_OUTPUT);
+    assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
+
+    uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
+    uint16_t descriptor_count = (uint16_t) (new_used_idx - queue->mut->last_used_idx);
+    uint16_t new_avail_idx;
+
+    // make sure that all data was written out successfully.
+    queue->mut->last_used_idx += descriptor_count;
+    assert(queue->mut->last_used_idx == queue->avail->idx);
+    // (note: we *could* consider validating that the lengths are zero, and that the IDs match the ring indexes.)
+    duct_txn_t txn;
+    duct_receive_prepare(&txn, queue->duct, REPLICA_ID);
+    // write out all messages
+    uint16_t msg_index;
+    for (msg_index = 0; msg_index < queue->queue_num; msg_index++) {
+        uint16_t ring_index = (queue->mut->last_used_idx + msg_index) % queue->queue_num;
+        uint8_t *buffer = &queue->buffer[ring_index * duct_message_size(queue->duct)];
+        size_t size = 0;
+        if (!(size = duct_receive_message(&txn, buffer, NULL))) {
+            break;
+        }
+        assert(size >= 1 && size <= duct_message_size(queue->duct));
+        queue->desc[ring_index].len = size;
+    }
+    if (duct_receive_message(&txn, NULL, NULL) > 0) {
+        abortf("should never receive more than the maximum flow in one clip execution");
+    }
+    duct_receive_commit(&txn);
+    new_avail_idx = queue->mut->last_used_idx + msg_index;
 
     if (new_avail_idx != queue->avail->idx) {
         atomic_store(queue->avail->idx, new_avail_idx);
@@ -200,13 +212,8 @@ void virtio_queue_monitor_clip(virtio_device_queue_t *queue) {
 }
 
 void virtio_device_setup_queue_internal(virtio_device_queue_t *queue) {
-    assert(queue != NULL);
-    assert(queue->parent_device != NULL);
-    assert(queue->duct != NULL);
-    assert(queue->queue_num > 0);
-    assert(queue->desc != NULL);
-    assert(queue->avail != NULL);
-    assert(queue->used != NULL);
+    assert(queue != NULL && queue->parent_device != NULL && queue->duct != NULL && queue->queue_num > 0);
+    assert(queue->desc != NULL && queue->avail != NULL && queue->used != NULL);
 
     struct virtio_mmio_registers *mmio = queue->parent_device->mmio;
     assert(mmio != NULL);

@@ -75,7 +75,8 @@ macro_define(VIRTIO_DEVICE_REGISTER,
 }
 
 void virtio_device_setup_queue_internal(virtio_device_queue_t *queue);
-void virtio_queue_monitor_clip(virtio_device_queue_t *queue);
+void virtio_input_queue_monitor_clip(virtio_device_queue_t *queue);
+void virtio_output_queue_monitor_clip(virtio_device_queue_t *queue);
 
 macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
              v_ident, v_queue_index, v_direction, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity) {
@@ -130,7 +131,10 @@ macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
     }
     PROGRAM_INIT(STAGE_READY, symbol_join(v_ident, v_queue_index, init));
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, monitor_clip),
-                  virtio_queue_monitor_clip, &symbol_join(v_ident, v_queue_index, queue))
+                  PP_IF_ELSE((v_direction) == QUEUE_INPUT,
+                        virtio_input_queue_monitor_clip,
+                        virtio_output_queue_monitor_clip),
+                  &symbol_join(v_ident, v_queue_index, queue))
 }
 
 macro_define(VIRTIO_DEVICE_QUEUE_REF, v_ident, v_queue_index) {
