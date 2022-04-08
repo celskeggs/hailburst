@@ -56,7 +56,7 @@ void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok) {
     duct_send_commit(&txn);
 }
 
-static bool watchdog_aspects_ok(watchdog_t *w) {
+static bool watchdog_aspects_ok(watchdog_voter_replica_t *w) {
     bool bypass = false;
 
     // allow one time unit after init for watchdog aspects to be populated, because the init value of 0 isn't valid
@@ -72,16 +72,15 @@ static bool watchdog_aspects_ok(watchdog_t *w) {
     duct_txn_t txn;
 
     for (size_t i = 0; i < w->num_aspects; i++) {
-        watchdog_aspect_t *aspect = w->aspects[i];
+        watchdog_aspect_replica_t *aspect = &w->aspects[i]->replicas[w->replica_id];
         assert(aspect != NULL);
-        duct_receive_prepare(&txn, aspect->duct, WATCHDOG_VOTER_ID);
+        duct_receive_prepare(&txn, aspect->duct, w->replica_id);
         uint8_t ok_byte = 0;
         if (duct_receive_message(&txn, &ok_byte, NULL) == sizeof(ok_byte) && ok_byte == 1) {
-            aspect->last_known_ok[WATCHDOG_VOTER_ID] = now;
+            aspect->mut->last_known_ok = now;
         } else if (bypass) {
             // don't do anything yet
-        } else if (now < aspect->last_known_ok[WATCHDOG_VOTER_ID]
-                    || now > aspect->last_known_ok[WATCHDOG_VOTER_ID] + aspect->timeout_ns) {
+        } else if (now < aspect->mut->last_known_ok || now > aspect->mut->last_known_ok + aspect->timeout_ns) {
             debugf(CRITICAL, "Aspect %s not confirmed OK.", aspect->label);
             all_ok = false;
         }
@@ -91,17 +90,17 @@ static bool watchdog_aspects_ok(watchdog_t *w) {
     return all_ok;
 }
 
-void watchdog_voter_clip(watchdog_t *w) {
+void watchdog_voter_clip(watchdog_voter_replica_t *w) {
     duct_txn_t txn;
 
-    duct_receive_prepare(&txn, w->recipe_duct, WATCHDOG_VOTER_ID);
+    duct_receive_prepare(&txn, w->recipe_duct, w->replica_id);
     struct watchdog_recipe_message recipe_msg;
     bool has_recipe_msg = (duct_receive_message(&txn, &recipe_msg, NULL) == sizeof(recipe_msg));
     duct_receive_commit(&txn);
 
     bool aspects_ok = watchdog_aspects_ok(w);
 
-    duct_send_prepare(&txn, w->food_duct, WATCHDOG_VOTER_ID);
+    duct_send_prepare(&txn, w->food_duct, w->replica_id);
     if (!aspects_ok) {
         struct watchdog_food_message food_msg = {
             .force_reset = true,
@@ -139,7 +138,7 @@ static bool watchdog_check_can_feed_yet(struct watchdog_mmio_region *mmio) {
     return delay_until_earliest <= 0;
 }
 
-void watchdog_monitor_clip(watchdog_t *w) {
+void watchdog_monitor_clip(watchdog_monitor_t *w) {
     duct_txn_t txn;
 
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
