@@ -21,11 +21,6 @@ enum {
     VIRTIO_MMIO_REGION_NUM     = 32,
 };
 
-typedef enum {
-    QUEUE_INPUT  = 1,
-    QUEUE_OUTPUT = 2,
-} virtio_queue_dir_t;
-
 // read the features, write back selected features, or abort/assert if features are not acceptable
 typedef void (*virtio_feature_select_cb)(uint64_t *features);
 
@@ -48,10 +43,8 @@ typedef const struct {
     virtio_device_t *parent_device;
     uint32_t         queue_index;
 
-    duct_t            *duct;
-    uint8_t           *buffer; // size is the same as the queue max flow * duct message size
-    virtio_queue_dir_t direction;
-
+    duct_t  *duct;
+    uint8_t *buffer; // size is the same as the queue max flow * duct message size
     size_t   queue_num;
 
     struct virtq_desc  *desc;
@@ -78,8 +71,8 @@ void virtio_device_setup_queue_internal(virtio_device_queue_t *queue);
 void virtio_input_queue_monitor_clip(virtio_device_queue_t *queue);
 void virtio_output_queue_monitor_clip(virtio_device_queue_t *queue);
 
-macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
-             v_ident, v_queue_index, v_direction, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity) {
+macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
+             v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity, v_initial_avail_idx) {
     static uint8_t symbol_join(v_ident, v_queue_index, buffer)[(v_queue_flow) * (v_duct_capacity)];
     static struct virtq_desc symbol_join(v_ident, v_queue_index, desc)[v_queue_flow] __attribute__((__aligned__(16)));
     static struct {
@@ -89,7 +82,7 @@ macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
     } symbol_join(v_ident, v_queue_index, avail) __attribute__((__aligned__(2))) = {
         .avail = {
             .flags = 0,
-            .idx   = (v_direction) == QUEUE_INPUT ? (v_queue_flow) : 0,
+            .idx   = (v_initial_avail_idx),
         },
         // populate all of the avail ring entries to point to their corresponding descriptors.
         // we won't need to change these again.
@@ -113,28 +106,34 @@ macro_define(VIRTIO_DEVICE_QUEUE_REGISTER,
         .queue_index = (v_queue_index),
         .duct = &(v_duct),
         .buffer = symbol_join(v_ident, v_queue_index, buffer),
-        .direction = (v_direction),
         .queue_num = (v_queue_flow),
         .desc = symbol_join(v_ident, v_queue_index, desc),
         .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
         .used = &symbol_join(v_ident, v_queue_index, used).used,
     };
     static void symbol_join(v_ident, v_queue_index, init)(void) {
-        if ((v_direction) == QUEUE_INPUT) {
-            assert((v_duct_flow) <= (v_queue_flow));
-        } else {
-            assert((v_duct_flow) == (v_queue_flow));
-        }
         assert(duct_max_flow(&v_duct) == (v_duct_flow));
         assert(duct_message_size(&v_duct) == (v_duct_capacity));
         virtio_device_setup_queue_internal(&symbol_join(v_ident, v_queue_index, queue));
     }
-    PROGRAM_INIT(STAGE_READY, symbol_join(v_ident, v_queue_index, init));
+    PROGRAM_INIT(STAGE_READY, symbol_join(v_ident, v_queue_index, init))
+}
+
+macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
+             v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity) {
+    static_assert((v_duct_flow) <= (v_queue_flow), "merging can only reduce number of duct entries needed");
+    VIRTIO_DEVICE_QUEUE_COMMON(v_ident, v_queue_index, v_duct,
+                               v_duct_flow, v_queue_flow, v_duct_capacity, v_queue_flow);
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, monitor_clip),
-                  PP_IF_ELSE((v_direction) == QUEUE_INPUT,
-                        virtio_input_queue_monitor_clip,
-                        virtio_output_queue_monitor_clip),
-                  &symbol_join(v_ident, v_queue_index, queue))
+                  virtio_input_queue_monitor_clip, &symbol_join(v_ident, v_queue_index, queue))
+}
+
+macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
+             v_ident, v_queue_index, v_duct, v_duct_flow, v_duct_capacity) {
+    VIRTIO_DEVICE_QUEUE_COMMON(v_ident, v_queue_index, v_duct,
+                               v_duct_flow, v_duct_flow, v_duct_capacity, 0);
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, monitor_clip),
+                  virtio_output_queue_monitor_clip, &symbol_join(v_ident, v_queue_index, queue))
 }
 
 macro_define(VIRTIO_DEVICE_QUEUE_REF, v_ident, v_queue_index) {

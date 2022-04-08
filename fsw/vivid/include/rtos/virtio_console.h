@@ -51,21 +51,19 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
     VIRTIO_DEVICE_REGISTER(symbol_join(v_ident, device), v_region_id, VIRTIO_CONSOLE_ID,
                            virtio_console_feature_select);
     DUCT_REGISTER(symbol_join(v_ident, crx), 1, VIRTIO_CONSOLE_REPLICAS,
-                  VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_SIZE, DUCT_RECEIVER_FIRST);
+                  VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_SIZE, DUCT_SENDER_FIRST);
     DUCT_REGISTER(symbol_join(v_ident, ctx), VIRTIO_CONSOLE_REPLICAS, 1,
                   VIRTIO_CONSOLE_CTX_FLOW, VIRTIO_CONSOLE_CTX_SIZE, DUCT_SENDER_FIRST);
-    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 2, /* control.rx */
-                                 QUEUE_INPUT,  symbol_join(v_ident, crx),
-                                 VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_SIZE);
-    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 3, /* control.tx */
-                                 QUEUE_OUTPUT, symbol_join(v_ident, ctx),
-                                 VIRTIO_CONSOLE_CTX_FLOW, VIRTIO_CONSOLE_CTX_FLOW, VIRTIO_CONSOLE_CTX_SIZE);
+    VIRTIO_DEVICE_INPUT_QUEUE_REGISTER( symbol_join(v_ident, device), 2, symbol_join(v_ident, crx), /* control.rx */
+                                        VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_SIZE);
+    VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER(symbol_join(v_ident, device), 3, symbol_join(v_ident, ctx), /* control.tx */
+                                        VIRTIO_CONSOLE_CTX_FLOW,                          VIRTIO_CONSOLE_CTX_SIZE);
     // merge is enabled for the input queue, because duct streams should be single-element, but it is possible that
     // data received is split across multiple buffers by the virtio device, even if it doesn't fill them.
-    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 4, /* data[1].rx */
-                                 QUEUE_INPUT,  v_data_rx, 1, 3, v_rx_capacity);
-    VIRTIO_DEVICE_QUEUE_REGISTER(symbol_join(v_ident, device), 5, /* data[1].tx */
-                                 QUEUE_OUTPUT, v_data_tx, 1, 1, v_tx_capacity);
+    VIRTIO_DEVICE_INPUT_QUEUE_REGISTER( symbol_join(v_ident, device), 4, /* data[1].rx */
+                                        v_data_rx, 1, 3, v_rx_capacity);
+    VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER(symbol_join(v_ident, device), 5, /* data[1].tx */
+                                        v_data_tx, 1,    v_tx_capacity);
     virtio_console_t v_ident = {
         .devptr = &symbol_join(v_ident, device),
         .data_receive_queue = VIRTIO_DEVICE_QUEUE_REF(symbol_join(v_ident, device), 4), /* data[1].rx */
@@ -91,6 +89,7 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
 // during regular execution, it is on the critical path for activating the spacecraft bus.
 // The very first message it sends MUST go out immediately!
 macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
+    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2, 10) /* control.rx */
     static_repeat(VIRTIO_CONSOLE_REPLICAS, v_replica_id) {
         CLIP_SCHEDULE(symbol_join(v_ident, clip, v_replica_id), 15)
     }
@@ -99,7 +98,6 @@ macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
 }
 
 macro_define(VIRTIO_CONSOLE_SCHEDULE_RECEIVE, v_ident) {
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2, 10) /* control.rx */
     VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 4, 20) /* data[1].rx */
 }
 
