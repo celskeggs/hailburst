@@ -22,7 +22,7 @@
 
 enum {
     DUCT_MIN_REPLICAS =   1,
-    DUCT_MAX_REPLICAS =   3, /* limit this because we need to define an array of this size in each transaction */
+    DUCT_MAX_REPLICAS =   4, /* limit this because we need to define an array of this size in each transaction */
     DUCT_MIN_FLOW     =   1,
     DUCT_MAX_FLOW     = 254, /* don't allow 255 flow per epoch to avoid overflow of uint8_t variables */
 
@@ -127,7 +127,7 @@ void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id);
 // returns true if we're allowed to send at least one more message
 bool duct_send_allowed(duct_txn_t *txn);
 // asserts if we've used up our max flow in this transaction already
-void duct_send_message(duct_txn_t *txn, void *message, size_t size, local_time_t timestamp);
+void duct_send_message(duct_txn_t *txn, const void *message_in, size_t size, local_time_t timestamp);
 void duct_send_commit(duct_txn_t *txn);
 
 void duct_receive_prepare(duct_txn_t *txn, duct_t *duct, uint8_t receiver_id);

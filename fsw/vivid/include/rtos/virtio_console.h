@@ -14,8 +14,9 @@ enum {
 };
 
 typedef const struct {
-    virtio_device_t       *devptr;
-    virtio_device_queue_t *data_receive_queue;
+    virtio_device_t *devptr;
+
+    virtio_device_input_queue_singletons_t *data_receive_queue;
 
     duct_t *control_rx;
     duct_t *control_tx;
@@ -66,7 +67,7 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
                                         v_data_tx, 1,    v_tx_capacity);
     virtio_console_t v_ident = {
         .devptr = &symbol_join(v_ident, device),
-        .data_receive_queue = VIRTIO_DEVICE_QUEUE_REF(symbol_join(v_ident, device), 4), /* data[1].rx */
+        .data_receive_queue = VIRTIO_DEVICE_INPUT_QUEUE_REF(symbol_join(v_ident, device), 4), /* data[1].rx */
         .control_rx = &symbol_join(v_ident, crx),
         .control_tx = &symbol_join(v_ident, ctx),
     };
@@ -89,16 +90,16 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
 // during regular execution, it is on the critical path for activating the spacecraft bus.
 // The very first message it sends MUST go out immediately!
 macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2, 10) /* control.rx */
+    VIRTIO_DEVICE_INPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 2) /* control.rx */
     static_repeat(VIRTIO_CONSOLE_REPLICAS, v_replica_id) {
         CLIP_SCHEDULE(symbol_join(v_ident, clip, v_replica_id), 15)
     }
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3, 10) /* control.tx */
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 50) /* data[1].tx */
+    VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3, 10) /* control.tx */
+    VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 50) /* data[1].tx */
 }
 
 macro_define(VIRTIO_CONSOLE_SCHEDULE_RECEIVE, v_ident) {
-    VIRTIO_DEVICE_QUEUE_SCHEDULE(symbol_join(v_ident, device), 4, 20) /* data[1].rx */
+    VIRTIO_DEVICE_INPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 4) /* data[1].rx */
 }
 
 #endif /* FSW_VIVID_RTOS_VIRTIO_CONSOLE_H */

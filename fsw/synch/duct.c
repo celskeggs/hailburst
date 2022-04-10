@@ -48,7 +48,7 @@ bool duct_send_allowed(duct_txn_t *txn) {
 }
 
 // asserts if we've used up our max flow in this transaction already
-void duct_send_message(duct_txn_t *txn, void *message, size_t size, local_time_t timestamp) {
+void duct_send_message(duct_txn_t *txn, const void *message, size_t size, local_time_t timestamp) {
     assert(txn != NULL && txn->duct != NULL);
     assert(txn->mode == DUCT_TXN_SEND);
     assert(txn->replica_id < txn->duct->sender_replicas);
