@@ -17,6 +17,10 @@
 
 #define VIRTIO_INPUT_QUEUE_REPLICAS 3
 
+// NOTE: this is NOT a configuration option; this is the number used because there is one prepare clip and one commit
+// clip. The code would have to be restructured for this to be anything else.
+#define VIRTIO_OUTPUT_QUEUE_REPLICAS 2
+
 enum {
     // configuration for the particular VIRTIO MMIO layout of the qemu-system-arm -M virt simulation board
     VIRTIO_MMIO_ADDRESS_BASE   = 0x0A000000,
@@ -112,14 +116,13 @@ typedef const struct {
 // If a queue is an OUTPUT queue (i.e. it writes to the device),
 //     then virtio is the duct RECEIVER and the other end is the duct SENDER.
 typedef const struct {
-    struct virtio_device_output_queue_mut {
-        uint16_t last_used_idx;
-    } *mut;
     virtio_device_t *parent_device;
     uint32_t         queue_index;
 
     duct_t  *duct;
-    uint8_t *buffer; // size is the same as the queue max flow * duct message size
+    uint8_t *transmit_buffer; // size is the same as the queue max flow * duct message size
+    uint8_t *compare_buffer;  // size is the same as the duct message size
+    size_t   message_size;    // same as the duct message size
     size_t   queue_num;
 
     struct virtq_desc  *desc;
@@ -147,7 +150,8 @@ void virtio_device_setup_queue_internal(struct virtio_mmio_registers *mmio, uint
 void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *queue);
 void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue);
 void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queue);
-void virtio_output_queue_monitor_clip(virtio_device_output_queue_t *queue);
+void virtio_output_queue_prepare_clip(virtio_device_output_queue_t *queue);
+void virtio_output_queue_commit_clip(virtio_device_output_queue_t *queue);
 
 macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
              v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity, v_initial_avail_idx) {
@@ -241,23 +245,26 @@ macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
              v_ident, v_queue_index, v_duct, v_duct_flow, v_duct_capacity) {
     VIRTIO_DEVICE_QUEUE_COMMON(v_ident, v_queue_index, v_duct,
                                v_duct_flow, v_duct_flow, v_duct_capacity, 0);
-    struct virtio_device_output_queue_mut symbol_join(v_ident, v_queue_index, queue_mutable) = {
-        .last_used_idx = 0,
-    };
-    static uint8_t symbol_join(v_ident, v_queue_index, transmit_buffer)[(v_duct_flow) * (v_duct_capacity)];
+    uint8_t symbol_join(v_ident, v_queue_index, transmit_buffer)[(v_duct_flow) * (v_duct_capacity)];
+    uint8_t symbol_join(v_ident, v_queue_index, compare_buffer)[v_duct_capacity];
     virtio_device_output_queue_t symbol_join(v_ident, v_queue_index, queue) = {
-        .mut = &symbol_join(v_ident, v_queue_index, queue_mutable),
         .parent_device = &v_ident,
         .queue_index = (v_queue_index),
+
         .duct = &(v_duct),
-        .buffer = symbol_join(v_ident, v_queue_index, transmit_buffer),
+        .transmit_buffer = symbol_join(v_ident, v_queue_index, transmit_buffer),
+        .compare_buffer = symbol_join(v_ident, v_queue_index, compare_buffer),
+        .message_size = (v_duct_capacity),
         .queue_num = (v_duct_flow),
+
         .desc = symbol_join(v_ident, v_queue_index, desc),
         .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
         .used = &symbol_join(v_ident, v_queue_index, used).used,
     };
-    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, monitor_clip),
-                  virtio_output_queue_monitor_clip, &symbol_join(v_ident, v_queue_index, queue))
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
+                  virtio_output_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, queue));
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, commit_clip),
+                  virtio_output_queue_commit_clip, &symbol_join(v_ident, v_queue_index, queue))
 }
 
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REF, v_ident, v_queue_index) {
@@ -273,7 +280,8 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_SCHEDULE, v_ident, v_queue_index) {
 }
 
 macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE, v_ident, v_queue_index, v_nanos) {
-    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, monitor_clip), v_nanos)
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, prepare_clip), v_nanos)
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, commit_clip), v_nanos)
 }
 
 void *virtio_device_config_space(virtio_device_t *device);

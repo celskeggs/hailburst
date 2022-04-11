@@ -7,7 +7,8 @@
 #include <synch/duct.h>
 #include <bus/codec.h>
 
-#define FAKEWIRE_LINK_RECEIVE_REPLICAS 1
+#define FAKEWIRE_LINK_RECEIVE_REPLICAS  1
+#define FAKEWIRE_LINK_TRANSMIT_REPLICAS 1
 
 typedef struct {
     int fd_in;
