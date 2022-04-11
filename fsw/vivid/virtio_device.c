@@ -1,5 +1,3 @@
-#include <endian.h>
-
 #include <rtos/virtio.h>
 
 enum {
@@ -16,8 +14,6 @@ enum {
     VIRTIO_DEVSTAT_DEVICE_NEEDS_RESET = 64,
     VIRTIO_DEVSTAT_FAILED             = 128,
 };
-
-// TODO: go back through and add all the missing conversions from LE32 to CPU
 
 // this function runs during STAGE_RAW, so it had better not use any kernel registration facilities
 void virtio_device_init_internal(virtio_device_t *device) {
@@ -53,9 +49,9 @@ void virtio_device_init_internal(virtio_device_t *device) {
 
     // read the feature bits
     mmio->device_features_sel = htole32(0);
-    uint64_t features = htole32(mmio->device_features);
+    uint64_t features = le32toh(mmio->device_features);
     mmio->device_features_sel = htole32(1);
-    features |= ((uint64_t) htole32(mmio->device_features)) << 32;
+    features |= ((uint64_t) le32toh(mmio->device_features)) << 32;
 
     // select feature bits
     device->feature_select_cb(&features);
@@ -85,26 +81,26 @@ void virtio_device_setup_queue_internal(struct virtio_mmio_registers *mmio, uint
                                         struct virtq_desc *desc, struct virtq_avail *avail, struct virtq_used *used) {
     assert(mmio != NULL && queue_num > 0 && desc != NULL && avail != NULL && used != NULL);
 
-    mmio->queue_sel = queue_index;
-    if (mmio->queue_ready != 0) {
+    mmio->queue_sel = htole32(queue_index);
+    if (le32toh(mmio->queue_ready) != 0) {
         abortf("VIRTIO device apparently already had virtqueue %d initialized; failing.", queue_index);
     }
-    if (mmio->queue_num_max == 0) {
+    if (le32toh(mmio->queue_num_max) == 0) {
         abortf("VIRTIO device does not have queue %u that it was expected to have.", queue_index);
     }
 
-    if (queue_num > mmio->queue_num_max) {
+    if (queue_num > le32toh(mmio->queue_num_max)) {
         abortf("VIRTIO device supports up to %u entries in a queue buffer, but max flow is %u.",
-               mmio->queue_num_max, queue_num);
+               le32toh(mmio->queue_num_max), queue_num);
     }
 
-    mmio->queue_num = queue_num;
+    mmio->queue_num = htole32(queue_num);
 
-    mmio->queue_desc   = (uint64_t) (uintptr_t) desc;
-    mmio->queue_driver = (uint64_t) (uintptr_t) avail;
-    mmio->queue_device = (uint64_t) (uintptr_t) used;
+    mmio->queue_desc   = htole64((uint64_t) (uintptr_t) desc);
+    mmio->queue_driver = htole64((uint64_t) (uintptr_t) avail);
+    mmio->queue_device = htole64((uint64_t) (uintptr_t) used);
 
-    atomic_store(mmio->queue_ready, 1);
+    atomic_store(mmio->queue_ready, htole32(1));
 
     debugf(DEBUG, "VIRTIO queue %d now configured", queue_index);
 }

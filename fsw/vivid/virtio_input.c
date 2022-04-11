@@ -1,10 +1,6 @@
-#include <endian.h>
-
 #include <rtos/virtio.h>
 
 //#define DEBUG_VIRTQ
-
-// TODO: go back through and add all the missing conversions from LE32 to CPU
 
 void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *queue) {
     assert(queue != NULL && queue->prepare_mut != NULL && queue->used != NULL);
@@ -56,19 +52,20 @@ void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue)
         // process descriptor
         uint32_t ring_index = (mut->last_used_idx + i) % queue->queue_num;
         struct virtq_used_elem *elem = &queue->used->ring[ring_index];
-        assert(ring_index == elem->id);
-        assert(elem->len > 0 && elem->len <= queue->message_size);
+        assert(ring_index == le32toh(elem->id));
+        size_t elem_len = le32toh(elem->len);
+        assert(elem_len > 0 && elem_len <= queue->message_size);
         const uint8_t *elem_data = &queue->receive_buffer[ring_index * queue->message_size];
         if (merge_buffer == NULL) {
             // if merging is disabled, then transmit once for each descriptor
-            duct_send_message(&txn, elem_data, elem->len, timestamp);
+            duct_send_message(&txn, elem_data, elem_len, timestamp);
             continue;
         }
         // if merging is enabled, then collect data into a buffer until it's large enough to send.
         assert(merge_offset < queue->message_size);
         size_t merge_step_length = queue->message_size - merge_offset;
-        if (merge_step_length > elem->len) {
-            merge_step_length = elem->len;
+        if (merge_step_length > elem_len) {
+            merge_step_length = elem_len;
         }
         memcpy(merge_buffer + merge_offset, elem_data, merge_step_length);
         merge_offset += merge_step_length;
@@ -85,9 +82,9 @@ void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue)
             merge_buffer = NULL;
             merge_offset = 0;
         }
-        if (merge_step_length < elem->len) {
+        if (merge_step_length < elem_len) {
             assert(merge_offset == 0);
-            merge_offset = elem->len - merge_step_length;
+            merge_offset = elem_len - merge_step_length;
             memcpy(merge_buffer, elem_data, merge_offset);
         }
     }
@@ -112,23 +109,23 @@ void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queu
     assert(queue != NULL && queue->avail != NULL && queue->desc != NULL && queue->mut_observer != NULL);
     // populate or repair all descriptors
     for (uint32_t i = 0; i < queue->queue_num; i++) {
-        queue->avail->ring[i] = i; // TODO: is this redundant with other code?
+        queue->avail->ring[i] = htole16(i); // TODO: is this redundant with other code?
         queue->desc[i] = (struct virtq_desc) {
             /* address (guest-physical) */
-            .addr  = (uint64_t) (uintptr_t) &queue->receive_buffer[i * queue->message_size],
-            .len   = queue->message_size,
-            .flags = VIRTQ_DESC_F_WRITE,
-            .next  = 0xFFFF, /* invalid index */
+            .addr  = htole64((uint64_t) (uintptr_t) &queue->receive_buffer[i * queue->message_size]),
+            .len   = htole32(queue->message_size),
+            .flags = htole16(VIRTQ_DESC_F_WRITE),
+            .next  = htole16(0xFFFF), /* invalid index */
         };
     }
 
     struct virtio_device_input_queue_notepad_mutable state;
     if (notepad_observe(queue->mut_observer, &state)) {
         uint16_t new_avail_idx = state.last_used_idx + queue->queue_num;
-        if (new_avail_idx != queue->avail->idx) {
-            atomic_store(queue->avail->idx, new_avail_idx);
-            if (!atomic_load(queue->avail->flags)) {
-                atomic_store_relaxed(queue->parent_device->mmio->queue_notify, queue->queue_index);
+        if (new_avail_idx != le16toh(queue->avail->idx)) {
+            atomic_store(queue->avail->idx, htole16(new_avail_idx));
+            if (!le16toh(atomic_load(queue->avail->flags))) {
+                atomic_store_relaxed(queue->parent_device->mmio->queue_notify, htole32(queue->queue_index));
             }
         }
     } else {
@@ -140,5 +137,5 @@ void virtio_device_force_notify_queue(virtio_device_input_queue_singletons_t *qu
     assert(queue != NULL && queue->parent_device != NULL && queue->parent_device->mmio != NULL);
 
     // spuriously notify the queue.
-    atomic_store_relaxed(queue->parent_device->mmio->queue_notify, queue->queue_index);
+    atomic_store_relaxed(queue->parent_device->mmio->queue_notify, htole32(queue->queue_index));
 }

@@ -1,6 +1,7 @@
 #ifndef FSW_VIVID_RTOS_VIRTIO_H
 #define FSW_VIVID_RTOS_VIRTIO_H
 
+#include <endian.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -158,14 +159,14 @@ macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
     } symbol_join(v_ident, v_queue_index, avail) __attribute__((__aligned__(2))) = {
         // TODO: can this be eliminated? the regular input clip should now be able to populate these all correctly.
         .avail = {
-            .flags = 0,
-            .idx   = (v_initial_avail_idx),
+            .flags = htole16(0),
+            .idx   = htole16(v_initial_avail_idx),
         },
         // populate all of the avail ring entries to point to their corresponding descriptors.
         // we'll ensure these stay constant.
         .flex_ring = {
             static_repeat(v_queue_flow, desc_idx) {
-                desc_idx,
+                htole16(desc_idx),
             }
         },
     };
