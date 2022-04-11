@@ -51,7 +51,7 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
              v_ident, v_region_id, v_data_rx, v_data_tx, v_rx_capacity, v_tx_capacity) {
     VIRTIO_DEVICE_REGISTER(symbol_join(v_ident, device), v_region_id, VIRTIO_CONSOLE_ID,
                            virtio_console_feature_select);
-    DUCT_REGISTER(symbol_join(v_ident, crx), 1, VIRTIO_CONSOLE_REPLICAS,
+    DUCT_REGISTER(symbol_join(v_ident, crx), VIRTIO_INPUT_QUEUE_REPLICAS, VIRTIO_CONSOLE_REPLICAS,
                   VIRTIO_CONSOLE_CRX_FLOW, VIRTIO_CONSOLE_CRX_SIZE, DUCT_SENDER_FIRST);
     DUCT_REGISTER(symbol_join(v_ident, ctx), VIRTIO_CONSOLE_REPLICAS, 1,
                   VIRTIO_CONSOLE_CTX_FLOW, VIRTIO_CONSOLE_CTX_SIZE, DUCT_SENDER_FIRST);

@@ -93,7 +93,7 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
     static_assert((e_max_flow) * 2 <= MAX_OUTSTANDING_TOKENS, "exchange protocol cannot transmit this fast");
     DUCT_REGISTER(symbol_join(e_ident, transmit_duct), EXCHANGE_REPLICAS, 1,
                   1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
-    DUCT_REGISTER(symbol_join(e_ident, receive_duct),  1, EXCHANGE_REPLICAS,
+    DUCT_REGISTER(symbol_join(e_ident, receive_duct),  FAKEWIRE_LINK_RECEIVE_REPLICAS, EXCHANGE_REPLICAS,
                   1, (e_max_flow) * (e_buf_size) + 1024, DUCT_SENDER_FIRST);
     FAKEWIRE_LINK_REGISTER(symbol_join(e_ident, io_port), e_link_options,
                            symbol_join(e_ident, receive_duct), symbol_join(e_ident, transmit_duct),

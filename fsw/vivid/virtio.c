@@ -76,20 +76,18 @@ void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *que
 void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue) {
     assert(queue != NULL && queue->prepare_mut != NULL && queue->io_duct != NULL && queue->used != NULL);
 
-    uint16_t last_used_idx = 0;
-    duct_txn_t txn;
-    duct_receive_prepare(&txn, queue->mut_duct, queue->replica_id);
-    if (duct_receive_message(&txn, &last_used_idx, NULL) != sizeof(last_used_idx)) {
-        last_used_idx = letoh16(atomic_load(queue->used->idx));
+    bool mut_valid = false;
+    struct virtio_device_input_queue_notepad_mutable *mut = notepad_feedforward(queue->mut_replica, &mut_valid);
+    if (!mut_valid) {
+        mut->last_used_idx = letoh16(atomic_load(queue->used->idx));
         debugf(WARNING, "Failed to feed forward any value for last_used_idx; falling back to current used index %u.",
-               last_used_idx);
+               mut->last_used_idx);
     }
-    duct_receive_commit(&txn);
 
     uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
-    uint16_t descriptor_count = (uint16_t) (new_used_idx - last_used_idx);
+    uint16_t descriptor_count = (uint16_t) (new_used_idx - mut->last_used_idx);
     // this is to prevent skew caused by queue->used->idx changing between the first and last advance clip.
-    uint16_t alt_descriptor_count = (uint16_t) (queue->prepare_mut->new_used_idx - last_used_idx);
+    uint16_t alt_descriptor_count = (uint16_t) (queue->prepare_mut->new_used_idx - mut->last_used_idx);
     if (descriptor_count > alt_descriptor_count) {
         // We don't mark this as a warning, because it naturally occurs as a result of keep-alive messages being sent
         // at random intervals.
@@ -109,6 +107,7 @@ void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue)
 
     local_time_t timestamp = timer_epoch_ns();
 
+    duct_txn_t txn;
     duct_send_prepare(&txn, queue->io_duct, queue->replica_id);
 
     assert(queue->message_size == duct_message_size(queue->io_duct));
@@ -117,7 +116,7 @@ void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue)
     size_t merge_offset = 0;
     for (uint16_t i = 0; i < descriptor_count; i++) {
         // process descriptor
-        uint32_t ring_index = (last_used_idx + i) % queue->queue_num;
+        uint32_t ring_index = (mut->last_used_idx + i) % queue->queue_num;
         struct virtq_used_elem *elem = &queue->used->ring[ring_index];
         assert(ring_index == elem->id);
         assert(elem->len > 0 && elem->len <= queue->message_size);
@@ -168,15 +167,11 @@ void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue)
 
     duct_send_commit(&txn);
 
-    last_used_idx += descriptor_count;
-
-    duct_send_prepare(&txn, queue->mut_duct, queue->replica_id);
-    duct_send_message(&txn, &last_used_idx, sizeof(last_used_idx), 0);
-    duct_send_commit(&txn);
+    mut->last_used_idx += descriptor_count;
 }
 
 void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queue) {
-    assert(queue != NULL && queue->avail != NULL && queue->desc != NULL && queue->mut_duct != NULL);
+    assert(queue != NULL && queue->avail != NULL && queue->desc != NULL && queue->mut_observer != NULL);
     // populate or repair all descriptors
     for (uint32_t i = 0; i < queue->queue_num; i++) {
         queue->avail->ring[i] = i; // TODO: is this redundant with other code?
@@ -189,11 +184,9 @@ void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queu
         };
     }
 
-    duct_txn_t txn;
-    uint16_t last_used_idx = 0;
-    duct_receive_prepare(&txn, queue->mut_duct, VIRTIO_INPUT_QUEUE_REPLICAS /* n+1 index to siphon off the duct */);
-    if (duct_receive_message(&txn, &last_used_idx, NULL) == sizeof(last_used_idx)) {
-        uint16_t new_avail_idx = last_used_idx + queue->queue_num;
+    struct virtio_device_input_queue_notepad_mutable state;
+    if (notepad_observe(queue->mut_observer, &state)) {
+        uint16_t new_avail_idx = state.last_used_idx + queue->queue_num;
         if (new_avail_idx != queue->avail->idx) {
             atomic_store(queue->avail->idx, new_avail_idx);
             if (!atomic_load(queue->avail->flags)) {
@@ -201,9 +194,8 @@ void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queu
             }
         }
     } else {
-        debugf(WARNING, "Failed to retrieve any value for last_used_idx; not updating avail index.");
+        debugf(WARNING, "Failed to retrieve a valid value for last_used_idx; not updating avail index.");
     }
-    duct_receive_commit(&txn);
 }
 
 void virtio_output_queue_monitor_clip(virtio_device_output_queue_t *queue) {

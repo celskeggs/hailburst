@@ -12,8 +12,9 @@
 #include <hal/thread.h>
 #include <hal/init.h>
 #include <synch/duct.h>
+#include <synch/notepad.h>
 
-#define VIRTIO_INPUT_QUEUE_REPLICAS 1
+#define VIRTIO_INPUT_QUEUE_REPLICAS 3
 
 enum {
     // configuration for the particular VIRTIO MMIO layout of the qemu-system-arm -M virt simulation board
@@ -34,6 +35,10 @@ typedef const struct {
     uint32_t expected_device_id;
 } virtio_device_t;
 
+struct virtio_device_input_queue_notepad_mutable {
+    uint16_t last_used_idx;
+};
+
 // If a queue is an INPUT queue (i.e. it reads from the device),
 //     then virtio is the duct SENDER and the other end is the duct RECEIVER.
 typedef const struct {
@@ -48,17 +53,16 @@ typedef const struct {
     virtio_device_t *parent_device;
     uint32_t         queue_index;
     size_t           message_size;
+    size_t           queue_num;
 
-    uint8_t *receive_buffer;
-    duct_t  *mut_duct;
-    size_t   queue_num;
+    uint8_t       *receive_buffer;
+    notepad_ref_t *mut_observer;
 } virtio_device_input_queue_singletons_t;
 
 typedef const struct {
     struct virtio_device_input_queue_prepare_mut *prepare_mut;
 
     uint8_t  replica_id;
-    duct_t  *mut_duct; // for passing forward last_used_idx as state to other replicas
     duct_t  *io_duct;
     size_t   message_size; // duct_message_size(io_duct)
     size_t   queue_num;
@@ -66,6 +70,7 @@ typedef const struct {
     uint8_t *merge_buffer; // of size message_size
 
     struct virtq_used *used;
+    notepad_ref_t     *mut_replica;
 } virtio_device_input_queue_replica_t;
 
 // If a queue is an OUTPUT queue (i.e. it writes to the device),
@@ -153,9 +158,8 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
     struct virtio_device_input_queue_prepare_mut symbol_join(v_ident, v_queue_index, prepare_mut) = {
         .new_used_idx = 0,
     };
-    DUCT_REGISTER(symbol_join(v_ident, v_queue_index, mut_duct),
-                  VIRTIO_INPUT_QUEUE_REPLICAS, VIRTIO_INPUT_QUEUE_REPLICAS + 1,
-                  1, sizeof(uint16_t), DUCT_RECEIVER_FIRST); // TODO: DUCT_RECEIVER_FIRST isn't quite right for the split
+    NOTEPAD_REGISTER(symbol_join(v_ident, v_queue_index, mut_notepad),
+                     VIRTIO_INPUT_QUEUE_REPLICAS, 1, sizeof(struct virtio_device_input_queue_notepad_mutable));
     uint8_t symbol_join(v_ident, v_queue_index, receive_buffer)[(v_queue_flow) * (v_duct_capacity)];
     virtio_device_input_queue_singletons_t symbol_join(v_ident, v_queue_index, singleton_data) = {
         .prepare_mut = &symbol_join(v_ident, v_queue_index, prepare_mut),
@@ -167,10 +171,10 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
         .parent_device = &v_ident,
         .queue_index = (v_queue_index),
         .message_size = (v_duct_capacity),
+        .queue_num = (v_queue_flow),
 
         .receive_buffer = symbol_join(v_ident, v_queue_index, receive_buffer),
-        .mut_duct = &symbol_join(v_ident, v_queue_index, mut_duct),
-        .queue_num = (v_queue_flow),
+        .mut_observer = NOTEPAD_OBSERVER_REF(symbol_join(v_ident, v_queue_index, mut_notepad), 0),
     };
 
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
@@ -181,12 +185,13 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
             .prepare_mut = &symbol_join(v_ident, v_queue_index, prepare_mut),
 
             .replica_id = v_replica_id,
-            .mut_duct = &symbol_join(v_ident, v_queue_index, mut_duct),
             .io_duct = &(v_duct),
             .message_size = (v_duct_capacity),
             .queue_num = (v_queue_flow),
             .receive_buffer = symbol_join(v_ident, v_queue_index, receive_buffer),
             .merge_buffer = symbol_join(v_ident, v_queue_index, replica, v_replica_id, merge_buffer),
+
+            .mut_replica = NOTEPAD_REPLICA_REF(symbol_join(v_ident, v_queue_index, mut_notepad), v_replica_id),
             .used = &symbol_join(v_ident, v_queue_index, used).used,
         };
         CLIP_REGISTER(symbol_join(v_ident, v_queue_index, advance_clip, v_replica_id),

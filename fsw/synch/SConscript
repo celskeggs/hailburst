@@ -3,6 +3,7 @@ Import('env')
 sources = [
     "duct.c",
     "init.c",
+    "notepad.c",
     "pipe.c",
     "pipebuf.c",
 ]

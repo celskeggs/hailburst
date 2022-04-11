@@ -11,7 +11,8 @@
 
 void duct_send_prepare(duct_txn_t *txn, duct_t *duct, uint8_t sender_id) {
     assert(txn != NULL && duct != NULL);
-    assert(sender_id < duct->sender_replicas);
+    assertf(sender_id < duct->sender_replicas,
+            "duct %s[sender=%u]: invalid sender id for %u replicas", duct->label, sender_id, duct->sender_replicas);
 
 #ifdef DUCT_DEBUG
     debugf(TRACE, "duct %s[sender=%u]: prepare send", duct->label, sender_id);
