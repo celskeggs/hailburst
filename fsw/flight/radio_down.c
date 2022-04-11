@@ -48,6 +48,7 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
             rdr->mut->downlink_state = RAD_DL_WAITING_FOR_STREAM;
+            rdr->mut->downlink_pending_length = 0;
         } else {
             debugf(WARNING, "Failed to disable radio transmitter, error=0x%03x", status);
         }
@@ -64,6 +65,7 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
             rdr->mut->downlink_state = RAD_DL_MONITOR_TRANSMIT;
+            rdr->mut->downlink_pending_length = 0;
         } else {
             debugf(WARNING, "Failed to start radio transmission, error=0x%03x", status);
         }
@@ -102,19 +104,23 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
     }
     pipe_txn_t txn;
     pipe_receive_prepare(&txn, rdr->down_pipe, rdr->replica_id);
-    if (rdr->mut->downlink_state == RAD_DL_WAITING_FOR_STREAM) {
+    bool accepting_stream_input = (rdr->mut->downlink_state == RAD_DL_WAITING_FOR_STREAM
+                                || rdr->mut->downlink_state == RAD_DL_MONITOR_TRANSMIT);
+    if (accepting_stream_input && rdr->mut->downlink_pending_length == 0) {
         assert(tx_region.size >= DOWNLINK_BUF_LOCAL_SIZE);
         assert(pipe_message_size(rdr->down_pipe) <= DOWNLINK_BUF_LOCAL_SIZE);
-        rdr->mut->downlink_length = pipe_receive_message(&txn, rdr->mut->downlink_buf_local, NULL);
-        if (rdr->mut->downlink_length > 0) {
-            assert(rdr->mut->downlink_length <= DOWNLINK_BUF_LOCAL_SIZE);
-            rdr->mut->downlink_state = RAD_DL_WRITE_RADIO_MEMORY;
-            debugf(TRACE, "Radio downlink received %u bytes for transmission.", rdr->mut->downlink_length);
+        rdr->mut->downlink_pending_length = pipe_receive_message(&txn, rdr->mut->downlink_buf_local, NULL);
+        if (rdr->mut->downlink_pending_length > 0) {
+            assert(rdr->mut->downlink_pending_length <= DOWNLINK_BUF_LOCAL_SIZE);
+            debugf(TRACE, "Radio downlink received %u bytes for transmission.", rdr->mut->downlink_pending_length);
         }
     }
+    if (rdr->mut->downlink_state == RAD_DL_WAITING_FOR_STREAM && rdr->mut->downlink_pending_length > 0) {
+        rdr->mut->downlink_length = rdr->mut->downlink_pending_length;
+        rdr->mut->downlink_state = RAD_DL_WRITE_RADIO_MEMORY;
+    }
     // we can only start requesting data once we know we can accept it.
-    // (maybe there's a way to streamline this?)
-    pipe_receive_commit(&txn, (rdr->mut->downlink_state == RAD_DL_WAITING_FOR_STREAM) ? 1 : 0);
+    pipe_receive_commit(&txn, (accepting_stream_input && rdr->mut->downlink_pending_length == 0) ? 1 : 0);
 
     switch (rdr->mut->downlink_state) {
     case RAD_DL_QUERY_COMMON_CONFIG:

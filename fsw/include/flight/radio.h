@@ -94,6 +94,7 @@ typedef const struct {
     struct radio_downlink_mut {
         enum radio_downlink_state downlink_state;
         uint32_t                  downlink_length;
+        uint32_t                  downlink_pending_length;
         uint8_t                   downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
     } *mut;
     uint8_t            replica_id;
