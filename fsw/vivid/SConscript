@@ -18,8 +18,10 @@ sources = [
     "scrubber.c",
     "stubs.c",
     "thread.c",
-    "virtio.c",
     "virtio_console.c",
+    "virtio_device.c",
+    "virtio_input.c",
+    "virtio_output.c",
     "watchdog.c",
 ]
 

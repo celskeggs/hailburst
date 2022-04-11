@@ -27,6 +27,41 @@ enum {
 // read the features, write back selected features, or abort/assert if features are not acceptable
 typedef void (*virtio_feature_select_cb)(uint64_t *features);
 
+// all of these are little-endian
+struct virtio_mmio_registers {
+    const volatile uint32_t magic_value;         // Magic value (R)
+    const volatile uint32_t version;             // Device version number (R)
+    const volatile uint32_t device_id;           // Virtio Subsystem Device ID (R)
+    const volatile uint32_t vendor_id;           // Virtio Subsystem Vendor ID (R)
+    const volatile uint32_t device_features;     // Flags representing features the device supports (R)
+          volatile uint32_t device_features_sel; // Device (host) features word selection (W)
+                   uint32_t RESERVED_0[2];
+          volatile uint32_t driver_features;     // Flags representing device features understood and activated by the driver (W)
+          volatile uint32_t driver_features_sel; // Activated (guest) features word selection (W)
+                   uint32_t RESERVED_1[2];
+          volatile uint32_t queue_sel;           // Virtual queue index (W)
+    const volatile uint32_t queue_num_max;       // Maximum virtual queue size (R)
+          volatile uint32_t queue_num;           // Virtual queue size (W)
+                   uint32_t RESERVED_2[2];
+          volatile uint32_t queue_ready;         // Virtual queue ready bit (RW)
+                   uint32_t RESERVED_3[2];
+          volatile uint32_t queue_notify;        // Queue notifier (W)
+                   uint32_t RESERVED_4[3];
+    const volatile uint32_t interrupt_status;    // Interrupt status (R)
+          volatile uint32_t interrupt_ack;       // Interrupt acknowledge (W)
+                   uint32_t RESERVED_5[2];
+          volatile uint32_t status;              // Device status (RW)
+                   uint32_t RESERVED_6[3];
+          volatile uint64_t queue_desc;          // Virtual queue's Descriptor Area 64 bit long physical address (W)
+                   uint32_t RESERVED_7[2];
+          volatile uint64_t queue_driver;        // Virtual queue's Driver Area 64 bit long physical address (W)
+                   uint32_t RESERVED_8[2];
+          volatile uint64_t queue_device;        // Virtual queue's Device Area 64 bit long physical address (W)
+                   uint32_t RESERVED_9[21];
+    const volatile uint32_t config_generation;   // Configuration atomicity value (R)
+};
+static_assert(sizeof(struct virtio_mmio_registers) == 0x100, "wrong sizeof(struct virtio_mmio_registers)");
+
 typedef const struct {
     struct virtio_mmio_registers *mmio;
     virtio_feature_select_cb      feature_select_cb;
