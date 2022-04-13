@@ -39,6 +39,8 @@ void pipe_receiver_reset(pipe_receiver_t *r) {
 static duct_flow_index pipe_receiver_request_count(pipe_receiver_t *r) {
     assert(r != NULL);
     assert(r->scratch_offset <= r->scratch_avail && r->scratch_avail <= r->scratch_capacity);
+    // ensure that data can be pipelined, to avoid stalling due to incompletely-consumed data
+    assert(2 * pipe_message_size(r->pipe) <= r->scratch_capacity);
     size_t fill_level = r->scratch_avail - r->scratch_offset;
     size_t current_receivable = r->scratch_capacity - fill_level;
     // round down; if we can receive less than a single message, that means we can't receive anything at all!

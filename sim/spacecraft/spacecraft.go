@@ -88,7 +88,7 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), 
 			commGround, commFlight := telecomm.MakePathway(sim, time.Microsecond)
 			mission.AttachMissionControl(sim, commGround, ac)
 			radio.FWRadioConfig{
-				MemorySize:     0x4000,
+				MemorySize:     0x2000,
 				LogicalAddress: AddrRadio,
 				DestinationKey: KeyRadio,
 			}.Construct(sim, ports[PortRadio], commFlight)
