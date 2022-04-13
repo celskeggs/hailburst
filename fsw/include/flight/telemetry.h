@@ -116,7 +116,7 @@ macro_define(TELEMETRY_SYSTEM_REGISTER, t_ident, t_pipe, t_components) {
 
 macro_define(TELEMETRY_SCHEDULE, t_ident) {
     static_repeat(TELEMETRY_REPLICAS, t_replica_id) {
-        CLIP_SCHEDULE(symbol_join(t_ident, clip, t_replica_id), 100)
+        CLIP_SCHEDULE(symbol_join(t_ident, clip, t_replica_id), 120)
     }
 }
 

@@ -100,7 +100,7 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
 macro_define(MAGNETOMETER_SCHEDULE, m_ident) {
     static_repeat(MAGNETOMETER_REPLICAS, m_replica_id) {
         CLIP_SCHEDULE(symbol_join(m_ident, query, m_replica_id), 20)
-        CLIP_SCHEDULE(symbol_join(m_ident, telem, m_replica_id), 100)
+        CLIP_SCHEDULE(symbol_join(m_ident, telem, m_replica_id), 90)
     }
 }
 
