@@ -33,14 +33,12 @@ struct watchdog_recipe_message {
 // sent in response to a recipe message OR if it's time to force-reset the watchdog. (a message is sent, instead of
 // directly forcing a reset, so that voting can take place.)
 struct watchdog_food_message {
-    bool force_reset;
     uint32_t food; // only populated if force_reset is false.
-};
+    bool force_reset;
+} __attribute__((packed));
+static_assert(sizeof(struct watchdog_food_message) == 5, "must not be any padding to cause memcmp issues");
 
 typedef const struct {
-    struct watchdog_voter_replica_mut {
-        local_time_t init_window_end;
-    } *mut;
     uint8_t             replica_id;
     watchdog_aspect_t **aspects;
     size_t              num_aspects;
@@ -53,6 +51,7 @@ typedef const struct {
     duct_t *food_duct;
 } watchdog_monitor_t;
 
+void watchdog_populate_aspect_timeouts(watchdog_aspect_t **aspects, size_t num_aspects);
 void watchdog_voter_clip(watchdog_voter_replica_t *wvr);
 void watchdog_monitor_clip(watchdog_monitor_t *wm);
 
@@ -90,25 +89,23 @@ macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
                   1, sizeof(struct watchdog_food_message), DUCT_SENDER_FIRST);
     static_repeat(WATCHDOG_VOTER_REPLICAS, w_replica_id) {
         watchdog_aspect_t *symbol_join(w_ident, aspects, w_replica_id)[] = w_aspects;
-        struct watchdog_voter_replica_mut symbol_join(w_ident, mutable, w_replica_id) = {
-            .init_window_end = 0, /* populated during init */
-        };
         watchdog_voter_replica_t symbol_join(w_ident, voter, w_replica_id) = {
-            .mut = &symbol_join(w_ident, mutable, w_replica_id),
             .replica_id = w_replica_id,
             .aspects = symbol_join(w_ident, aspects, w_replica_id),
             .num_aspects = PP_ARRAY_SIZE(symbol_join(w_ident, aspects, w_replica_id)),
             .recipe_duct = &symbol_join(w_ident, recipe_duct),
             .food_duct = &symbol_join(w_ident, food_duct),
         };
-        static inline void symbol_join(w_ident, init, w_replica_id)(void) {
-            symbol_join(w_ident, voter, w_replica_id).mut->init_window_end
-                    = timer_now_ns() + WATCHDOG_STARTUP_GRACE_PERIOD;
-        }
-        PROGRAM_INIT(STAGE_RAW, symbol_join(w_ident, init, w_replica_id));
         CLIP_REGISTER(symbol_join(w_ident, voter_clip, w_replica_id),
                       watchdog_voter_clip, &symbol_join(w_ident, voter, w_replica_id));
     }
+    static inline void symbol_join(w_ident, init)(void) {
+        watchdog_populate_aspect_timeouts(
+            symbol_join(w_ident, aspects, 0),
+            PP_ARRAY_SIZE(symbol_join(w_ident, aspects, 0))
+        );
+    }
+    PROGRAM_INIT(STAGE_RAW, symbol_join(w_ident, init));
     watchdog_monitor_t symbol_join(w_ident, monitor) = {
         .recipe_duct = &symbol_join(w_ident, recipe_duct),
         .food_duct = &symbol_join(w_ident, food_duct),

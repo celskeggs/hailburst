@@ -56,17 +56,21 @@ void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok) {
     duct_send_commit(&txn);
 }
 
-static bool watchdog_aspects_ok(watchdog_voter_replica_t *w) {
-    bool bypass = false;
-
-    // allow one time unit after init for watchdog aspects to be populated, because the init value of 0 isn't valid
-    // for subsequent reboots
+void watchdog_populate_aspect_timeouts(watchdog_aspect_t **aspects, size_t num_aspects) {
     local_time_t now = timer_now_ns();
-    if (now < w->mut->init_window_end) {
-        assert(w->mut->init_window_end < now + WATCHDOG_STARTUP_GRACE_PERIOD);
-        // override any previous issues
-        bypass = true;
+
+    // allow one timeout period after init for watchdog aspects to be populated, so that nothing fails immediately.
+    for (size_t i = 0; i < num_aspects; i++) {
+        for (size_t j = 0; j < WATCHDOG_VOTER_REPLICAS; j++) {
+            watchdog_aspect_replica_t *aspect = &aspects[i]->replicas[j];
+            assert(aspect != NULL);
+            aspect->mut->last_known_ok = now;
+        }
     }
+}
+
+static bool watchdog_aspects_ok(watchdog_voter_replica_t *w) {
+    local_time_t now = timer_epoch_ns();
 
     bool all_ok = true;
     duct_txn_t txn;
@@ -78,8 +82,6 @@ static bool watchdog_aspects_ok(watchdog_voter_replica_t *w) {
         uint8_t ok_byte = 0;
         if (duct_receive_message(&txn, &ok_byte, NULL) == sizeof(ok_byte) && ok_byte == 1) {
             aspect->mut->last_known_ok = now;
-        } else if (bypass) {
-            // don't do anything yet
         } else if (now < aspect->mut->last_known_ok || now > aspect->mut->last_known_ok + aspect->timeout_ns) {
             debugf(CRITICAL, "Aspect %s not confirmed OK.", aspect->label);
             all_ok = false;
