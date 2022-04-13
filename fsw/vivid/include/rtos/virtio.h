@@ -155,6 +155,7 @@ void virtio_output_queue_commit_clip(virtio_device_output_queue_t *queue);
 
 macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
              v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity, v_initial_avail_idx) {
+    static_assert(((v_queue_flow) & ((v_queue_flow) - 1)) == 0, "per virtio spec, queue flow must be a power of 2");
     static struct virtq_desc symbol_join(v_ident, v_queue_index, desc)[v_queue_flow] __attribute__((__aligned__(16)));
     static struct {
         /* weird init syntax required due to flexible array member */

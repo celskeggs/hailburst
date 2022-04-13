@@ -62,7 +62,7 @@ macro_define(VIRTIO_CONSOLE_REGISTER,
     // merge is enabled for the input queue, because duct streams should be single-element, but it is possible that
     // data received is split across multiple buffers by the virtio device, even if it doesn't fill them.
     VIRTIO_DEVICE_INPUT_QUEUE_REGISTER( symbol_join(v_ident, device), 4, /* data[1].rx */
-                                        v_data_rx, 1, 3, v_rx_capacity);
+                                        v_data_rx, 1, 4, v_rx_capacity);
     VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER(symbol_join(v_ident, device), 5, /* data[1].tx */
                                         v_data_tx, 1,    v_tx_capacity);
     virtio_console_t v_ident = {
@@ -95,7 +95,7 @@ macro_define(VIRTIO_CONSOLE_SCHEDULE_TRANSMIT, v_ident) {
         CLIP_SCHEDULE(symbol_join(v_ident, clip, v_replica_id), 15)
     }
     VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 3, 10) /* control.tx */
-    VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 50) /* data[1].tx */
+    VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE(symbol_join(v_ident, device), 5, 70) /* data[1].tx */
 }
 
 macro_define(VIRTIO_CONSOLE_SCHEDULE_RECEIVE, v_ident) {
