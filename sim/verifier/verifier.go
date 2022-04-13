@@ -140,7 +140,7 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 		_, ok := event.(TelemetryDownlinkEvent)
 		return ok
 	})
-	flexibility := 15 * time.Millisecond // normal flexibility
+	flexibility := 20 * time.Millisecond // normal flexibility
 	if remoteTimestamp.Before(firstTDE.(TelemetryDownlinkEvent).LocalTimestamp) {
 		flexibility = 100 * time.Millisecond // more flexibility for buffered data
 	}

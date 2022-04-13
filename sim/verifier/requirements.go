@@ -78,7 +78,7 @@ const (
 	// acceptable.
 	ReqTelemOrdered = "ReqTelemOrdered"
 	// ReqTelemRecent requires:
-	// Every downlinked telemetry packet shall have a remote timestamp within the last 15ms.
+	// Every downlinked telemetry packet shall have a remote timestamp within the last 20ms.
 	ReqTelemRecent = "ReqTelemRecent"
 	// ReqCmdSuccess requires:
 	// Every command shall succeed.
