@@ -1,3 +1,4 @@
+#include <endian.h>
 #include <string.h>
 
 #include <hal/atomic.h>
@@ -172,6 +173,7 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
         }
         valid_messages++;
         duct_flow_index votes = 1;
+        duct_flow_index total_valid_messages = valid_messages;
         for (uint8_t compare_id = candidate_id + 1; compare_id < txn->duct->sender_replicas; compare_id++) {
             duct_message_t *compare = duct_check_message(txn->duct, compare_id, txn->replica_id, txn->flow_current);
             if (compare == NULL) {
@@ -181,20 +183,40 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
 #endif
                 continue;
             }
+            total_valid_messages++;
             if (compare->size != candidate->size || compare->timestamp != candidate->timestamp) {
-#ifdef DUCT_DEBUG
                 debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: "
                        "metadata mismatch (size %zu ? %zu, timestamp %zu ? %zu); skipping.",
                        txn->duct->label, txn->replica_id, candidate_id, compare_id,
                        candidate->size, compare->size, candidate->timestamp, compare->timestamp);
-#endif
                 continue;
             }
             if (memcmp(candidate->body, compare->body, compare->size) != 0) {
-#ifdef DUCT_DEBUG
-                debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: data mismatch; skipping.",
-                       txn->duct->label, txn->replica_id, candidate_id, compare_id);
-#endif
+                debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: data mismatch (len %zu); skipping.",
+                       txn->duct->label, txn->replica_id, candidate_id, compare_id, compare->size);
+                size_t i = 0;
+                while (i + 16 <= compare->size) {
+                    uint32_t *ca_data = (uint32_t *) &candidate->body[i];
+                    uint32_t *co_data = (uint32_t *) &compare->body[i];
+                    debugf(TRACE, "[+%3zu] %u. %08x %08x %08x %08x VS %u. %08x %08x %08x %08x",
+                           i, candidate_id, htobe32(ca_data[0]), htobe32(ca_data[1]), htobe32(ca_data[2]), htobe32(ca_data[3]),
+                              compare_id,   htobe32(co_data[0]), htobe32(co_data[1]), htobe32(co_data[2]), htobe32(co_data[3]));
+                    i += 16;
+                }
+                while (i + 4 <= compare->size) {
+                    uint32_t *ca_data = (uint32_t *) &candidate->body[i];
+                    uint32_t *co_data = (uint32_t *) &compare->body[i];
+                    debugf(TRACE, "[+%3zu] %u. %08x VS %u. %08x",
+                           i, candidate_id, htobe32(ca_data[0]),
+                              compare_id,   htobe32(co_data[0]));
+                    i += 4;
+                }
+                while (i < compare->size) {
+                    debugf(TRACE, "[+%3zu] %u. %02x VS %u. %02x",
+                           i, candidate_id, candidate->body[i],
+                              compare_id,   compare->body[i]);
+                    i += 1;
+                }
                 continue;
             }
             votes++;
@@ -208,8 +230,9 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
         }
         if (votes >= majority) {
             if (votes != txn->duct->sender_replicas) {
-                miscomparef("duct %s[receiver=%u]: voted for a message with %u/%u votes on index %u.",
-                            txn->duct->label, txn->replica_id, votes, txn->duct->sender_replicas, txn->flow_current);
+                miscomparef("duct %s[receiver=%u]: voted for a message with %u/%u/%u votes on index %u.",
+                            txn->duct->label, txn->replica_id, votes, total_valid_messages, txn->duct->sender_replicas,
+                            txn->flow_current);
             }
             if (message_out != NULL) {
                 memcpy(message_out, candidate->body, candidate->size);
