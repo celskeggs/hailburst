@@ -15,20 +15,20 @@ type Connection struct {
 	inbound      *ByteSchedule
 }
 
-func MakePathway(ctx model.SimContext, byteDuration time.Duration) (*Connection, *Connection) {
+func MakePathway(ctx model.SimContext, l2rByteDuration, r2lByteDuration time.Duration) (*Connection, *Connection) {
 	l2r, r2l := MakeByteSchedule(ctx), MakeByteSchedule(ctx)
 	l2rd := component.MakeEventDispatcher(ctx, "sim.telecomm.Connection/L2R")
 	r2ld := component.MakeEventDispatcher(ctx, "sim.telecomm.Connection/R2L")
 	return &Connection{
 			ctx:          ctx,
-			byteDuration: byteDuration,
+			byteDuration: l2rByteDuration,
 			outbound:     l2r,
 			dispOut:      l2rd,
 			inbound:      r2l,
 			dispIn:       r2ld,
 		}, &Connection{
 			ctx:          ctx,
-			byteDuration: byteDuration,
+			byteDuration: r2lByteDuration,
 			outbound:     r2l,
 			dispOut:      r2ld,
 			inbound:      l2r,

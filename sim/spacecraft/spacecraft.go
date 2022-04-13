@@ -85,7 +85,7 @@ func BuildSpacecraft(onFailure func(elapsed time.Duration, explanation string), 
 				Sink:   sink,
 			})
 			// connect a radio to the switch on Port 2
-			commGround, commFlight := telecomm.MakePathway(sim, time.Microsecond)
+			commGround, commFlight := telecomm.MakePathway(sim, time.Millisecond, 5 * time.Microsecond)
 			mission.AttachMissionControl(sim, commGround, ac)
 			radio.FWRadioConfig{
 				MemorySize:     0x2000,
