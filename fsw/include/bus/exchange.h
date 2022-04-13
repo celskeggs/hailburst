@@ -8,7 +8,6 @@
 #define EXCHANGE_REPLICAS 3
 
 enum {
-    EXCHANGE_QUEUE_DEPTH = 16,
     MAX_OUTSTANDING_TOKENS = 10,
 };
 
@@ -88,7 +87,6 @@ void fakewire_exc_rx_clip(fw_exchange_t *fwe);
 
 macro_define(FAKEWIRE_EXCHANGE_REGISTER,
              e_ident, e_link_options, e_read_duct, e_write_duct, e_max_flow, e_buf_size) {
-    static_assert(e_max_flow <= EXCHANGE_QUEUE_DEPTH, "exchange is not guaranteed to be able to transmit this fast");
     /* in order to continously transmit N packets per cycle, there must be able to be 2N packets outstanding */
     static_assert((e_max_flow) * 2 <= MAX_OUTSTANDING_TOKENS, "exchange protocol cannot transmit this fast");
     DUCT_REGISTER(symbol_join(e_ident, transmit_duct), EXCHANGE_REPLICAS, FAKEWIRE_LINK_TRANSMIT_REPLICAS,

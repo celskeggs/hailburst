@@ -537,10 +537,21 @@ void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
     duct_txn_t send_txn;
     duct_send_prepare(&send_txn, exc->conf->read_duct, exc->conf->exchange_replica_id);
     fakewire_dec_prepare(conf->decoder);
-    // keep receiving line data as long as there's more data to receive; we don't want to sleep until there's
-    // nothing left, so that we can guarantee a wakeup will still be pending afterwards,
+    // keep receiving data up to the processing limit, which should be plenty for ordinary situations. if we exceed
+    // this limit, then we're probably catching up after a reset, and we don't want to keep going, because then we'll
+    // run out of time. just dump everything else and try again.
+    duct_flow_index receive_limit = duct_max_flow(exc->conf->read_duct) * 2;
+    duct_flow_index remaining_limit = receive_limit;
     while (exchange_instance_receive(exc, &send_txn)) {
-        // keep looping
+        if (--remaining_limit == 0) {
+            size_t remaining = fakewire_dec_remaining_bytes(conf->decoder);
+            if (remaining > 0) {
+                debug_printf(WARNING, "Tossing remaining %zu received bytes due to overflow of receive limit (%u); "
+                             "resetting.", remaining, receive_limit);
+                fakewire_dec_reset(conf->decoder);
+                exchange_instance_reset(exc);
+            }
+        }
     }
     duct_send_commit(&send_txn);
     fakewire_dec_commit(conf->decoder);

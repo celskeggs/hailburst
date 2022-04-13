@@ -78,6 +78,12 @@ macro_define(FAKEWIRE_DECODER_REGISTER, d_ident, d_duct, d_replica, d_duct_size)
 
 void fakewire_dec_reset(fw_decoder_t *fwd);
 
+static inline size_t fakewire_dec_remaining_bytes(fw_decoder_t *fwd) {
+    assert(fwd != NULL);
+    assert(fwd->rx_length >= fwd->rx_offset);
+    return fwd->rx_length - fwd->rx_offset;
+}
+
 void fakewire_dec_prepare(fw_decoder_t *fwd);
 // returns true if another character is available; false if yielding is recommended
 bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
