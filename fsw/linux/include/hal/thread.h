@@ -25,8 +25,6 @@ typedef struct thread_st {
     void (*start_routine)(void *);
     void *start_parameter;
     pthread_t thread;
-    bool top_rouse;
-    bool local_rouse;
     bool scheduler_independent; // used during IO waits
     pthread_cond_t sched_cond;
 } __attribute__((__aligned__(16))) *thread_t; // alignment must be specified for x86_64 compatibility
@@ -117,87 +115,5 @@ macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     };                                                                            \
     const uint32_t task_scheduling_order_length =                                 \
         sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
-
-// top-level task doze/rouse: should only be used by the code that defines a task, not intermediate libraries
-
-static inline void task_rouse(thread_t task) {
-    assert(task != NULL);
-    atomic_store(task->top_rouse, true);
-}
-
-static inline void task_doze(void) {
-    thread_t task = task_get_current();
-    while (!atomic_load(task->top_rouse)) {
-        task_yield();
-    }
-    atomic_store_relaxed(task->top_rouse, false);
-}
-
-// does not actually block
-static inline bool task_doze_try(void) {
-    thread_t task = task_get_current();
-    if (!atomic_load(task->top_rouse)) {
-        return false;
-    }
-    atomic_store_relaxed(task->top_rouse, false);
-    return true;
-}
-
-static inline bool task_doze_timed_abs(local_time_t deadline_ns) {
-    thread_t task = task_get_current();
-    while (!atomic_load(task->top_rouse)) {
-        if (timer_now_ns() > deadline_ns) {
-            return false;
-        }
-        task_yield();
-    }
-    atomic_store_relaxed(task->top_rouse, false);
-    return true;
-}
-
-static inline bool task_doze_timed(duration_t nanoseconds) {
-    return task_doze_timed_abs(timer_now_ns() + nanoseconds);
-}
-
-// primitive-level task doze/rouse: may be used by individual libraries, so assumptions should not be made about
-// whether other code may interfere with this.
-
-static inline void local_rouse(thread_t task) {
-    assert(task != NULL);
-    atomic_store(task->local_rouse, true);
-}
-
-static inline void local_doze(thread_t task) {
-    while (!atomic_load(task->local_rouse)) {
-        task_yield();
-    }
-    atomic_store_relaxed(task->local_rouse, false);
-}
-
-// does not actually block
-static inline bool local_doze_try(thread_t task) {
-    assert(task == task_get_current());
-    if (!atomic_load(task->local_rouse)) {
-        return false;
-    }
-    atomic_store_relaxed(task->local_rouse, false);
-    return true;
-}
-
-static inline bool local_doze_timed_abs(thread_t task, local_time_t deadline_ns) {
-    assert(task == task_get_current());
-    while (!atomic_load(task->local_rouse)) {
-        if (timer_now_ns() > deadline_ns) {
-            return false;
-        }
-        task_yield();
-    }
-    atomic_store_relaxed(task->local_rouse, false);
-    return true;
-}
-
-static inline bool local_doze_timed(thread_t task, duration_t nanoseconds) {
-    return local_doze_timed_abs(task, timer_now_ns() + nanoseconds);
-}
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

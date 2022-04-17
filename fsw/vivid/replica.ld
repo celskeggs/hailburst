@@ -10,6 +10,6 @@ SECTIONS
     /* use invalid start location, because this will be relocated later */
     . = 0x20000000;
     .text : { *(.text*) *(.rodata*) } :text
-    /DISCARD/ : { *(.data*) *(.bss*) *(COMMON*) *(initpoints) *(tasktable) *(replicas) }
+    /DISCARD/ : { *(.data*) *(.bss*) *(COMMON*) *(initpoints) *(replicas) }
     debugf_messages (INFO) : { *(debugf_messages) }
 }

@@ -50,9 +50,6 @@ enum {
     portAPSR_USER_MODE = 0x10,
 };
 
-#define taskFOREACH( pxTCB ) \
-    for (TCB_t * pxTCB = tasktable_start; pxTCB < tasktable_end; pxTCB++)
-
 /*-----------------------------------------------------------*/
 
 static uint32_t schedule_index = 0;
@@ -83,7 +80,7 @@ static void schedule_execute(bool validate)
     assert(schedule_index < task_scheduling_order_length);
     schedule_entry_t sched = task_scheduling_order[schedule_index];
     pxCurrentTCB = sched.task;
-    assert(pxCurrentTCB != NULL && pxCurrentTCB >= tasktable_start && pxCurrentTCB < tasktable_end);
+    assert(pxCurrentTCB != NULL);
     schedule_loads++;
 
     if (schedule_index == 0) {

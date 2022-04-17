@@ -16,7 +16,6 @@ static const char *excise_sections[] = {
     ".data",
     ".bss",
     "initpoints",
-    "tasktable",
     "replicas",
     NULL,
 };

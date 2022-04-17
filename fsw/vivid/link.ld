@@ -15,11 +15,6 @@ SECTIONS
         *(initpoints);
         initpoints_end = .;
     } :text
-    tasktable : {
-        tasktable_start = .;
-        *(tasktable);
-        tasktable_end = .;
-    } :text
     .data : { *(.data*) } :data
     .bss : { *(.bss*) *(COMMON*) } :data
     . = 0xF8000000;

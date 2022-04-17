@@ -73,10 +73,6 @@ typedef struct
     uint32_t        clip_next_tick;
     scrubber_pend_t clip_pend;
     uint64_t        clip_max_nanos;
-
-    // these are just 0 or 1, but in a full uint32_t to help with atomicity
-    uint32_t roused_task;
-    uint32_t roused_local;
 } TCB_mut_t;
 
 // this is an immutable structure
@@ -90,11 +86,6 @@ typedef struct TCB_st
     StackType_t * const pxStack;                /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
     const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 } const TCB_t;
-
-// array containing all tasktable entries produced in TASK_REGISTER
-// (this array is generated from fragments by the linker)
-extern const TCB_t tasktable_start[];
-extern const TCB_t tasktable_end[];
 
 typedef struct
 {
