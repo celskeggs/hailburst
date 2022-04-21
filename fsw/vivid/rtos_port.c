@@ -59,9 +59,8 @@ registers, plus a 32-bit status register. */
 
 /*-----------------------------------------------------------*/
 
-/* Counts the interrupt nesting depth.  A context switch is only performed if
-if the nesting depth is 0. */
-volatile uint32_t ulPortInterruptNesting = 0UL;
+/* Set to 0 if in user code, 1 if in kernel. */
+uint32_t ulPortInKernel = 1UL;
 
 /* Used in the asm file. */
 __attribute__(( used )) const uint32_t ulICCIAR = portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS;

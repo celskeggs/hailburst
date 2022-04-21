@@ -69,7 +69,7 @@ static const char *trap_mode_names[] = {
     "DATA ABORT",
 };
 
-extern volatile uint32_t ulPortInterruptNesting;
+extern uint32_t ulPortInKernel;
 
 // defined in entrypoint.s
 extern volatile uint32_t trap_recursive_flag;
@@ -90,7 +90,7 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x",
            state->lr, spsr);
     debugf(CRITICAL, "Possible causes: InterruptNesting=%u GlobalRecurse=%u TaskRecurse=%u",
-           ulPortInterruptNesting, trap_recursive_flag - 1, task_recursive);
+           ulPortInKernel, trap_recursive_flag - 1, task_recursive);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",
            state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x",

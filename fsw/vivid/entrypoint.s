@@ -48,7 +48,7 @@
     .extern pxCurrentTCB
     .extern vTaskSwitchContext
     .extern vApplicationIRQHandler
-    .extern ulPortInterruptNesting
+    .extern ulPortInKernel
 
 
 .macro SAVE_CONTEXT
@@ -91,6 +91,16 @@ resume_restore_context:
     VPOP    {D0-D15}
     VMSR    FPSCR, R0
 
+    /* Make sure that we were previously in the kernel. */
+    LDR     r3, ulPortInKernelConst
+    LDR     r1, [r3]
+    CMP     r1, #1
+    BNE     abort
+
+    /* And mark that we are no longer. */
+    MOV     r1, #0
+    STR     r1, [r3]
+
     /* Restore all system mode registers other than the SP (which is already
     being used). */
     POP     {R0-R12, R14}
@@ -107,6 +117,16 @@ start_clip_context:
 
     /* Takes as a parameter the stack to switch into (R0). */
     MOV     SP,    R0
+
+    /* Make sure that we were previously in the kernel. */
+    LDR     r3, ulPortInKernelConst
+    LDR     r1, [r3]
+    CMP     r1, #1
+    BNE     abort
+
+    /* And mark that we are no longer. */
+    MOV     r1, #0
+    STR     r1, [r3]
 
     /* Initialize the system mode registers to a known state. */
     MOV     R0,  #0x00000000
@@ -209,8 +229,8 @@ trap_recursive_flag:
     ADD     r14, r14, #1
     STR     r14, [r12]
 
-    @ And also check if we're in a nested interrupt, where we also cannot be safely suspended or restarted
-    LDREQ   r14, ulPortInterruptNestingConst
+    @ And also check if we're in the kernel, where we also cannot be safely suspended or restarted
+    LDREQ   r14, ulPortInKernelConst
     LDREQ   r14, [r14]
     CMPEQ   r14, #0
 
@@ -295,13 +315,15 @@ interrupt_handler:
     /* Push used registers. */
     PUSH    {r0-r4, r12}
 
-    /* Increment nesting count.  r3 holds the address of ulPortInterruptNesting
-    for future use.  r1 holds the original ulPortInterruptNesting value for
-    future use. */
-    LDR     r3, ulPortInterruptNestingConst
+    /* Make sure that we weren't already in the kernel. */
+    LDR     r3, ulPortInKernelConst
     LDR     r1, [r3]
-    ADD     r4, r1, #1
-    STR     r4, [r3]
+    CMP     r1, #0
+    BNE     abort
+
+    /* And mark that we now are. */
+    MOV     r1, #1
+    STR     r1, [r3]
 
     /* Read value from the interrupt acknowledge register, which is stored in r0
     for future parameter and interrupt clearing use. */
@@ -319,13 +341,6 @@ interrupt_handler:
     LDR     r4, ulICCEOIRConst
     LDR     r4, [r4]
     STR     r0, [r4]
-
-    /* Restore the old nesting count. */
-    STR     r1, [r3]
-
-    /* Timer interrupts should never nest. */
-    CMP     r1, #0
-    BNE     abort
 
     /* Restore used registers, LR-irq and SPSR before saving the context
     to the task stack. */
@@ -367,7 +382,8 @@ regular_device_irq:
     LDR     r4, [r4]
     STR     r0, [r4]
 
-    /* Restore the old nesting count. */
+    /* Clear kernel entry flag. */
+    MOV     r1, #0
     STR     r1, [r3]
 
     /* No context switch.  Restore used registers, LR_irq and SPSR before
@@ -384,6 +400,6 @@ ulICCIARConst: .word ulICCIAR
 ulICCEOIRConst: .word ulICCEOIR
 pxCurrentTCBConst: .word pxCurrentTCB
 vApplicationIRQHandlerConst: .word vApplicationIRQHandler
-ulPortInterruptNestingConst: .word ulPortInterruptNesting
+ulPortInKernelConst: .word ulPortInKernel
 
 .end
