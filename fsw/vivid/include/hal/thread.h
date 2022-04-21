@@ -21,9 +21,8 @@ macro_define(TASK_PROTO, t_ident) {
     extern TCB_t t_ident;
 }
 
-macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
-    StackType_t symbol_join(t_ident, stack)[RTOS_STACK_SIZE];
-    TCB_mut_t symbol_join(t_ident, mutable) = {
+macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
+    TCB_mut_t symbol_join(c_ident, mutable) = {
         .pxTopOfStack        = NULL,
         .needs_start         = true,
         .hit_restart         = false,
@@ -32,32 +31,22 @@ macro_define(TASK_REGISTER, t_ident, t_start, t_arg, t_restartable) {
         .clip_next_tick      = 0,
     };
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
-    REPLICATE_OBJECT_CODE(t_start, symbol_join(t_ident, start_fn));
+    REPLICATE_OBJECT_CODE(c_play, symbol_join(c_ident, start_fn));
 #endif
-    TCB_t t_ident = {
-        .mut             = &symbol_join(t_ident, mutable),
+    TCB_t c_ident = {
+        .mut             = &symbol_join(c_ident, mutable),
 #if ( VIVID_REPLICATE_TASK_CODE == 1 )
-        .start_routine   = PP_ERASE_TYPE(symbol_join(t_ident, start_fn), t_arg),
+        .start_routine   = PP_ERASE_TYPE(symbol_join(c_ident, start_fn), c_arg),
 #else /* VIVID_REPLICATE_TASK_CODE == 0 */
-        .start_routine   = PP_ERASE_TYPE(t_start, t_arg),
+        .start_routine   = PP_ERASE_TYPE(c_play, c_arg),
 #endif
-        .start_arg       = (void *) t_arg,
-        .restartable     = t_restartable,
-        .pxStack         = symbol_join(t_ident, stack),
-        .pcTaskName      = symbol_str(t_ident),
+        .start_arg       = (void *) c_arg,
+        .pcTaskName      = symbol_str(c_ident),
     }
 }
 
-macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
-    TASK_REGISTER(c_ident, c_play, c_arg, RESTART_ON_RESCHEDULE)
-}
-
-macro_define(TASK_SCHEDULE, t_ident, t_micros) {
-    { .task = &(t_ident), .nanos = (t_micros) * 1000 },
-}
-
 macro_define(CLIP_SCHEDULE, c_ident, c_micros) {
-    TASK_SCHEDULE(c_ident, c_micros)
+    { .task = &(c_ident), .nanos = (c_micros) * 1000 },
 }
 
 #define TASK_SCHEDULING_ORDER(...)                                                                                    \
@@ -83,11 +72,9 @@ static inline const char *task_get_name(thread_t task) {
 }
 
 static inline void task_yield(void) {
-    uint64_t loads = schedule_loads;
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
-    do {
-        asm volatile("WFI");
-    } while (loads == schedule_loads);
+    asm volatile("WFI");
+    abortf("should never return from WFI since all non-timer interrupts are masked");
 }
 
 static inline uint32_t task_tick_index(void) {

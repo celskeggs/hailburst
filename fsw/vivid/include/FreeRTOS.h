@@ -63,7 +63,5 @@ typedef uint32_t StackType_t;
  *
  */
 typedef struct TCB_st const TCB_t;
-StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
-                                     TCB_t * pxNewTCB );
 
 #endif /* INC_FREERTOS_H */

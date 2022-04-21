@@ -76,39 +76,6 @@
 ; /**********************************************************************/
 
 .align 4
-resume_restore_context:
-    .globl resume_restore_context
-
-    /* Make sure we're in system mode. */
-    CPS     #SYS_MODE
-
-    /* Takes as a parameter the stack to switch into. */
-    MOV     SP, R0
-
-    /* Restore the floating point context. */
-    POP     {R0}
-    VPOP    {D16-D31}
-    VPOP    {D0-D15}
-    VMSR    FPSCR, R0
-
-    /* Make sure that we were previously in the kernel. */
-    LDR     r3, ulPortInKernelConst
-    LDR     r1, [r3]
-    CMP     r1, #1
-    BNE     abort
-
-    /* And mark that we are no longer. */
-    MOV     r1, #0
-    STR     r1, [r3]
-
-    /* Restore all system mode registers other than the SP (which is already
-    being used). */
-    POP     {R0-R12, R14}
-
-    /* Return to the task code, loading CPSR on the way. */
-    RFEIA   sp!
-
-.align 4
 start_clip_context:
     .globl start_clip_context
 

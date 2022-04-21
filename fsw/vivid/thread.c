@@ -10,28 +10,6 @@
 #include <hal/thread.h>
 #include <synch/config.h>
 
-void task_entrypoint(TCB_t *state) {
-    if (state->mut->hit_restart) {
-        debugf(WARNING, "Pending restart on next scrubber cycle.");
-
-        scrubber_pend_t pend;
-        scrubber_start_pend(&pend);
-
-        while (!scrubber_is_pend_done(&pend)) {
-            task_yield();
-        }
-
-        debugf(WARNING, "Task %s resuming after scrubber cycle completion.", state->pcTaskName);
-    }
-
-    /* clear crash flag */
-    state->mut->recursive_exception = false;
-
-    state->start_routine(state->start_arg);
-
-    restartf("Task main loop unexpectedly returned.");
-}
-
 void clip_play_direct(void) {
     thread_t clip = task_get_current();
 

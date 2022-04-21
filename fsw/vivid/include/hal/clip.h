@@ -18,8 +18,7 @@ static inline uint32_t clip_remaining_ns(void) {
 
 // asserts if the current task is not executing within a clip
 static inline void clip_assert(void) {
-    assertf(task_get_current()->restartable == RESTART_ON_RESCHEDULE,
-            "running in task %s, which is not a clip", task_get_name(task_get_current()));
+    // always a clip on Vivid
 }
 
 #endif /* FSW_VIVID_HAL_CLIP_H */

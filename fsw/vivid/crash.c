@@ -26,21 +26,13 @@ __attribute__((noreturn)) void restart_current_task(void) {
     thread_t current_thread = task_get_current();
     assert(current_thread != NULL);
 
-    if (current_thread->restartable == RESTARTABLE) {
-        // mark ourself as pending restart (handled by scheduler)
-        current_thread->mut->hit_restart = true;
-        current_thread->mut->needs_start = true;
+    // mark clip
+    current_thread->mut->hit_restart = true;
+    scrubber_start_pend(&current_thread->mut->clip_pend);
 
-        debugf(WARNING, "Suspending task to wait for restart.");
-    } else if (current_thread->restartable == RESTART_ON_RESCHEDULE) {
-        current_thread->mut->hit_restart = true;
-        scrubber_start_pend(&current_thread->mut->clip_pend);
+    debugf(WARNING, "Suspending restarted task to wait for reschedule.");
 
-        debugf(WARNING, "Suspending restarted task to wait for reschedule.");
-    } else {
-        debugf(CRITICAL, "Cannot restart this task (not marked as RESTARTABLE); suspending instead.");
-    }
-    // wait forever for the restart task to run
+    // wait forever for the reschedule
     task_suspend();
 }
 

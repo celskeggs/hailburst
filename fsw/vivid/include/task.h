@@ -63,6 +63,7 @@ typedef struct {
  */
 typedef struct
 {
+    // TODO: eliminate this
     volatile StackType_t * pxTopOfStack; /*< Points to the location of the last item placed on the tasks stack.  THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
     uint32_t recursive_exception;        /*< MUST BE THE SECOND MEMBER OF THE TCB STRUCT */
     bool needs_start;
@@ -82,8 +83,6 @@ typedef struct TCB_st
 
     void (* const start_routine)(void*);
     void * const start_arg;
-    const restartable_t restartable;
-    StackType_t * const pxStack;                /*< Points to the start of the stack of size RTOS_STACK_SIZE. */
     const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
 } const TCB_t;
 
@@ -118,7 +117,6 @@ extern local_time_t schedule_epoch_start;
 /*
  * Resume a task, restoring registers from the specified stack pointer.
  */
-extern void resume_restore_context(volatile void *stack) __attribute__((noreturn));
 extern void start_clip_context(volatile void *stack) __attribute__((noreturn));
 
 void vTaskStartScheduler( void );

@@ -59,13 +59,13 @@ local_time_t schedule_period_start = 0;
 local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
+static StackType_t shared_clip_stack[RTOS_STACK_SIZE];
 
 /*-----------------------------------------------------------*/
 
-static inline StackType_t *task_top_of_stack(TCB_t *task) {
-    assert(task != NULL);
+static inline StackType_t *clip_top_of_stack(void) {
     /* Calculate the top of stack address. */
-    StackType_t *top = &(task->pxStack[RTOS_STACK_SIZE - (uint32_t) 1]);
+    StackType_t *top = &(shared_clip_stack[RTOS_STACK_SIZE - (uint32_t) 1]);
     top = (StackType_t *) (((uintptr_t) top) & (~((uintptr_t) portBYTE_ALIGNMENT_MASK)));
     /* Check the alignment of the calculated top of stack is correct. */
     assert((((uintptr_t) top & (uintptr_t) portBYTE_ALIGNMENT_MASK) == 0UL));
@@ -108,26 +108,7 @@ static void schedule_execute(bool validate)
 
     schedule_last = new_time;
 
-    if (sched.task->restartable == RESTART_ON_RESCHEDULE) {
-        // just go directly to its entrypoint without restoring registers
-        start_clip_context(task_top_of_stack(sched.task));
-    } else {
-        // we put this here instead of in a separate task, because it has to have a critical section anyway,
-        // so it shouldn't be any more dangerous here than elsewhere.
-        if (sched.task->mut->needs_start == true) {
-            debugf(WARNING, "Starting or restarting task '%s'", sched.task->pcTaskName);
-
-            sched.task->mut->needs_start = false;
-
-            /* Initialize the TCB stack to look as if the task was already running,
-             * but had been interrupted by the scheduler.  The return address is set
-             * to the start of the task function. Once the stack has been initialised
-             * the top of stack variable is updated. */
-            sched.task->mut->pxTopOfStack = pxPortInitialiseStack(task_top_of_stack(sched.task), sched.task);
-        }
-
-        resume_restore_context(sched.task->mut->pxTopOfStack);
-    }
+    start_clip_context(clip_top_of_stack());
 }
 
 /*-----------------------------------------------------------*/
@@ -182,8 +163,8 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
 __attribute__((noreturn)) void vTaskSwitchContext( void )
 {
     /* Is the currently saved stack pointer within the stack limit? */
-    if( pxCurrentTCB->mut->pxTopOfStack <= pxCurrentTCB->pxStack )
-    {
+    if (pxCurrentTCB->mut->pxTopOfStack <= shared_clip_stack
+            || pxCurrentTCB->mut->pxTopOfStack > clip_top_of_stack()) {
         abortf("STACK OVERFLOW occurred in task '%s'", pxCurrentTCB->pcTaskName);
     }
 
