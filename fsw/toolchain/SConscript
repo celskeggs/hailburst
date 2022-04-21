@@ -14,16 +14,17 @@ excise_source = [
     GDB_BINUTILS + "/libiberty/libiberty.a",
 ]
 
-env["OBJCOMSTR"] = "[${PLATFORM} - COMPILE] ${SOURCE}"
-env["LINKCOMSTR"] = "[${PLATFORM} -    LINK] ${TARGET}"
-env["PPCOMSTR"] = "[${PLATFORM} - PREPROC] ${SOURCE}"
-env["PPMODCOMSTR"] = "[${PLATFORM} -  MACROS] ${SOURCE}"
-env["ARCOMSTR"] = "[${PLATFORM} - ARCHIVE] ${TARGET}"
-env["RANLIBCOMSTR"] = "[${PLATFORM} -  RANLIB] ${TARGET}"
-env["ASCOMSTR"] = "[${PLATFORM} - ASSEMBL] ${SOURCE}"
-env["STRIPCOMSTR"] = "[${PLATFORM} -   STRIP] ${SOURCE}"
-env["BIN2OBJCOMSTR"] = "[${PLATFORM} - BIN2OBJ] ${SOURCE}"
-env["OBJ2BINCOMSTR"] = "[${PLATFORM} - OBJ2BIN] ${SOURCE}"
+if not os.getenv("SCONS_VERBOSE"):
+    env["OBJCOMSTR"] = "[${PLATFORM} - COMPILE] ${SOURCE}"
+    env["LINKCOMSTR"] = "[${PLATFORM} -    LINK] ${TARGET}"
+    env["PPCOMSTR"] = "[${PLATFORM} - PREPROC] ${SOURCE}"
+    env["PPMODCOMSTR"] = "[${PLATFORM} -  MACROS] ${SOURCE}"
+    env["ARCOMSTR"] = "[${PLATFORM} - ARCHIVE] ${TARGET}"
+    env["RANLIBCOMSTR"] = "[${PLATFORM} -  RANLIB] ${TARGET}"
+    env["ASCOMSTR"] = "[${PLATFORM} - ASSEMBL] ${SOURCE}"
+    env["STRIPCOMSTR"] = "[${PLATFORM} -   STRIP] ${SOURCE}"
+    env["BIN2OBJCOMSTR"] = "[${PLATFORM} - BIN2OBJ] ${SOURCE}"
+    env["OBJ2BINCOMSTR"] = "[${PLATFORM} - OBJ2BIN] ${SOURCE}"
 
 
 siren_deps = Glob("siren/*.py") + Glob("siren/*/*.py")
