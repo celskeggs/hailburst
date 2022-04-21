@@ -39,13 +39,6 @@
 #include <rtos/gic.h>
 #include <hal/atomic.h>
 
-enum {
-    /* The value of the mode bits in the APSR when the CPU is executing in user mode. */
-    portAPSR_USER_MODE = 0x10,
-};
-
-/*-----------------------------------------------------------*/
-
 static uint32_t schedule_index = 0;
 uint64_t schedule_loads = 0;
 uint32_t schedule_ticks = 0;
@@ -54,11 +47,7 @@ local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 
-/*-----------------------------------------------------------*/
-
-__attribute__((noreturn))
-static void schedule_execute(bool validate)
-{
+static __attribute__((noreturn)) void schedule_execute(bool validate) {
     assert(schedule_index < task_scheduling_order_length);
     schedule_entry_t sched = task_scheduling_order[schedule_index];
     pxCurrentTCB = sched.task;
@@ -94,10 +83,7 @@ static void schedule_execute(bool validate)
     abortf("should never return from enter_context");
 }
 
-/*-----------------------------------------------------------*/
-
-__attribute__((noreturn)) void vTaskStartScheduler( void )
-{
+__attribute__((noreturn)) void schedule_first_task(void) {
     /* Interrupts are verified to be off here, to ensure ticks do not execute while the scheduler is being started.
      * When clips are executed, the status word will be switched such that interrupts are re-enabled. */
     uint32_t cpsr = arm_get_cpsr();
@@ -119,10 +105,8 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
     schedule_index = 0;
     schedule_execute(false);
 }
-/*-----------------------------------------------------------*/
 
-__attribute__((noreturn)) void schedule_next_task( void )
-{
+__attribute__((noreturn)) void schedule_next_task(void) {
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
     if (schedule_index == 0) {

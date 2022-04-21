@@ -27,7 +27,7 @@ void entrypoint(void *kernel_elf_rom) {
     initialize_systems();
 
     debugf(WARNING, "Activating scheduler to bring spacecraft online.");
-    vTaskStartScheduler();
+    schedule_first_task();
 
     abortf("Scheduler halted.");
 }

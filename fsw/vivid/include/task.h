@@ -102,7 +102,7 @@ extern local_time_t schedule_period_start;
 extern local_time_t schedule_last;
 extern local_time_t schedule_epoch_start;
 
-void vTaskStartScheduler( void );
+void schedule_first_task(void) __attribute__((noreturn));
 void schedule_next_task(void) __attribute__((noreturn));
 
 #endif /* INC_TASK_H */
