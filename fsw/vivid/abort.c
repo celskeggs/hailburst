@@ -1,4 +1,5 @@
-#include <rtos/crash.h>
+#include <stdlib.h>
+
 #include <rtos/gic.h>
 
 void abort(void) {

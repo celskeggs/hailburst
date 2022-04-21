@@ -1,11 +1,8 @@
-#include <FreeRTOS.h>
-
 #include <rtos/arm.h>
 #include <rtos/gic.h>
 #include <hal/atomic.h>
 #include <hal/init.h>
 
-#include <FreeRTOS.h>
 #include <task.h>
 
 enum {

@@ -2,11 +2,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <FreeRTOS.h>
 #include <task.h>
 
 #include <rtos/arm.h>
-#include <rtos/crash.h>
 #include <rtos/gic.h>
 #include <rtos/scrubber.h>
 #include <hal/debug.h>

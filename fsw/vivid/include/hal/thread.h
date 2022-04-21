@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include <FreeRTOS.h>
 #include <task.h>
 
 #include <rtos/config.h>

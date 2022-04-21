@@ -1,10 +1,8 @@
 #include <inttypes.h>
 
-#include <FreeRTOS.h>
 #include <task.h>
 
 #include <rtos/arm.h>
-#include <rtos/crash.h>
 #include <hal/atomic.h>
 #include <hal/debug.h>
 #include <hal/init.h>

@@ -31,13 +31,12 @@
 #ifndef INC_TASK_H
 #define INC_TASK_H
 
-#ifndef INC_FREERTOS_H
-    #error "include FreeRTOS.h must appear in source files before include task.h"
-#endif
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
-/*-----------------------------------------------------------
-* MACROS AND DEFINITIONS
-*----------------------------------------------------------*/
+#include <hal/debug.h>
 
 #define SCRUBBER_COPIES 2
 

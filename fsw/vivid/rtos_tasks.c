@@ -34,8 +34,7 @@
 #include <string.h>
 
 /* FreeRTOS includes. */
-#include "FreeRTOS.h"
-#include "task.h"
+#include <task.h>
 
 #include <rtos/gic.h>
 #include <hal/atomic.h>

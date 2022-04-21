@@ -1,7 +1,5 @@
-#include <FreeRTOS.h>
 #include <task.h>
 
-#include <rtos/crash.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
 #include <hal/clip.h>
