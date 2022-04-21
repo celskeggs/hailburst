@@ -8,6 +8,7 @@ enum {
     GIC_DIST_ADDR = 0x08000000,
     GIC_CPU_ADDR  = 0x08010000,
 
+    IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
 };
 
 struct gic_dist_reg {
@@ -68,29 +69,6 @@ __attribute__(( used )) const uint32_t ulICCIAR = (uintptr_t) &cpu->gicc_iar;
 __attribute__(( used )) const uint32_t ulICCEOIR = (uintptr_t) &cpu->gicc_eoir;
 
 static uint32_t num_interrupts = 0;
-static gic_callback_t callbacks[1020] = { NULL };
-static void *callback_params[1020] = { NULL };
-
-void enable_irq(uint32_t irq, gic_callback_t callback, void *param) {
-    assert(irq < sizeof(callbacks) / sizeof(callbacks[0]));
-    assert(irq < num_interrupts);
-
-    debugf(DEBUG, "Registering IRQ callback for IRQ %u.", irq);
-
-    assert(callbacks[irq] == NULL);
-    assert(callback_params[irq] == NULL);
-    callbacks[irq] = callback;
-    callback_params[irq] = param;
-
-    uint32_t off = irq / 32;
-    uint32_t mask = 1 << (irq % 32);
-
-    dist->gicd_icfgr[off]     &= ~mask; // set level-sensitive
-    dist->gicd_icactiver[off]  = mask;  // clear active bit
-    dist->gicd_icpendr[off]    = mask;  // clear pending bit
-    dist->gicd_ipriorityr[irq] = 0xF0;  // set priority allowing FreeRTOS calls
-    dist->gicd_isenabler[off]  = mask;  // enable IRQ
-}
 
 void shutdown_gic(void) {
     dist->gicd_ctlr = 0;
@@ -131,14 +109,22 @@ static void configure_gic(void) {
     asm volatile("dsb\nisb\n" ::: "memory");  // TODO: is this really needed?
     dist->gicd_ctlr = 1;
     cpu->gicc_ctlr = 1;
+
+    // enable timer interrupt
+    assert(IRQ_PHYS_TIMER < num_interrupts);
+
+    debugf(DEBUG, "Enabling tick IRQ.");
+
+    uint32_t irq = IRQ_PHYS_TIMER;
+    uint32_t off = irq / 32;
+    uint32_t mask = 1 << (irq % 32);
+
+    dist->gicd_icfgr[off]     &= ~mask; // set level-sensitive
+    dist->gicd_icactiver[off]  = mask;  // clear active bit
+    dist->gicd_icpendr[off]    = mask;  // clear pending bit
+    dist->gicd_ipriorityr[irq] = 0xF0;  // set priority allowing FreeRTOS calls
+    dist->gicd_isenabler[off]  = mask;  // enable IRQ
 }
 // we don't need to worry about exactly when this happens, because interrupts will be disabled by the bootrom, and not
 // re-enabled until the initialization is complete.
 PROGRAM_INIT(STAGE_RAW, configure_gic);
-
-// entrypoint via FreeRTOS-derived code
-void vApplicationIRQHandler(uint32_t irq) {
-    asm volatile("CPSIE I"); // TODO: do I need dsb; isb?
-    assertf(callbacks[irq] != NULL, "missing callback function for IRQ %u", irq);
-    callbacks[irq](callback_params[irq]);
-}

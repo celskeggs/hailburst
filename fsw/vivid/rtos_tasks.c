@@ -41,8 +41,6 @@
 #include <hal/atomic.h>
 
 enum {
-    IRQ_PHYS_TIMER = IRQ_PPI_BASE + 14,
-
     /* Masks all bits in the APSR other than the mode bits. */
     portAPSR_MODE_BITS_MASK = 0x1F,
 
@@ -103,12 +101,6 @@ static void schedule_execute(bool validate)
 
 /*-----------------------------------------------------------*/
 
-static void unexpected_irq_callback(void *opaque)
-{
-    (void) opaque;
-    abortf("should not have gotten a callback on the timer IRQ");
-}
-
 __attribute__((noreturn)) void vTaskStartScheduler( void )
 {
     /* Interrupts are verified to be off here, to ensure a tick does not occur
@@ -143,9 +135,6 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
     // time, but we can live with that)
     uint64_t start_time_ns = timer_now_ns();
     schedule_last = start_time_ns + CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
-
-    // don't provide a real callback here, because it will never actually have to be called.
-    enable_irq(IRQ_PHYS_TIMER, unexpected_irq_callback, NULL);
 
     // start executing first task
     schedule_index = 0;

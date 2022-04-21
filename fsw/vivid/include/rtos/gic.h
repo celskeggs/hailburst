@@ -7,9 +7,6 @@ enum {
     IRQ_SPI_BASE = 32, // shared peripheral interrupt
 };
 
-typedef void (*gic_callback_t)(void *);
-
 void shutdown_gic(void);
-void enable_irq(uint32_t irq, gic_callback_t callback, void *param);
 
 #endif /* FSW_VIVID_RTOS_GIC_H */

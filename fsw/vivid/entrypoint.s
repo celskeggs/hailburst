@@ -47,7 +47,6 @@
     /* Variables and functions. */
     .extern pxCurrentTCB
     .extern vTaskSwitchContext
-    .extern vApplicationIRQHandler
     .extern vivid_port_in_kernel
 
 
@@ -174,7 +173,7 @@ trap_recursive_flag:
     BNE     emergency_abort_handler
 
     @ Next, check whether this particular task is recursively trapping.
-    LDR     r12, pxCurrentTCBConst  /* r12 = &pxCurrentTCB */
+    LDR     r12, =pxCurrentTCB      /* r12 = &pxCurrentTCB */
     LDR     r12, [r12]              /* r12 = pxCurrentTCB */
     CMP     r12, #0      @ If no task, make sure we go to the emergency abort handler!
     BEQ     emergency_abort_handler
@@ -235,19 +234,8 @@ emergency_abort_handler:
 .align 4
 .type interrupt_handler, %function
 interrupt_handler:
-    /* Return to the interrupted instruction. */
-    SUB     lr, lr, #4
-
-    /* Push the return address and SPSR. */
-    PUSH    {lr}
-    MRS     lr, SPSR
-    PUSH    {lr}
-
     /* Change to supervisor mode to allow reentry. */
-    CPS     #SVC_MODE
-
-    /* Push used registers. */
-    PUSH    {r0-r4, r12}
+    CPS     #SYS_MODE
 
     /* Make sure that we weren't already in the kernel. */
     LDR     r3, =vivid_port_in_kernel
@@ -261,79 +249,23 @@ interrupt_handler:
 
     /* Read value from the interrupt acknowledge register, which is stored in r0
     for future parameter and interrupt clearing use. */
-    LDR     r2, ulICCIARConst
+    LDR     r2, =ulICCIAR
     LDR     r2, [r2]
     LDR     r0, [r2]
 
-    /* Check whether this is a timer interrupt */
+    /* Should only encounter timer interrupts; anything else could throw off the partition scheduler! */
     CMP     r0, #IRQ_PHYS_TIMER
-    BNE     regular_device_irq
+    BNE     abort
 
     /****** TIMER INTERRUPT ******/
 
     /* Write the value read from ICCIAR to ICCEOIR. */
-    LDR     r4, ulICCEOIRConst
+    LDR     r4, =ulICCEOIR
     LDR     r4, [r4]
     STR     r0, [r4]
-
-    /* Restore used registers, LR-irq and SPSR before saving the context
-    to the task stack. */
-    POP     {r0-r4, r12}
-    CPS     #IRQ_MODE
-    POP     {LR}
-    MSR     SPSR_cxsf, LR
-    POP     {LR}
-
-    CPS     #SYS_MODE
 
     /* Call the function that selects the new task to execute. It will directly
     call resume_restore_context and never return. */
     B       vTaskSwitchContext
-
-    /****** DEVICE INTERRUPT ******/
-
-regular_device_irq:
-
-    /* Ensure bit 2 of the stack pointer is clear.  r2 holds the bit 2 value for
-    future use.  _RB_ Does this ever actually need to be done provided the start
-    of the stack is 8-byte aligned? */
-    MOV     r2, sp
-    AND     r2, r2, #4
-    SUB     sp, sp, r2
-
-    /* Call the interrupt handler.  r4 pushed to maintain alignment. */
-    PUSH    {r0-r4, lr}
-    LDR     r1, vApplicationIRQHandlerConst
-    BLX     r1
-    POP     {r0-r4, lr}
-    ADD     sp, sp, r2
-
-    CPSID   i
-    DSB
-    ISB
-
-    /* Write the value read from ICCIAR to ICCEOIR. */
-    LDR     r4, ulICCEOIRConst
-    LDR     r4, [r4]
-    STR     r0, [r4]
-
-    /* Clear kernel entry flag. */
-    MOV     r1, #0
-    STR     r1, [r3]
-
-    /* No context switch.  Restore used registers, LR_irq and SPSR before
-    returning. */
-    POP     {r0-r4, r12}
-    CPS     #IRQ_MODE
-    POP     {LR}
-    MSR     SPSR_cxsf, LR
-    POP     {LR}
-    MOVS    PC, LR
-
-
-ulICCIARConst: .word ulICCIAR
-ulICCEOIRConst: .word ulICCEOIR
-pxCurrentTCBConst: .word pxCurrentTCB
-vApplicationIRQHandlerConst: .word vApplicationIRQHandler
 
 .end

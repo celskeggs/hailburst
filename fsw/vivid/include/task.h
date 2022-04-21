@@ -67,7 +67,6 @@ typedef struct
     bool needs_start;
     bool hit_restart;
 
-    // only used for clips
     bool            clip_running;
     uint32_t        clip_next_tick;
     scrubber_pend_t clip_pend;
