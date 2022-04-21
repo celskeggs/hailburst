@@ -60,17 +60,7 @@ local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
 static StackType_t shared_clip_stack[RTOS_STACK_SIZE];
-
-/*-----------------------------------------------------------*/
-
-static inline StackType_t *clip_top_of_stack(void) {
-    /* Calculate the top of stack address. */
-    StackType_t *top = &(shared_clip_stack[RTOS_STACK_SIZE - (uint32_t) 1]);
-    top = (StackType_t *) (((uintptr_t) top) & (~((uintptr_t) portBYTE_ALIGNMENT_MASK)));
-    /* Check the alignment of the calculated top of stack is correct. */
-    assert((((uintptr_t) top & (uintptr_t) portBYTE_ALIGNMENT_MASK) == 0UL));
-    return top;
-}
+static StackType_t * const clip_top_of_stack = &shared_clip_stack[RTOS_STACK_SIZE - 2];
 
 /*-----------------------------------------------------------*/
 
@@ -108,7 +98,7 @@ static void schedule_execute(bool validate)
 
     schedule_last = new_time;
 
-    start_clip_context(clip_top_of_stack());
+    start_clip_context(clip_top_of_stack);
 }
 
 /*-----------------------------------------------------------*/
@@ -127,6 +117,9 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
      * so interrupts will automatically get re-enabled when the first task
      * starts to run. */
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
+
+    /* Check the alignment of the calculated top of stack is correct. */
+    assert(((uintptr_t) clip_top_of_stack & 0x0007) == 0UL);
 
     assert(pxCurrentTCB == NULL);
 
@@ -162,12 +155,6 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
 
 __attribute__((noreturn)) void vTaskSwitchContext( void )
 {
-    /* Is the currently saved stack pointer within the stack limit? */
-    if (pxCurrentTCB->mut->pxTopOfStack <= shared_clip_stack
-            || pxCurrentTCB->mut->pxTopOfStack > clip_top_of_stack()) {
-        abortf("STACK OVERFLOW occurred in task '%s'", pxCurrentTCB->pcTaskName);
-    }
-
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;
     if (schedule_index == 0) {

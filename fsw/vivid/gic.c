@@ -60,8 +60,12 @@ struct gic_cpu_reg {
 };
 static_assert(sizeof(struct gic_cpu_reg) == 0x2000, "invalid sizeof(gic_cpu_reg)");
 
-static struct gic_dist_reg *dist = (struct gic_dist_reg *) GIC_DIST_ADDR;
-static struct gic_cpu_reg  *cpu  = (struct gic_cpu_reg *)  GIC_CPU_ADDR;
+static struct gic_dist_reg * const dist = (struct gic_dist_reg *) GIC_DIST_ADDR;
+static struct gic_cpu_reg  * const cpu  = (struct gic_cpu_reg *)  GIC_CPU_ADDR;
+
+/* Used in the asm file. */
+__attribute__(( used )) const uint32_t ulICCIAR = (uintptr_t) &cpu->gicc_iar;
+__attribute__(( used )) const uint32_t ulICCEOIR = (uintptr_t) &cpu->gicc_eoir;
 
 static uint32_t num_interrupts = 0;
 static gic_callback_t callbacks[1020] = { NULL };

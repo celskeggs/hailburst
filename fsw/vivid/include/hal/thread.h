@@ -23,7 +23,6 @@ macro_define(TASK_PROTO, t_ident) {
 
 macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
     TCB_mut_t symbol_join(c_ident, mutable) = {
-        .pxTopOfStack        = NULL,
         .needs_start         = true,
         .hit_restart         = false,
         .recursive_exception = false,

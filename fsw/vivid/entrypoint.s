@@ -48,30 +48,8 @@
     .extern pxCurrentTCB
     .extern vTaskSwitchContext
     .extern vApplicationIRQHandler
-    .extern ulPortInKernel
+    .extern vivid_port_in_kernel
 
-
-.macro SAVE_CONTEXT
-
-    /* Save the LR and SPSR onto the system mode stack before switching to
-    system mode to save the remaining system mode registers. */
-    SRSDB   sp!, #SYS_MODE
-    CPS     #SYS_MODE
-    PUSH    {R0-R12, R14}
-
-    /* Save the floating point context. */
-    FMRX    R1, FPSCR
-    VPUSH   {D0-D15}
-    VPUSH   {D16-D31}
-    PUSH    {R1}
-
-    /* Save the stack pointer in the TCB. */
-    LDR     R0, pxCurrentTCBConst   /* R0 = &pxCurrentTCB                   */
-    LDR     R1, [R0]                /* R1 = pxCurrentTCB                    */
-    LDR     R2, [R1]                /* R2 = &pxCurrentTCB->mut              */
-    STR     SP, [R2]                /* SP = pxCurrentTCB->mut->pxTopOfStack */
-
-    .endm
 
 ; /**********************************************************************/
 
@@ -86,7 +64,7 @@ start_clip_context:
     MOV     SP,    R0
 
     /* Make sure that we were previously in the kernel. */
-    LDR     r3, ulPortInKernelConst
+    LDR     r3, =vivid_port_in_kernel
     LDR     r1, [r3]
     CMP     r1, #1
     BNE     abort
@@ -164,17 +142,6 @@ _start:                               @ r0 is populated by the bootrom with the 
     B  .
 
 
-/******************************************************************************
- * SVC handler is used to start the scheduler.
- *****************************************************************************/
-@ .align 4
-@ .type supervisor_call_handler, %function
-@ supervisor_call_handler:
-@    /* Save the context of the current task and select a new task to run. */
-@    SAVE_CONTEXT
-@    BL      vTaskSwitchContext
-@    RESTORE_CONTEXT
-
     .data
 
 .align 4
@@ -197,7 +164,7 @@ trap_recursive_flag:
     STR     r14, [r12]
 
     @ And also check if we're in the kernel, where we also cannot be safely suspended or restarted
-    LDREQ   r14, ulPortInKernelConst
+    LDREQ   r14, =vivid_port_in_kernel
     LDREQ   r14, [r14]
     CMPEQ   r14, #0
 
@@ -211,8 +178,7 @@ trap_recursive_flag:
     LDR     r12, [r12]              /* r12 = pxCurrentTCB */
     CMP     r12, #0      @ If no task, make sure we go to the emergency abort handler!
     BEQ     emergency_abort_handler
-    LDR     r12, [r12]              /* r12 = &pxCurrentTCB->mut */
-    ADD     r12, #4                 /* r12 = &pxCurrentTCB->mut->recursive_exception */
+    LDR     r12, [r12]              /* r12 = &pxCurrentTCB->mut->recursive_exception */
     LDR     r12, [r12]              /* r12 = pxCurrentTCB->mut->recursive_exception */
     CMP     r12, #0      @ If nonzero, then recursively trapping!
     BNE     emergency_abort_handler
@@ -220,7 +186,8 @@ trap_recursive_flag:
     @ Otherwise, we're not recursive.
     POP     {r12, r14}
 
-    SAVE_CONTEXT
+    CPS     #SYS_MODE
+
     MOV     r0,  #\trapid
     B       task_abort_handler      @ trap_abort_handler will reset trap_recursive_flag to 0
     @ task_abort_handler does not return
@@ -283,7 +250,7 @@ interrupt_handler:
     PUSH    {r0-r4, r12}
 
     /* Make sure that we weren't already in the kernel. */
-    LDR     r3, ulPortInKernelConst
+    LDR     r3, =vivid_port_in_kernel
     LDR     r1, [r3]
     CMP     r1, #0
     BNE     abort
@@ -316,7 +283,8 @@ interrupt_handler:
     POP     {LR}
     MSR     SPSR_cxsf, LR
     POP     {LR}
-    SAVE_CONTEXT
+
+    CPS     #SYS_MODE
 
     /* Call the function that selects the new task to execute. It will directly
     call resume_restore_context and never return. */
@@ -367,6 +335,5 @@ ulICCIARConst: .word ulICCIAR
 ulICCEOIRConst: .word ulICCEOIR
 pxCurrentTCBConst: .word pxCurrentTCB
 vApplicationIRQHandlerConst: .word vApplicationIRQHandler
-ulPortInKernelConst: .word ulPortInKernel
 
 .end

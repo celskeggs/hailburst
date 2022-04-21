@@ -36,10 +36,3 @@
 #include <task.h>
 
 /*-----------------------------------------------------------*/
-
-/* Set to 0 if in user code, 1 if in kernel. */
-uint32_t ulPortInKernel = 1UL;
-
-/* Used in the asm file. */
-__attribute__(( used )) const uint32_t ulICCIAR = portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS;
-__attribute__(( used )) const uint32_t ulICCEOIR = portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS;
