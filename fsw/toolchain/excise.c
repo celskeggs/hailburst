@@ -1,6 +1,7 @@
 #include <config.h>
 #include <bfd.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -13,8 +14,8 @@
 // #define EXCISE_DEBUG
 
 static const char *excise_sections[] = {
-    ".data",
-    ".bss",
+    ".data*",
+    ".bss*",
     "initpoints",
     "replicas",
     NULL,
@@ -26,8 +27,19 @@ static bool excise_section(asection *sec) {
     }
     const char *name = bfd_section_name(sec);
     for (const char **section = excise_sections; *section != NULL; section++) {
-        if (strcmp(name, *section) == 0) {
-            return true;
+        const char *match_name = *section;
+        assert(match_name != NULL);
+        size_t match_len = strlen(match_name);
+        assert(match_len > 0);
+        // handle terminal wildcard
+        if (match_name[match_len - 1] == '*') {
+            if (strncmp(name, match_name, match_len - 1) == 0) {
+                return true;
+            }
+        } else {
+            if (strcmp(name, match_name) == 0) {
+                return true;
+            }
         }
     }
     return false;

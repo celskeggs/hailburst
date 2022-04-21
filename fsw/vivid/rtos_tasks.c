@@ -54,7 +54,7 @@ local_time_t schedule_period_start = 0;
 local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
-static StackType_t shared_clip_stack[RTOS_STACK_SIZE];
+static StackType_t shared_clip_stack[RTOS_STACK_SIZE] __attribute__((aligned (8)));
 static StackType_t * const clip_top_of_stack = &shared_clip_stack[RTOS_STACK_SIZE - 2];
 
 /*-----------------------------------------------------------*/

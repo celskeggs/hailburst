@@ -149,7 +149,7 @@ def main():
         for target in sorted(set(link_map.values())):
             assert "/" not in target
             target_path = os.path.join(tempdir, "t_" + target + ".o")
-            call_proc([linker, "--relocatable", "--fatal-warnings", "--unresolved-symbols=ignore-all",
+            call_proc([linker, "--relocatable", "--fatal-warnings", "--unresolved-symbols=ignore-all", "--gc-sections",
                        "-T", replica_script, "--require-defined", target, "-o", target_path, safety_archive])
             partials[target] = target_path
 

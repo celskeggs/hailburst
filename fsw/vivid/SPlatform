@@ -47,7 +47,7 @@ env = Environment(
     STRIP="arm-none-eabi-strip",
     LINKFLAGS=["-T", "$LINKSCRIPT", "--fatal-warnings"],
     CCFLAGS=common_flags + [
-        "-fdiagnostics-color", "-fmax-errors=1",
+        "-fdiagnostics-color", "-ffunction-sections", "-fdata-sections", "-fmax-errors=1",
         "-Wall", "-Wextra", "-Werror",
         # because ealibc uses #pragma mark, and that causes trouble
         "-Wno-unknown-pragmas",
