@@ -26,14 +26,14 @@ const radio_memregion_t rx_halves[] = {
  * buffering arrangement without too much trouble.                                               *
  *************************************************************************************************/
 
-static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg[NUM_REGISTERS],
-                                       struct radio_uplink_reads *reads) {
+static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, struct radio_uplink_note *mut_synch,
+                                       uint32_t reg[NUM_REGISTERS], struct radio_uplink_reads *reads) {
     assert(rur != NULL && reg != NULL && reads != NULL);
 
     if (reg[REG_RX_STATE] == RX_STATE_IDLE) {
         debugf(INFO, "Radio: initializing uplink out of IDLE mode");
 
-        rur->mut->bytes_extracted = 0;
+        mut_synch->bytes_extracted = 0;
         reg[REG_RX_PTR] = rx_halves[0].base;
         reg[REG_RX_LEN] = rx_halves[0].size;
         reg[REG_RX_PTR_ALT] = rx_halves[1].base;
@@ -66,7 +66,7 @@ static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg
     uint32_t end_index_alt = reg[REG_RX_PTR_ALT] + reg[REG_RX_LEN_ALT];
 #ifdef DEBUGIDX
     debugf(TRACE, "Radio indices: end_index_h0=%u, end_index_h1=%u, end_index_prime=%u, end_index_alt=%u, extracted=%u",
-           end_index_h0, end_index_h1, end_index_prime, end_index_alt, rur->mut->bytes_extracted);
+           end_index_h0, end_index_h1, end_index_prime, end_index_alt, mut_synch->bytes_extracted);
 #endif
     assert(end_index_prime == end_index_h0 || end_index_prime == end_index_h1);
     assert(end_index_prime != end_index_alt);
@@ -77,7 +77,7 @@ static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg
     }
 
     // identify where the next read location should be...
-    uint32_t read_cycle_offset = rur->mut->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
+    uint32_t read_cycle_offset = mut_synch->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
     int read_half = (read_cycle_offset >= rx_halves[0].size) ? 1 : 0;
     uint32_t read_half_offset = read_cycle_offset - (read_half ? rx_halves[0].size : 0);
 
@@ -128,7 +128,7 @@ static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg
     };
 
     uint32_t total_read = read_length + read_length_flip;
-    rur->mut->bytes_extracted += total_read;
+    mut_synch->bytes_extracted += total_read;
 
     // quick coherency check: if we are in OVERFLOW condition, then we must have run out of data on our prime buffer.
     if (reg[REG_RX_STATE] == RX_STATE_OVERFLOW) {
@@ -136,7 +136,7 @@ static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg
     }
 
     // new question: is there any unread data in the alternate half?
-    uint32_t reread_cycle_offset = rur->mut->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
+    uint32_t reread_cycle_offset = mut_synch->bytes_extracted % (rx_halves[0].size + rx_halves[1].size);
     int reread_half = (reread_cycle_offset >= rx_halves[0].size) ? 1 : 0;
 
     bool any_unread_data_in_alternate = (reread_half == 0 && end_index_prime == end_index_h1)
@@ -144,7 +144,8 @@ static void radio_uplink_compute_reads(radio_uplink_replica_t *rur, uint32_t reg
 
 #ifdef DEBUGIDX
     debugf(TRACE, "Unread stats: bytes_extracted=%u, reread_half=%d, a_u_d_i_a=%d, ptr=%u, ptr_alt=%u",
-           rur->mut->bytes_extracted, reread_half, any_unread_data_in_alternate, reg[REG_RX_PTR], reg[REG_RX_PTR_ALT]);
+           mut_synch->bytes_extracted, reread_half, any_unread_data_in_alternate,
+           reg[REG_RX_PTR], reg[REG_RX_PTR_ALT]);
 #endif
 
     if (any_unread_data_in_alternate) {
@@ -193,8 +194,12 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     rmap_status_t status;
     uint32_t registers[NUM_REGISTERS];
 
-    if (clip_is_restart()) {
-        rur->mut->uplink_state = RAD_UL_INITIAL_STATE;
+    bool valid = false;
+    struct radio_uplink_note *mut_synch = notepad_feedforward(rur->mut_synch, &valid);
+
+    if (!valid || (uint32_t) mut_synch->uplink_state > (uint32_t) RAD_UL_WRITE_TO_STREAM) {
+        mut_synch->uplink_state = RAD_UL_INITIAL_STATE;
+        mut_synch->bytes_extracted = 0;
     }
 
     rmap_txn_t rmap_txn;
@@ -202,18 +207,18 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
 
     bool watchdog_ok = false;
 
-    switch (rur->mut->uplink_state) {
+    switch (mut_synch->uplink_state) {
     case RAD_UL_QUERY_COMMON_CONFIG:
         status = rmap_read_complete(&rmap_txn, (uint8_t*) registers, sizeof(uint32_t) * 3, NULL);
         if (status == RS_OK) {
             for (int i = 0; i < 3; i++) {
                 registers[i] = be32toh(registers[i]);
             }
-            if (!radio_validate_common_config(registers)) {
+            if (radio_validate_common_config(registers)) {
+                mut_synch->uplink_state = RAD_UL_DISABLE_RECEIVE;
+            } else {
                 // invalid radio; stop.
-                return;
             }
-            rur->mut->uplink_state = RAD_UL_DISABLE_RECEIVE;
         } else {
             debugf(WARNING, "Failed to read initial radio metadata, error=0x%03x", status);
         }
@@ -221,7 +226,7 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     case RAD_UL_DISABLE_RECEIVE:
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
-            rur->mut->uplink_state = RAD_UL_RESET_REGISTERS;
+            mut_synch->uplink_state = RAD_UL_RESET_REGISTERS;
         } else {
             debugf(WARNING, "Failed to disable radio receiver, error=0x%03x", status);
         }
@@ -229,7 +234,7 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     case RAD_UL_RESET_REGISTERS:
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
-            rur->mut->uplink_state = RAD_UL_QUERY_STATE;
+            mut_synch->uplink_state = RAD_UL_QUERY_STATE;
         } else {
             debugf(WARNING, "Failed to reset radio receiver to known state, error=0x%03x", status);
         }
@@ -240,27 +245,28 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
             for (int i = REG_RX_PTR; i < REG_RX_PTR + 5; i++) {
                 registers[i] = be32toh(registers[i]);
             }
-            radio_uplink_compute_reads(rur, registers, &rur->mut->read_plan);
-            rur->mut->uplink_state = RAD_UL_PRIME_READ;
+            radio_uplink_compute_reads(rur, mut_synch, registers, &mut_synch->read_plan);
+            mut_synch->uplink_state = RAD_UL_PRIME_READ;
             flag_recoverf(&rur->mut->uplink_query_status_flag, "Radio status queries recovered.");
-            watchdog_ok = rur->mut->read_plan.watchdog_ok;
+            watchdog_ok = mut_synch->read_plan.watchdog_ok;
         } else {
             flag_raisef(&rur->mut->uplink_query_status_flag, "Failed to query radio status, error=0x%03x", status);
         }
         break;
     case RAD_UL_PRIME_READ:
-        status = rmap_read_complete(&rmap_txn, rur->mut->uplink_buf_local, rur->mut->read_plan.prime_read_length, NULL);
+        status = rmap_read_complete(&rmap_txn, rur->mut->uplink_buf_local,
+                                               mut_synch->read_plan.prime_read_length, NULL);
         if (status == RS_OK) {
-            rur->mut->uplink_state = RAD_UL_FLIPPED_READ;
+            mut_synch->uplink_state = RAD_UL_FLIPPED_READ;
         } else {
             debugf(WARNING, "Failed to read prime memory region, error=0x%03x", status);
         }
         break;
     case RAD_UL_FLIPPED_READ:
-        status = rmap_read_complete(&rmap_txn, rur->mut->uplink_buf_local + rur->mut->read_plan.prime_read_length,
-                                               rur->mut->read_plan.flipped_read_length, NULL);
+        status = rmap_read_complete(&rmap_txn, rur->mut->uplink_buf_local + mut_synch->read_plan.prime_read_length,
+                                               mut_synch->read_plan.flipped_read_length, NULL);
         if (status == RS_OK) {
-            rur->mut->uplink_state = RAD_UL_REFILL_BUFFERS;
+            mut_synch->uplink_state = RAD_UL_REFILL_BUFFERS;
         } else {
             debugf(WARNING, "Failed to read flipped memory region, error=0x%03x", status);
         }
@@ -268,7 +274,7 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     case RAD_UL_REFILL_BUFFERS:
         status = rmap_write_complete(&rmap_txn, NULL);
         if (status == RS_OK) {
-            rur->mut->uplink_state = RAD_UL_WRITE_TO_STREAM;
+            mut_synch->uplink_state = RAD_UL_WRITE_TO_STREAM;
         } else {
             debugf(WARNING, "Failed to refill receiver buffers, error=0x%03x", status);
         }
@@ -280,35 +286,35 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
 
     watchdog_indicate(rur->up_aspect, rur->replica_id, watchdog_ok);
 
-    if (rur->mut->uplink_state == RAD_UL_INITIAL_STATE) {
-        rur->mut->uplink_state = RAD_UL_QUERY_COMMON_CONFIG;
+    if (mut_synch->uplink_state == RAD_UL_INITIAL_STATE) {
+        mut_synch->uplink_state = RAD_UL_QUERY_COMMON_CONFIG;
     }
-    if ((rur->mut->uplink_state == RAD_UL_PRIME_READ && rur->mut->read_plan.prime_read_length == 0)
-            || (rur->mut->uplink_state == RAD_UL_FLIPPED_READ && rur->mut->read_plan.flipped_read_length == 0)) {
-        rur->mut->uplink_state = RAD_UL_REFILL_BUFFERS;
+    if ((mut_synch->uplink_state == RAD_UL_PRIME_READ && mut_synch->read_plan.prime_read_length == 0)
+            || (mut_synch->uplink_state == RAD_UL_FLIPPED_READ && mut_synch->read_plan.flipped_read_length == 0)) {
+        mut_synch->uplink_state = RAD_UL_REFILL_BUFFERS;
     }
-    if (rur->mut->uplink_state == RAD_UL_REFILL_BUFFERS
-            && !rur->mut->read_plan.needs_update_all && !rur->mut->read_plan.needs_alt_update) {
-        rur->mut->uplink_state = RAD_UL_WRITE_TO_STREAM;
+    if (mut_synch->uplink_state == RAD_UL_REFILL_BUFFERS
+            && !mut_synch->read_plan.needs_update_all && !mut_synch->read_plan.needs_alt_update) {
+        mut_synch->uplink_state = RAD_UL_WRITE_TO_STREAM;
     }
     pipe_txn_t txn;
     pipe_send_prepare(&txn, rur->up_pipe, rur->replica_id);
-    if (rur->mut->uplink_state == RAD_UL_WRITE_TO_STREAM) {
-        uint32_t uplink_length = rur->mut->read_plan.prime_read_length + rur->mut->read_plan.flipped_read_length;
+    if (mut_synch->uplink_state == RAD_UL_WRITE_TO_STREAM) {
+        uint32_t uplink_length = mut_synch->read_plan.prime_read_length + mut_synch->read_plan.flipped_read_length;
         if (uplink_length == 0) {
-            rur->mut->uplink_state = RAD_UL_QUERY_STATE;
+            mut_synch->uplink_state = RAD_UL_QUERY_STATE;
         } else if (pipe_send_allowed(&txn)) {
             assert(uplink_length <= UPLINK_BUF_LOCAL_SIZE
                      && UPLINK_BUF_LOCAL_SIZE <= pipe_message_size(rur->up_pipe));
             // write all the data we just pulled to the stream before continuing
             pipe_send_message(&txn, rur->mut->uplink_buf_local, uplink_length, 0);
-            rur->mut->uplink_state = RAD_UL_QUERY_STATE;
+            mut_synch->uplink_state = RAD_UL_QUERY_STATE;
             debugf(TRACE, "Radio uplink received %u bytes.", uplink_length);
         }
     }
     pipe_send_commit(&txn);
 
-    switch (rur->mut->uplink_state) {
+    switch (mut_synch->uplink_state) {
     case RAD_UL_QUERY_COMMON_CONFIG:
         // validate basic radio configuration settings
         rmap_read_start(&rmap_txn, 0x00, RADIO_REG_BASE_ADDR + REG_MAGIC * sizeof(uint32_t), sizeof(uint32_t) * 3);
@@ -343,30 +349,30 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
         static_assert(REG_RX_PTR + 4 == REG_RX_STATE, "register layout assumptions");
         break;
     case RAD_UL_PRIME_READ:
-        assert(rur->mut->read_plan.prime_read_length > 0);
-        rmap_read_start(&rmap_txn, 0x00, RADIO_MEM_BASE_ADDR + rur->mut->read_plan.prime_read_address,
-                                                               rur->mut->read_plan.prime_read_length);
+        assert(mut_synch->read_plan.prime_read_length > 0);
+        rmap_read_start(&rmap_txn, 0x00, RADIO_MEM_BASE_ADDR + mut_synch->read_plan.prime_read_address,
+                                                               mut_synch->read_plan.prime_read_length);
         break;
     case RAD_UL_FLIPPED_READ:
-        assert(rur->mut->read_plan.flipped_read_length > 0);
-        rmap_read_start(&rmap_txn, 0x00, RADIO_MEM_BASE_ADDR + rur->mut->read_plan.flipped_read_address,
-                                                               rur->mut->read_plan.flipped_read_length);
+        assert(mut_synch->read_plan.flipped_read_length > 0);
+        rmap_read_start(&rmap_txn, 0x00, RADIO_MEM_BASE_ADDR + mut_synch->read_plan.flipped_read_address,
+                                                               mut_synch->read_plan.flipped_read_length);
         break;
     case RAD_UL_REFILL_BUFFERS:
-        assert(rur->mut->read_plan.needs_update_all || rur->mut->read_plan.needs_alt_update);
-        if (rur->mut->read_plan.needs_update_all) {
+        assert(mut_synch->read_plan.needs_update_all || mut_synch->read_plan.needs_alt_update);
+        if (mut_synch->read_plan.needs_update_all) {
             for (int i = 0; i < 5; i++) {
-                registers[REG_RX_PTR + i] = htobe32(rur->mut->read_plan.new_registers[i]);
-                debugf(TRACE, "Writing register %u <- 0x%08x", REG_RX_PTR + i, rur->mut->read_plan.new_registers[i]);
+                registers[REG_RX_PTR + i] = htobe32(mut_synch->read_plan.new_registers[i]);
+                debugf(TRACE, "Writing register %u <- 0x%08x", REG_RX_PTR + i, mut_synch->read_plan.new_registers[i]);
             }
             rmap_write_start(&rmap_txn, 0x00, RADIO_REG_BASE_ADDR + REG_RX_PTR * sizeof(uint32_t),
                              (uint8_t*) (registers + REG_RX_PTR), sizeof(uint32_t) * 5);
         } else {
             for (int i = 0; i < 2; i++) {
                 registers[REG_RX_PTR_ALT + i] =
-                        htobe32(rur->mut->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
+                        htobe32(mut_synch->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
                 debugf(TRACE, "Writing register %u <- 0x%08x",
-                       REG_RX_PTR_ALT + i, rur->mut->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
+                       REG_RX_PTR_ALT + i, mut_synch->read_plan.new_registers[i + REG_RX_PTR_ALT - REG_RX_PTR]);
             }
             rmap_write_start(&rmap_txn, 0x00, RADIO_REG_BASE_ADDR + REG_RX_PTR_ALT * sizeof(uint32_t),
                              (uint8_t*) (registers + REG_RX_PTR_ALT), sizeof(uint32_t) * 2);

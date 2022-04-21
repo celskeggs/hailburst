@@ -2,6 +2,7 @@
 #define FSW_RADIO_H
 
 #include <hal/watchdog.h>
+#include <synch/notepad.h>
 #include <synch/pipe.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
@@ -76,28 +77,40 @@ enum radio_downlink_state {
     RAD_DL_MONITOR_TRANSMIT,
 };
 
+struct radio_uplink_note {
+    // automatically synchronized
+    enum radio_uplink_state   uplink_state;
+    struct radio_uplink_reads read_plan;
+    uint32_t                  bytes_extracted;
+};
+
 typedef const struct {
     struct radio_uplink_mut {
-        enum radio_uplink_state   uplink_state;
-        struct radio_uplink_reads read_plan;
-        flag_t                    uplink_query_status_flag;
-        uint32_t                  bytes_extracted;
-        uint8_t                   uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
+        // not automatically synchronized
+        flag_t  uplink_query_status_flag;
+        uint8_t uplink_buf_local[UPLINK_BUF_LOCAL_SIZE];
     } *mut;
     uint8_t            replica_id;
+    notepad_ref_t     *mut_synch;
     rmap_replica_t    *rmap_up;
     pipe_t            *up_pipe;
     watchdog_aspect_t *up_aspect;
 } radio_uplink_replica_t;
 
+struct radio_downlink_note {
+    // automatically synchronized
+    enum radio_downlink_state downlink_state;
+    uint32_t                  downlink_length;
+};
+
 typedef const struct {
     struct radio_downlink_mut {
-        enum radio_downlink_state downlink_state;
-        uint32_t                  downlink_length;
-        uint32_t                  downlink_pending_length;
-        uint8_t                   downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
+        // not automatically synchronized
+        uint32_t downlink_length_local;
+        uint8_t  downlink_buf_local[DOWNLINK_BUF_LOCAL_SIZE];
     } *mut;
     uint8_t            replica_id;
+    notepad_ref_t     *mut_synch;
     rmap_replica_t    *rmap_down;
     pipe_t            *down_pipe;
     watchdog_aspect_t *down_aspect;
@@ -118,17 +131,16 @@ macro_define(RADIO_UPLINK_REGISTER, r_ident,   r_switch_in, r_switch_out,
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_up), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_up_port, r_up_addr, UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);
     WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
+    NOTEPAD_REGISTER(symbol_join(r_ident, up_notepad), RADIO_REPLICAS, 0, sizeof(struct radio_uplink_note));
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_uplink_mut symbol_join(r_ident, uplink, r_replica_id, mut) = {
-            .uplink_state = RAD_UL_INITIAL_STATE,
-            .read_plan = { },
             .uplink_query_status_flag = FLAG_INITIALIZER,
-            .bytes_extracted = 0,
             .uplink_buf_local = { 0 },
         };
         radio_uplink_replica_t symbol_join(r_ident, uplink, r_replica_id) = {
             .mut = &symbol_join(r_ident, uplink, r_replica_id, mut),
             .replica_id = r_replica_id,
+            .mut_synch = NOTEPAD_REPLICA_REF(symbol_join(r_ident, up_notepad), r_replica_id),
             .rmap_up = RMAP_REPLICA_REF(symbol_join(r_ident, rmap_up), r_replica_id),
             .up_pipe = &r_uplink,
             .up_aspect = &symbol_join(r_ident, up_aspect),
@@ -145,15 +157,16 @@ macro_define(RADIO_DOWNLINK_REGISTER, r_ident,     r_switch_in, r_switch_out,
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_down), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_down_port, r_down_addr, REG_IO_BUFFER_SIZE, DOWNLINK_BUF_LOCAL_SIZE);
     WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
+    NOTEPAD_REGISTER(symbol_join(r_ident, down_notepad), RADIO_REPLICAS, 0, sizeof(struct radio_downlink_note));
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_downlink_mut symbol_join(r_ident, downlink, r_replica_id, mut) = {
-            .downlink_state = RAD_DL_INITIAL_STATE,
-            .downlink_length = 0,
+            .downlink_length_local = 0,
             .downlink_buf_local = { 0 },
         };
         radio_downlink_replica_t symbol_join(r_ident, downlink, r_replica_id) = {
             .mut = &symbol_join(r_ident, downlink, r_replica_id, mut),
             .replica_id = r_replica_id,
+            .mut_synch = NOTEPAD_REPLICA_REF(symbol_join(r_ident, down_notepad), r_replica_id),
             .rmap_down = RMAP_REPLICA_REF(symbol_join(r_ident, rmap_down), r_replica_id),
             .down_pipe = &r_downlink,
             .down_aspect = &symbol_join(r_ident, down_aspect),
