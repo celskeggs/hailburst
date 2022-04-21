@@ -21,7 +21,24 @@ macro_define(TASK_PROTO, t_ident) {
     extern TCB_t t_ident;
 }
 
+// clip wrapper that runs within the execution context
+void clip_play_direct(void (*entrypoint)(void*)) __attribute__((noreturn));
+// scheduler call to enter the execution context and run clip_play_direct
+void clip_enter_context(void (*entrypoint)(void*)) __attribute__((noreturn));
+
 macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
+#if ( VIVID_REPLICATE_TASK_CODE == 1 )
+    // We need to define a single function that references both clip_enter_context AND the entrypoint so that we can
+    // avoid replicating the two separately.
+    void symbol_join(c_ident, enter_context_unreplicated)(void) {
+        clip_enter_context(PP_ERASE_TYPE(c_play, c_arg));
+    }
+    REPLICATE_OBJECT_CODE(symbol_join(c_ident, enter_context_unreplicated), symbol_join(c_ident, enter_context));
+#else /* VIVID_REPLICATE_TASK_CODE == 0 */
+    void symbol_join(c_ident, enter_context)(void) {
+        clip_enter_context(PP_ERASE_TYPE(c_play, c_arg));
+    }
+#endif
     TCB_mut_t symbol_join(c_ident, mutable) = {
         .needs_start         = true,
         .hit_restart         = false,
@@ -29,16 +46,9 @@ macro_define(CLIP_REGISTER, c_ident, c_play, c_arg) {
         .clip_running        = false,
         .clip_next_tick      = 0,
     };
-#if ( VIVID_REPLICATE_TASK_CODE == 1 )
-    REPLICATE_OBJECT_CODE(c_play, symbol_join(c_ident, start_fn));
-#endif
     TCB_t c_ident = {
         .mut             = &symbol_join(c_ident, mutable),
-#if ( VIVID_REPLICATE_TASK_CODE == 1 )
-        .start_routine   = PP_ERASE_TYPE(symbol_join(c_ident, start_fn), c_arg),
-#else /* VIVID_REPLICATE_TASK_CODE == 0 */
-        .start_routine   = PP_ERASE_TYPE(c_play, c_arg),
-#endif
+        .enter_context   = symbol_join(c_ident, enter_context),
         .start_arg       = (void *) c_arg,
         .pcTaskName      = symbol_str(c_ident),
     }

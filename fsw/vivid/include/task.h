@@ -39,14 +39,6 @@
 * MACROS AND DEFINITIONS
 *----------------------------------------------------------*/
 
-#define RTOS_STACK_SIZE ( 1000 )
-
-typedef enum {
-    NOT_RESTARTABLE = 0,
-    RESTARTABLE,
-    RESTART_ON_RESCHEDULE,
-} restartable_t;
-
 #define SCRUBBER_COPIES 2
 
 typedef struct {
@@ -74,14 +66,14 @@ typedef struct
 } TCB_mut_t;
 
 // this is an immutable structure
-typedef struct TCB_st
+typedef const struct TCB_st
 {
-    TCB_mut_t * const mut;                      /*< THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
+    TCB_mut_t *mut;                      /*< THIS MUST BE THE FIRST MEMBER OF THE TCB STRUCT. */
 
-    void (* const start_routine)(void*);
-    void * const start_arg;
-    const char * const pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
-} const TCB_t;
+    void (*enter_context)(void);
+    void *start_arg;
+    const char *pcTaskName;              /*< Descriptive name given to the task when created.  Facilitates debugging only. */
+} TCB_t;
 
 typedef struct
 {
@@ -110,11 +102,6 @@ extern uint32_t schedule_ticks;
 extern local_time_t schedule_period_start;
 extern local_time_t schedule_last;
 extern local_time_t schedule_epoch_start;
-
-/*
- * Resume a task, restoring registers from the specified stack pointer.
- */
-extern void start_clip_context(volatile void *stack) __attribute__((noreturn));
 
 void vTaskStartScheduler( void );
 void schedule_next_task(void) __attribute__((noreturn));

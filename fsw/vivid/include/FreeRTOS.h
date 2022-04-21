@@ -38,8 +38,6 @@
 
 #include <hal/debug.h>
 
-typedef uint32_t StackType_t;
-
 typedef struct TCB_st const TCB_t;
 
 #endif /* INC_FREERTOS_H */

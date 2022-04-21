@@ -10,7 +10,7 @@
 #include <hal/thread.h>
 #include <synch/config.h>
 
-void clip_play_direct(void) {
+__attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
     thread_t clip = task_get_current();
 
     if (clip->mut->hit_restart) {
@@ -42,7 +42,7 @@ void clip_play_direct(void) {
     atomic_store(clip->mut->clip_running, true);
 
     // actual execution body
-    clip->start_routine(clip->start_arg);
+    entrypoint(clip->start_arg);
 
     // should never fail, because the clip would have been rescheduled (and therefore restart) if this happened!
     assert(task_tick_index() == clip->mut->clip_next_tick);

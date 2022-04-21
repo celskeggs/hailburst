@@ -54,8 +54,6 @@ local_time_t schedule_period_start = 0;
 local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
 TCB_t * volatile pxCurrentTCB = NULL;
-static StackType_t shared_clip_stack[RTOS_STACK_SIZE] __attribute__((aligned (8)));
-static StackType_t * const clip_top_of_stack = &shared_clip_stack[RTOS_STACK_SIZE - 2];
 
 /*-----------------------------------------------------------*/
 
@@ -93,7 +91,8 @@ static void schedule_execute(bool validate)
 
     schedule_last = new_time;
 
-    start_clip_context(clip_top_of_stack);
+    sched.task->enter_context();
+    abortf("should never return from enter_context");
 }
 
 /*-----------------------------------------------------------*/
@@ -106,9 +105,6 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
     assert((cpsr & ARM_CPSR_MASK_INTERRUPTS) != 0);
     /* Also, ensure that we are in IRQ mode, which is the standard mode for executing in the scheduler. */
     assert((cpsr & ARM_CPSR_MASK_MODE) == ARM_IRQ_MODE);
-
-    /* Check the alignment of the calculated top of stack is correct. */
-    assert(((uintptr_t) clip_top_of_stack & 0x0007) == 0UL);
 
     assert(pxCurrentTCB == NULL);
 

@@ -9,11 +9,11 @@ env["REPLICA_SCRIPT"] = File('replica.ld')
 
 sources = [
     "abort.c",
+    "clip_entry.s",
     "crash.c",
     "entrypoint.s",
     "fakewire_link.c",
     "gic.c",
-    "rtos_port.c",
     "rtos_tasks.c",
     "scrubber.c",
     "stubs.c",
