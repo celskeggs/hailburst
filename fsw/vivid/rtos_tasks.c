@@ -41,9 +41,6 @@
 #include <hal/atomic.h>
 
 enum {
-    /* Masks all bits in the APSR other than the mode bits. */
-    portAPSR_MODE_BITS_MASK = 0x1F,
-
     /* The value of the mode bits in the APSR when the CPU is executing in user mode. */
     portAPSR_USER_MODE = 0x10,
 };
@@ -103,12 +100,12 @@ static void schedule_execute(bool validate)
 
 __attribute__((noreturn)) void vTaskStartScheduler( void )
 {
-    /* Interrupts are verified to be off here, to ensure a tick does not occur
-     * before or during the call to xPortStartScheduler().  The stacks of
-     * the created tasks contain a status word with interrupts switched on
-     * so interrupts will automatically get re-enabled when the first task
-     * starts to run. */
-    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
+    /* Interrupts are verified to be off here, to ensure ticks do not execute while the scheduler is being started.
+     * When clips are executed, the status word will be switched such that interrupts are re-enabled. */
+    uint32_t cpsr = arm_get_cpsr();
+    assert((cpsr & ARM_CPSR_MASK_INTERRUPTS) != 0);
+    /* Also, ensure that we are in IRQ mode, which is the standard mode for executing in the scheduler. */
+    assert((cpsr & ARM_CPSR_MASK_MODE) == ARM_IRQ_MODE);
 
     /* Check the alignment of the calculated top of stack is correct. */
     assert(((uintptr_t) clip_top_of_stack & 0x0007) == 0UL);
@@ -117,19 +114,6 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
 
     /* Start the timer that generates the tick ISR. */
     assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
-
-    /* Only continue if the CPU is not in User mode.  The CPU must be in a
-    Privileged mode for the scheduler to start. */
-    uint32_t ulAPSR;
-    __asm volatile ( "MRS %0, APSR" : "=r" ( ulAPSR ) :: "memory" );
-    ulAPSR &= portAPSR_MODE_BITS_MASK;
-    assert(ulAPSR != portAPSR_USER_MODE);
-
-    /* Interrupts are turned off in the CPU itself to ensure ticks do
-    not execute while the scheduler is being started.  Interrupts are
-    automatically turned back on in the CPU when the first task starts
-    executing. */
-    assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) != 0);
 
     // start scheduling at next millisecond boundary (yes, this means the first task might have a bit of extra
     // time, but we can live with that)
@@ -142,7 +126,7 @@ __attribute__((noreturn)) void vTaskStartScheduler( void )
 }
 /*-----------------------------------------------------------*/
 
-__attribute__((noreturn)) void vTaskSwitchContext( void )
+__attribute__((noreturn)) void schedule_next_task( void )
 {
     /* Select the next task to run, round-robin-style */
     schedule_index = (schedule_index + 1) % task_scheduling_order_length;

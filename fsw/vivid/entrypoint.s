@@ -31,23 +31,16 @@
     .text
     .arm
 
+    .set MODE_MASK, 0x1f
     .set SYS_MODE, 0x1f
     .set UND_MODE, 0x1B
     .set ABT_MODE, 0x17
     .set SVC_MODE, 0x13
     .set IRQ_MODE, 0x12
 
-    .set IRQ_PPI_BASE, 16 /* replicated from gic.h */
-    .set IRQ_PHYS_TIMER, IRQ_PPI_BASE + 14
-
-    /* Hardware registers. */
-    .extern ulICCIAR
-    .extern ulICCEOIR
-
     /* Variables and functions. */
     .extern pxCurrentTCB
-    .extern vTaskSwitchContext
-    .extern vivid_port_in_kernel
+    .extern gic_interrupt_handler
 
 
 ; /**********************************************************************/
@@ -56,21 +49,11 @@
 start_clip_context:
     .globl start_clip_context
 
-    /* Make sure we're in system mode. */
+    /* Change to system mode. */
     CPS     #SYS_MODE
 
     /* Takes as a parameter the stack to switch into (R0). */
     MOV     SP,    R0
-
-    /* Make sure that we were previously in the kernel. */
-    LDR     r3, =vivid_port_in_kernel
-    LDR     r1, [r3]
-    CMP     r1, #1
-    BNE     abort
-
-    /* And mark that we are no longer. */
-    MOV     r1, #0
-    STR     r1, [r3]
 
     /* Initialize the system mode registers to a known state. */
     MOV     R0,  #0x00000000
@@ -91,7 +74,7 @@ start_clip_context:
     /* Don't bother fully initializing the floating-point context. There's no need for a hard security boundary. */
     VMSR    FPSCR, R0
 
-    /* Already in system mode, but make sure to enable everything before we jump to the entrypoint. */
+    /* Make sure to enable interrupts before we jump to the entrypoint. */
     CPSIE   aif
 
     B       clip_play_direct
@@ -112,26 +95,15 @@ interrupt_vector_table:
 .align 8
 .comm supervisor_stack, 0x1000  @ Reserve 4k stack in the BSS
 .align 8
-.comm interrupt_stack, 0x1000   @ Reserve 4k stack in the BSS
-.align 8
-.comm abort_stack, 0x1000       @ Reserve 4k stack in the BSS
+.comm trap_stack, 0x1000        @ Reserve 4k stack in the BSS
 
 
 .align 4
 _start:                               @ r0 is populated by the bootrom with the ROM address of the kernel ELF file
     .globl _start
 
-    CPS #IRQ_MODE                     @ Transition to IRQ mode
-    LDR sp, =interrupt_stack+0x1000   @ Set up the IRQ stack
-
-    CPS #ABT_MODE                     @ Transition to ABORT mode
-    LDR sp, =abort_stack+0x1000       @ Set up the ABORT stack (shared with UNDEFINED)
-
-    CPS #UND_MODE                     @ Transition to UNDEFINED mode
-    LDR sp, =abort_stack+0x1000       @ Set up the UNDEFINED stack (shared with ABORT)
-
-    CPS #SVC_MODE                     @ Transition to supervisor mode
-    LDR sp, =supervisor_stack+0x1000  @ Set up the supervisor stack
+    CPS #IRQ_MODE                     @ Transition to IRQ mode, which is the mode used in the scheduler.
+    LDR sp, =supervisor_stack+0x1000
 
     LDR r1, =interrupt_vector_table
     MCR p15, 0, r1, c12, c0, 0        @ Set up the interrupt vector table in the VBAR register
@@ -151,6 +123,8 @@ trap_recursive_flag:
     .text
 
 .macro TRAP_HANDLER trapid
+    @ Set up the trap handling stack
+    LDR sp, =trap_stack+0x1000
 
     @ Verify that our trap is NOT recursive
     PUSH    {r12, r14}       @ (Use r12 and r14 as scratch space to simplify emergency_abort_handler.)
@@ -162,10 +136,10 @@ trap_recursive_flag:
     ADD     r14, r14, #1
     STR     r14, [r12]
 
-    @ And also check if we're in the kernel, where we also cannot be safely suspended or restarted
-    LDREQ   r14, =vivid_port_in_kernel
-    LDREQ   r14, [r14]
-    CMPEQ   r14, #0
+    @ And also check if we were in the kernel, where we also cannot be safely suspended or restarted
+    MRSEQ   r14, SPSR
+    ANDEQ   r14, r14, #MODE_MASK
+    CMPEQ   r14, #SYS_MODE
 
     @ If the trap is recursive, OR we're in a critical section, we'll jump to the emergency handler
     @ (more cases below)
@@ -234,38 +208,10 @@ emergency_abort_handler:
 .align 4
 .type interrupt_handler, %function
 interrupt_handler:
-    /* Change to supervisor mode to allow reentry. */
-    CPS     #SYS_MODE
+    /* Use the supervisor stack. */
+    LDR     sp, =supervisor_stack+0x1000
 
-    /* Make sure that we weren't already in the kernel. */
-    LDR     r3, =vivid_port_in_kernel
-    LDR     r1, [r3]
-    CMP     r1, #0
-    BNE     abort
-
-    /* And mark that we now are. */
-    MOV     r1, #1
-    STR     r1, [r3]
-
-    /* Read value from the interrupt acknowledge register, which is stored in r0
-    for future parameter and interrupt clearing use. */
-    LDR     r2, =ulICCIAR
-    LDR     r2, [r2]
-    LDR     r0, [r2]
-
-    /* Should only encounter timer interrupts; anything else could throw off the partition scheduler! */
-    CMP     r0, #IRQ_PHYS_TIMER
-    BNE     abort
-
-    /****** TIMER INTERRUPT ******/
-
-    /* Write the value read from ICCIAR to ICCEOIR. */
-    LDR     r4, =ulICCEOIR
-    LDR     r4, [r4]
-    STR     r0, [r4]
-
-    /* Call the function that selects the new task to execute. It will directly
-    call resume_restore_context and never return. */
-    B       vTaskSwitchContext
+    /* Jump into C code. */
+    B       gic_interrupt_handler
 
 .end

@@ -2,7 +2,11 @@
 
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <hal/atomic.h>
 #include <hal/init.h>
+
+#include <FreeRTOS.h>
+#include <task.h>
 
 enum {
     GIC_DIST_ADDR = 0x08000000,
@@ -64,10 +68,6 @@ static_assert(sizeof(struct gic_cpu_reg) == 0x2000, "invalid sizeof(gic_cpu_reg)
 static struct gic_dist_reg * const dist = (struct gic_dist_reg *) GIC_DIST_ADDR;
 static struct gic_cpu_reg  * const cpu  = (struct gic_cpu_reg *)  GIC_CPU_ADDR;
 
-/* Used in the asm file. */
-__attribute__(( used )) const uint32_t ulICCIAR = (uintptr_t) &cpu->gicc_iar;
-__attribute__(( used )) const uint32_t ulICCEOIR = (uintptr_t) &cpu->gicc_eoir;
-
 static uint32_t num_interrupts = 0;
 
 void shutdown_gic(void) {
@@ -128,3 +128,20 @@ static void configure_gic(void) {
 // we don't need to worry about exactly when this happens, because interrupts will be disabled by the bootrom, and not
 // re-enabled until the initialization is complete.
 PROGRAM_INIT(STAGE_RAW, configure_gic);
+
+void gic_interrupt_handler(void) {
+    // Make sure that we were executing normal user code.
+    uint32_t spsr = arm_get_spsr();
+    assertf((spsr & ARM_CPSR_MASK_MODE) == ARM_SYS_MODE,
+            "SPSR indicated interrupted code was not in SYS_MODE: 0x%08x", spsr);
+
+    // Confirm that this was the expected interrupt, and acknowledge it.
+    uint32_t irq = atomic_load_relaxed(cpu->gicc_iar);
+    assertf(irq == IRQ_PHYS_TIMER,
+            "GIC encountered IRQ %u, which is not the timer interrupt and should be disabled.", irq);
+
+    atomic_store_relaxed(cpu->gicc_eoir, irq);
+
+    // Switch to the next task.
+    schedule_next_task();
+}

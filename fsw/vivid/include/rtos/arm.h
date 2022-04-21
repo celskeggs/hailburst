@@ -13,6 +13,11 @@ enum {
     ARM_FPEXC_EN = 0x40000000, // enable bit
 
     ARM_CPSR_MASK_INTERRUPTS = 0x80,
+    ARM_CPSR_MASK_MODE       = 0x1F,
+
+    ARM_USER_MODE = 0x10,
+    ARM_IRQ_MODE  = 0x12,
+    ARM_SYS_MODE  = 0x1F,
 
     ARM_CPACR_CP10_FULL_ACCESS = 0x300000, // enable CP10 with full access
     ARM_CPACR_CP11_FULL_ACCESS = 0xC00000, // enable CP11 with full access
@@ -22,6 +27,13 @@ enum {
 static inline uint32_t arm_get_cpsr(void) {
     uint32_t v;
     asm volatile("MRS %0, CPSR" : "=r" (v));
+    return v;
+}
+
+/** Saved Program Status Register (SPSR) **/
+static inline uint32_t arm_get_spsr(void) {
+    uint32_t v;
+    asm volatile("MRS %0, SPSR" : "=r" (v));
     return v;
 }
 

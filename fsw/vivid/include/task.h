@@ -117,6 +117,6 @@ extern local_time_t schedule_epoch_start;
 extern void start_clip_context(volatile void *stack) __attribute__((noreturn));
 
 void vTaskStartScheduler( void );
-void vTaskSwitchContext( void );
+void schedule_next_task(void) __attribute__((noreturn));
 
 #endif /* INC_TASK_H */
