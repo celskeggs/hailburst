@@ -5,6 +5,7 @@
 
 #include <hal/thread.h>
 #include <hal/watchdog.h>
+#include <synch/config.h>
 
 // SCRUBBER_COPIES and scrubber_pend_t are defined in task.h
 
@@ -14,8 +15,6 @@ typedef const struct {
         void        *kernel_elf_rom;
         uint64_t     iteration;
         uint8_t     *next_scrubbed_address;
-        local_time_t next_cycle_time;
-        bool         encourage_immediate_cycle;
     } *mut;
     uint8_t            copy_id;
     watchdog_aspect_t *aspect;
@@ -26,13 +25,14 @@ void scrubber_main_clip(scrubber_copy_t *sc);
 macro_define(SCRUBBER_REGISTER) {
     static_repeat(SCRUBBER_COPIES, s_copy_id) {
         // define a separate aspect for each scrubber copy, because they are REDUNDANT, not REPLICATED!
-        WATCHDOG_ASPECT(symbol_join(scrubber, s_copy_id, aspect), 2 * CLOCK_NS_PER_SEC, 1);
+        WATCHDOG_ASPECT(symbol_join(scrubber, s_copy_id, aspect),
+                        /* if not in strict mode, allow enough time to repair one scrubber with the other */
+                        PP_IF_ELSE(CONFIG_SYNCH_MODE_STRICT == 1, CLOCK_NS_PER_SEC / 2, CLOCK_NS_PER_SEC),
+                        1);
         struct scrubber_copy_mut symbol_join(scrubber, s_copy_id, mutable) = {
             .kernel_elf_rom = NULL,
             .iteration = 0,
             .next_scrubbed_address = NULL,
-            .next_cycle_time = 0,
-            .encourage_immediate_cycle = false,
         };
         scrubber_copy_t symbol_join(scrubber, s_copy_id) = {
             .mut = &symbol_join(scrubber, s_copy_id, mutable),

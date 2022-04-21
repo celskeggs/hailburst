@@ -11,7 +11,6 @@ enum {
 
     SCRUBBER_ESCAPE_CHECK_INTERVAL = 128,
     SCRUBBER_ESCAPE_TIMEOUT        = 4 * CLOCK_NS_PER_US,
-    SCRUBBER_CYCLE_DELAY           = 500 * CLOCK_NS_PER_MS, // must be small enough to work well with watchdog timeout
 };
 
 static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, size_t memsz, uint32_t flags,
@@ -39,23 +38,27 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
 
         size_t corrections = 0;
 
+        assert(filesz % sizeof(uint32_t) == 0 && start_offset % sizeof(uint32_t) == 0);
         size_t i;
-        for (i = start_offset; i < filesz; i++) {
-            if (i % SCRUBBER_ESCAPE_CHECK_INTERVAL == 0 && clip_remaining_ns() < SCRUBBER_ESCAPE_TIMEOUT) {
+        for (i = start_offset; i < filesz; i += sizeof(uint32_t)) {
+            if ((i / sizeof(uint32_t)) % SCRUBBER_ESCAPE_CHECK_INTERVAL == 0
+                        && clip_remaining_ns() < SCRUBBER_ESCAPE_TIMEOUT) {
                 debugf(TRACE, "Scrubber pausing remainder of check; not enough time left to complete cycle now.");
                 break;
             }
-            if (scrub_active[i] != scrub_baseline[i]) {
+            uint32_t *active_ref = (uint32_t *) &scrub_active[i];
+            uint32_t *baseline_ref = (uint32_t *) &scrub_baseline[i];
+            if (*active_ref != *baseline_ref) {
                 if (corrections == 0) {
                     debugf(WARNING, "Detected mismatch in read-only memory. Beginning corrections.");
                 }
-                scrub_active[i] = scrub_baseline[i];
+                *active_ref = *baseline_ref;
                 corrections++;
             }
         }
 
         if (corrections > 0) {
-            debugf(WARNING, "Summary for current scrubber step: %u bytes corrected.", corrections);
+            debugf(WARNING, "Summary for current scrubber step: %u word(s) corrected.", corrections);
         }
 
         if (i == filesz) {
@@ -70,52 +73,39 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
 void scrubber_main_clip(scrubber_copy_t *sc) {
     assert(sc != NULL && sc->mut != NULL && sc->mut->kernel_elf_rom != NULL);
 
-    local_time_t now = timer_now_ns();
-
     if (clip_is_restart()) {
         debugf(DEBUG, "Reset scrubber state due to restart.");
         sc->mut->next_scrubbed_address = NULL;
-        sc->mut->next_cycle_time = now;
+    }
+
+    if (sc->mut->next_scrubbed_address == NULL) {
+        debugf(DEBUG, "Beginning scrub cycle (baseline kernel ELF at 0x%08x)...",
+                      (uintptr_t) sc->mut->kernel_elf_rom);
+
+        if (!elf_validate_header(sc->mut->kernel_elf_rom)) {
+            restartf("Header validation failed; resetting scrubber.");
+        }
+    }
+
+    void *last = sc->mut->next_scrubbed_address;
+
+    if (elf_scan_load_segments(sc->mut->kernel_elf_rom, MEMORY_LOW, scrub_segment, (void *) sc) == 0) {
+        restartf("Segment scan failed; resetting scrubber.");
+    }
+
+    if (last != NULL && last == sc->mut->next_scrubbed_address) {
+        restartf("No scan progress made; resetting scrubber.");
     }
 
     bool watchdog_ok = false;
 
-    if (sc->mut->next_scrubbed_address != NULL
-            || now >= sc->mut->next_cycle_time
-            || now < sc->mut->next_cycle_time - SCRUBBER_CYCLE_DELAY
-            || atomic_load_relaxed(sc->mut->encourage_immediate_cycle) == true) {
+    if (sc->mut->next_scrubbed_address == NULL) {
+        // completed iteration
+        atomic_store_relaxed(sc->mut->iteration, sc->mut->iteration + 1);
 
-        if (sc->mut->next_scrubbed_address == NULL) {
-            debugf(DEBUG, "Beginning scrub cycle (baseline kernel ELF at 0x%08x)...",
-                          (uintptr_t) sc->mut->kernel_elf_rom);
+        debugf(DEBUG, "Scrub cycle complete.");
 
-            sc->mut->encourage_immediate_cycle = false;
-
-            if (!elf_validate_header(sc->mut->kernel_elf_rom)) {
-                restartf("Header validation failed; resetting scrubber.");
-            }
-        }
-
-        void *last = sc->mut->next_scrubbed_address;
-
-        if (elf_scan_load_segments(sc->mut->kernel_elf_rom, MEMORY_LOW, scrub_segment, (void *) sc) == 0) {
-            restartf("Segment scan failed; resetting scrubber.");
-        }
-
-        if (last != NULL && last == sc->mut->next_scrubbed_address) {
-            restartf("No scan progress made; resetting scrubber.");
-        }
-
-        if (sc->mut->next_scrubbed_address == NULL) {
-            // completed iteration
-            atomic_store_relaxed(sc->mut->iteration, sc->mut->iteration + 1);
-
-            debugf(DEBUG, "Scrub cycle complete.");
-
-            watchdog_ok = true;
-
-            sc->mut->next_cycle_time = now + SCRUBBER_CYCLE_DELAY;
-        }
+        watchdog_ok = true;
     }
 
     watchdog_indicate(sc->aspect, 0, watchdog_ok);
@@ -125,10 +115,6 @@ static uint64_t start_scrub_wait(scrubber_copy_t *scrubber) {
     assert(scrubber != NULL);
 
     uint64_t start_iteration = atomic_load_relaxed(scrubber->mut->iteration);
-
-    // encourage the scrubber to start a cycle immediately
-    atomic_store_relaxed(scrubber->mut->encourage_immediate_cycle, true);
-
     return start_iteration;
 }
 
