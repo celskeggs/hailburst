@@ -12,7 +12,11 @@ static inline uint8_t *notepad_region_ref(notepad_ref_t *replica, uint8_t replic
 static inline uint8_t notepad_vote_flip(notepad_ref_t *replica, bool is_observer) {
     assert(replica != NULL);
     uint32_t count_secondary = 0;
-    for (size_t i = 0; i < replica->num_replicas; i++) {
+    if (replica->flip_states[replica->replica_id] == NOTEPAD_UNINITIALIZED) {
+        return NOTEPAD_UNINITIALIZED;
+    }
+
+    for (uint8_t i = 0; i < replica->num_replicas; i++) {
         uint8_t flip_state = replica->flip_states[i];
         assert(flip_state == 0 || flip_state == 1);
         if (!is_observer && i < replica->replica_id) {
@@ -29,7 +33,13 @@ static inline uint8_t notepad_vote_flip(notepad_ref_t *replica, bool is_observer
     return (count_secondary >= majority) ? 1 : 0;
 }
 
-static bool notepad_vote_best(notepad_ref_t *replica, bool flip_read, void *output_region) {
+static bool notepad_vote_best(notepad_ref_t *replica, uint8_t flip_read, void *output_region) {
+    if (flip_read == NOTEPAD_UNINITIALIZED) {
+        debugf(DEBUG, "Blank notepad %s[%u]; initializing by reset.", replica->label, replica->replica_id);
+        memset(output_region, 0, replica->state_size);
+        return false; /* invalid */
+    }
+
     bool populated = false;
     uint8_t best_vote = 0;
     uint8_t majority = 1 + (replica->num_replicas / 2);
@@ -70,7 +80,8 @@ void *notepad_feedforward(notepad_ref_t *replica, bool *valid_out) {
     assert(replica->replica_id < replica->num_replicas); // ensure this is not an observer
 
     uint8_t flip_read = notepad_vote_flip(replica, false);
-    uint8_t flip_write = (flip_read ^ 1);
+    uint8_t flip_write = !flip_read; // opposite of flip_read; map flip_read=NOTEPAD_UNINITIALIZED to flip_write=0
+    assert(flip_write == 0 || flip_write == 1);
 
     void *output_region = notepad_region_ref(replica, replica->replica_id, flip_write);
 

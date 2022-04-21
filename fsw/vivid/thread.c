@@ -53,7 +53,7 @@ __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
     int64_t elapsed = timer_now_ns() - schedule_period_start;
     if (elapsed > 0 && (uint64_t) elapsed > clip->mut->clip_max_nanos) {
         clip->mut->clip_max_nanos = elapsed;
-        debugf(DEBUG, "New longest clip duration for %s: %u.%03u microseconds.",
+        debugf(TRACE, "New longest clip duration for %s: %u.%03u microseconds.",
                clip->pcTaskName, elapsed / 1000, elapsed % 1000);
     }
 

@@ -19,6 +19,8 @@
 
 enum {
     NOTEPAD_OBSERVER_BASE_ID = 100,
+
+    NOTEPAD_UNINITIALIZED = 0xFF,
 };
 
 typedef const struct {
@@ -32,7 +34,7 @@ typedef const struct {
 } notepad_ref_t;
 
 macro_define(NOTEPAD_REGISTER, n_ident, n_replicas, n_observers, n_state_size) {
-    uint8_t symbol_join(n_ident, flip_states)[n_replicas];
+    uint8_t symbol_join(n_ident, flip_states)[n_replicas] = { [0 ... n_replicas - 1] = NOTEPAD_UNINITIALIZED };
     uint8_t symbol_join(n_ident, mutable_state)[(n_replicas) * 2 * (n_state_size)];
     static_repeat(n_replicas, n_replica_id) {
         notepad_ref_t symbol_join(n_ident, replica, n_replica_id) = {
