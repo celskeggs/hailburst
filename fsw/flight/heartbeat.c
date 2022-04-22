@@ -8,9 +8,12 @@ enum {
 };
 
 void heartbeat_main_clip(heartbeat_replica_t *h) {
-    if (clip_is_restart()) {
-        // heartbeat immediately on restart
-        h->mut->last_heartbeat_time = timer_now_ns() - HEARTBEAT_PERIOD;
+    local_time_t now = timer_epoch_ns();
+
+    bool valid = false;
+    struct heartbeat_note *mut_synch = notepad_feedforward(h->mut_synch, &valid);
+    if (!valid || mut_synch->last_heartbeat_time > now) {
+        mut_synch->last_heartbeat_time = now - HEARTBEAT_PERIOD;
     }
 
     tlm_txn_t telem;
@@ -18,12 +21,12 @@ void heartbeat_main_clip(heartbeat_replica_t *h) {
 
     bool watchdog_ok = false;
 
-    if (clock_is_calibrated() && timer_now_ns() >= h->mut->last_heartbeat_time + HEARTBEAT_PERIOD) {
+    if (clock_is_calibrated() && now >= mut_synch->last_heartbeat_time + HEARTBEAT_PERIOD) {
         tlm_heartbeat(&telem);
 
         watchdog_ok = true;
 
-        h->mut->last_heartbeat_time = timer_now_ns();
+        mut_synch->last_heartbeat_time = now;
     }
 
     watchdog_indicate(h->aspect, h->replica_id, watchdog_ok);
