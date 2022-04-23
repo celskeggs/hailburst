@@ -55,8 +55,7 @@ typedef const struct {
     cmd_endpoint_t *command_endpoint;
 } magnetometer_replica_t;
 
-void magnetometer_query_clip(magnetometer_replica_t *mag);
-void magnetometer_telem_clip(magnetometer_replica_t *mag);
+void magnetometer_clip(magnetometer_replica_t *mag);
 
 macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_out, m_switch_port) {
     TELEMETRY_ASYNC_REGISTER(symbol_join(m_ident, telemetry_async), MAGNETOMETER_REPLICAS, 2);
@@ -84,10 +83,8 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
             .telemetry_sync = &symbol_join(m_ident, telemetry_sync),
             .command_endpoint = &symbol_join(m_ident, command),
         };
-        CLIP_REGISTER(symbol_join(m_ident, query, m_replica_id),
-                      magnetometer_query_clip, &symbol_join(m_ident, replica, m_replica_id));
-        CLIP_REGISTER(symbol_join(m_ident, telem, m_replica_id),
-                      magnetometer_telem_clip, &symbol_join(m_ident, replica, m_replica_id));
+        CLIP_REGISTER(symbol_join(m_ident, clip, m_replica_id),
+                      magnetometer_clip, &symbol_join(m_ident, replica, m_replica_id));
     }
 }
 
@@ -99,8 +96,7 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
 
 macro_define(MAGNETOMETER_SCHEDULE, m_ident) {
     static_repeat(MAGNETOMETER_REPLICAS, m_replica_id) {
-        CLIP_SCHEDULE(symbol_join(m_ident, query, m_replica_id), 20)
-        CLIP_SCHEDULE(symbol_join(m_ident, telem, m_replica_id), 90)
+        CLIP_SCHEDULE(symbol_join(m_ident, clip, m_replica_id), 110)
     }
 }
 

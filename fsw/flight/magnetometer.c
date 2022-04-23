@@ -25,8 +25,19 @@ enum {
     LATCHING_DELAY_NS = 15 * 1000 * 1000, // wait 15 ms before checking for reading completion
 };
 
-void magnetometer_query_clip(magnetometer_replica_t *mr) {
+static void magnetometer_telem_iterator_fetch(void *mr_opaque, size_t index, tlm_mag_reading_t *reading_out) {
+    magnetometer_replica_t *mr = (magnetometer_replica_t *) mr_opaque;
+    assert(mr != NULL && reading_out != NULL);
+
+    tlm_mag_reading_t *reading = circ_buf_read_peek(mr->readings, index);
+    assert(reading != NULL);
+    *reading_out = *reading;
+}
+
+void magnetometer_clip(magnetometer_replica_t *mr) {
     assert(mr != NULL && mr->mut != NULL);
+
+    local_time_t now = timer_epoch_ns();
 
     if (clip_is_restart()) {
         mr->mut->state = MS_INACTIVE;
@@ -34,6 +45,11 @@ void magnetometer_query_clip(magnetometer_replica_t *mr) {
         mr->mut->actual_reading_time = 0;
         mr->mut->check_latch_time = 0;
         circ_buf_reset(mr->readings);
+
+        // make sure this can't get corrupted to a value that prevents us from sending telemetry
+        if (mr->mut->last_telem_time > now) {
+            mr->mut->last_telem_time = now;
+        }
     }
 
     // scratch variables for use in switch statements
@@ -73,7 +89,7 @@ void magnetometer_query_clip(magnetometer_replica_t *mr) {
         if (status == RS_OK) {
             assert(mr->mut->actual_reading_time != 0);
             mr->mut->state = MS_LATCHED_ON;
-            mr->mut->check_latch_time = timer_now_ns() + LATCHING_DELAY_NS;
+            mr->mut->check_latch_time = now + LATCHING_DELAY_NS;
         } else {
             debugf(WARNING, "Failed to turn on magnetometer latch, error=0x%03x", status);
         }
@@ -129,7 +145,7 @@ void magnetometer_query_clip(magnetometer_replica_t *mr) {
         debugf(DEBUG, "Taking magnetometer reading...");
         mr->mut->state = MS_LATCHING_ON;
         mr->mut->next_reading_time += READING_DELAY_NS;
-    } else if (mr->mut->state == MS_LATCHED_ON && timer_now_ns() >= mr->mut->check_latch_time) {
+    } else if (mr->mut->state == MS_LATCHED_ON && now >= mr->mut->check_latch_time) {
         mr->mut->state = MS_TAKING_READING;
     }
 
@@ -162,32 +178,9 @@ void magnetometer_query_clip(magnetometer_replica_t *mr) {
 
     telemetry_commit(&telem);
     rmap_epoch_commit(&rmap_txn);
-}
 
-static void magnetometer_telem_iterator_fetch(void *mr_opaque, size_t index, tlm_mag_reading_t *reading_out) {
-    magnetometer_replica_t *mr = (magnetometer_replica_t *) mr_opaque;
-    assert(mr != NULL && reading_out != NULL);
-
-    tlm_mag_reading_t *reading = circ_buf_read_peek(mr->readings, index);
-    assert(reading != NULL);
-    *reading_out = *reading;
-}
-
-void magnetometer_telem_clip(magnetometer_replica_t *mr) {
-    assert(mr != NULL && mr->mut != NULL);
-
-    local_time_t now = timer_now_ns();
-
-    if (clip_is_restart()) {
-        circ_buf_reset(mr->readings);
-        // make sure this can't get corrupted to a value that prevents us from sending telemetry
-        if (mr->mut->last_telem_time > now) {
-            mr->mut->last_telem_time = now;
-        }
-    }
-
-    tlm_txn_t telem;
-    telemetry_prepare(&telem, mr->telemetry_sync, mr->replica_id);
+    tlm_txn_t telem_synch;
+    telemetry_prepare(&telem_synch, mr->telemetry_sync, mr->replica_id);
 
     circ_index_t downlink_count = circ_buf_read_avail(mr->readings);
     if (downlink_count == 0) {
@@ -196,9 +189,9 @@ void magnetometer_telem_clip(magnetometer_replica_t *mr) {
     } else {
         // something to downlink... but only downlink at most every 5.5 seconds (to meet requirements), and only if
         // there's room in the telemetry buffer to actually transmit data.
-        if (now >= mr->mut->last_telem_time + (uint64_t) 5500 * CLOCK_NS_PER_MS && telemetry_can_send(&telem)) {
+        if (now >= mr->mut->last_telem_time + (uint64_t) 5500 * CLOCK_NS_PER_MS && telemetry_can_send(&telem_synch)) {
             size_t write_count = downlink_count;
-            tlm_mag_readings_map(&telem, &write_count, magnetometer_telem_iterator_fetch, (void *) mr);
+            tlm_mag_readings_map(&telem_synch, &write_count, magnetometer_telem_iterator_fetch, (void *) mr);
             assert(write_count >= 1 && write_count <= downlink_count);
             circ_buf_read_done(mr->readings, write_count);
 
@@ -206,5 +199,5 @@ void magnetometer_telem_clip(magnetometer_replica_t *mr) {
         }
     }
 
-    telemetry_commit(&telem);
+    telemetry_commit(&telem_synch);
 }
