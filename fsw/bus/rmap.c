@@ -9,9 +9,15 @@ enum {
     PROTOCOL_RMAP = 0x01,
 };
 
-void rmap_epoch_prepare(rmap_txn_t *txn, rmap_replica_t *rmap) {
-    assert(txn != NULL && rmap != NULL);
+void rmap_synch_reset(rmap_synch_t *synch) {
+    assert(synch != NULL);
+    synch->current_txn_id = 0;
+}
+
+void rmap_epoch_prepare(rmap_txn_t *txn, rmap_replica_t *rmap, rmap_synch_t *synch) {
+    assert(txn != NULL && rmap != NULL && synch != NULL);
     txn->rmap = rmap;
+    txn->synch = synch;
     duct_send_prepare(&txn->tx_send_txn, rmap->tx_duct, rmap->replica_id);
     duct_receive_prepare(&txn->rx_recv_txn, rmap->rx_duct, rmap->replica_id);
 }
@@ -61,10 +67,10 @@ void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uin
     rmap_encode_source_path(&out, &rmap->routing->source);
     *out++ = rmap->routing->source.logical_address;
 
-    rmap->mut->current_txn_id += 1;
+    txn->synch->current_txn_id += 1;
 
-    *out++ = (rmap->mut->current_txn_id >> 8) & 0xFF;
-    *out++ = (rmap->mut->current_txn_id >> 0) & 0xFF;
+    *out++ = (txn->synch->current_txn_id >> 8) & 0xFF;
+    *out++ = (txn->synch->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
@@ -89,8 +95,9 @@ void rmap_write_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, uin
 }
 
 // returns true if packet is a valid reply, and false otherwise.
-static bool rmap_validate_write_reply(rmap_replica_t *rmap, uint8_t *in, size_t count, uint8_t *status_byte_out) {
-    assert(rmap != NULL && in != NULL && status_byte_out != NULL);
+static bool rmap_validate_write_reply(rmap_txn_t *txn, uint8_t *in, size_t count, uint8_t *status_byte_out) {
+    assert(txn != NULL && txn->rmap != NULL && txn->synch != NULL && in != NULL && status_byte_out != NULL);
+    rmap_replica_t *rmap = txn->rmap;
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
         debugf(WARNING, "RMAP (%10s) dropped truncated packet (len=%zu).", rmap->label, count);
@@ -122,9 +129,9 @@ static bool rmap_validate_write_reply(rmap_replica_t *rmap, uint8_t *in, size_t 
     }
     // verify transaction ID
     uint16_t txn_id = (in[5] << 8) | in[6];
-    if (txn_id != rmap->mut->current_txn_id) {
+    if (txn_id != txn->synch->current_txn_id) {
         debugf(WARNING, "RMAP (%10s) dropped write reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
-               rmap->label, txn_id, rmap->mut->current_txn_id);
+               rmap->label, txn_id, txn->synch->current_txn_id);
         return false;
     }
     // make sure routing addresses match
@@ -147,7 +154,7 @@ rmap_status_t rmap_write_complete(rmap_txn_t *txn, local_time_t *ack_timestamp_o
     uint8_t status_byte;
     local_time_t timestamp = 0;
     size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
-    if (packet_length == 0 || !rmap_validate_write_reply(rmap, rmap->scratch, packet_length, &status_byte)) {
+    if (packet_length == 0 || !rmap_validate_write_reply(txn, rmap->scratch, packet_length, &status_byte)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
 #ifdef RMAP_TRACE
         debugf(TRACE, "RMAP (%10s) WRITE  FAIL: NO RESPONSE", rmap->label);
@@ -201,10 +208,10 @@ void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size
     rmap_encode_source_path(&out, &rmap->routing->source);
     *out++ = rmap->routing->source.logical_address;
 
-    rmap->mut->current_txn_id += 1;
+    txn->synch->current_txn_id += 1;
 
-    *out++ = (rmap->mut->current_txn_id >> 8) & 0xFF;
-    *out++ = (rmap->mut->current_txn_id >> 0) & 0xFF;
+    *out++ = (txn->synch->current_txn_id >> 8) & 0xFF;
+    *out++ = (txn->synch->current_txn_id >> 0) & 0xFF;
     *out++ = ext_addr;
     *out++ = (main_addr >> 24) & 0xFF;
     *out++ = (main_addr >> 16) & 0xFF;
@@ -225,9 +232,11 @@ void rmap_read_start(rmap_txn_t *txn, uint8_t ext_addr, uint32_t main_addr, size
 }
 
 // returns true if packet is a valid reply, and false otherwise.
-static bool rmap_validate_read_reply(rmap_replica_t *rmap, uint8_t *in, size_t count,
+static bool rmap_validate_read_reply(rmap_txn_t *txn, uint8_t *in, size_t count,
                                      uint8_t *status_byte_out, uint8_t *packet_out, size_t *packet_length_io) {
-    assert(rmap != NULL && in != NULL && status_byte_out != NULL && packet_out != NULL && packet_length_io != NULL);
+    assert(txn != NULL && txn->rmap != NULL && txn->synch != NULL && in != NULL && status_byte_out != NULL
+                       && packet_out != NULL && packet_length_io != NULL);
+    rmap_replica_t *rmap = txn->rmap;
     // validate basic parameters of a valid RMAP packet
     if (count < 8) {
         debugf(WARNING, "RMAP (%10s) dropped truncated packet (len=%zu).", rmap->label, count);
@@ -275,9 +284,9 @@ static bool rmap_validate_read_reply(rmap_replica_t *rmap, uint8_t *in, size_t c
     }
     // verify transaction ID
     uint16_t txn_id = (in[5] << 8) | in[6];
-    if (txn_id != rmap->mut->current_txn_id) {
+    if (txn_id != txn->synch->current_txn_id) {
         debugf(WARNING, "RMAP (%10s) dropped read reply with wrong transaction ID (found=0x%04x, expected=0x%04x).",
-               rmap->label, txn_id, rmap->mut->current_txn_id);
+               rmap->label, txn_id, txn->synch->current_txn_id);
         return false;
     }
     // make sure routing addresses match
@@ -306,7 +315,7 @@ rmap_status_t rmap_read_complete(rmap_txn_t *txn, uint8_t *buffer, size_t buffer
     size_t output_length = buffer_size;
     local_time_t timestamp = 0;
     size_t packet_length = duct_receive_message(&txn->rx_recv_txn, rmap->scratch, &timestamp);
-    if (packet_length == 0 || !rmap_validate_read_reply(rmap, rmap->scratch, packet_length,
+    if (packet_length == 0 || !rmap_validate_read_reply(txn, rmap->scratch, packet_length,
                                                         &status_byte, buffer, &output_length)) {
         // no need to check for further packets... our duct only allows one packet per epoch!
 #ifdef RMAP_TRACE

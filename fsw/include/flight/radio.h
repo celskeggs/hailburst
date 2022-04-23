@@ -82,6 +82,7 @@ struct radio_uplink_note {
     enum radio_uplink_state   uplink_state;
     struct radio_uplink_reads read_plan;
     uint32_t                  bytes_extracted;
+    rmap_synch_t              rmap_synch;
 };
 
 typedef const struct {
@@ -101,6 +102,7 @@ struct radio_downlink_note {
     // automatically synchronized
     enum radio_downlink_state downlink_state;
     uint32_t                  downlink_length;
+    rmap_synch_t              rmap_synch;
 };
 
 typedef const struct {

@@ -55,7 +55,7 @@ void clock_voter_clip(void) {
 }
 
 void clock_start_clip(clock_replica_t *cr) {
-    assert(cr != NULL && cr->mut != NULL);
+    assert(cr != NULL);
 
     // temporary local variables for switch statements
     rmap_status_t status;
@@ -63,12 +63,20 @@ void clock_start_clip(clock_replica_t *cr) {
     mission_time_t received_timestamp;
     local_time_t network_timestamp;
 
+    bool valid = false;
+    struct clock_replica_note *synch = notepad_feedforward(cr->synch, &valid);
+    if (!valid || (uint32_t) synch->state > (uint32_t) CLOCK_CALIBRATED) {
+        // reset state
+        synch->state = CLOCK_IDLE;
+        rmap_synch_reset(&synch->rmap_synch);
+    }
+
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, cr->rmap);
+    rmap_epoch_prepare(&rmap_txn, cr->rmap, &synch->rmap_synch);
     tlm_txn_t telem_txn;
     telemetry_prepare(&telem_txn, cr->telem, cr->replica_id);
 
-    switch (cr->mut->state) {
+    switch (synch->state) {
     case CLOCK_READ_MAGIC_NUMBER:
         status = rmap_read_complete(&rmap_txn, (uint8_t*) &magic_number, sizeof(magic_number), NULL);
         if (status == RS_OK) {
@@ -76,7 +84,7 @@ void clock_start_clip(clock_replica_t *cr) {
             if (magic_number != CLOCK_MAGIC_NUM) {
                 abortf("Clock sent incorrect magic number.");
             }
-            cr->mut->state = CLOCK_READ_CURRENT_TIME;
+            synch->state = CLOCK_READ_CURRENT_TIME;
         } else {
             debugf(WARNING, "Failed to query clock magic number, error=0x%03x", status);
         }
@@ -89,7 +97,7 @@ void clock_start_clip(clock_replica_t *cr) {
 
             clock_configure(&telem_txn, cr->replica_id, received_timestamp, network_timestamp);
 
-            cr->mut->state = CLOCK_CALIBRATED;
+            synch->state = CLOCK_CALIBRATED;
         } else {
             debugf(WARNING, "Failed to query clock current time, error=0x%03x", status);
         }
@@ -99,13 +107,13 @@ void clock_start_clip(clock_replica_t *cr) {
         break;
     }
 
-    if (cr->mut->state == CLOCK_IDLE && atomic_load(clock_calibration_required)) {
-        cr->mut->state = CLOCK_READ_MAGIC_NUMBER;
-    } else if (cr->mut->state == CLOCK_CALIBRATED) {
-        cr->mut->state = CLOCK_IDLE;
+    if (synch->state == CLOCK_IDLE && atomic_load(clock_calibration_required)) {
+        synch->state = CLOCK_READ_MAGIC_NUMBER;
+    } else if (synch->state == CLOCK_CALIBRATED) {
+        synch->state = CLOCK_IDLE;
     }
 
-    switch (cr->mut->state) {
+    switch (synch->state) {
     case CLOCK_READ_MAGIC_NUMBER:
         rmap_read_start(&rmap_txn, 0x00, REG_MAGIC, sizeof(magic_number));
         break;

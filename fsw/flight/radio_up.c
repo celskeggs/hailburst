@@ -200,10 +200,11 @@ void radio_uplink_clip(radio_uplink_replica_t *rur) {
     if (!valid || (uint32_t) mut_synch->uplink_state > (uint32_t) RAD_UL_WRITE_TO_STREAM) {
         mut_synch->uplink_state = RAD_UL_INITIAL_STATE;
         mut_synch->bytes_extracted = 0;
+        rmap_synch_reset(&mut_synch->rmap_synch);
     }
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, rur->rmap_up);
+    rmap_epoch_prepare(&rmap_txn, rur->rmap_up, &mut_synch->rmap_synch);
 
     bool watchdog_ok = false;
 

@@ -5,6 +5,7 @@
 
 #include <hal/thread.h>
 #include <synch/circular.h>
+#include <synch/notepad.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>
 #include <flight/command.h>
@@ -26,22 +27,24 @@ enum magnetometer_state {
     MS_DEACTIVATING,
 };
 
+struct magnetometer_note {
+    // synchronization
+    bool should_be_powered;
+
+    // saved query state
+    enum magnetometer_state state;
+    local_time_t next_reading_time;
+    local_time_t actual_reading_time;
+    local_time_t check_latch_time;
+    rmap_synch_t rmap_synch;
+
+    // saved telemetry state
+    local_time_t last_telem_time;
+};
+
 typedef const struct {
-    struct magnetometer_replica_mut {
-        // synchronization
-        bool should_be_powered;
-
-        // state saved between query clip invocations
-        enum magnetometer_state state;
-        local_time_t next_reading_time;
-        local_time_t actual_reading_time;
-        local_time_t check_latch_time;
-
-        // state saved between telemetry clip invocations
-        local_time_t last_telem_time;
-    } *mut;
-
     uint8_t replica_id;
+    notepad_ref_t *synch;
 
     // spacecraft bus connection
     rmap_replica_t *endpoint;
@@ -63,20 +66,13 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
     COMMAND_ENDPOINT(symbol_join(m_ident, command), MAG_SET_PWR_STATE_CID, MAGNETOMETER_REPLICAS);
     RMAP_ON_SWITCHES(symbol_join(m_ident, endpoint), MAGNETOMETER_REPLICAS, m_switch_in, m_switch_out,
                      m_switch_port, m_address, 8, 4);
+    NOTEPAD_REGISTER(symbol_join(m_ident, notepad), MAGNETOMETER_REPLICAS, 0, sizeof(struct magnetometer_note));
     static_repeat(MAGNETOMETER_REPLICAS, m_replica_id) {
         CIRC_BUF_REGISTER(symbol_join(m_ident, readings, m_replica_id),
                           sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);
-        struct magnetometer_replica_mut symbol_join(m_ident, mutable, m_replica_id) = {
-            .should_be_powered = false,
-            .state = MS_INACTIVE,
-            .next_reading_time = 0,
-            .actual_reading_time = 0,
-            .check_latch_time = 0,
-            .last_telem_time = 0,
-        };
         magnetometer_replica_t symbol_join(m_ident, replica, m_replica_id) = {
-            .mut = &symbol_join(m_ident, mutable, m_replica_id),
             .replica_id = m_replica_id,
+            .synch = NOTEPAD_REPLICA_REF(symbol_join(m_ident, notepad), m_replica_id),
             .endpoint = RMAP_REPLICA_REF(symbol_join(m_ident, endpoint), m_replica_id),
             .readings = &symbol_join(m_ident, readings, m_replica_id),
             .telemetry_async = &symbol_join(m_ident, telemetry_async),

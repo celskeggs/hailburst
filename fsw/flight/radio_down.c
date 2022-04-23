@@ -25,10 +25,11 @@ void radio_downlink_clip(radio_downlink_replica_t *rdr) {
     if (!valid || (uint32_t) mut_synch->downlink_state > (uint32_t) RAD_DL_MONITOR_TRANSMIT) {
         mut_synch->downlink_state = RAD_DL_INITIAL_STATE;
         mut_synch->downlink_length = 0;
+        rmap_synch_reset(&mut_synch->rmap_synch);
     }
 
     rmap_txn_t rmap_txn;
-    rmap_epoch_prepare(&rmap_txn, rdr->rmap_down);
+    rmap_epoch_prepare(&rmap_txn, rdr->rmap_down, &mut_synch->rmap_synch);
 
     bool watchdog_ok = false;
 
