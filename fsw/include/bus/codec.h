@@ -45,66 +45,74 @@ typedef struct {
     local_time_t  receive_timestamp;
 } fw_decoded_ent_t;
 
+// this structure is incorporated into the exchange's synchronized notepad structure
 typedef struct {
-    const uint8_t   rx_duct_replica;
-    duct_t  * const rx_duct;
-    uint8_t * const rx_buffer;
-    const size_t    rx_buffer_capacity;
-    size_t          rx_length;
-    size_t          rx_offset;
-    local_time_t    rx_timestamp;
-
     // for internal decoder
-    bool recv_in_escape;
+    bool         recv_in_escape;
     // for external decoder
     fw_ctrl_t    recv_current; // parameterized control character
     size_t       recv_count;   // 0-3: N bytes already processed
     uint32_t     recv_param;
     local_time_t recv_timestamp_ns;
+} fw_decoder_synch_t;
+
+typedef const struct {
+    struct fw_decoder_mut {
+        size_t       rx_length;
+        size_t       rx_offset;
+        local_time_t rx_timestamp;
+    } *mut;
+    uint8_t  rx_duct_replica;
+    duct_t  *rx_duct;
+    uint8_t *rx_buffer;
+    size_t   rx_buffer_capacity;
 } fw_decoder_t;
 
 // note: a decoder acts as the server side of data_rx
 macro_define(FAKEWIRE_DECODER_REGISTER, d_ident, d_duct, d_replica, d_duct_size) {
     uint8_t symbol_join(d_ident, buffer)[d_duct_size];
+    struct fw_decoder_mut symbol_join(d_ident, mut);
     fw_decoder_t d_ident = {
+        .mut = &symbol_join(d_ident, mut),
         .rx_duct_replica = (d_replica),
         .rx_duct = &(d_duct),
         .rx_buffer = symbol_join(d_ident, buffer),
         .rx_buffer_capacity = (d_duct_size),
-        .rx_length = 0,
-        .rx_offset = 0,
     }
 }
 
-void fakewire_dec_reset(fw_decoder_t *fwd);
+void fakewire_dec_reset(fw_decoder_t *fwd, fw_decoder_synch_t *synch);
 
 static inline size_t fakewire_dec_remaining_bytes(fw_decoder_t *fwd) {
     assert(fwd != NULL);
-    assert(fwd->rx_length >= fwd->rx_offset);
-    return fwd->rx_length - fwd->rx_offset;
+    assert(fwd->mut->rx_length >= fwd->mut->rx_offset);
+    return fwd->mut->rx_length - fwd->mut->rx_offset;
 }
 
 void fakewire_dec_prepare(fw_decoder_t *fwd);
 // returns true if another character is available; false if yielding is recommended
-bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded);
+bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoder_synch_t *synch, fw_decoded_ent_t *decoded);
 void fakewire_dec_commit(fw_decoder_t *fwd);
 
-typedef struct {
-    const uint8_t   tx_duct_replica;
-    duct_t  * const tx_duct;
-    uint8_t * const tx_buffer;
-    const size_t    tx_capacity;
-    size_t          tx_offset;
+typedef const struct {
+    struct fw_encoder_mut {
+        size_t tx_offset;
+    } *mut;
+    uint8_t  tx_duct_replica;
+    duct_t  *tx_duct;
+    uint8_t *tx_buffer;
+    size_t   tx_capacity;
 } fw_encoder_t;
 
 macro_define(FAKEWIRE_ENCODER_REGISTER, e_ident, e_duct, e_replica, e_duct_size) {
     uint8_t symbol_join(e_ident, buffer)[e_duct_size];
+    struct fw_encoder_mut symbol_join(e_ident, mut);
     fw_encoder_t e_ident = {
+        .mut = &symbol_join(e_ident, mut),
         .tx_duct_replica = (e_replica),
         .tx_duct = &(e_duct),
         .tx_buffer = symbol_join(e_ident, buffer),
         .tx_capacity = (e_duct_size),
-        .tx_offset = 0,
     }
 }
 

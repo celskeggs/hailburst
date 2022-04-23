@@ -11,7 +11,7 @@
 
 //#define EXCHANGE_DEBUG
 
-#define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, exc->conf->label, ## __VA_ARGS__)
+#define debug_printf(lvl, fmt, ...) debugf(lvl, "[%s] " fmt, conf->label, ## __VA_ARGS__)
 
 static void rand_init(void) {
     // this does have to be deterministic for our simulations...
@@ -30,7 +30,7 @@ void fakewire_exc_rand_clip(duct_t *rand_duct) {
     duct_send_commit(&txn);
 }
 
-static uint32_t fakewire_exc_receive_random_number(const fw_exchange_t *conf) {
+static uint32_t fakewire_exc_receive_random_number(fw_exchange_t *conf) {
     assert(conf != NULL);
 
     uint32_t random_number;
@@ -54,19 +54,17 @@ static uint32_t fakewire_exc_receive_random_number(const fw_exchange_t *conf) {
 }
 
 // random interval in the range [1 tick, 5 ticks]
-static uint32_t exchange_handshake_period_ticks(exchange_instance_t *exc) {
+static uint32_t exchange_handshake_period_ticks(struct fakewire_exchange_note *exc) {
     assert(exc != NULL);
 
     return exc->random_number % 4 + 1;
 }
 
-static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t *conf, uint32_t countdown_timeout) {
-    assert(exc != NULL && conf != NULL);
+static void exchange_instance_configure(struct fakewire_exchange_note *exc, uint32_t countdown_timeout) {
+    assert(exc != NULL);
 
-    exc->conf = conf;
-
-    exc->exc_state    = FW_EXC_CONNECTING;
-    exc->recv_state   = FW_RECV_LISTENING;
+    exc->exc_state  = FW_EXC_CONNECTING;
+    exc->recv_state = FW_RECV_LISTENING;
 
     exc->countdown_timeout = countdown_timeout;
 
@@ -88,12 +86,12 @@ static void exchange_instance_configure(exchange_instance_t *exc, fw_exchange_t 
     exc->write_needs_error = false;
 }
 
-static void exchange_instance_reset(exchange_instance_t *exc) {
+static void exchange_instance_reset(struct fakewire_exchange_note *exc) {
     assert(exc != NULL);
-    exchange_instance_configure(exc, exc->conf, exc->countdown_timeout);
+    exchange_instance_configure(exc, exc->countdown_timeout);
 }
 
-static void exchange_instance_check_timers(exchange_instance_t *exc) {
+static void exchange_instance_check_timers(fw_exchange_t *conf, struct fakewire_exchange_note *exc) {
     assert(exc != NULL);
 
     // check timers now
@@ -117,7 +115,7 @@ static void exchange_instance_check_timers(exchange_instance_t *exc) {
     }
 }
 
-static void exchange_instance_check_invariants(exchange_instance_t *exc) {
+static void exchange_instance_check_invariants(struct fakewire_exchange_note *exc) {
     assert(exc != NULL);
 
     // check invariants
@@ -126,8 +124,9 @@ static void exchange_instance_check_invariants(exchange_instance_t *exc) {
             "pkts_sent = %u, fcts_rcvd = %u", exc->pkts_sent, exc->fcts_rcvd);
 }
 
-static void exchange_recv_ctrl_char_while_connecting(exchange_instance_t *exc, fw_ctrl_t symbol, uint32_t param) {
-    assert(exc != NULL);
+static void exchange_recv_ctrl_char_while_connecting(fw_exchange_t *conf, struct fakewire_exchange_note *exc,
+                                                     fw_ctrl_t symbol, uint32_t param) {
+    assert(conf != NULL && exc != NULL);
 
     // error condition: if ANYTHING is hit except a handshake_1
     if (symbol != FWC_HANDSHAKE_1) {
@@ -145,8 +144,9 @@ static void exchange_recv_ctrl_char_while_connecting(exchange_instance_t *exc, f
     exc->send_secondary_handshake = true;
 }
 
-static void exchange_recv_ctrl_char_while_handshaking(exchange_instance_t *exc, fw_ctrl_t symbol, uint32_t param) {
-    assert(exc != NULL);
+static void exchange_recv_ctrl_char_while_handshaking(fw_exchange_t *conf, struct fakewire_exchange_note *exc,
+                                                      fw_ctrl_t symbol, uint32_t param) {
+    assert(conf != NULL && exc != NULL);
 
     // error condition: if ANYTHING is hit except a match handshake_2
     if (symbol != FWC_HANDSHAKE_2 || param != exc->send_handshake_id) {
@@ -163,9 +163,10 @@ static void exchange_recv_ctrl_char_while_handshaking(exchange_instance_t *exc, 
     exc->send_secondary_handshake = false;
 }
 
-static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, duct_txn_t *send_txn,
-                                                    fw_ctrl_t symbol, uint32_t param, local_time_t receive_timestamp) {
-    assert(exc != NULL);
+static void exchange_recv_ctrl_char_while_operating(fw_exchange_t *conf, struct fakewire_exchange_note *exc,
+                                                    duct_txn_t *send_txn, fw_ctrl_t symbol, uint32_t param,
+                                                    local_time_t receive_timestamp) {
+    assert(conf != NULL && exc != NULL);
 
     // TODO: act on any received FWC_HANDSHAKE_1 requests immediately.
     switch (symbol) {
@@ -184,7 +185,7 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, du
         // reset receive state and buffer before proceeding
         exc->read_offset = 0;
         // Had to disable this memset because it was too slow to be practical.
-        // memset(exc->conf->read_buffer, 0, exc->conf->buffers_length);
+        // memset(conf->read_buffer, 0, conf->buffers_length);
         exc->read_timestamp = receive_timestamp;
 
         exc->recv_state = FW_RECV_RECEIVING;
@@ -202,7 +203,7 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, du
             exc->recv_state = FW_RECV_LISTENING;
         } else {
             // transmit received packet through duct
-            duct_send_message(send_txn, exc->conf->read_buffer, exc->read_offset, exc->read_timestamp);
+            duct_send_message(send_txn, conf->read_buffer, exc->read_offset, exc->read_timestamp);
             exc->recv_state = FW_RECV_LISTENING;
         }
         break;
@@ -244,14 +245,15 @@ static void exchange_recv_ctrl_char_while_operating(exchange_instance_t *exc, du
         exchange_instance_reset(exc);
         if (symbol == FWC_HANDSHAKE_1) {
             // special case: process received handshakes immediately
-            exchange_recv_ctrl_char_while_connecting(exc, symbol, param);
+            exchange_recv_ctrl_char_while_connecting(conf, exc, symbol, param);
         }
     }
 }
 
-static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, duct_txn_t *send_txn,
-                                                fw_ctrl_t symbol, uint32_t param, local_time_t receive_timestamp) {
-    assert(exc != NULL);
+static void exchange_instance_receive_ctrl_char(fw_exchange_t *conf, struct fakewire_exchange_note *exc,
+                                                duct_txn_t *send_txn, fw_ctrl_t symbol, uint32_t param,
+                                                local_time_t receive_timestamp) {
+    assert(conf != NULL && exc != NULL);
     assert(param == 0 || fakewire_is_parametrized(symbol));
 
 #ifdef EXCHANGE_DEBUG
@@ -260,21 +262,22 @@ static void exchange_instance_receive_ctrl_char(exchange_instance_t *exc, duct_t
 
     switch (exc->exc_state) {
     case FW_EXC_CONNECTING:
-        exchange_recv_ctrl_char_while_connecting(exc, symbol, param);
+        exchange_recv_ctrl_char_while_connecting(conf, exc, symbol, param);
         break;
     case FW_EXC_HANDSHAKING:
-        exchange_recv_ctrl_char_while_handshaking(exc, symbol, param);
+        exchange_recv_ctrl_char_while_handshaking(conf, exc, symbol, param);
         break;
     case FW_EXC_OPERATING:
-        exchange_recv_ctrl_char_while_operating(exc, send_txn, symbol, param, receive_timestamp);
+        exchange_recv_ctrl_char_while_operating(conf, exc, send_txn, symbol, param, receive_timestamp);
         break;
     default:
         assert(false);
     }
 }
 
-static void exchange_instance_receive_data_chars(exchange_instance_t *exc, uint8_t *data_in, size_t data_len) {
-    assert(exc != NULL);
+static void exchange_instance_receive_data_chars(fw_exchange_t *conf, struct fakewire_exchange_note *exc,
+                                                 uint8_t *data_in, size_t data_len) {
+    assert(conf != NULL && exc != NULL);
 
     if (exc->recv_state == FW_RECV_OVERFLOWED) {
         assert(exc->exc_state == FW_EXC_OPERATING);
@@ -288,23 +291,25 @@ static void exchange_instance_receive_data_chars(exchange_instance_t *exc, uint8
         debug_printf(WARNING, "Received at least %zu unexpected data characters during state (exc=%d, recv=%d); "
                      "resetting.", data_len, exc->exc_state, exc->recv_state);
         exchange_instance_reset(exc);
-    } else if (exc->read_offset >= exc->conf->buffers_length) {
+    } else if (exc->read_offset >= conf->buffers_length) {
         assert(data_in == NULL);
         debug_printf(WARNING, "Packet exceeded buffer size %zu (at least %zu + %zu bytes); discarding.",
-                     exc->conf->buffers_length, exc->read_offset, data_len);
+                     conf->buffers_length, exc->read_offset, data_len);
         exc->recv_state = FW_RECV_OVERFLOWED;
     } else {
         assert(data_in != NULL);
-        assert(exc->read_offset + data_len <= exc->conf->buffers_length);
+        assert(exc->read_offset + data_len <= conf->buffers_length);
 #ifdef EXCHANGE_DEBUG
         debug_printf(TRACE, "Received %zu regular data bytes.", data_len);
 #endif
         exc->read_offset += data_len;
-        assert(exc->read_offset <= exc->conf->buffers_length);
+        assert(exc->read_offset <= conf->buffers_length);
     }
 }
 
-static bool exchange_instance_receive(exchange_instance_t *exc, duct_txn_t *send_txn) {
+static bool exchange_instance_receive(fw_exchange_t *conf, struct fakewire_exchange_note *exc, duct_txn_t *send_txn) {
+    assert(conf != NULL && exc != NULL);
+
     // discard all data and just tell us the number of bytes
     fw_decoded_ent_t rx_ent = {
         .data_out     = NULL,
@@ -313,12 +318,12 @@ static bool exchange_instance_receive(exchange_instance_t *exc, duct_txn_t *send
 
     // UNLESS we have somewhere we can put that data, in which case put it there
     if (exc->exc_state == FW_EXC_OPERATING && exc->recv_state == FW_RECV_RECEIVING
-            && exc->read_offset < exc->conf->buffers_length) {
-        rx_ent.data_out     = exc->conf->read_buffer + exc->read_offset;
-        rx_ent.data_max_len = exc->conf->buffers_length - exc->read_offset;
+            && exc->read_offset < conf->buffers_length) {
+        rx_ent.data_out     = conf->read_buffer + exc->read_offset;
+        rx_ent.data_max_len = conf->buffers_length - exc->read_offset;
     }
 
-    if (!fakewire_dec_decode(exc->conf->decoder, &rx_ent)) {
+    if (!fakewire_dec_decode(conf->decoder, &exc->decoder_synch, &rx_ent)) {
         // no more data to receive right now; wait until next wakeup
         return false;
     }
@@ -326,21 +331,21 @@ static bool exchange_instance_receive(exchange_instance_t *exc, duct_txn_t *send
     if (rx_ent.ctrl_out != FWC_NONE) {
         assert(rx_ent.data_actual_len == 0);
 
-        exchange_instance_receive_ctrl_char(exc, send_txn,
+        exchange_instance_receive_ctrl_char(conf, exc, send_txn,
                                             rx_ent.ctrl_out, rx_ent.ctrl_param, rx_ent.receive_timestamp);
     } else {
         assert(rx_ent.data_actual_len > 0);
 
-        exchange_instance_receive_data_chars(exc, rx_ent.data_out, rx_ent.data_actual_len);
+        exchange_instance_receive_data_chars(conf, exc, rx_ent.data_out, rx_ent.data_actual_len);
     }
 
     return true;
 }
 
-static void exchange_instance_check_fcts(exchange_instance_t *exc) {
-    assert(exc != NULL);
+static void exchange_instance_check_fcts(fw_exchange_t *conf, struct fakewire_exchange_note *exc) {
+    assert(conf != NULL && exc != NULL);
 
-    uint32_t not_yet_received = duct_max_flow(exc->conf->read_duct);
+    uint32_t not_yet_received = duct_max_flow(conf->read_duct);
     if (exc->recv_state != FW_RECV_LISTENING) {
         not_yet_received -= 1;
     }
@@ -359,10 +364,10 @@ static void exchange_instance_check_fcts(exchange_instance_t *exc) {
     }
 }
 
-static void exchange_instance_transmit_tokens(exchange_instance_t *exc) {
-    assert(exc != NULL);
+static void exchange_instance_transmit_tokens(fw_exchange_t *conf, struct fakewire_exchange_note *exc) {
+    assert(conf != NULL && exc != NULL);
 
-    if (exc->resend_fcts && fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_FLOW_CONTROL, exc->fcts_sent)) {
+    if (exc->resend_fcts && fakewire_enc_encode_ctrl(conf->encoder, FWC_FLOW_CONTROL, exc->fcts_sent)) {
         assert(exc->exc_state == FW_EXC_OPERATING);
         exc->resend_fcts = false;
 #ifdef EXCHANGE_DEBUG
@@ -370,7 +375,7 @@ static void exchange_instance_transmit_tokens(exchange_instance_t *exc) {
 #endif
     }
 
-    if (exc->resend_pkts && fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_KEEP_ALIVE, exc->pkts_sent)) {
+    if (exc->resend_pkts && fakewire_enc_encode_ctrl(conf->encoder, FWC_KEEP_ALIVE, exc->pkts_sent)) {
         assert(exc->exc_state == FW_EXC_OPERATING);
         exc->resend_pkts = false;
 #ifdef EXCHANGE_DEBUG
@@ -379,11 +384,11 @@ static void exchange_instance_transmit_tokens(exchange_instance_t *exc) {
     }
 }
 
-static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
-    assert(exc != NULL);
+static void exchange_instance_transmit_handshakes(fw_exchange_t *conf, struct fakewire_exchange_note *exc) {
+    assert(conf != NULL && exc != NULL);
 
     if (exc->send_secondary_handshake
-            && fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_HANDSHAKE_2, exc->recv_handshake_id)) {
+            && fakewire_enc_encode_ctrl(conf->encoder, FWC_HANDSHAKE_2, exc->recv_handshake_id)) {
         assert(exc->exc_state == FW_EXC_CONNECTING);
 
         exc->exc_state = FW_EXC_OPERATING;
@@ -402,7 +407,7 @@ static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
         // pick something very likely to be distinct (Go picks msb unset, C picks msb set)
         uint32_t gen_handshake_id = 0x80000000 + (0x7FFFFFFF & exc->random_number);
 
-        if (fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_HANDSHAKE_1, gen_handshake_id)) {
+        if (fakewire_enc_encode_ctrl(conf->encoder, FWC_HANDSHAKE_1, gen_handshake_id)) {
             exc->send_handshake_id = gen_handshake_id;
 
             exc->exc_state = FW_EXC_HANDSHAKING;
@@ -415,8 +420,8 @@ static void exchange_instance_transmit_handshakes(exchange_instance_t *exc) {
     }
 }
 
-static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t length) {
-    assert(exc != NULL);
+static bool exchange_instance_transmit_data(fw_exchange_t *conf, struct fakewire_exchange_note *exc, size_t length) {
+    assert(conf != NULL && exc != NULL);
 
     if (exc->exc_state != FW_EXC_OPERATING) {
         // can't transmit anything until we're in the operating state. drop packets instead.
@@ -426,7 +431,7 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
     if (exc->write_needs_error) {
         // if we weren't able to transmit the whole last packet, then we need to make sure to transmit ERROR_PACKET to
         // make sure the remote end drops it instead of trying to process it.
-        if (fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_ERROR_PACKET, 0)) {
+        if (fakewire_enc_encode_ctrl(conf->encoder, FWC_ERROR_PACKET, 0)) {
             exc->write_needs_error = false;
         } else {
             debugf(TRACE, "Transmit buffer is full.");
@@ -439,7 +444,7 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
         debugf(TRACE, "No more flow control tokens available.");
         return false;
     }
-    if (!fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_START_PACKET, 0)) {
+    if (!fakewire_enc_encode_ctrl(conf->encoder, FWC_START_PACKET, 0)) {
         // no room to write START_PACKET; drop the packet and try again next epoch.
         debugf(TRACE, "Transmit buffer is full.");
         return false;
@@ -448,7 +453,7 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
     // sent a START_PACKET, so increment pkts_sent.
     exc->pkts_sent++;
 
-    size_t actually_written = fakewire_enc_encode_data(exc->conf->encoder, exc->conf->write_buffer, length);
+    size_t actually_written = fakewire_enc_encode_data(conf->encoder, conf->write_buffer, length);
     if (actually_written < length) {
         // not enough room to finish writing the whole packet at once; drop it.
         exc->write_needs_error = true;
@@ -456,7 +461,7 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
         return false;
     }
 
-    if (!fakewire_enc_encode_ctrl(exc->conf->encoder, FWC_END_PACKET, 0)) {
+    if (!fakewire_enc_encode_ctrl(conf->encoder, FWC_END_PACKET, 0)) {
         // no room to write END_PACKET; drop it. (disappointing, but the alternative is transmitting a packet late.)
         exc->write_needs_error = true;
         debugf(TRACE, "Transmit buffer is full.");
@@ -470,48 +475,49 @@ static bool exchange_instance_transmit_data(exchange_instance_t *exc, size_t len
     return true;
 }
 
-static void fakewire_exc_check_reinit(const fw_exchange_t *conf) {
+static struct fakewire_exchange_note *fakewire_exc_feedforward(fw_exchange_t *conf) {
     assert(conf != NULL);
-    exchange_instance_t *exc = conf->instance;
+    bool valid = false;
+    struct fakewire_exchange_note *exc = notepad_feedforward(conf->mut_synch, &valid);
     assert(exc != NULL);
 
     uint32_t random_number = fakewire_exc_receive_random_number(conf);
 
-    if (clip_is_restart()) {
+    if (!valid) {
         memset(exc, 0, sizeof(*exc));
         exc->random_number = random_number;
-        exchange_instance_configure(exc, conf, exchange_handshake_period_ticks(exc));
-        fakewire_dec_reset(conf->decoder);
+        exchange_instance_configure(exc, exchange_handshake_period_ticks(exc));
+        fakewire_dec_reset(conf->decoder, &exc->decoder_synch);
 
         debug_printf(DEBUG, "First handshake scheduled for %u ticks in the future", exc->countdown_timeout);
     } else {
         exc->random_number = random_number;
     }
+
+    return exc;
 }
 
-void fakewire_exc_tx_clip(const fw_exchange_t *conf) {
+void fakewire_exc_tx_clip(fw_exchange_t *conf) {
     assert(conf != NULL);
-    exchange_instance_t *exc = conf->instance;
+    struct fakewire_exchange_note *exc = fakewire_exc_feedforward(conf);
     assert(exc != NULL);
-
-    fakewire_exc_check_reinit(conf);
 
     exchange_instance_check_invariants(exc);
 
     duct_txn_t recv_txn;
-    duct_receive_prepare(&recv_txn, exc->conf->write_duct, exc->conf->exchange_replica_id);
+    duct_receive_prepare(&recv_txn, conf->write_duct, conf->exchange_replica_id);
     fakewire_enc_prepare(conf->encoder);
 
-    exchange_instance_transmit_tokens(exc);
+    exchange_instance_transmit_tokens(conf, exc);
 
-    exchange_instance_transmit_handshakes(exc);
+    exchange_instance_transmit_handshakes(conf, exc);
 
     duct_flow_index dropped = 0;
     size_t packet_length;
-    assert(exc->conf->buffers_length == duct_message_size(exc->conf->write_duct));
-    while (0 != (packet_length = duct_receive_message(&recv_txn, exc->conf->write_buffer, NULL))) {
-        assert(0 < packet_length && packet_length <= exc->conf->buffers_length);
-        if (!exchange_instance_transmit_data(exc, packet_length)) {
+    assert(conf->buffers_length == duct_message_size(conf->write_duct));
+    while (0 != (packet_length = duct_receive_message(&recv_txn, conf->write_buffer, NULL))) {
+        assert(0 < packet_length && packet_length <= conf->buffers_length);
+        if (!exchange_instance_transmit_data(conf, exc, packet_length)) {
             dropped++;
         }
     }
@@ -523,32 +529,30 @@ void fakewire_exc_tx_clip(const fw_exchange_t *conf) {
     fakewire_enc_commit(conf->encoder);
 }
 
-void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
+void fakewire_exc_rx_clip(fw_exchange_t *conf) {
     assert(conf != NULL);
-    exchange_instance_t *exc = conf->instance;
+    struct fakewire_exchange_note *exc = fakewire_exc_feedforward(conf);
     assert(exc != NULL);
-
-    fakewire_exc_check_reinit(conf);
 
     exchange_instance_check_invariants(exc);
 
-    exchange_instance_check_timers(exc);
+    exchange_instance_check_timers(conf, exc);
 
     duct_txn_t send_txn;
-    duct_send_prepare(&send_txn, exc->conf->read_duct, exc->conf->exchange_replica_id);
+    duct_send_prepare(&send_txn, conf->read_duct, conf->exchange_replica_id);
     fakewire_dec_prepare(conf->decoder);
     // keep receiving data up to the processing limit, which should be plenty for ordinary situations. if we exceed
     // this limit, then we're probably catching up after a reset, and we don't want to keep going, because then we'll
     // run out of time. just dump everything else and try again.
-    duct_flow_index receive_limit = duct_max_flow(exc->conf->read_duct) * 2;
+    duct_flow_index receive_limit = duct_max_flow(conf->read_duct) * 2;
     duct_flow_index remaining_limit = receive_limit;
-    while (exchange_instance_receive(exc, &send_txn)) {
+    while (exchange_instance_receive(conf, exc, &send_txn)) {
         if (--remaining_limit == 0) {
             size_t remaining = fakewire_dec_remaining_bytes(conf->decoder);
             if (remaining > 0) {
                 debug_printf(WARNING, "Tossing remaining %zu received bytes due to overflow of receive limit (%u); "
                              "resetting.", remaining, receive_limit);
-                fakewire_dec_reset(conf->decoder);
+                fakewire_dec_reset(conf->decoder, &exc->decoder_synch);
                 exchange_instance_reset(exc);
             }
         }
@@ -556,5 +560,5 @@ void fakewire_exc_rx_clip(const fw_exchange_t *conf) {
     duct_send_commit(&send_txn);
     fakewire_dec_commit(conf->decoder);
 
-    exchange_instance_check_fcts(exc);
+    exchange_instance_check_fcts(conf, exc);
 }

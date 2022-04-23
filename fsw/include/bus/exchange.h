@@ -2,6 +2,7 @@
 #define FSW_FAKEWIRE_EXCHANGE_H
 
 #include <hal/thread.h>
+#include <synch/notepad.h>
 #include <bus/link.h>
 #include <bus/switch.h>
 
@@ -32,10 +33,8 @@ enum transmit_state {
     FW_TXMIT_FOOTER,   // waiting to transmit END_PACKET symbol
 };
 
-// this structure is reinitialized every time the exchange task restarts
-typedef struct {
-    const struct fw_exchange_st *conf;
-
+struct fakewire_exchange_note {
+    // all fields automatically resynchronized
     uint32_t random_number;
 
     enum exchange_state exc_state;
@@ -59,19 +58,26 @@ typedef struct {
     size_t       read_offset;
     local_time_t read_timestamp;
     bool         write_needs_error;
-} exchange_instance_t;
+
+    // state in the decoder that needs to be kept in sync across replicas.
+    fw_decoder_synch_t decoder_synch;
+};
 
 typedef const struct fw_exchange_st {
-    uint8_t exchange_replica_id;
+    uint8_t     exchange_replica_id;
     const char *label;
 
-    exchange_instance_t *instance;
+    notepad_ref_t *mut_synch;
 
+    // not resynchronized; internal state is wiped every scheduling cycle.
     fw_encoder_t *encoder;
+    // some internal state is wiped every cycle; other state is resynchronized via the decoder_synch field
     fw_decoder_t *decoder;
 
     size_t   buffers_length;
+    // not resynchronized; will naturally resync after message is sent, and errors will be throw away by the duct.
     uint8_t *read_buffer;
+    // not resynchronized; only used within a single scheduling cycle.
     uint8_t *write_buffer;
 
     duct_t *rand_duct;     // sender: randomness task, recipient: exchange_thread
@@ -100,6 +106,7 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
     DUCT_REGISTER(symbol_join(e_ident, rand_duct), 1, EXCHANGE_REPLICAS, 1, sizeof(uint32_t), DUCT_SENDER_FIRST);
     CLIP_REGISTER(symbol_join(e_ident, rand_clip_tx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
     CLIP_REGISTER(symbol_join(e_ident, rand_clip_rx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
+    NOTEPAD_REGISTER(symbol_join(e_ident, notepad), EXCHANGE_REPLICAS, 0, sizeof(struct fakewire_exchange_note));
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
         FAKEWIRE_ENCODER_REGISTER(symbol_join(e_ident, encoder, replica_id),
                                   symbol_join(e_ident, transmit_duct), replica_id, (e_max_flow) * (e_buf_size) + 1024);
@@ -107,13 +114,12 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
                                   symbol_join(e_ident, receive_duct),  replica_id, (e_max_flow) * (e_buf_size) + 1024);
         uint8_t symbol_join(e_ident, read_buffer,  replica_id)[e_buf_size];
         uint8_t symbol_join(e_ident, write_buffer, replica_id)[e_buf_size];
-        exchange_instance_t symbol_join(e_ident, instance, replica_id);
         fw_exchange_t symbol_join(e_ident, replica_id) = {
             .exchange_replica_id = replica_id,
             .label = (e_link_options).label,
-            .instance = &symbol_join(e_ident, instance, replica_id),
-            .encoder  = &symbol_join(e_ident, encoder,  replica_id),
-            .decoder  = &symbol_join(e_ident, decoder,  replica_id),
+            .mut_synch = NOTEPAD_REPLICA_REF(symbol_join(e_ident, notepad), replica_id),
+            .encoder  = &symbol_join(e_ident, encoder, replica_id),
+            .decoder  = &symbol_join(e_ident, decoder, replica_id),
             .buffers_length = (e_buf_size),
             .read_buffer  = symbol_join(e_ident, read_buffer,  replica_id),
             .write_buffer = symbol_join(e_ident, write_buffer, replica_id),

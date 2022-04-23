@@ -31,72 +31,72 @@ const char *fakewire_codec_symbol(fw_ctrl_t c) {
     }
 }
 
-void fakewire_dec_reset(fw_decoder_t *fwd) {
+void fakewire_dec_reset(fw_decoder_t *fwd, fw_decoder_synch_t *synch) {
     assert(fwd != NULL);
     // when ducts are used as streams, there is no need to separate their elements.
     assert(duct_max_flow(fwd->rx_duct) == 1);
     assert(duct_message_size(fwd->rx_duct) == fwd->rx_buffer_capacity);
-    fwd->rx_length = fwd->rx_offset = 0;
-    fwd->rx_timestamp = 0;
-    fwd->recv_in_escape = false;
-    fwd->recv_current = FWC_NONE;
-    fwd->recv_count = 0;
-    fwd->recv_param = 0;
-    fwd->recv_timestamp_ns = 0;
+    fwd->mut->rx_length = fwd->mut->rx_offset = 0;
+    fwd->mut->rx_timestamp = 0;
+    synch->recv_in_escape = false;
+    synch->recv_current = FWC_NONE;
+    synch->recv_count = 0;
+    synch->recv_param = 0;
+    synch->recv_timestamp_ns = 0;
 }
 
 void fakewire_dec_prepare(fw_decoder_t *fwd) {
     assert(fwd != NULL);
     duct_txn_t txn;
     duct_receive_prepare(&txn, fwd->rx_duct, fwd->rx_duct_replica);
-    fwd->rx_length = duct_receive_message(&txn, fwd->rx_buffer, &fwd->rx_timestamp);
-    fwd->rx_offset = 0;
+    fwd->mut->rx_length = duct_receive_message(&txn, fwd->rx_buffer, &fwd->mut->rx_timestamp);
+    fwd->mut->rx_offset = 0;
 #ifdef CODEC_DEBUG
-    debugf(TRACE, "Decoder received %zu bytes from line.", fwd->rx_length);
+    debugf(TRACE, "Decoder received %zu bytes from line.", fwd->mut->rx_length);
 #endif
-    assert(fwd->rx_length <= fwd->rx_buffer_capacity);
+    assert(fwd->mut->rx_length <= fwd->rx_buffer_capacity);
     duct_receive_commit(&txn);
 }
 
 void fakewire_dec_commit(fw_decoder_t *fwd) {
     assert(fwd != NULL);
-    assert(fwd->rx_offset == fwd->rx_length);
+    assert(fwd->mut->rx_offset == fwd->mut->rx_length);
 }
 
 // partial version of decode that does not decode control character parameters (ctrl_param is not set)
-static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
+static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoder_synch_t *synch, fw_decoded_ent_t *decoded) {
     assert(fwd != NULL && decoded != NULL);
     assert((decoded->data_max_len > 0) == (decoded->data_out != NULL));
 
     decoded->ctrl_out = FWC_NONE;
     decoded->data_actual_len = 0;
-    decoded->receive_timestamp = fwd->rx_timestamp;
+    decoded->receive_timestamp = fwd->mut->rx_timestamp;
 
     for (;;) {
-        if (fwd->rx_offset == fwd->rx_length) {
+        if (fwd->mut->rx_offset == fwd->mut->rx_length) {
             return (decoded->data_actual_len > 0);
         }
-        assert(fwd->rx_length >= 1 && fwd->rx_length <= fwd->rx_buffer_capacity);
-        assert(fwd->rx_offset < fwd->rx_length);
+        assert(fwd->mut->rx_length >= 1 && fwd->mut->rx_length <= fwd->rx_buffer_capacity);
+        assert(fwd->mut->rx_offset < fwd->mut->rx_length);
         assert(decoded->data_out == NULL || decoded->data_actual_len < decoded->data_max_len);
 
-        uint8_t cur_byte = fwd->rx_buffer[fwd->rx_offset++];
+        uint8_t cur_byte = fwd->rx_buffer[fwd->mut->rx_offset++];
 
-        if (fwd->recv_in_escape) {
+        if (synch->recv_in_escape) {
             uint8_t decoded_byte = cur_byte ^ 0x10;
             if (!fakewire_is_special(decoded_byte)) {
                 // invalid escape sequence; pass the escape up the line for error handling
                 if (decoded->data_actual_len > 0) {
                     // except... we have data to communicate first!
-                    fwd->rx_offset--; // make sure we interpret this byte again
+                    fwd->mut->rx_offset--; // make sure we interpret this byte again
                     return true;
                 }
                 decoded->ctrl_out = FWC_ESCAPE_SYM;
-                fwd->rx_offset--; // don't consume this byte; re-interpret it.
-                fwd->recv_in_escape = false; // but without the escape
+                fwd->mut->rx_offset--; // don't consume this byte; re-interpret it.
+                synch->recv_in_escape = false; // but without the escape
                 return true;
             }
-            fwd->recv_in_escape = false;
+            synch->recv_in_escape = false;
             // valid escape sequence; write to buffer
             if (decoded->data_out != NULL) {
                 decoded->data_out[decoded->data_actual_len++] = decoded_byte;
@@ -105,12 +105,12 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
             }
         } else if (cur_byte == FWC_ESCAPE_SYM) {
             // handle escape sequence for next byte
-            fwd->recv_in_escape = true;
+            synch->recv_in_escape = true;
         } else if (fakewire_is_special(cur_byte)) {
             // pass control character up the line
             if (decoded->data_actual_len > 0) {
                 // except... we have data to communicate first!
-                fwd->rx_offset--; // make sure we interpret this byte again
+                fwd->mut->rx_offset--; // make sure we interpret this byte again
                 return true;
             }
             decoded->ctrl_out = cur_byte;
@@ -129,15 +129,15 @@ static bool fakewire_dec_internal_decode(fw_decoder_t *fwd, fw_decoded_ent_t *de
     }
 }
 
-bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
+bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoder_synch_t *synch, fw_decoded_ent_t *decoded) {
     assert(fwd != NULL && decoded != NULL);
     assert((decoded->data_max_len > 0) == (decoded->data_out != NULL));
 
     decoded->ctrl_param = 0;
 
     // primary processing path for non-parameterized control characters and regular data bytes
-    if (fwd->recv_current == FWC_NONE) {
-        if (!fakewire_dec_internal_decode(fwd, decoded)) {
+    if (synch->recv_current == FWC_NONE) {
+        if (!fakewire_dec_internal_decode(fwd, synch, decoded)) {
             return false;
         }
 
@@ -152,9 +152,9 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
                 return true;
             }
             // but if it's parameterized, start reading the parameter
-            fwd->recv_current = decoded->ctrl_out;
-            fwd->recv_count = 0;
-            fwd->recv_timestamp_ns = decoded->receive_timestamp;
+            synch->recv_current = decoded->ctrl_out;
+            synch->recv_count = 0;
+            synch->recv_timestamp_ns = decoded->receive_timestamp;
         } else {
             assertf(decoded->data_actual_len > 0 &&
                         (decoded->data_out == NULL || decoded->data_actual_len <= decoded->data_max_len),
@@ -170,41 +170,42 @@ bool fakewire_dec_decode(fw_decoder_t *fwd, fw_decoded_ent_t *decoded) {
 
     // secondary processing path for control character parameters
     for (;;) {
-        assert(fwd->recv_current != FWC_NONE && fakewire_is_parametrized(fwd->recv_current));
-        assert(fwd->recv_count < sizeof(fwd->recv_param));
+        assert(synch->recv_current != FWC_NONE && fakewire_is_parametrized(synch->recv_current));
+        assert(synch->recv_count < sizeof(synch->recv_param));
 
         fw_decoded_ent_t subdec = {
-            .data_out     = ((uint8_t*) &fwd->recv_param) + fwd->recv_count,
-            .data_max_len = sizeof(fwd->recv_param) - fwd->recv_count,
+            .data_out     = ((uint8_t*) &synch->recv_param) + synch->recv_count,
+            .data_max_len = sizeof(synch->recv_param) - synch->recv_count,
         };
 
-        if (!fakewire_dec_internal_decode(fwd, &subdec)) {
+        if (!fakewire_dec_internal_decode(fwd, synch, &subdec)) {
             return false;
         }
 
         if (subdec.ctrl_out != FWC_NONE) {
             assert(subdec.data_actual_len == 0);
             // if we receive another control character while still working on a parameter, report it as a codec error.
-            assert(fakewire_is_parametrized(fwd->recv_current));
+            assert(fakewire_is_parametrized(synch->recv_current));
             debugf(WARNING, "Decoder encountered unexpected control character %s while decoding parameterized control "
-                   "character %s.", fakewire_codec_symbol(subdec.ctrl_out), fakewire_codec_symbol(fwd->recv_current));
+                   "character %s.",
+                   fakewire_codec_symbol(subdec.ctrl_out), fakewire_codec_symbol(synch->recv_current));
             decoded->ctrl_out = FWC_CODEC_ERROR;
             decoded->ctrl_param = 0;
             decoded->data_actual_len = 0;
             decoded->receive_timestamp = subdec.receive_timestamp;
-            fwd->recv_current = FWC_NONE;
+            synch->recv_current = FWC_NONE;
             return true;
         }
         assert(subdec.data_actual_len > 0 && subdec.data_actual_len <= subdec.data_max_len);
 
         // we're currently processing a parametrized control character, so decode the bytes in question
-        fwd->recv_count += subdec.data_actual_len;
-        if (fwd->recv_count == sizeof(fwd->recv_param)) {
-            decoded->ctrl_out = fwd->recv_current;
-            decoded->ctrl_param = be32toh(fwd->recv_param);
+        synch->recv_count += subdec.data_actual_len;
+        if (synch->recv_count == sizeof(synch->recv_param)) {
+            decoded->ctrl_out = synch->recv_current;
+            decoded->ctrl_param = be32toh(synch->recv_param);
             decoded->data_actual_len = 0;
-            decoded->receive_timestamp = fwd->recv_timestamp_ns;
-            fwd->recv_current = FWC_NONE;
+            decoded->receive_timestamp = synch->recv_timestamp_ns;
+            synch->recv_current = FWC_NONE;
 #ifdef CODEC_DEBUG
             debugf(TRACE, "Decoded parameterized control character: %s(0x%08x).",
                    fakewire_codec_symbol(decoded->ctrl_out), decoded->ctrl_param);
@@ -221,17 +222,17 @@ void fakewire_enc_prepare(fw_encoder_t *fwe) {
     assert(fwe != NULL);
     assert(duct_max_flow(fwe->tx_duct) == 1);
     assert(fwe->tx_capacity == duct_message_size(fwe->tx_duct));
-    fwe->tx_offset = 0;
+    fwe->mut->tx_offset = 0;
 }
 
 void fakewire_enc_commit(fw_encoder_t *fwe) {
     assert(fwe != NULL);
     duct_txn_t txn;
     duct_send_prepare(&txn, fwe->tx_duct, fwe->tx_duct_replica);
-    if (fwe->tx_offset > 0) {
-        duct_send_message(&txn, fwe->tx_buffer, fwe->tx_offset, 0);
+    if (fwe->mut->tx_offset > 0) {
+        duct_send_message(&txn, fwe->tx_buffer, fwe->mut->tx_offset, 0);
 #ifdef CODEC_DEBUG
-        debugf(TRACE, "Encoder wrote %zu line bytes in commit.", fwe->tx_offset);
+        debugf(TRACE, "Encoder wrote %zu line bytes in commit.", fwe->mut->tx_offset);
 #endif
     }
     duct_send_commit(&txn);
@@ -246,18 +247,18 @@ size_t fakewire_enc_encode_data(fw_encoder_t *fwe, const uint8_t *bytes_in, size
         uint8_t byte = bytes_in[in_offset];
 
         if (fakewire_is_special(byte)) {
-            if (fwe->tx_offset + 2 > fwe->tx_capacity) {
+            if (fwe->mut->tx_offset + 2 > fwe->tx_capacity) {
                 break;
             }
-            fwe->tx_buffer[fwe->tx_offset++] = FWC_ESCAPE_SYM;
+            fwe->tx_buffer[fwe->mut->tx_offset++] = FWC_ESCAPE_SYM;
             // encode byte so that it remains in the data range
             byte ^= 0x10;
         } else {
-            if (fwe->tx_offset + 1 > fwe->tx_capacity) {
+            if (fwe->mut->tx_offset + 1 > fwe->tx_capacity) {
                 break;
             }
         }
-        fwe->tx_buffer[fwe->tx_offset++] = byte;
+        fwe->tx_buffer[fwe->mut->tx_offset++] = byte;
     }
 #ifdef CODEC_DEBUG
     debugf(TRACE, "Encoded %zu/%zu raw data bytes.", in_offset, byte_count);
@@ -271,11 +272,11 @@ bool fakewire_enc_encode_ctrl(fw_encoder_t *fwe, fw_ctrl_t symbol, uint32_t para
     assert(param == 0 || fakewire_is_parametrized(symbol));
 
     // if our buffer fills up, drain it to the output
-    if (fwe->tx_offset + (fakewire_is_parametrized(symbol) ? 9 : 1) > fwe->tx_capacity) {
+    if (fwe->mut->tx_offset + (fakewire_is_parametrized(symbol) ? 9 : 1) > fwe->tx_capacity) {
         return false;
     }
 
-    fwe->tx_buffer[fwe->tx_offset++] = (uint8_t) symbol;
+    fwe->tx_buffer[fwe->mut->tx_offset++] = (uint8_t) symbol;
     if (fakewire_is_parametrized(symbol)) {
         uint32_t netparam = htobe32(param);
         size_t actual = fakewire_enc_encode_data(fwe, (uint8_t*) &netparam, sizeof(netparam));
