@@ -125,6 +125,9 @@ func ScanAll(dir string, fswBin string, options Options) (out []scans.ScannedLin
 			out = append(out, debuglog)
 		}
 	}
+	if len(out) == 0 {
+		return nil, errors.New("no data to display")
+	}
 	return out, nil
 }
 

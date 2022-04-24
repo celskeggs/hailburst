@@ -18,6 +18,7 @@ func main() {
 	var usage bool
 	var follow bool
 	var full bool
+	var fixTime bool = true
 	minLogLevel := readlog.LogTrace
 	for i := 1; i < len(os.Args); i++ {
 		if os.Args[i] == "--loglevel" && i+1 < len(os.Args) {
@@ -47,6 +48,8 @@ func main() {
 				latest = time
 			}
 			i += 1
+		} else if os.Args[i] == "--raw-time" {
+			fixTime = false
 		} else if strings.HasPrefix(os.Args[i], "-") {
 			usage = true
 			break
@@ -72,7 +75,7 @@ func main() {
 	var parseError error
 	go func() {
 		defer close(recordCh)
-		parseError = readlog.Parse(binaries, input, recordCh, follow)
+		parseError = readlog.Parse(binaries, input, recordCh, follow, fixTime)
 	}()
 	renderCh := make(chan readlog.Record)
 	readlog.Filter(recordCh, renderCh, minLogLevel, earliest, latest)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/celskeggs/hailburst/ctrl/chart/tlplot"
 	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
 	"image/color"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"time"
 )
 
 type InjectionScan struct {
@@ -80,10 +82,7 @@ func ScanInjections(path string) (*InjectionScan, error) {
 		if err != nil {
 			return nil, err
 		}
-		injectV, ok := model.FromNanoseconds(injectNs)
-		if !ok {
-			return nil, fmt.Errorf("invalid timestamp: %v", injectNs)
-		}
+		injectV := spacecraft.MissionStartTime.Add(time.Duration(injectNs) * time.Nanosecond)
 		scan.Injections = append(scan.Injections, injectV)
 	}
 }

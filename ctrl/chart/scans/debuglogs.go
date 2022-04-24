@@ -93,7 +93,7 @@ func ScanDebugLog(path string, elfPaths []string) ([]*DebugLogScan, error) {
 	var parseErr error
 	go func() {
 		defer close(records)
-		parseErr = readlog.Parse(elfPaths, f, records, false)
+		parseErr = readlog.Parse(elfPaths, f, records, false, true)
 	}()
 
 	levelScans := map[readlog.LogLevel]*DebugLogScan{}

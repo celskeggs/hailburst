@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/celskeggs/hailburst/ctrl/chart/tlplot"
 	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
 	"image/color"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"time"
 )
 
 type IOScan struct {
@@ -103,10 +105,7 @@ func ScanIOLog(path string) (*IOScan, error) {
 		if err != nil {
 			return nil, err
 		}
-		eventTime, ok := model.FromNanoseconds(eventNs)
-		if !ok {
-			return nil, fmt.Errorf("invalid timestamp: %v", eventNs)
-		}
+		eventTime := spacecraft.MissionStartTime.Add(time.Duration(eventNs) * time.Nanosecond)
 		*out = append(*out, eventTime)
 	}
 }

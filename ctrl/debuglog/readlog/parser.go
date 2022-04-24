@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"io"
 	"log"
 	"time"
@@ -117,7 +118,7 @@ func ParseStream(inputStream io.Reader, outputCh chan<- []byte, junkCh chan<- []
 	}
 }
 
-func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record, follow bool) error {
+func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record, follow bool, fixTime bool) error {
 	dd, err := LoadDebugData(elfPaths)
 	if err != nil {
 		return err
@@ -137,6 +138,9 @@ func Parse(elfPaths []string, inputStream io.Reader, recordsOut chan<- Record, f
 			recordDec, err := dd.Decode(record)
 			if err != nil {
 				log.Printf("Error during decoding: %v", err)
+			}
+			if fixTime && recordDec.Timestamp.TimeExists() && recordDec.Timestamp.Before(spacecraft.MissionStartTime) {
+				recordDec.Timestamp = spacecraft.MissionStartTime.Add(recordDec.Timestamp.Since(model.TimeZero))
 			}
 			recordsOut <- recordDec
 		case junk := <-junkCh:
