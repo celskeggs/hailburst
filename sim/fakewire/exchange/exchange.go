@@ -268,10 +268,10 @@ func concat(allData ...[]byte) (total []byte) {
 	return total
 }
 
-// HandshakePeriod generates a random interval in the range [3ms, 10ms)
+// HandshakePeriod generates a random interval in the range [5ms, 15ms)
 func (ex *Exchange) HandshakePeriod() time.Duration {
 	msInNs := time.Millisecond.Nanoseconds()
-	return time.Duration(ex.Sim.Rand().Int63n(7*msInNs)+3*msInNs) * time.Nanosecond
+	return time.Duration(ex.Sim.Rand().Int63n(10*msInNs)+5*msInNs) * time.Nanosecond
 }
 
 func FakeWire(ctx model.SimContext, lsink model.DataSinkBytes, lsource model.DataSourceBytes, psink fwmodel.PacketSink, psource fwmodel.PacketSource, label string) {
