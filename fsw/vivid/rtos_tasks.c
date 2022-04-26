@@ -71,7 +71,9 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     if (validate) {
         uint64_t here = timer_now_ns();
         // make sure we aren't drifting from the schedule
-        assert(schedule_last <= here && here <= new_time);
+        assertf(schedule_last <= here && here <= new_time,
+                "schedule invariant last=" TIMEFMT " <= here=" TIMEFMT " <= new_time=" TIMEFMT " violated",
+                TIMEARG(schedule_last), TIMEARG(here), TIMEARG(new_time));
     }
 
     // make the start of the scheduling period available to code that may be interested

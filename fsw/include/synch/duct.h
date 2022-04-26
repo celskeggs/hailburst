@@ -31,16 +31,16 @@ enum {
 
 typedef uint8_t duct_flow_index;
 
-typedef struct {
-    const char * const      label;
-    const uint8_t           sender_replicas;
-    const uint8_t           receiver_replicas;
-    const duct_flow_index   max_flow;
-    const size_t            message_size;
-    uint8_t * const         message_buffer;
-    duct_flow_index * const flow_status; // DUCT_MISSING_FLOW if not sent; otherwise [0, max_flow] based on msgs.
-    flag_t * const          flags_receive;
-    flag_t * const          flags_send;
+typedef const struct {
+    const char      *label;
+    uint8_t          sender_replicas;
+    uint8_t          receiver_replicas;
+    duct_flow_index  max_flow;
+    size_t           message_size;
+    uint8_t         *message_buffer;
+    duct_flow_index *flow_status; // DUCT_MISSING_FLOW if not sent; otherwise [0, max_flow] based on msgs.
+    flag_t          *flags_receive;
+    flag_t          *flags_send;
 } duct_t;
 
 enum duct_txn_mode {

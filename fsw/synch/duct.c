@@ -55,7 +55,9 @@ void duct_send_message(duct_txn_t *txn, const void *message, size_t size, local_
     assert(txn->mode == DUCT_TXN_SEND);
     assert(txn->replica_id < txn->duct->sender_replicas);
     assert(txn->flow_current < txn->duct->max_flow);
-    assert(message != NULL && size >= 1 && size <= txn->duct->message_size);
+    assert(message != NULL);
+    assertf(size >= 1 && size <= txn->duct->message_size,
+            "invalid message size; %zu not in [1, %zu].", size, txn->duct->message_size);
 
     /* copy message into the transit queue */
     duct_message_t *entry = duct_lookup_message(txn->duct, txn->replica_id, txn->flow_current);
