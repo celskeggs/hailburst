@@ -410,7 +410,7 @@ def log_inject(args):
 def inject(args):
     """Inject a bitflip at an address."""
 
-    args = args.strip().rsplit(" ", 1)
+    args = args.strip().split(" ")
     if len(args) > 3:
         print("usage: inject [<address>] [<bytewidth>] [<bit>]")
         print("if no address specified, will be randomly selected, and bytewidth will default to 1")
