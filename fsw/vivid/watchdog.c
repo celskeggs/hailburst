@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include <rtos/gic.h>
 #include <hal/debug.h>
 #include <hal/system.h>
 #include <hal/thread.h>
@@ -155,7 +156,7 @@ void watchdog_monitor_clip(watchdog_monitor_t *w) {
     if (has_food_msg) {
         if (food_msg.force_reset) {
             debugf(CRITICAL, "Watchdog voter voted to force reset.");
-            watchdog_force_reset();
+            abort();
         } else if (!can_feed_yet) {
             debugf(WARNING, "Watchdog voter suggested feeding watchdog before the right time!");
         } else {
@@ -178,12 +179,18 @@ void watchdog_monitor_clip(watchdog_monitor_t *w) {
     duct_send_commit(&txn);
 }
 
-void watchdog_force_reset(void) {
+void abort(void) {
+    asm volatile("CPSID i");
+
     struct watchdog_mmio_region *mmio = (struct watchdog_mmio_region *) WATCHDOG_BASE_ADDRESS;
 
-    // writes to the greet register are forbidden
-    debugf(CRITICAL, "Forcing reset via watchdog.");
+    // writes to the greet register are forbidden, so this will make the watchdog force a reset.
     atomic_store_relaxed(mmio->r_greet, 0);
-    // if we continue here, something is really wrong... that should have killed the watchdog!
-    abortf("Watchdog reset did not occur! aborting.");
+
+    // if we continue executing here, something is really wrong... that should have killed the watchdog!
+    // shut down the interrupt controller, and then start spinning to wait forever, for the watchdog device to kick in.
+    shutdown_gic();
+    while (1) {
+        asm volatile("WFI");
+    }
 }

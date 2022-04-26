@@ -9,18 +9,11 @@
 #include <hal/system.h>
 #include <hal/thread.h>
 
-__attribute__((noreturn)) void task_suspend(void) {
-    // this will indeed stop us in the middle of this abort handler... but that's fine! We don't actually need
-    // to return all the way back to the interrupted task; this stack will simply be thrown away.
-    debugf(DEBUG, "Suspending task.");
-    // make sure interrupts are enabled before we use any WFI instructions
-    asm volatile("CPSIE i" ::: "memory");
-    for (;;) {
-        task_yield();
-    }
-}
-
 __attribute__((noreturn)) void restart_current_task(void) {
+    if ((arm_get_cpsr() & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE) {
+        abortf("Restart condition hit in kernel context.");
+    }
+
     thread_t current_thread = task_get_current();
     assert(current_thread != NULL);
 
@@ -30,8 +23,11 @@ __attribute__((noreturn)) void restart_current_task(void) {
 
     debugf(WARNING, "Suspending restarted task to wait for reschedule.");
 
+    // make sure interrupts are enabled before we use any WFI instructions
+    asm volatile("CPSIE i" ::: "memory");
+
     // wait forever for the reschedule
-    task_suspend();
+    task_yield();
 }
 
 struct reg_state {

@@ -31,32 +31,47 @@ struct debugf_metadata {
     uint32_t line_number;
 } __attribute__((packed));
 
-#define _assert_raw(x,fmt,...) do { \
-    if (!(x)) {                     \
-        debugf_stable(CRITICAL, Assertion, fmt, ## __VA_ARGS__); \
-        abort(); \
-    } \
-} while (0)
-
-#define assertf(x,fmt,...) _assert_raw(x, "ASSERT: " fmt, __VA_ARGS__)
-#define assert(x)          _assert_raw(x, "ASSERT")
-
-#define abortf(fmt,...) do { \
-    debugf_stable(CRITICAL, Assertion, "ABORT: " fmt, ## __VA_ARGS__); \
-    abort(); \
-} while (0)
-
 // restart the current task
 extern void restart_current_task(void) __attribute__((noreturn));
 
-#define restartf(fmt,...) do { \
-    debugf(WARNING, "RESTART: " fmt, ## __VA_ARGS__); \
-    restart_current_task(); \
-} while (0)
-#define restart() do { \
-    debugf(WARNING, "RESTART"); \
-    restart_current_task(); \
-} while (0)
+macro_define(assert, x) {
+    ({
+        if (!(x)) {
+            blame_caller { debugf_stable(WARNING, Assertion, "ASSERT"); }
+            restart_current_task();
+        }
+    })
+}
+
+macro_define(assertf, x, fmt, args...) {
+    ({
+        if (!(x)) {
+            blame_caller { debugf_stable(WARNING, Assertion, "ASSERT: " fmt, args); }
+            restart_current_task();
+        }
+    })
+}
+
+macro_define(abortf, fmt, args...) {
+    ({
+        blame_caller { debugf_stable(CRITICAL, Assertion, "ABORT: " fmt, args); }
+        abort();
+    })
+}
+
+macro_define(restartf, fmt, args...) {
+    ({
+        blame_caller { debugf(WARNING, "RESTART: " fmt, args); }
+        restart_current_task();
+    })
+}
+
+macro_define(restart) {
+    ({
+        blame_caller { debugf(WARNING, "RESTART"); }
+        restart_current_task();
+    })
+}
 
 #define static_assert _Static_assert
 

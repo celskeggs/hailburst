@@ -79,7 +79,7 @@ static inline const char *task_get_name(thread_t task) {
     return task->pcTaskName;
 }
 
-static inline void task_yield(void) {
+static inline __attribute__((noreturn)) void task_yield(void) {
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
     asm volatile("WFI");
     abortf("should never return from WFI since all non-timer interrupts are masked");
