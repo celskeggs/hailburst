@@ -60,7 +60,7 @@ func main() {
 		}
 	}
 	if guestLog == "" || usage {
-		log.Printf("Usage: %s [--loglevel <level>] [--full] [--follow] [--from <time>] [--until <time>] <guest.log> [<source binary> [<source binary> [...]]]",
+		log.Printf("Usage: %s [--loglevel <level>] [--full] [--follow] [--from <time>] [--until <time>] [--srcdir <dir>] [--raw-time] <guest.log> [<source binary> [<source binary> [...]]]",
 			os.Args[0])
 		os.Exit(1)
 	}
