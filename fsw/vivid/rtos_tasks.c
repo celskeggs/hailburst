@@ -58,11 +58,8 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
         schedule_epoch_start = schedule_last;
     }
 
-    // update the next callback time to the next timing tick
+    // compute the next timing tick
     uint64_t new_time = schedule_last + sched.nanos;
-    arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
-    // set the enable bit and don't set the mask bit
-    arm_set_cntp_ctl(ARM_TIMER_ENABLE);
 
 #ifdef TASK_DEBUG
     debugf(TRACE, "VIVID scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
@@ -75,6 +72,13 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
                 "schedule invariant last=" TIMEFMT " <= here=" TIMEFMT " <= new_time=" TIMEFMT " violated",
                 TIMEARG(schedule_last), TIMEARG(here), TIMEARG(new_time));
     }
+
+    // set the next callback time
+    arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
+    // set the enable bit and don't set the mask bit
+    arm_set_cntp_ctl(ARM_TIMER_ENABLE);
+
+    gic_validate_ready();
 
     // make the start of the scheduling period available to code that may be interested
     schedule_period_start = schedule_last;

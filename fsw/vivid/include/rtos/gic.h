@@ -8,5 +8,6 @@ enum {
 };
 
 void shutdown_gic(void);
+void gic_validate_ready(void);
 
 #endif /* FSW_VIVID_RTOS_GIC_H */

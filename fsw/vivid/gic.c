@@ -72,6 +72,17 @@ void shutdown_gic(void) {
     cpu->gicc_ctlr = 0;
 }
 
+void gic_validate_ready(void) {
+    uint32_t irq = IRQ_PHYS_TIMER;
+    uint32_t off = irq / 32;
+    uint32_t mask = 1 << (irq % 32);
+
+    assertf((dist->gicd_isactiver[off] & mask) == 0 && (dist->gicd_ispendr[off] & mask) == 0
+                                                    && (dist->gicd_isenabler[off] & mask) == mask,
+            "GIC misconfigured for regular execution: ICACTIVER=0x%x, ICPENDR=0x%x, ISENABLER=0x%x, mask=0x%08x",
+            dist->gicd_isactiver[off], dist->gicd_ispendr[off], dist->gicd_isenabler[off], mask);
+}
+
 static void configure_gic(void) {
     num_interrupts = ((dist->gicd_typer & 0x1F) + 1) * 32;
 
