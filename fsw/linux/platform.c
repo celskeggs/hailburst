@@ -166,11 +166,15 @@ void enter_scheduler(void) {
         if (here - last > total) {
             debugf(TRACE, "Epoch too long:   %" PRIu64 " > %" PRIu64, here - last, total);
         } else {
+            uint32_t micros = (total - (here - last)) / 1000;
 #ifdef SCHED_DEBUG
-            debugf(TRACE, "Epoch acceptable: %" PRIu64 " < %" PRIu64, here - last, total);
+            debugf(TRACE, "Epoch acceptable: %" PRIu64 " < %" PRIu64 "; sleep %u us.", here - last, total, micros);
 #endif
+            if (micros > 0) {
+                usleep(micros);
+            }
         }
-        last = here;
+        last = timer_now_ns();
         schedule_index++;
     }
 }
