@@ -6,7 +6,8 @@
 #include <bus/link.h>
 #include <bus/switch.h>
 
-#define EXCHANGE_REPLICAS 3
+// use default number of replicas
+#define EXCHANGE_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     MAX_OUTSTANDING_TOKENS = 10,

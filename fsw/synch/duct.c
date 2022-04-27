@@ -5,8 +5,8 @@
 #include <hal/clip.h>
 #include <hal/thread.h>
 #include <hal/timer.h>
-#include <synch/config.h>
 #include <synch/duct.h>
+#include <synch/strict.h>
 
 //#define DUCT_DEBUG
 

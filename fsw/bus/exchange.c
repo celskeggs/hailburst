@@ -6,7 +6,7 @@
 #include <hal/init.h>
 #include <hal/thread.h>
 #include <hal/timer.h>
-#include <synch/config.h>
+#include <synch/strict.h>
 #include <bus/exchange.h>
 
 //#define EXCHANGE_DEBUG

@@ -14,7 +14,8 @@
 #include <synch/duct.h>
 #include <synch/notepad.h>
 
-#define VIRTIO_INPUT_QUEUE_REPLICAS 3
+// use default number of replicas
+#define VIRTIO_INPUT_QUEUE_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 // NOTE: this is NOT a configuration option; this is the number used because there is one prepare clip and one commit
 // clip. The code would have to be restructured for this to be anything else.

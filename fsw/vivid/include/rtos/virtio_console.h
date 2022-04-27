@@ -3,7 +3,8 @@
 
 #include <rtos/virtio.h>
 
-#define VIRTIO_CONSOLE_REPLICAS 3
+// use default number of replicas
+#define VIRTIO_CONSOLE_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     // VIRTIO type for a console device

@@ -5,7 +5,8 @@
 #include <synch/notepad.h>
 #include <flight/clock_cal.h>
 
-#define HEARTBEAT_REPLICAS 3
+// use default number of replicas
+#define HEARTBEAT_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 struct heartbeat_note {
     local_time_t last_heartbeat_time;

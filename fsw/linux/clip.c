@@ -1,5 +1,5 @@
 #include <hal/clip.h>
-#include <synch/config.h>
+#include <synch/strict.h>
 
 void clip_loop(clip_t *clip) {
     assert(clip != NULL);

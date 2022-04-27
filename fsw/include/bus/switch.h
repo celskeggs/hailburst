@@ -9,7 +9,8 @@
 #include <hal/thread.h>
 #include <synch/duct.h>
 
-#define SWITCH_REPLICAS 3
+// use default number of replicas
+#define SWITCH_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     SWITCH_PORT_BASE  = 1,

@@ -8,7 +8,8 @@
 #include <flight/comm.h>
 #include <flight/telemetry.h>
 
-#define COMMAND_REPLICAS 3
+// use default number of replicas
+#define COMMAND_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     // none of the currently-defined commands exceed this length

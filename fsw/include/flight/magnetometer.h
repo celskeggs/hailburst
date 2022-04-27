@@ -11,7 +11,8 @@
 #include <flight/command.h>
 #include <flight/telemetry.h>
 
-#define MAGNETOMETER_REPLICAS 3
+// use default number of replicas
+#define MAGNETOMETER_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     MAGNETOMETER_MAX_READINGS = 100,

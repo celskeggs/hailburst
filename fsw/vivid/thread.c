@@ -6,7 +6,7 @@
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/thread.h>
-#include <synch/config.h>
+#include <synch/strict.h>
 
 __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
     thread_t clip = task_get_current();

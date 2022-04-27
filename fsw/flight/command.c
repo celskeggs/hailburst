@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 #include <hal/debug.h>
-#include <synch/config.h>
+#include <synch/strict.h>
 #include <flight/command.h>
 #include <flight/telemetry.h>
 

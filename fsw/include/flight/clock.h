@@ -6,8 +6,10 @@
 
 #include <hal/time.h>
 #include <hal/timer.h>
+#include <synch/config.h>
 
-#define CLOCK_REPLICAS 3
+// use default number of replicas
+#define CLOCK_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 extern int64_t clock_offset_adj_slow[CLOCK_REPLICAS];
 extern int64_t clock_offset_adj_fast;

@@ -1,7 +1,7 @@
 #include <string.h>
 
-#include <synch/config.h>
 #include <synch/notepad.h>
+#include <synch/strict.h>
 
 static inline uint8_t *notepad_region_ref(notepad_ref_t *replica, uint8_t replica_id, uint8_t flip_state) {
     assert(replica != NULL);

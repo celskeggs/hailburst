@@ -4,7 +4,8 @@
 #include <hal/init.h>
 #include <synch/duct.h>
 
-#define WATCHDOG_VOTER_REPLICAS 3
+// use default number of replicas
+#define WATCHDOG_VOTER_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     WATCHDOG_STARTUP_GRACE_PERIOD = 1 * CLOCK_NS_PER_SEC,

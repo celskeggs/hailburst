@@ -5,7 +5,8 @@
 #include <flight/command.h>
 #include <flight/telemetry.h>
 
-#define PINGBACK_REPLICAS 3
+// use default number of replicas
+#define PINGBACK_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 typedef const struct {
     tlm_endpoint_t *telemetry;

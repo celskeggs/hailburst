@@ -7,7 +7,8 @@
 #include <bus/rmap.h>
 #include <bus/switch.h>
 
-#define RADIO_REPLICAS 3
+// use default number of replicas
+#define RADIO_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 typedef enum {
     REG_MAGIC      = 0,

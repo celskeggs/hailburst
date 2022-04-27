@@ -12,7 +12,8 @@
 #include <synch/pipe.h>
 #include <flight/comm.h>
 
-#define TELEMETRY_REPLICAS 3
+// use default number of replicas
+#define TELEMETRY_REPLICAS CONFIG_APPLICATION_REPLICAS
 
 enum {
     TLM_MAX_ASYNC_SIZE = 16,
