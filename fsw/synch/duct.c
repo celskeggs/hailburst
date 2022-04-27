@@ -188,9 +188,9 @@ size_t duct_receive_message(duct_txn_t *txn, void *message_out, local_time_t *ti
             total_valid_messages++;
             if (compare->size != candidate->size || compare->timestamp != candidate->timestamp) {
                 debugf(TRACE, "duct %s[receiver=%u]: candidate %u -> compare %u: "
-                       "metadata mismatch (size %zu ? %zu, timestamp %zu ? %zu); skipping.",
+                       "metadata mismatch (size %zu ? %zu, timestamp " TIMEFMT " ? " TIMEFMT "); skipping.",
                        txn->duct->label, txn->replica_id, candidate_id, compare_id,
-                       candidate->size, compare->size, candidate->timestamp, compare->timestamp);
+                       candidate->size, compare->size, TIMEARG(candidate->timestamp), TIMEARG(compare->timestamp));
                 continue;
             }
             if (memcmp(candidate->body, compare->body, compare->size) != 0) {
