@@ -26,6 +26,22 @@ func (v *verifier) checkReq(req string, checkAt model.VirtualTime, ok func() boo
 	})
 }
 
+func (v *verifier) checkReqRetro(req string, firstCheck model.VirtualTime, interval time.Duration, check func() (bool, bool, model.VirtualTime)) {
+	completion := v.rqt.StartRetro(req)
+	var schedule func(model.VirtualTime)
+	schedule = func(checkAt model.VirtualTime) {
+		v.sim.SetTimer(checkAt, "sim.verifier.Verifier/CheckReqRetro", func() {
+			done, success, endTime := check()
+			if done {
+				completion(success, endTime)
+			} else {
+				schedule(checkAt.Add(interval))
+			}
+		})
+	}
+	schedule(firstCheck)
+}
+
 func (v *verifier) checkReqProgressive(req string, firstCheck model.VirtualTime, interval time.Duration, check func() (passed, cont bool)) {
 	completion := v.rqt.Start(req)
 	v.sim.SetTimer(firstCheck, "sim.verifier.Verifier/CheckReq", func() {
@@ -185,20 +201,39 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 			return ok1 && ok2 && tde.LocalTimestamp != now
 		})
 		inOrder := true
-		lastReadingTime := model.TimeZero
+		lastReadingTime, prevLatestTime := model.TimeZero, model.TimeZero
 		if lastReadingsArray != nil {
-			lastReadings := lastReadingsArray.(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray).Readings
+			lastArray := lastReadingsArray.(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray)
 			// guaranteed to have at least one element by telemetry decoder
-			lastReadingTime, inOrder = model.FromNanoseconds(lastReadings[len(lastReadings)-1].ReadingTime)
-			if !inOrder {
+			var plOk, lrOk bool
+			lastReadingTime, lrOk = model.FromNanoseconds(lastArray.Readings[len(lastArray.Readings)-1].ReadingTime)
+			prevLatestTime, plOk = model.FromNanoseconds(lastArray.Header.LatestTime)
+			if !plOk || !lrOk {
 				log.Printf("Out-of-order error resulting from error in previous downlink buffer")
+				inOrder = false
 			}
+		}
+		earliestTime, etOk := model.FromNanoseconds(readingsArray.Header.EarliestTime)
+		latestTime, ltOk := model.FromNanoseconds(readingsArray.Header.LatestTime)
+		if !etOk || !ltOk {
+			log.Printf("Out-of-order error resulting from invalid earliest or latest time")
+			inOrder = false
+		} else if !(prevLatestTime.Before(earliestTime) && earliestTime.AtOrBefore(latestTime)) {
+			log.Printf("Out-of-order error due to mismatch on packet metadata. Expected %v < %v < %v",
+				prevLatestTime, earliestTime, latestTime)
+			inOrder = false
 		}
 
 		// now validate the order
 		for _, reading := range readingsArray.Readings {
 			readingTime, rtOk := model.FromNanoseconds(reading.ReadingTime)
-			if !rtOk || !readingTime.AtOrAfter(lastReadingTime.Add(time.Millisecond*95)) {
+			if !rtOk || readingTime.Before(earliestTime) || readingTime.After(latestTime) {
+				log.Printf("Out of order error resulting from invalid reading time: %v not in [%v, %v]",
+					readingTime, earliestTime, latestTime)
+				inOrder = false
+				break
+			}
+			if !readingTime.AtOrAfter(lastReadingTime.Add(time.Millisecond * 95)) {
 				log.Printf("Out-of-order error resulting from comparison issue: %v < (%v + 95ms = %v)",
 					readingTime, lastReadingTime, lastReadingTime.Add(time.Millisecond*95))
 				inOrder = false
@@ -361,31 +396,60 @@ func (v *verifier) OnMeasureMagnetometer(x, y, z int16) {
 	}
 
 	// confirm that each of these measurements gets incorporated into at least one downlink packet
-	v.checkReq(ReqDownlinkMagReadings, now.Add(time.Second*10), func() bool {
-		events := v.tracker.search(now, now.Add(time.Second*10), func(e Event) bool {
-			tde, ok1 := e.(TelemetryDownlinkEvent)
-			mra, ok2 := tde.Telemetry.(*transport.MagReadingsArray)
-			if !ok1 || !ok2 {
-				return false
-			}
-			// make sure the reading is found somewhere in here
-			for _, reading := range mra.Readings {
-				if reading.MagX == x && reading.MagY == y && reading.MagZ == z {
-					readingTime, ok := model.FromNanoseconds(reading.ReadingTime)
-					if ok && now.TimeDistance(readingTime) < MaxMagMeasTimeVariance {
-						return true
-					} else {
-						log.Printf("Found reading that almost matched, but didn't:\n"+
-							"measurement = {%d, %d, %d, now=%v}\n"+
-							"reading     = {%d, %d, %d, now=%v}",
-							x, y, z, now, reading.MagX, reading.MagY, reading.MagZ, readingTime)
+	allowedPeriod := now.Add(time.Second * 10)
+	v.checkReqRetro(ReqDownlinkMagReadings, now.Add(time.Second), time.Second,
+		func() (done bool, ok bool, endTime model.VirtualTime) {
+			events := v.tracker.search(now, allowedPeriod, func(e Event) bool {
+				tde, ok1 := e.(TelemetryDownlinkEvent)
+				mra, ok2 := tde.Telemetry.(*transport.MagReadingsArray)
+				if !ok1 || !ok2 {
+					return false
+				}
+				// make sure the reading is found somewhere in here
+				for _, reading := range mra.Readings {
+					if reading.MagX == x && reading.MagY == y && reading.MagZ == z {
+						readingTime, ok := model.FromNanoseconds(reading.ReadingTime)
+						if ok && now.TimeDistance(readingTime) < MaxMagMeasTimeVariance {
+							return true
+						} else {
+							log.Printf("Found reading that almost matched, but didn't:\n"+
+								"measurement = {%d, %d, %d, now=%v}\n"+
+								"reading     = {%d, %d, %d, now=%v}",
+								x, y, z, now, reading.MagX, reading.MagY, reading.MagZ, readingTime)
+						}
 					}
 				}
+				return false
+			})
+			if len(events) > 0 {
+				return true, true, events[0].Timestamp()
 			}
-			return false
-		})
-		return len(events) > 0
-	})
+			// When a packet failed to downlink, there are a few cases:
+			//  1. It was not added to the circular buffer in the first place.
+			//  2. The circular buffer was unexpectedly emptied, such as by a reset.
+			// In the first case, we want to place the blame at the collection time.
+			// In the second case, we want to place the blame at the time of the discard, which is the 'earliest' time
+			// downlinked as part of the next packet.
+			// Both of these can be achieved by finding the first packet whose earliest time starts at the collection
+			// time minus the variance time or any later point.
+			minPacketStartTime := now.Add(-MaxMagMeasTimeVariance)
+			matchingPackets := v.tracker.search(now, v.sim.Now(), func(e Event) bool {
+				tde, ok1 := e.(TelemetryDownlinkEvent)
+				mra, ok2 := tde.Telemetry.(*transport.MagReadingsArray)
+				if !ok1 || !ok2 {
+					return false
+				}
+				earliestTime, ok := model.FromNanoseconds(mra.Header.EarliestTime)
+				return ok && earliestTime.AtOrAfter(minPacketStartTime)
+			})
+			if len(matchingPackets) > 0 {
+				nextPacket := matchingPackets[0].(TelemetryDownlinkEvent).Telemetry.(*transport.MagReadingsArray)
+				return true, false, model.FromNanosecondsAssume(nextPacket.Header.EarliestTime)
+			}
+			// If we don't have enough evidence to conclude either way, then check again in another second.
+			return false, false, model.TimeNever
+		},
+	)
 }
 
 func (v *verifier) startPeriodicValidation(nbe, npe int) {

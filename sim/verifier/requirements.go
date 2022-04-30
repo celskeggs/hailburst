@@ -62,10 +62,12 @@ const (
 	ReqDownlinkMagReadings = "ReqDownlinkMagReadings"
 	// ReqOrderedMagReadings requires:
 	// Magnetometer readings shall be downlinked in strictly increasing temporal order, with a minimum of 95ms between
-	// subsequent measurement times.
+	// subsequent measurement times. Downlink packet metadata shall be in increasing temporal order, and all readings
+	// within a packet shall fall within the metadata range.
 	ReqOrderedMagReadings = "ReqOrderedMagReadings"
 	// ReqCorrectMagReadings requires:
-	// The flight software shall not downlink any reading that does not match one produced by the magnetometer.
+	// Every magnetometer reading packet shall downlink exactly the set of readings actually collected during the
+	// time range defined in its metadata.
 	ReqCorrectMagReadings = "ReqCorrectMagReadings"
 	// ReqBatchedMagReadings requires:
 	// The flight software shall not downlink magnetometer readings more frequently than once every five seconds.
@@ -150,6 +152,35 @@ func (rt *ReqTracker) Start(req string) (complete func(success bool)) {
 		rt.Immediate(req, success)
 		done = true
 	}
+}
+
+func (rt *ReqTracker) StartRetro(req string) (complete func(success bool, time model.VirtualTime)) {
+	assertReq(req)
+	origTime := rt.sim.Now().Nanoseconds()
+	rt.log("BEGIN", strconv.FormatUint(origTime, 10), req)
+	rt.outstanding[req] += 1
+	var done bool
+	return func(success bool, endTime model.VirtualTime) {
+		if done {
+			panic("cannot complete twice")
+		}
+		rt.log("RETIRE", strconv.FormatUint(origTime, 10), strconv.FormatUint(endTime.Nanoseconds(), 10), req)
+		rt.outstanding[req] -= 1
+		rt.Retroactive(req, success, endTime)
+		done = true
+	}
+}
+
+func (rt *ReqTracker) Retroactive(req string, success bool, time model.VirtualTime) {
+	assertReq(req)
+	if success {
+		rt.log("SUCCEED", strconv.FormatUint(time.Nanoseconds(), 10), req)
+		rt.succeeded[req] += 1
+	} else {
+		rt.log("FAIL", strconv.FormatUint(time.Nanoseconds(), 10), req)
+		rt.failed[req] += 1
+	}
+	rt.disp.DispatchLater()
 }
 
 func (rt *ReqTracker) Immediate(req string, success bool) {

@@ -49,6 +49,8 @@ void magnetometer_clip(magnetometer_replica_t *mr) {
         synch->check_latch_time = 0;
         synch->last_telem_time = 0;
         rmap_synch_reset(&synch->rmap_synch);
+        synch->earliest_time = now;
+        synch->earliest_time_is_mission_time = false;
         circ_buf_reset(mr->readings);
     }
 
@@ -87,7 +89,9 @@ void magnetometer_clip(magnetometer_replica_t *mr) {
         synch->actual_reading_time = 0;
         status = rmap_write_complete(&rmap_txn, &synch->actual_reading_time);
         if (status == RS_OK) {
-            assert(synch->actual_reading_time != 0);
+            assertf(synch->actual_reading_time == now,
+                    "expected reading time to be now: " TIMEFMT " == " TIMEFMT,
+                    TIMEARG(synch->actual_reading_time), TIMEARG(now));
             synch->state = MS_LATCHED_ON;
             synch->check_latch_time = now + LATCHING_DELAY_NS;
         } else {
@@ -191,9 +195,25 @@ void magnetometer_clip(magnetometer_replica_t *mr) {
         // there's room in the telemetry buffer to actually transmit data.
         if (now >= synch->last_telem_time + (uint64_t) 5500 * CLOCK_NS_PER_MS && telemetry_can_send(&telem_synch)) {
             size_t write_count = downlink_count;
-            tlm_mag_readings_map(&telem_synch, &write_count, magnetometer_telem_iterator_fetch, (void *) mr);
-            assert(write_count >= 1 && write_count <= downlink_count);
+            mission_time_t latest_time = clock_mission_adjust(now);
+            if (write_count > TLM_MAX_MAG_READINGS_PER_MAP) {
+                write_count = TLM_MAX_MAG_READINGS_PER_MAP;
+                tlm_mag_reading_t *reading = circ_buf_read_peek(mr->readings, write_count);
+                assert(reading != NULL);
+                latest_time = reading->reading_time - 1;
+            } else if ((synch->state == MS_LATCHED_ON || synch->state == MS_TAKING_READING)
+                            && latest_time >= synch->actual_reading_time) {
+                latest_time = clock_mission_adjust(synch->actual_reading_time) - 1;
+            }
+            mission_time_t earliest_time = synch->earliest_time;
+            if (!synch->earliest_time_is_mission_time) {
+                earliest_time = clock_mission_adjust(earliest_time);
+            }
+            tlm_mag_readings_map(&telem_synch, earliest_time, latest_time,
+                                 write_count, magnetometer_telem_iterator_fetch, (void *) mr);
             circ_buf_read_done(mr->readings, write_count);
+            synch->earliest_time = latest_time + 1;
+            synch->earliest_time_is_mission_time = true;
 
             synch->last_telem_time = now;
         }

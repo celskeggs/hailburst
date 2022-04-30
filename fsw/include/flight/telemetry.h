@@ -18,6 +18,7 @@
 enum {
     TLM_MAX_ASYNC_SIZE = 16,
     TLM_MAX_SYNC_SIZE  = 64 * 1024,
+    TLM_MAX_MAG_READINGS_PER_MAP = (TLM_MAX_SYNC_SIZE - 2 * sizeof(uint64_t)) / 14,
 };
 
 // should fit on the stack
@@ -184,7 +185,7 @@ void tlm_pong(tlm_txn_t *txn, uint32_t ping_id);
 void tlm_clock_calibrated(tlm_txn_t *txn, int64_t adjustment);
 void tlm_heartbeat(tlm_txn_t *txn);
 void tlm_mag_pwr_state_changed(tlm_txn_t *txn, bool power_state);
-void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
+void tlm_mag_readings_map(tlm_txn_t *txn, uint64_t earliest_time, uint64_t latest_time, size_t fetch_count,
                           void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param);
 
 #endif /* FSW_TLM_H */

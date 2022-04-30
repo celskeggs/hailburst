@@ -308,23 +308,29 @@ void tlm_mag_pwr_state_changed(tlm_txn_t *txn, bool power_state) {
     telemetry_small_submit(txn, MAG_PWR_STATE_CHANGED_TID, &data, sizeof(data));
 }
 
-void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
+void tlm_mag_readings_map(tlm_txn_t *txn, uint64_t earliest_time, uint64_t latest_time, size_t fetch_count,
                           void (*fetch)(void *param, size_t index, tlm_mag_reading_t *out), void *param) {
-    assert(txn != NULL && fetch_count != NULL && fetch != NULL);
+    assert(txn != NULL && fetch != NULL);
+    assert(fetch_count >= 1 && fetch_count <= TLM_MAX_MAG_READINGS_PER_MAP);
 
     // get the buffer
     uint8_t *data_bytes = telemetry_large_start(txn, MAG_READINGS_ARRAY_TID);
 
-    // now fill up the buffer
-    size_t num_readings = *fetch_count;
-    if (num_readings * 14 > TLM_MAX_SYNC_SIZE) {
-        num_readings = TLM_MAX_SYNC_SIZE / 14;
-    }
-    assert(num_readings > 0);
-    debugf(DEBUG, "[%u] Magnetometer Readings Array: %zu readings", txn->replica_id, num_readings);
-    *fetch_count = num_readings;
-    uint16_t *out = (uint16_t*) data_bytes;
-    for (size_t i = 0; i < num_readings; i++) {
+    // set up the header
+    struct {
+        uint64_t earliest_time;
+        uint64_t latest_time;
+    } __attribute__((packed)) header = {
+        .earliest_time = htobe64(earliest_time),
+        .latest_time = htobe64(latest_time),
+    };
+
+    // now fill the rest of the buffer
+    debugf(DEBUG, "[%u] Magnetometer Readings Array for " TIMEFMT " to " TIMEFMT ": %zu readings",
+           txn->replica_id, TIMEARG(earliest_time), TIMEARG(latest_time), fetch_count);
+    memcpy(data_bytes, &header, sizeof(header));
+    uint16_t *out = (uint16_t*) (data_bytes + sizeof(header));
+    for (size_t i = 0; i < fetch_count; i++) {
         tlm_mag_reading_t rd;
 
         fetch(param, i, &rd);
@@ -341,7 +347,7 @@ void tlm_mag_readings_map(tlm_txn_t *txn, size_t *fetch_count,
         *out++ = htobe16(rd.mag_y);
         *out++ = htobe16(rd.mag_z);
     }
-    assert((uint8_t*) out - data_bytes == (ssize_t) (num_readings * 14));
+    assert((uint8_t*) out - data_bytes == (ssize_t) (fetch_count * 14 + sizeof(header)));
 
     // write the sync record to the ring buffer, and wait for it to be written out to the telemetry stream
     telemetry_large_submit(txn, (uint8_t*) out - data_bytes);

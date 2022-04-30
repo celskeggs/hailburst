@@ -29,10 +29,10 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
 
     if (flags & PF_W) {
         assert(sc->mut->next_scrubbed_address == NULL);
-        debugf(DEBUG, "Skipping scrub of writable segment at vaddr=0x%08x (filesz=0x%08x, memsz=0x%08x)",
+        debugf(TRACE, "Skipping scrub of writable segment at vaddr=0x%08x (filesz=0x%08x, memsz=0x%08x)",
                vaddr, filesz, memsz);
     } else {
-        debugf(DEBUG, "Scrubbing read-only segment at vaddr=0x%08x (filesz=0x%08x, memsz=0x%08x) from offset=0x%08x, "
+        debugf(TRACE, "Scrubbing read-only segment at vaddr=0x%08x (filesz=0x%08x, memsz=0x%08x) from offset=0x%08x, "
                "time remaining=%uns", vaddr, filesz, memsz, start_offset, clip_remaining_ns());
         assert(memsz == filesz); // no BSS here, presumably?
 

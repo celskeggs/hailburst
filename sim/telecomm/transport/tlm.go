@@ -85,8 +85,8 @@ type TlmDropped struct {
 	MessagesLost uint32
 }
 
-func (c *TlmDropped) String() string {
-	return fmt.Sprintf("TlmDropped(Messages=%d)", c.MessagesLost)
+func (t *TlmDropped) String() string {
+	return fmt.Sprintf("TlmDropped(Messages=%d)", t.MessagesLost)
 }
 
 type Pong struct {
@@ -94,8 +94,8 @@ type Pong struct {
 	PingID uint32
 }
 
-func (c *Pong) String() string {
-	return fmt.Sprintf("Pong(ID=0x%08x)", c.PingID)
+func (p *Pong) String() string {
+	return fmt.Sprintf("Pong(ID=0x%08x)", p.PingID)
 }
 
 type ClockCalibrated struct {
@@ -111,7 +111,7 @@ type Heartbeat struct {
 	BaseTelemetry
 }
 
-func (c *Heartbeat) String() string {
+func (h *Heartbeat) String() string {
 	return "Heartbeat"
 }
 
@@ -120,8 +120,8 @@ type MagPwrStateChanged struct {
 	PowerState bool
 }
 
-func (c *MagPwrStateChanged) String() string {
-	if c.PowerState {
+func (m *MagPwrStateChanged) String() string {
+	if m.PowerState {
 		return "MagPwrStateChanged(OFF -> ON)"
 	} else {
 		return "MagPwrStateChanged(ON -> OFF)"
@@ -133,30 +133,36 @@ type MagReading struct {
 	MagX, MagY, MagZ int16
 }
 
-func (c *MagReading) String() string {
+func (m *MagReading) String() string {
 	return fmt.Sprintf("MagReading(T=%v, Mag=<%d,%d,%d>)",
-		model.FromNanosecondsIgnore(c.ReadingTime), c.MagX, c.MagY, c.MagZ)
+		model.FromNanosecondsIgnore(m.ReadingTime), m.MagX, m.MagY, m.MagZ)
 }
 
 type MagReadingsArray struct {
+	Header struct {
+		EarliestTime uint64
+		LatestTime   uint64
+	}
 	Readings []MagReading
 }
 
-func (c *MagReadingsArray) String() string {
-	return fmt.Sprintf("MagReadingsArray[N=%d]", len(c.Readings))
+func (m *MagReadingsArray) String() string {
+	return fmt.Sprintf("MagReadingsArray[From=%v,N=%d,To=%v]",
+		model.FromNanosecondsIgnore(m.Header.EarliestTime), len(m.Readings),
+		model.FromNanosecondsIgnore(m.Header.LatestTime))
 }
 
 func (m *MagReadingsArray) Decode(_ Telemetry, dataBytes []byte, tlmId uint32) error {
 	r := bytes.NewReader(dataBytes)
+	if err := binary.Read(r, binary.BigEndian, &m.Header); err != nil {
+		return fmt.Errorf("while decoding %d bytes into header for ID %08x: %v", len(dataBytes), tlmId, err)
+	}
 	for r.Len() > 0 {
 		var mr MagReading
 		if err := binary.Read(r, binary.BigEndian, &mr); err != nil {
 			return fmt.Errorf("while decoding %d bytes into array-based ID %08x: %v", len(dataBytes), tlmId, err)
 		}
 		m.Readings = append(m.Readings, mr)
-	}
-	if r.Len() != 0 {
-		return fmt.Errorf("extraneous bytes left over in array-based telemetry packet: %d", r.Len())
 	}
 	if len(m.Readings) == 0 {
 		return errors.New("cannot have zero entries in downlinked magnetometer readings array")

@@ -29,8 +29,10 @@ enum magnetometer_state {
 };
 
 struct magnetometer_note {
-    // synchronization
+    // shared
     bool should_be_powered;
+    uint64_t earliest_time;
+    bool earliest_time_is_mission_time;
 
     // saved query state
     enum magnetometer_state state;

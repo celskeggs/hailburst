@@ -89,7 +89,7 @@ func ScanReqSummaryViterbi(path string) ([]*ReqViterbiIntervalScan, error) {
 	if latest <= startTime {
 		panic("invalid time spread")
 	}
-	periods := int(math.Ceil((latest - startTime) / ViterbiGranularity.Seconds()))
+	periods := int(math.Ceil((latest - startTime + time.Nanosecond.Seconds()) / ViterbiGranularity.Seconds()))
 	if periods < 1 {
 		panic("too few periods")
 	}
