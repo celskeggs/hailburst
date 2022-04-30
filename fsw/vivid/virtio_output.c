@@ -41,6 +41,7 @@ void virtio_output_queue_prepare_clip(virtio_device_output_queue_t *queue) {
         };
         queue->avail->ring[ring_index] = htole16(ring_index); // TODO: is this redundant with other code?
     }
+    // TODO: should I set the other descriptor entries to have length = 0?
 
     duct_receive_commit(&txn);
 
