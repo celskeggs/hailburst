@@ -43,7 +43,7 @@ void magnetometer_clip(magnetometer_replica_t *mr) {
     struct magnetometer_note *synch = notepad_feedforward(mr->synch, &valid);
     if (!valid || (uint32_t) synch->state > (uint32_t) MS_DEACTIVATING) {
         synch->should_be_powered = false;
-        synch->state = MS_INACTIVE;
+        synch->state = MS_UNKNOWN;
         synch->next_reading_time = 0;
         synch->actual_reading_time = 0;
         synch->check_latch_time = 0;
@@ -139,10 +139,12 @@ void magnetometer_clip(magnetometer_replica_t *mr) {
         }
     }
 
-    if ((synch->state == MS_INACTIVE || synch->state == MS_DEACTIVATING) && synch->should_be_powered) {
+    if ((synch->state == MS_INACTIVE || synch->state == MS_DEACTIVATING
+            || (synch->state == MS_UNKNOWN && clock_is_calibrated())) && synch->should_be_powered) {
         debugf(DEBUG, "Turning on magnetometer power...");
         synch->state = MS_ACTIVATING;
-    } else if ((synch->state == MS_ACTIVATING || synch->state == MS_ACTIVE) && !synch->should_be_powered) {
+    } else if ((synch->state == MS_ACTIVATING || synch->state == MS_ACTIVE
+                    || (synch->state == MS_UNKNOWN && clock_is_calibrated())) && !synch->should_be_powered) {
         debugf(DEBUG, "Turning off magnetometer power...");
         synch->state = MS_DEACTIVATING;
     } else if (synch->state == MS_ACTIVE && timer_epoch_ns() >= synch->next_reading_time) {

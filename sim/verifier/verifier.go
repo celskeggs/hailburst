@@ -112,11 +112,10 @@ func (v *verifier) OnCommandUplink(command transport.Command, sendTimestamp mode
 			return ok && cc.OriginalCommandId == command.CmdId() && cc.OriginalTimestamp == sendTimestamp.Nanoseconds()
 		}, nil)
 		latest := v.tracker.searchLast(func(e Event) bool {
-			cue, ok1 := e.(CommandUplinkEvent)
-			_, ok2 := cue.Command.(transport.MagSetPwrState)
-			return ok1 && ok2 && cue.SendTimestamp != sendTimestamp
+			mpe, ok := e.(MagnetometerPowerEvent)
+			return ok && mpe.ActionTimestamp.AtOrBefore(sendTimestamp)
 		})
-		lastPowerState := latest != nil && latest.(CommandUplinkEvent).Command.(transport.MagSetPwrState).PowerState
+		lastPowerState := latest != nil && latest.(MagnetometerPowerEvent).Powered
 		if lastPowerState != magCmd.PowerState {
 			v.checkExactlyOne(ReqMagSetPwr, time.Millisecond*200, func(e Event) bool {
 				mpe, ok := e.(MagnetometerPowerEvent)

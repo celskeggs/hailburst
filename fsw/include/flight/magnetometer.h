@@ -19,7 +19,8 @@ enum {
 };
 
 enum magnetometer_state {
-    MS_INACTIVE = 0,
+    MS_UNKNOWN = 0,
+    MS_INACTIVE,
     MS_ACTIVATING,
     MS_ACTIVE,
     MS_LATCHING_ON,
