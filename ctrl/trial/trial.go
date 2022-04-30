@@ -126,7 +126,7 @@ func (opt Options) RAM() (megabytes int) {
 		return 20
 	} else {
 		// need a lot less memory for Vivid
-		return 4
+		return 3
 	}
 }
 
