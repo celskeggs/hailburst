@@ -1,4 +1,4 @@
-package util
+package viterbi
 
 import "github.com/celskeggs/hailburst/sim/verifier"
 
@@ -8,8 +8,6 @@ const (
 	FullyWorking HiddenState = iota
 	PartiallyWorking
 	CompletelyBroken
-	Recovering         // Recovering indicates that errors in DownlinkMagReadings may occur spuriously
-	RecoveringPartial  // Combination of 'Partially Working' and 'Recovering'
 	NumHiddenStates
 )
 
@@ -29,35 +27,17 @@ type ViterbiObservation struct {
 }
 
 func DefaultStateTransitions() (l [NumHiddenStates][NumHiddenStates]float64) {
-	l[FullyWorking][FullyWorking] = 0.98
-	l[FullyWorking][PartiallyWorking] = 0.0199
-	l[FullyWorking][CompletelyBroken] = 0.0001
-	l[FullyWorking][Recovering] = 0.00
-	l[FullyWorking][RecoveringPartial] = 0.00
+	l[FullyWorking][FullyWorking] = 0.97
+	l[FullyWorking][PartiallyWorking] = 0.02
+	l[FullyWorking][CompletelyBroken] = 0.01
 
 	l[PartiallyWorking][FullyWorking] = 0.01
 	l[PartiallyWorking][PartiallyWorking] = 0.99
 	l[PartiallyWorking][CompletelyBroken] = 0.00
-	l[PartiallyWorking][Recovering] = 0.00
-	l[PartiallyWorking][RecoveringPartial] = 0.00
 
-	l[CompletelyBroken][FullyWorking] = 0.00
+	l[CompletelyBroken][FullyWorking] = 0.01
 	l[CompletelyBroken][PartiallyWorking] = 0.00
 	l[CompletelyBroken][CompletelyBroken] = 0.99
-	l[CompletelyBroken][Recovering] = 0.01
-	l[CompletelyBroken][RecoveringPartial] = 0.00
-
-	l[Recovering][FullyWorking] = 0.10
-	l[Recovering][PartiallyWorking] = 0.00
-	l[Recovering][CompletelyBroken] = 0.0001
-	l[Recovering][Recovering] = 0.90
-	l[Recovering][RecoveringPartial] = 0.0079
-
-	l[RecoveringPartial][FullyWorking] = 0.00
-	l[RecoveringPartial][PartiallyWorking] = 0.00
-	l[RecoveringPartial][CompletelyBroken] = 0.00
-	l[RecoveringPartial][Recovering] = 0.01
-	l[RecoveringPartial][RecoveringPartial] = 0.99
 	return
 }
 
@@ -65,8 +45,6 @@ func DefaultSuccessLikelihoods() (defaults [NumHiddenStates]float64, l map[strin
 	defaults[FullyWorking] = 1.00
 	defaults[PartiallyWorking] = 0.70
 	defaults[CompletelyBroken] = 0.05
-	defaults[Recovering] = 1.00
-	defaults[RecoveringPartial] = 0.70
 
 	l = map[string][NumHiddenStates]float64{}
 
@@ -74,36 +52,26 @@ func DefaultSuccessLikelihoods() (defaults [NumHiddenStates]float64, l map[strin
 	ll[FullyWorking] = 1.00
 	ll[PartiallyWorking] = 0.70
 	ll[CompletelyBroken] = 0.05
-	ll[Recovering] = 0.85
-	ll[RecoveringPartial] = 0.60
 	l[verifier.ReqMagSetPwr] = ll
 
 	ll[FullyWorking] = 1.00
 	ll[PartiallyWorking] = 0.70
 	ll[CompletelyBroken] = 0.05
-	ll[Recovering] = 1.00
-	ll[RecoveringPartial] = 0.70
 	l[verifier.ReqCollectMagReadings] = ll
 
 	ll[FullyWorking] = 1.00
 	ll[PartiallyWorking] = 0.70
 	ll[CompletelyBroken] = 0.05
-	ll[Recovering] = 1.00
-	ll[RecoveringPartial] = 0.70
 	l[verifier.ReqHeartbeat] = ll
 
 	ll[FullyWorking] = 1.00
 	ll[PartiallyWorking] = 0.97
 	ll[CompletelyBroken] = 0.97
-	ll[Recovering] = 0.70
-	ll[RecoveringPartial] = 0.67
 	l[verifier.ReqDownlinkMagReadings] = ll
 
 	ll[FullyWorking] = 1.00
 	ll[PartiallyWorking] = 0.75
 	ll[CompletelyBroken] = 0.99
-	ll[Recovering] = 1.00
-	ll[RecoveringPartial] = 0.75
 	l[verifier.ReqNoTelemErrs] = ll
 	return
 }
@@ -116,8 +84,6 @@ func InitialViterbiState() ViterbiState {
 			0.98,
 			0.01,
 			0.01,
-			0.00,
-			0.00,
 		},
 		StateTransitions: transitions,
 		SuccessDefaults:  defaults,

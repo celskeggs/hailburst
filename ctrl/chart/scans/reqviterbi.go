@@ -2,7 +2,7 @@ package scans
 
 import (
 	"github.com/celskeggs/hailburst/ctrl/chart/tlplot"
-	"github.com/celskeggs/hailburst/ctrl/util"
+	"github.com/celskeggs/hailburst/ctrl/chart/viterbi"
 	"github.com/celskeggs/hailburst/sim/model"
 	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"gonum.org/v1/plot/vg"
@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-const ViterbiGranularity = time.Millisecond * 100
+const ViterbiGranularity = time.Millisecond * 50
 
 type ReqViterbiInterval struct {
-	Mode  util.HiddenState
+	Mode  viterbi.HiddenState
 	Start model.VirtualTime
 	End   model.VirtualTime
 }
@@ -41,18 +41,14 @@ func (r *ReqViterbiIntervalScan) LastTime() float64 {
 	return latest
 }
 
-func ViterbiRender(state util.HiddenState) (c color.RGBA, label string) {
+func ViterbiRender(state viterbi.HiddenState) (c color.RGBA, label string) {
 	switch state {
-	case util.FullyWorking: // 78c679
+	case viterbi.FullyWorking: // 78c679
 		return color.RGBA{0x78, 0xC6, 0x79, 255}, "Working"
-	case util.PartiallyWorking:
+	case viterbi.PartiallyWorking:
 		return color.RGBA{0xFF, 0xFF, 0xB2, 255}, "Partial"
-	case util.CompletelyBroken:
+	case viterbi.CompletelyBroken:
 		return color.RGBA{0xE3, 0x1A, 0x1C, 255}, "Broken"
-	case util.Recovering:
-		return color.RGBA{0x7B, 0xCC, 0xCC, 255}, "Recovering"
-	case util.RecoveringPartial:
-		return color.RGBA{0xFD, 0xCC, 0x8A, 255}, "Disrupted"
 	default:
 		panic("invalid mode")
 	}
@@ -93,12 +89,12 @@ func ScanReqSummaryViterbi(path string) ([]*ReqViterbiIntervalScan, error) {
 	if periods < 1 {
 		panic("too few periods")
 	}
-	buckets := make([][]util.ViterbiObservation, periods)
+	buckets := make([][]viterbi.ViterbiObservation, periods)
 	for _, req := range raw {
 		for i, category := range [2][]model.VirtualTime{req.Failures, req.Successes} {
 			for _, timestamp := range category {
 				bucket := int(timestamp.Since(startTimeVT) / ViterbiGranularity)
-				buckets[bucket] = append(buckets[bucket], util.ViterbiObservation{
+				buckets[bucket] = append(buckets[bucket], viterbi.ViterbiObservation{
 					Requirement: req.RequirementName,
 					Success:     i == 1,
 				})
@@ -106,7 +102,7 @@ func ScanReqSummaryViterbi(path string) ([]*ReqViterbiIntervalScan, error) {
 		}
 	}
 
-	state := util.InitialViterbiState()
+	state := viterbi.InitialViterbiState()
 	for _, bucket := range buckets {
 		state.NextPeriod(bucket)
 	}
