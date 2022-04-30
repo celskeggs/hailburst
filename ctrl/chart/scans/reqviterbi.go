@@ -70,6 +70,29 @@ func (r *ReqViterbiIntervalScan) BuildPlot(lastTime float64, location float64) *
 	return tlplot.NewTimelinePlot(activities, nil, location, vg.Points(10), lastTime)
 }
 
+func CalcViterbiStats(intervals []ReqViterbiInterval) {
+	var failureTimes []time.Duration
+	var successTimes []time.Duration
+
+	wasFailure := false
+	for i := 0; i < len(intervals)-1; i++ {
+		interval := intervals[i]
+		if interval.Mode == viterbi.FullyWorking {
+			successTimes = append(successTimes, interval.Duration())
+			wasFailure = false
+		} else {
+			if wasFailure {
+				failureTimes[len(failureTimes)-1] += interval.Duration()
+			} else {
+				failureTimes = append(failureTimes, interval.Duration())
+			}
+			wasFailure = true
+		}
+	}
+
+	log.Printf("STATS: mttf=%v, mttr=%v", MeanDuration(successTimes), MeanDuration(failureTimes))
+}
+
 func ScanReqSummaryViterbi(path string) ([]*ReqViterbiIntervalScan, error) {
 	raw, err := ScanRawReqs(path)
 	if err != nil {
@@ -125,6 +148,7 @@ func ScanReqSummaryViterbi(path string) ([]*ReqViterbiIntervalScan, error) {
 		startPoint = endPoint
 	}
 	log.Printf("Viterbi analysis complete!")
+	CalcViterbiStats(intervals)
 
 	return []*ReqViterbiIntervalScan{
 		{

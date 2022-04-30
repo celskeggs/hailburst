@@ -50,23 +50,8 @@ func DefaultSuccessLikelihoods() (defaults [NumHiddenStates]float64, l map[strin
 
 	var ll [NumHiddenStates]float64
 	ll[FullyWorking] = 1.00
-	ll[PartiallyWorking] = 0.70
-	ll[CompletelyBroken] = 0.05
-	l[verifier.ReqMagSetPwr] = ll
-
-	ll[FullyWorking] = 1.00
-	ll[PartiallyWorking] = 0.70
-	ll[CompletelyBroken] = 0.05
-	l[verifier.ReqCollectMagReadings] = ll
-
-	ll[FullyWorking] = 1.00
-	ll[PartiallyWorking] = 0.70
-	ll[CompletelyBroken] = 0.05
-	l[verifier.ReqHeartbeat] = ll
-
-	ll[FullyWorking] = 1.00
-	ll[PartiallyWorking] = 0.97
-	ll[CompletelyBroken] = 0.97
+	ll[PartiallyWorking] = 0.95
+	ll[CompletelyBroken] = 0.01
 	l[verifier.ReqDownlinkMagReadings] = ll
 
 	ll[FullyWorking] = 1.00
