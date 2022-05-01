@@ -111,6 +111,7 @@ void scrubber_main_clip(scrubber_copy_t *sc) {
     watchdog_indicate(sc->aspect, 0, watchdog_ok);
 }
 
+#if ( VIVID_SCRUBBER_COPIES > 0 )
 static uint64_t start_scrub_wait(scrubber_copy_t *scrubber) {
     assert(scrubber != NULL);
 
@@ -121,14 +122,15 @@ static uint64_t start_scrub_wait(scrubber_copy_t *scrubber) {
 static bool scrubber_done(scrubber_copy_t *scrubber, uint64_t start_iteration) {
     return atomic_load_relaxed(scrubber->mut->iteration) > start_iteration;
 }
+#endif
 
-static_repeat(SCRUBBER_COPIES, s_copy_id) {
+static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
     extern scrubber_copy_t symbol_join(scrubber, s_copy_id);
 }
 
 void scrubber_start_pend(scrubber_pend_t *pend) {
     assert(pend != NULL);
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         pend->iteration[s_copy_id] = start_scrub_wait(&symbol_join(scrubber, s_copy_id));
     }
     pend->max_attempts = 200;
@@ -142,7 +144,7 @@ bool scrubber_is_pend_done(scrubber_pend_t *pend) {
         return true;
     }
     pend->max_attempts -= 1;
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         if (scrubber_done(&symbol_join(scrubber, s_copy_id), pend->iteration[s_copy_id])) {
             return true;
         }
@@ -153,7 +155,7 @@ bool scrubber_is_pend_done(scrubber_pend_t *pend) {
 void scrubber_set_kernel(void *kernel_elf_rom) {
     assert(kernel_elf_rom != NULL);
 
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         assert(symbol_join(scrubber, s_copy_id).mut->kernel_elf_rom == NULL);
         symbol_join(scrubber, s_copy_id).mut->kernel_elf_rom = kernel_elf_rom;
     }

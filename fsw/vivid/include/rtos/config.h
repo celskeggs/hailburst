@@ -3,6 +3,9 @@
 
 // #define TASK_DEBUG
 
+/* set to the number of replicas for the scrubber to have, or 0 for no replicas */
+#define VIVID_SCRUBBER_COPIES                           2
+
 /* set to 1 if each task should be linked separately; 0 otherwise */
 #define VIVID_REPLICATE_TASK_CODE                       1
 

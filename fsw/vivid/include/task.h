@@ -36,12 +36,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <rtos/config.h>
 #include <hal/debug.h>
 
-#define SCRUBBER_COPIES 2
-
 typedef struct {
-    uint64_t iteration[SCRUBBER_COPIES];
+    uint64_t iteration[VIVID_SCRUBBER_COPIES];
     uint8_t  max_attempts;
 } scrubber_pend_t;
 

@@ -3,11 +3,13 @@
 
 #include <stdbool.h>
 
+#include <rtos/config.h>
 #include <hal/thread.h>
 #include <hal/watchdog.h>
 #include <synch/config.h>
 
-// SCRUBBER_COPIES and scrubber_pend_t are defined in task.h
+// VIVID_SCRUBBER_COPIES is defined in rtos/config.h
+// scrubber_pend_t is defined in task.h
 
 typedef const struct {
     struct scrubber_copy_mut {
@@ -23,7 +25,7 @@ typedef const struct {
 void scrubber_main_clip(scrubber_copy_t *sc);
 
 macro_define(SCRUBBER_REGISTER) {
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         // define a separate aspect for each scrubber copy, because they are REDUNDANT, not REPLICATED!
         WATCHDOG_ASPECT(symbol_join(scrubber, s_copy_id, aspect),
                         /* if not in strict mode, allow enough time to repair one scrubber with the other */
@@ -44,13 +46,13 @@ macro_define(SCRUBBER_REGISTER) {
 }
 
 macro_define(SCRUBBER_SCHEDULE) {
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         CLIP_SCHEDULE(symbol_join(scrubber, s_copy_id, clip), 100)
     }
 }
 
 macro_define(SCRUBBER_WATCH) {
-    static_repeat(SCRUBBER_COPIES, s_copy_id) {
+    static_repeat(VIVID_SCRUBBER_COPIES, s_copy_id) {
         &symbol_join(scrubber, s_copy_id, aspect),
     }
 }
