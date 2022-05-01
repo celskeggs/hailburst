@@ -9,6 +9,14 @@
 #include <hal/system.h>
 #include <hal/thread.h>
 
+// referenced in entrypoint.s
+// force to 1 if we don't want to recover cleanly
+#if ( VIVID_RECOVER_FROM_EXCEPTIONS == 1 )
+uint32_t trap_recursive_flag = 0;
+#else /* ( VIVID_RECOVER_FROM_EXCEPTIONS == 0 ) */
+const uint32_t trap_recursive_flag = 1;
+#endif
+
 __attribute__((noreturn)) void restart_current_task(void) {
     if ((arm_get_cpsr() & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE) {
         abortf("Restart condition hit in kernel context.");
@@ -55,9 +63,6 @@ static const char *trap_mode_names[] = {
     "DATA ABORT",
 };
 
-// defined in entrypoint.s
-extern volatile uint32_t trap_recursive_flag;
-
 void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_mode) {
     uint64_t now = timer_now_ns();
 
@@ -74,7 +79,7 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x",
            state->lr, spsr);
     debugf(CRITICAL, "Possible causes: InKernel=%u GlobalRecurse=%u TaskRecurse=%u",
-           (spsr & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE, trap_recursive_flag - 1, task_recursive);
+           (spsr & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE, atomic_load_relaxed(trap_recursive_flag) - 1, task_recursive);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",
            state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x",
@@ -96,15 +101,20 @@ __attribute__((noreturn)) void task_abort_handler(unsigned int trap_mode) {
     debugf(WARNING, "TASK %s", trap_name);
     TaskHandle_t failed_task = task_get_current();
     debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
+
+#if ( VIVID_RECOVER_FROM_EXCEPTIONS == 0 )
+    abortf("Recovery was disabled... shouldn't have reached task_abort_handler!");
+#else /* ( VIVID_RECOVER_FROM_EXCEPTIONS == 1 ) */
     // must be false because we checked it just a moment ago in the trap handler
     assert(failed_task->mut->recursive_exception == false);
 
     // make sure we don't clear the global recursive flag until we've safely set the task recursive flag
     failed_task->mut->recursive_exception = true;
-    assert(trap_recursive_flag == 1);
+    assert(atomic_load_relaxed(trap_recursive_flag) == 1);
     atomic_store(trap_recursive_flag, 0);
 
     // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
     // to return all the way back to the interrupted task.
     restart_current_task();
+#endif
 }

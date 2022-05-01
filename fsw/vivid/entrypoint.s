@@ -41,6 +41,7 @@
     /* Variables and functions. */
     .extern pxCurrentTCB
     .extern gic_interrupt_handler
+    .extern trap_recursive_flag
 
 
 ; /**********************************************************************/
@@ -78,16 +79,6 @@ _start:                               @ r0 is populated by the bootrom with the 
     BL entrypoint                     @ Jump to the entrypoint function, passing r0 (kernel ELF address)
 
     B  .
-
-
-    .data
-
-.align 4
-.globl trap_recursive_flag
-trap_recursive_flag:
-    .word 0
-
-    .text
 
 .macro TRAP_HANDLER trapid
     @ Set up the trap handling stack
