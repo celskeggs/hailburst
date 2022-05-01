@@ -27,7 +27,9 @@ __attribute__((noreturn)) void restart_current_task(void) {
 
     // mark clip
     current_thread->mut->hit_restart = true;
+#if ( VIVID_RECOVERY_WAIT_FOR_SCRUBBER == 1 )
     scrubber_start_pend(&current_thread->mut->clip_pend);
+#endif
 
     debugf(WARNING, "Suspending restarted task to wait for reschedule.");
 

@@ -6,6 +6,9 @@
 /* set to the number of replicas for the scrubber to have, or 0 for no replicas */
 #define VIVID_SCRUBBER_COPIES                           2
 
+/* set to 1 if restarting clips should wait for the scrubbers before resuming */
+#define VIVID_RECOVERY_WAIT_FOR_SCRUBBER                1
+
 /* set to 1 if each task should be linked separately; 0 otherwise */
 #define VIVID_REPLICATE_TASK_CODE                       1
 

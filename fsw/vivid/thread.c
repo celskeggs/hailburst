@@ -15,6 +15,7 @@ __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
         // clear crash flag
         clip->mut->recursive_exception = false;
 
+#if ( VIVID_RECOVERY_WAIT_FOR_SCRUBBER == 1 )
         // pend started in restart_current_task() to simplify this logic for us.
         if (!scrubber_is_pend_done(&clip->mut->clip_pend)) {
             // Go back to the top next scheduling period.
@@ -22,6 +23,7 @@ __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
             abortf("Clips should never return from yield!");
         }
         debugf(WARNING, "Clip %s resuming after scrubber cycle completion.", clip->pcTaskName);
+#endif
         clip->mut->hit_restart = false;
         clip->mut->clip_next_tick = task_tick_index();
         clip->mut->needs_start = true;

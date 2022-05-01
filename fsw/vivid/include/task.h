@@ -59,7 +59,9 @@ typedef struct
 
     bool            clip_running;
     uint32_t        clip_next_tick;
+#if ( VIVID_RECOVERY_WAIT_FOR_SCRUBBER == 1 )
     scrubber_pend_t clip_pend;
+#endif
     uint64_t        clip_max_nanos;
 } TCB_mut_t;
 
