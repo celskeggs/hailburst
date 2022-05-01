@@ -107,7 +107,7 @@ macro_define(FAKEWIRE_EXCHANGE_REGISTER,
     DUCT_REGISTER(symbol_join(e_ident, rand_duct), 1, EXCHANGE_REPLICAS, 1, sizeof(uint32_t), DUCT_SENDER_FIRST);
     CLIP_REGISTER(symbol_join(e_ident, rand_clip_tx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
     CLIP_REGISTER(symbol_join(e_ident, rand_clip_rx), fakewire_exc_rand_clip, &symbol_join(e_ident, rand_duct));
-    NOTEPAD_REGISTER(symbol_join(e_ident, notepad), EXCHANGE_REPLICAS, 0, sizeof(struct fakewire_exchange_note));
+    NOTEPAD_REGISTER(symbol_join(e_ident, notepad), EXCHANGE_REPLICAS, sizeof(struct fakewire_exchange_note));
     static_repeat(EXCHANGE_REPLICAS, replica_id) {
         FAKEWIRE_ENCODER_REGISTER(symbol_join(e_ident, encoder, replica_id),
                                   symbol_join(e_ident, transmit_duct), replica_id, (e_max_flow) * (e_buf_size) + 1024);

@@ -70,7 +70,7 @@ macro_define(MAGNETOMETER_REGISTER, m_ident, m_address, m_switch_in, m_switch_ou
     COMMAND_ENDPOINT(symbol_join(m_ident, command), MAG_SET_PWR_STATE_CID, MAGNETOMETER_REPLICAS);
     RMAP_ON_SWITCHES(symbol_join(m_ident, endpoint), MAGNETOMETER_REPLICAS, m_switch_in, m_switch_out,
                      m_switch_port, m_address, 8, 4);
-    NOTEPAD_REGISTER(symbol_join(m_ident, notepad), MAGNETOMETER_REPLICAS, 0, sizeof(struct magnetometer_note));
+    NOTEPAD_REGISTER(symbol_join(m_ident, notepad), MAGNETOMETER_REPLICAS, sizeof(struct magnetometer_note));
     static_repeat(MAGNETOMETER_REPLICAS, m_replica_id) {
         CIRC_BUF_REGISTER(symbol_join(m_ident, readings, m_replica_id),
                           sizeof(tlm_mag_reading_t), MAGNETOMETER_MAX_READINGS);

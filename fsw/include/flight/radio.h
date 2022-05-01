@@ -134,7 +134,7 @@ macro_define(RADIO_UPLINK_REGISTER, r_ident,   r_switch_in, r_switch_out,
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_up), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_up_port, r_up_addr, UPLINK_BUF_LOCAL_SIZE, REG_IO_BUFFER_SIZE);
     WATCHDOG_ASPECT(symbol_join(r_ident, up_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
-    NOTEPAD_REGISTER(symbol_join(r_ident, up_notepad), RADIO_REPLICAS, 0, sizeof(struct radio_uplink_note));
+    NOTEPAD_REGISTER(symbol_join(r_ident, up_notepad), RADIO_REPLICAS, sizeof(struct radio_uplink_note));
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_uplink_mut symbol_join(r_ident, uplink, r_replica_id, mut) = {
             .uplink_query_status_flag = FLAG_INITIALIZER,
@@ -160,7 +160,7 @@ macro_define(RADIO_DOWNLINK_REGISTER, r_ident,     r_switch_in, r_switch_out,
     RMAP_ON_SWITCHES(symbol_join(r_ident, rmap_down), RADIO_REPLICAS, r_switch_in, r_switch_out,
                      r_down_port, r_down_addr, REG_IO_BUFFER_SIZE, DOWNLINK_BUF_LOCAL_SIZE);
     WATCHDOG_ASPECT(symbol_join(r_ident, down_aspect), 1 * CLOCK_NS_PER_SEC, RADIO_REPLICAS);
-    NOTEPAD_REGISTER(symbol_join(r_ident, down_notepad), RADIO_REPLICAS, 0, sizeof(struct radio_downlink_note));
+    NOTEPAD_REGISTER(symbol_join(r_ident, down_notepad), RADIO_REPLICAS, sizeof(struct radio_downlink_note));
     static_repeat(RADIO_REPLICAS, r_replica_id) {
         struct radio_downlink_mut symbol_join(r_ident, downlink, r_replica_id, mut) = {
             .downlink_length_local = 0,

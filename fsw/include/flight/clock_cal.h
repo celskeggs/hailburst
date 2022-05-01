@@ -32,7 +32,7 @@ macro_define(CLOCK_REGISTER, c_ident, c_address, c_switch_in, c_switch_out, c_sw
     RMAP_ON_SWITCHES(symbol_join(c_ident, rmap), CLOCK_REPLICAS, c_switch_in, c_switch_out, c_switch_port, c_address,
                      sizeof(uint64_t), 0);
     TELEMETRY_ASYNC_REGISTER(symbol_join(c_ident, telemetry), CLOCK_REPLICAS, 1);
-    NOTEPAD_REGISTER(symbol_join(c_ident, notepad), CLOCK_REPLICAS, 0, sizeof(struct clock_replica_note));
+    NOTEPAD_REGISTER(symbol_join(c_ident, notepad), CLOCK_REPLICAS, sizeof(struct clock_replica_note));
     static_repeat(CLOCK_REPLICAS, c_replica_id) {
         clock_replica_t symbol_join(c_ident, replica, c_replica_id) = {
             .replica_id = c_replica_id,

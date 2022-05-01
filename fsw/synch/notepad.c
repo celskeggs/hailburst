@@ -9,7 +9,7 @@ static inline uint8_t *notepad_region_ref(notepad_ref_t *replica, uint8_t replic
     return &replica->mutable_state[(replica_id * 2 + flip_state) * replica->state_size];
 }
 
-static inline uint8_t notepad_vote_flip(notepad_ref_t *replica, bool is_observer) {
+static inline uint8_t notepad_vote_flip(notepad_ref_t *replica) {
     assert(replica != NULL);
     uint32_t count_secondary = 0;
     if (replica->flip_states[replica->replica_id] == NOTEPAD_UNINITIALIZED) {
@@ -19,7 +19,7 @@ static inline uint8_t notepad_vote_flip(notepad_ref_t *replica, bool is_observer
     for (uint8_t i = 0; i < replica->num_replicas; i++) {
         uint8_t flip_state = replica->flip_states[i];
         assert(flip_state == 0 || flip_state == 1);
-        if (!is_observer && i < replica->replica_id) {
+        if (i < replica->replica_id) {
             // this replica has already executed before us, so assume its current flip state setting has already been
             // flipped for next cycle.
             flip_state ^= 1;
@@ -79,7 +79,7 @@ void *notepad_feedforward(notepad_ref_t *replica, bool *valid_out) {
     assert(replica != NULL);
     assert(replica->replica_id < replica->num_replicas); // ensure this is not an observer
 
-    uint8_t flip_read = notepad_vote_flip(replica, false);
+    uint8_t flip_read = notepad_vote_flip(replica);
     uint8_t flip_write = !flip_read; // opposite of flip_read; map flip_read=NOTEPAD_UNINITIALIZED to flip_write=0
     assert(flip_write == 0 || flip_write == 1);
 
@@ -95,13 +95,4 @@ void *notepad_feedforward(notepad_ref_t *replica, bool *valid_out) {
 
     // return the output region
     return output_region;
-}
-
-bool notepad_observe(notepad_ref_t *observer, void *output) {
-    assert(observer != NULL);
-    assert(observer->replica_id >= observer->num_replicas); // ensure this is not a regular replica
-
-    uint8_t flip_read = notepad_vote_flip(observer, true);
-
-    return notepad_vote_best(observer, flip_read, output);
 }
