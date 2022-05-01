@@ -9,4 +9,7 @@
 /* set to 1 if exceptions should be recovered via clip restarts instead of system resets */
 #define VIVID_RECOVER_FROM_EXCEPTIONS                   1
 
+/* set to 1 if assertions and explicit restarts should actually restart the clip, as opposed to reset the system */
+#define VIVID_RECOVER_FROM_ASSERTIONS                   1
+
 #endif /* FSW_VIVID_RTOS_CONFIG_H */

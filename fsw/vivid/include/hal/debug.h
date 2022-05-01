@@ -34,11 +34,21 @@ struct debugf_metadata {
 // restart the current task
 extern void restart_current_task(void) __attribute__((noreturn));
 
+#if ( VIVID_RECOVER_FROM_ASSERTIONS == 1 )
+static inline __attribute__((noreturn)) void assert_restart_task(void) {
+    restart_current_task();
+}
+#else /* ( VIVID_RECOVER_FROM_ASSERTIONS == 0 ) */
+static inline __attribute__((noreturn)) void assert_restart_task(void) {
+    abort();
+}
+#endif
+
 macro_define(assert, x) {
     ({
         if (!(x)) {
             blame_caller { debugf_stable(WARNING, Assertion, "ASSERT"); }
-            restart_current_task();
+            assert_restart_task();
         }
     })
 }
@@ -47,7 +57,7 @@ macro_define(assertf, x, fmt, args...) {
     ({
         if (!(x)) {
             blame_caller { debugf_stable(WARNING, Assertion, "ASSERT: " fmt, args); }
-            restart_current_task();
+            assert_restart_task();
         }
     })
 }
@@ -62,14 +72,14 @@ macro_define(abortf, fmt, args...) {
 macro_define(restartf, fmt, args...) {
     ({
         blame_caller { debugf(WARNING, "RESTART: " fmt, args); }
-        restart_current_task();
+        assert_restart_task();
     })
 }
 
 macro_define(restart) {
     ({
         blame_caller { debugf(WARNING, "RESTART"); }
-        restart_current_task();
+        assert_restart_task();
     })
 }
 
