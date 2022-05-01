@@ -14,11 +14,9 @@
 #include <synch/duct.h>
 #include <synch/notepad.h>
 
-// use default number of replicas
-#define VIRTIO_INPUT_QUEUE_REPLICAS CONFIG_APPLICATION_REPLICAS
-
-// NOTE: this is NOT a configuration option; this is the number used because there is one prepare clip and one commit
+// NOTE: these are NOT configuration options; 2 is the number used because there is one prepare clip and one commit
 // clip. The code would have to be restructured for this to be anything else.
+#define VIRTIO_INPUT_QUEUE_REPLICAS  2
 #define VIRTIO_OUTPUT_QUEUE_REPLICAS 2
 
 enum {
@@ -75,16 +73,12 @@ typedef const struct {
     uint32_t expected_device_id;
 } virtio_device_t;
 
-struct virtio_device_input_queue_notepad_mutable {
-    uint16_t last_used_idx;
-};
-
 // If a queue is an INPUT queue (i.e. it reads from the device),
 //     then virtio is the duct SENDER and the other end is the duct RECEIVER.
 typedef const struct {
-    struct virtio_device_input_queue_prepare_mut {
-        uint16_t new_used_idx;
-    } *prepare_mut;
+    struct virtio_device_input_queue_mut {
+        uint16_t last_descriptor_count;
+    } *mut;
 
     struct virtq_desc  *desc;
     struct virtq_avail *avail;
@@ -94,24 +88,16 @@ typedef const struct {
     uint32_t         queue_index;
     size_t           message_size;
     size_t           queue_num;
+    duct_t          *io_duct;
 
-    uint8_t       *receive_buffer;
-    notepad_ref_t *mut_observer;
+    uint8_t *receive_buffer;
+    uint8_t *merge_buffer; // of size message_size
 } virtio_device_input_queue_singletons_t;
 
 typedef const struct {
-    struct virtio_device_input_queue_prepare_mut *prepare_mut;
-
-    uint8_t  replica_id;
-    duct_t  *io_duct;
-    size_t   message_size; // duct_message_size(io_duct)
-    size_t   queue_num;
-    uint8_t *receive_buffer;
-    uint8_t *merge_buffer; // of size message_size
-
-    struct virtq_used *used;
-    notepad_ref_t     *mut_replica;
-} virtio_device_input_queue_replica_t;
+    virtio_device_t *parent_device;
+    uint32_t         queue_index;
+} virtio_device_input_queue_notify_t;
 
 // If a queue is an OUTPUT queue (i.e. it writes to the device),
 //     then virtio is the duct RECEIVER and the other end is the duct SENDER.
@@ -148,7 +134,6 @@ macro_define(VIRTIO_DEVICE_REGISTER,
 void virtio_device_setup_queue_internal(struct virtio_mmio_registers *mmio, uint32_t queue_index, size_t queue_num,
                                         struct virtq_desc *desc, struct virtq_avail *avail, struct virtq_used *used);
 void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *queue);
-void virtio_input_queue_advance_clip(virtio_device_input_queue_replica_t *queue);
 void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queue);
 void virtio_output_queue_prepare_clip(virtio_device_output_queue_t *queue);
 void virtio_output_queue_commit_clip(virtio_device_output_queue_t *queue);
@@ -194,52 +179,36 @@ macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
              v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity) {
     static_assert((v_duct_flow) <= (v_queue_flow), "merging can only reduce number of duct entries needed");
-    VIRTIO_DEVICE_QUEUE_COMMON(v_ident, v_queue_index, v_duct,
-                               v_duct_flow, v_queue_flow, v_duct_capacity, 0);
-    struct virtio_device_input_queue_prepare_mut symbol_join(v_ident, v_queue_index, prepare_mut) = {
-        .new_used_idx = 0,
-    };
-    NOTEPAD_REGISTER(symbol_join(v_ident, v_queue_index, mut_notepad),
-                     VIRTIO_INPUT_QUEUE_REPLICAS, 1, sizeof(struct virtio_device_input_queue_notepad_mutable));
+    VIRTIO_DEVICE_QUEUE_COMMON(v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity, 0);
     uint8_t symbol_join(v_ident, v_queue_index, receive_buffer)[(v_queue_flow) * (v_duct_capacity)];
-    virtio_device_input_queue_singletons_t symbol_join(v_ident, v_queue_index, singleton_data) = {
-        .prepare_mut = &symbol_join(v_ident, v_queue_index, prepare_mut),
-
-        .desc = symbol_join(v_ident, v_queue_index, desc),
-        .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
-        .used = &symbol_join(v_ident, v_queue_index, used).used,
-
-        .parent_device = &v_ident,
-        .queue_index = (v_queue_index),
-        .message_size = (v_duct_capacity),
-        .queue_num = (v_queue_flow),
-
-        .receive_buffer = symbol_join(v_ident, v_queue_index, receive_buffer),
-        .mut_observer = NOTEPAD_OBSERVER_REF(symbol_join(v_ident, v_queue_index, mut_notepad), 0),
-    };
-
-    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
-                  virtio_input_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, singleton_data));
+    struct virtio_device_input_queue_mut symbol_join(v_ident, v_queue_index, mutable_state);
     static_repeat(VIRTIO_INPUT_QUEUE_REPLICAS, v_replica_id) {
-        uint8_t symbol_join(v_ident, v_queue_index, replica, v_replica_id, merge_buffer)[v_duct_capacity];
-        virtio_device_input_queue_replica_t symbol_join(v_ident, v_queue_index, replica, v_replica_id) = {
-            .prepare_mut = &symbol_join(v_ident, v_queue_index, prepare_mut),
+        uint8_t symbol_join(v_ident, v_queue_index, merge_buffer, v_replica_id)[v_duct_capacity];
+        virtio_device_input_queue_singletons_t symbol_join(v_ident, v_queue_index, singleton_data, v_replica_id) = {
+            .mut = &symbol_join(v_ident, v_queue_index, mutable_state),
 
-            .replica_id = v_replica_id,
-            .io_duct = &(v_duct),
+            .desc = symbol_join(v_ident, v_queue_index, desc),
+            .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
+            .used = &symbol_join(v_ident, v_queue_index, used).used,
+
+            .parent_device = &v_ident,
+            .queue_index = (v_queue_index),
             .message_size = (v_duct_capacity),
             .queue_num = (v_queue_flow),
-            .receive_buffer = symbol_join(v_ident, v_queue_index, receive_buffer),
-            .merge_buffer = symbol_join(v_ident, v_queue_index, replica, v_replica_id, merge_buffer),
+            .io_duct = &(v_duct),
 
-            .mut_replica = NOTEPAD_REPLICA_REF(symbol_join(v_ident, v_queue_index, mut_notepad), v_replica_id),
-            .used = &symbol_join(v_ident, v_queue_index, used).used,
+            .receive_buffer = symbol_join(v_ident, v_queue_index, receive_buffer),
+            .merge_buffer = symbol_join(v_ident, v_queue_index, merge_buffer, v_replica_id),
         };
-        CLIP_REGISTER(symbol_join(v_ident, v_queue_index, advance_clip, v_replica_id),
-                      virtio_input_queue_advance_clip, &symbol_join(v_ident, v_queue_index, replica, v_replica_id));
     }
+    virtio_device_input_queue_notify_t symbol_join(v_ident, v_queue_index, notify) = {
+        .parent_device = &v_ident,
+        .queue_index = (v_queue_index),
+    };
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
+                  virtio_input_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, singleton_data, 0));
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, commit_clip),
-                  virtio_input_queue_commit_clip, &symbol_join(v_ident, v_queue_index, singleton_data))
+                  virtio_input_queue_commit_clip, &symbol_join(v_ident, v_queue_index, singleton_data, 1))
 }
 
 macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
@@ -269,15 +238,12 @@ macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
 }
 
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REF, v_ident, v_queue_index) {
-    (&symbol_join(v_ident, v_queue_index, singleton_data))
+    (&symbol_join(v_ident, v_queue_index, notify))
 }
 
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_SCHEDULE, v_ident, v_queue_index) {
-    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, prepare_clip), 5)
-    static_repeat(VIRTIO_INPUT_QUEUE_REPLICAS, v_replica_id) {
-        CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, advance_clip, v_replica_id), 20)
-    }
-    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, commit_clip), 5)
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, prepare_clip), 25)
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, commit_clip), 25)
 }
 
 macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE, v_ident, v_queue_index, v_nanos) {
@@ -288,6 +254,6 @@ macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE, v_ident, v_queue_index, v_nano
 void *virtio_device_config_space(virtio_device_t *device);
 
 // for a queue already set up using virtio_device_setup_queue, this function spuriously notifies the queue.
-void virtio_device_force_notify_queue(virtio_device_input_queue_singletons_t *queue);
+void virtio_device_force_notify_queue(virtio_device_input_queue_notify_t *queue);
 
 #endif /* FSW_VIVID_RTOS_VIRTIO_H */
