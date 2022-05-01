@@ -1,7 +1,10 @@
 #include <string.h>
 
+#include <hal/clip.h>
 #include <synch/notepad.h>
 #include <synch/strict.h>
+
+#if ( CONFIG_SYNCH_NOTEPADS_ENABLED == 1 )
 
 static inline uint8_t *notepad_region_ref(notepad_ref_t *replica, uint8_t replica_id, uint8_t flip_state) {
     assert(replica != NULL);
@@ -96,3 +99,15 @@ void *notepad_feedforward(notepad_ref_t *replica, bool *valid_out) {
     // return the output region
     return output_region;
 }
+
+#else /* ( CONFIG_SYNCH_NOTEPADS_ENABLED == 0 ) */
+
+void *notepad_feedforward(notepad_ref_t *replica, bool *valid_out) {
+    assert(replica != NULL);
+    if (valid_out != NULL) {
+        *valid_out = !clip_is_restart();
+    }
+    return replica->local_buffer;
+}
+
+#endif

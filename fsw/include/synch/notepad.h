@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include <hal/debug.h>
+#include <synch/config.h>
 
 /*
  * This file contains an implementation of a "voting state notepad." A notepad is a storage location for mutable state
@@ -17,6 +18,8 @@
 enum {
     NOTEPAD_UNINITIALIZED = 0xFF,
 };
+
+#if ( CONFIG_SYNCH_NOTEPADS_ENABLED == 1 )
 
 typedef const struct {
     const char *label;
@@ -42,6 +45,23 @@ macro_define(NOTEPAD_REGISTER, n_ident, n_replicas, n_state_size) {
         };
     }
 }
+
+#else /* ( CONFIG_SYNCH_NOTEPADS_ENABLED == 0 ) */
+
+typedef const struct {
+    uint8_t *local_buffer;
+} notepad_ref_t;
+
+macro_define(NOTEPAD_REGISTER, n_ident, n_replicas, n_state_size) {
+    static_repeat(n_replicas, n_replica_id) {
+        uint8_t symbol_join(n_ident, local_buffer, n_replica_id)[n_state_size];
+        notepad_ref_t symbol_join(n_ident, replica, n_replica_id) = {
+            .local_buffer = symbol_join(n_ident, local_buffer, n_replica_id),
+        };
+    }
+}
+
+#endif
 
 macro_define(NOTEPAD_REPLICA_REF, n_ident, n_replica_id) {
     (&symbol_join(n_ident, replica, n_replica_id))
