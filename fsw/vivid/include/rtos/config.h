@@ -24,4 +24,7 @@
 /* set to 1 if the watchdog monitor clip should monitor the status of other components */
 #define VIVID_WATCHDOG_MONITOR_ASPECTS                  1
 
+/* set to 1 to enable the prepare/commit structure for the VIRTIO driver */
+#define VIVID_PREPARE_COMMIT_VIRTIO_DRIVER              1
+
 #endif /* FSW_VIVID_RTOS_CONFIG_H */

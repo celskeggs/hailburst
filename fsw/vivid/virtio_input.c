@@ -5,11 +5,12 @@
 #define DEBUG_VIRTQ
 
 enum {
+    REPLICA_SINGLE_ID = 0,
     REPLICA_PREPARE_ID = 0,
     REPLICA_COMMIT_ID = 1,
 };
 
-static void virtio_input_queue_common_data(virtio_device_input_queue_singletons_t *queue,
+static void virtio_input_queue_common_data(virtio_device_input_queue_t *queue,
                                            uint8_t replica_id, uint16_t last_used_idx, uint16_t descriptor_count) {
     local_time_t timestamp = timer_epoch_ns();
 
@@ -75,7 +76,7 @@ static void virtio_input_queue_common_data(virtio_device_input_queue_singletons_
     duct_send_commit(&txn);
 }
 
-void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *queue) {
+void virtio_input_queue_prepare_clip(virtio_device_input_queue_t *queue) {
     assert(queue != NULL && queue->used != NULL && queue->avail != NULL && queue->desc != NULL);
 
     uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
@@ -109,7 +110,7 @@ void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *que
     }
 }
 
-void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queue) {
+void virtio_input_queue_commit_clip(virtio_device_input_queue_t *queue) {
     assert(queue != NULL && queue->used != NULL && queue->avail != NULL && queue->desc != NULL);
 
     uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
@@ -177,6 +178,46 @@ void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queu
             if (!le16toh(atomic_load(queue->avail->flags))) {
                 atomic_store_relaxed(queue->parent_device->mmio->queue_notify, htole32(queue->queue_index));
             }
+        }
+    }
+}
+
+void virtio_input_queue_single_clip(virtio_device_input_queue_t *queue) {
+    assert(queue != NULL && queue->used != NULL && queue->avail != NULL && queue->desc != NULL);
+
+    uint16_t new_used_idx = letoh16(atomic_load(queue->used->idx));
+    uint16_t last_used_idx = letoh16(atomic_load_relaxed(queue->avail->idx)) - queue->queue_num;
+    uint16_t descriptor_count = (uint16_t) (new_used_idx - last_used_idx);
+    assert(descriptor_count <= queue->queue_num);
+
+    if (clip_is_restart()) {
+        descriptor_count = 0;
+    }
+
+#ifdef DEBUG_VIRTQ
+    debugf(TRACE, "Input queue %u: received descriptor count is %u.", queue->queue_index, descriptor_count);
+#endif
+
+    virtio_input_queue_common_data(queue, REPLICA_SINGLE_ID, last_used_idx, descriptor_count);
+
+    // populate or repair all descriptors
+    for (uint32_t i = 0; i < queue->queue_num; i++) {
+        queue->avail->ring[i] = htole16(i); // TODO: is this redundant with other code?
+        queue->desc[i] = (struct virtq_desc) {
+            /* address (guest-physical) */
+            .addr  = htole64((uint64_t) (uintptr_t) &queue->receive_buffer[i * queue->message_size]),
+            .len   = htole32(queue->message_size),
+            .flags = htole16(VIRTQ_DESC_F_WRITE),
+            .next  = htole16(0xFFFF), /* invalid index */
+        };
+    }
+
+    // update avail idx
+    uint16_t new_avail_idx = new_used_idx + queue->queue_num;
+    if (new_avail_idx != letoh16(queue->avail->idx)) {
+        atomic_store(queue->avail->idx, htole16(new_avail_idx));
+        if (!le16toh(atomic_load(queue->avail->flags))) {
+            atomic_store_relaxed(queue->parent_device->mmio->queue_notify, htole32(queue->queue_index));
         }
     }
 }

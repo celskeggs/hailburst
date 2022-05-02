@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <rtos/config.h>
 #include <rtos/gic.h>
 #include <rtos/virtqueue.h>
 #include <hal/clip.h>
@@ -12,10 +13,13 @@
 #include <synch/duct.h>
 #include <synch/notepad.h>
 
-// NOTE: these are NOT configuration options; 2 is the number used because there is one prepare clip and one commit
-// clip. The code would have to be restructured for this to be anything else.
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
 #define VIRTIO_INPUT_QUEUE_REPLICAS  2
 #define VIRTIO_OUTPUT_QUEUE_REPLICAS 2
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+#define VIRTIO_INPUT_QUEUE_REPLICAS  1
+#define VIRTIO_OUTPUT_QUEUE_REPLICAS 1
+#endif
 
 enum {
     // configuration for the particular VIRTIO MMIO layout of the qemu-system-arm -M virt simulation board
@@ -90,7 +94,7 @@ typedef const struct {
 
     uint8_t *receive_buffer;
     uint8_t *merge_buffer; // of size message_size
-} virtio_device_input_queue_singletons_t;
+} virtio_device_input_queue_t;
 
 typedef const struct {
     virtio_device_t *parent_device;
@@ -131,10 +135,15 @@ macro_define(VIRTIO_DEVICE_REGISTER,
 
 void virtio_device_setup_queue_internal(struct virtio_mmio_registers *mmio, uint32_t queue_index, size_t queue_num,
                                         struct virtq_desc *desc, struct virtq_avail *avail, struct virtq_used *used);
-void virtio_input_queue_prepare_clip(virtio_device_input_queue_singletons_t *queue);
-void virtio_input_queue_commit_clip(virtio_device_input_queue_singletons_t *queue);
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
+void virtio_input_queue_prepare_clip(virtio_device_input_queue_t *queue);
+void virtio_input_queue_commit_clip(virtio_device_input_queue_t *queue);
 void virtio_output_queue_prepare_clip(virtio_device_output_queue_t *queue);
 void virtio_output_queue_commit_clip(virtio_device_output_queue_t *queue);
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+void virtio_input_queue_single_clip(virtio_device_input_queue_t *queue);
+void virtio_output_queue_single_clip(virtio_device_output_queue_t *queue);
+#endif
 
 macro_define(VIRTIO_DEVICE_QUEUE_COMMON,
              v_ident, v_queue_index, v_duct, v_duct_flow, v_queue_flow, v_duct_capacity, v_initial_avail_idx) {
@@ -182,7 +191,7 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
     struct virtio_device_input_queue_mut symbol_join(v_ident, v_queue_index, mutable_state);
     static_repeat(VIRTIO_INPUT_QUEUE_REPLICAS, v_replica_id) {
         uint8_t symbol_join(v_ident, v_queue_index, merge_buffer, v_replica_id)[v_duct_capacity];
-        virtio_device_input_queue_singletons_t symbol_join(v_ident, v_queue_index, singleton_data, v_replica_id) = {
+        virtio_device_input_queue_t symbol_join(v_ident, v_queue_index, singleton_data, v_replica_id) = {
             .mut = &symbol_join(v_ident, v_queue_index, mutable_state),
 
             .desc = symbol_join(v_ident, v_queue_index, desc),
@@ -203,10 +212,15 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REGISTER,
         .parent_device = &v_ident,
         .queue_index = (v_queue_index),
     };
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
                   virtio_input_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, singleton_data, 0));
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, commit_clip),
                   virtio_input_queue_commit_clip, &symbol_join(v_ident, v_queue_index, singleton_data, 1))
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, single_clip),
+                  virtio_input_queue_single_clip, &symbol_join(v_ident, v_queue_index, singleton_data, 0))
+#endif
 }
 
 macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
@@ -215,24 +229,31 @@ macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_REGISTER,
                                v_duct_flow, v_duct_flow, v_duct_capacity, 0);
     uint8_t symbol_join(v_ident, v_queue_index, transmit_buffer)[(v_duct_flow) * (v_duct_capacity)];
     uint8_t symbol_join(v_ident, v_queue_index, compare_buffer)[v_duct_capacity];
-    virtio_device_output_queue_t symbol_join(v_ident, v_queue_index, queue) = {
-        .parent_device = &v_ident,
-        .queue_index = (v_queue_index),
+    static_repeat(VIRTIO_OUTPUT_QUEUE_REPLICAS, v_replica_id) {
+        virtio_device_output_queue_t symbol_join(v_ident, v_queue_index, queue, v_replica_id) = {
+            .parent_device = &v_ident,
+            .queue_index = (v_queue_index),
 
-        .duct = &(v_duct),
-        .transmit_buffer = symbol_join(v_ident, v_queue_index, transmit_buffer),
-        .compare_buffer = symbol_join(v_ident, v_queue_index, compare_buffer),
-        .message_size = (v_duct_capacity),
-        .queue_num = (v_duct_flow),
+            .duct = &(v_duct),
+            .transmit_buffer = symbol_join(v_ident, v_queue_index, transmit_buffer),
+            .compare_buffer = symbol_join(v_ident, v_queue_index, compare_buffer),
+            .message_size = (v_duct_capacity),
+            .queue_num = (v_duct_flow),
 
-        .desc = symbol_join(v_ident, v_queue_index, desc),
-        .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
-        .used = &symbol_join(v_ident, v_queue_index, used).used,
-    };
+            .desc = symbol_join(v_ident, v_queue_index, desc),
+            .avail = &symbol_join(v_ident, v_queue_index, avail).avail,
+            .used = &symbol_join(v_ident, v_queue_index, used).used,
+        };
+    }
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, prepare_clip),
-                  virtio_output_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, queue));
+                  virtio_output_queue_prepare_clip, &symbol_join(v_ident, v_queue_index, queue, 0));
     CLIP_REGISTER(symbol_join(v_ident, v_queue_index, commit_clip),
-                  virtio_output_queue_commit_clip, &symbol_join(v_ident, v_queue_index, queue))
+                  virtio_output_queue_commit_clip, &symbol_join(v_ident, v_queue_index, queue, 1))
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+    CLIP_REGISTER(symbol_join(v_ident, v_queue_index, single_clip),
+                  virtio_output_queue_single_clip, &symbol_join(v_ident, v_queue_index, queue, 0))
+#endif
 }
 
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REF, v_ident, v_queue_index) {
@@ -240,13 +261,21 @@ macro_define(VIRTIO_DEVICE_INPUT_QUEUE_REF, v_ident, v_queue_index) {
 }
 
 macro_define(VIRTIO_DEVICE_INPUT_QUEUE_SCHEDULE, v_ident, v_queue_index) {
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
     CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, prepare_clip), 25)
     CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, commit_clip), 25)
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, single_clip), 25)
+#endif
 }
 
 macro_define(VIRTIO_DEVICE_OUTPUT_QUEUE_SCHEDULE, v_ident, v_queue_index, v_nanos) {
+#if ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 1 )
     CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, prepare_clip), v_nanos)
     CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, commit_clip), v_nanos)
+#else /* ( VIVID_PREPARE_COMMIT_VIRTIO_DRIVER == 0 ) */
+    CLIP_SCHEDULE(symbol_join(v_ident, v_queue_index, single_clip), v_nanos)
+#endif
 }
 
 void *virtio_device_config_space(virtio_device_t *device);
