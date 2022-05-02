@@ -51,13 +51,19 @@ static uint32_t wdt_strict_food_from_recipe(uint32_t recipe)
 
 void watchdog_indicate(watchdog_aspect_t *aspect, uint8_t replica_id, bool ok) {
     assert(aspect != NULL);
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
     duct_txn_t txn;
     duct_send_prepare(&txn, aspect->duct, replica_id);
     uint8_t ok_byte = (ok ? 1 : 0);
     duct_send_message(&txn, &ok_byte, sizeof(ok_byte), 0);
     duct_send_commit(&txn);
+#else /* ( VIVID_WATCHDOG_MONITOR_ASPECTS == 0 ) */
+    (void) replica_id;
+    (void) ok;
+#endif
 }
 
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
 void watchdog_populate_aspect_timeouts(watchdog_aspect_t **aspects, size_t num_aspects) {
     local_time_t now = timer_now_ns();
 
@@ -93,6 +99,7 @@ static bool watchdog_aspects_ok(watchdog_voter_replica_t *w) {
 
     return all_ok;
 }
+#endif
 
 void watchdog_voter_clip(watchdog_voter_replica_t *w) {
     duct_txn_t txn;
@@ -102,7 +109,11 @@ void watchdog_voter_clip(watchdog_voter_replica_t *w) {
     bool has_recipe_msg = (duct_receive_message(&txn, &recipe_msg, NULL) == sizeof(recipe_msg));
     duct_receive_commit(&txn);
 
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
     bool aspects_ok = watchdog_aspects_ok(w);
+#else
+    bool aspects_ok = true;
+#endif
 
     duct_send_prepare(&txn, w->food_duct, w->replica_id);
     if (!aspects_ok) {

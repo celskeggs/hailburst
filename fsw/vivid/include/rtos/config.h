@@ -21,4 +21,7 @@
 /* set to 0 for no preemption, 1 for maximum partition durations, and 2 (default) for maximum and minimum. */
 #define VIVID_PARTITION_SCHEDULE_ENFORCEMENT            2
 
+/* set to 1 if the watchdog monitor clip should monitor the status of other components */
+#define VIVID_WATCHDOG_MONITOR_ASPECTS                  1
+
 #endif /* FSW_VIVID_RTOS_CONFIG_H */

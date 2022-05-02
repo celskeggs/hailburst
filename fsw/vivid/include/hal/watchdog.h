@@ -11,6 +11,7 @@ enum {
     WATCHDOG_STARTUP_GRACE_PERIOD = 1 * CLOCK_NS_PER_SEC,
 };
 
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
 typedef const struct {
     struct watchdog_aspect_replica_mut {
         local_time_t last_known_ok;
@@ -19,11 +20,14 @@ typedef const struct {
     duct_t     *duct;
     duration_t  timeout_ns;
 } watchdog_aspect_replica_t;
+#endif
 
 typedef const struct {
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
     watchdog_aspect_replica_t replicas[WATCHDOG_VOTER_REPLICAS];
     // separate copy for the sender
     duct_t *duct;
+#endif
 } watchdog_aspect_t;
 
 // only sent when it's time to decide whether to feed the watchdog.
@@ -61,6 +65,7 @@ macro_define(WATCHDOG_ASPECT_PROTO, a_ident) {
 }
 
 macro_define(WATCHDOG_ASPECT, a_ident, a_timeout_ns, a_sender_replicas) {
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
     DUCT_REGISTER(symbol_join(a_ident, duct), a_sender_replicas, WATCHDOG_VOTER_REPLICAS, 1, sizeof(uint8_t),
                   DUCT_SENDER_FIRST);
     static_repeat(WATCHDOG_VOTER_REPLICAS, w_replica_id) {
@@ -81,6 +86,9 @@ macro_define(WATCHDOG_ASPECT, a_ident, a_timeout_ns, a_sender_replicas) {
         },
         .duct = &symbol_join(a_ident, duct),
     }
+#else /* ( VIVID_WATCHDOG_MONITOR_ASPECTS == 0 ) */
+    watchdog_aspect_t a_ident = {};
+#endif
 }
 
 macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
@@ -100,6 +108,7 @@ macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
         CLIP_REGISTER(symbol_join(w_ident, voter_clip, w_replica_id),
                       watchdog_voter_clip, &symbol_join(w_ident, voter, w_replica_id));
     }
+#if ( VIVID_WATCHDOG_MONITOR_ASPECTS == 1 )
     static inline void symbol_join(w_ident, init)(void) {
         watchdog_populate_aspect_timeouts(
             symbol_join(w_ident, aspects, 0),
@@ -107,6 +116,7 @@ macro_define(WATCHDOG_REGISTER, w_ident, w_aspects) {
         );
     }
     PROGRAM_INIT(STAGE_RAW, symbol_join(w_ident, init));
+#endif
     watchdog_monitor_t symbol_join(w_ident, monitor) = {
         .recipe_duct = &symbol_join(w_ident, recipe_duct),
         .food_duct = &symbol_join(w_ident, food_duct),
