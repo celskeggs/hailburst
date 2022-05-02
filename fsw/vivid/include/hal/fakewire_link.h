@@ -2,7 +2,7 @@
 #define FSW_VIVID_HAL_FAKEWIRE_LINK_H
 
 #include <rtos/virtio_console.h>
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <bus/codec.h>
 
 #define FAKEWIRE_LINK_RECEIVE_REPLICAS  VIRTIO_INPUT_QUEUE_REPLICAS

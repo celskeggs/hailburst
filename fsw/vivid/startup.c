@@ -2,10 +2,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include <task.h>
-
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <rtos/scheduler.h>
 #include <rtos/scrubber.h>
 #include <hal/debug.h>
 #include <hal/init.h>
@@ -27,7 +26,7 @@ void entrypoint(void *kernel_elf_rom) {
     initialize_systems();
 
     debugf(WARNING, "Activating scheduler to bring spacecraft online.");
-    schedule_first_task();
+    schedule_first_clip();
 
     abortf("Scheduler halted.");
 }

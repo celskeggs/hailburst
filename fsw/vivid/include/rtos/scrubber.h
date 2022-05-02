@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include <rtos/config.h>
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <hal/watchdog.h>
 #include <synch/config.h>
 

@@ -3,7 +3,6 @@
 
 #include <hal/atomic.h>
 #include <hal/clip.h>
-#include <hal/thread.h>
 #include <hal/timer.h>
 #include <synch/duct.h>
 #include <synch/strict.h>

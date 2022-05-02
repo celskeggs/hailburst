@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <synch/circular.h>
 #include <synch/notepad.h>
 #include <bus/rmap.h>

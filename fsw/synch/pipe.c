@@ -1,4 +1,4 @@
-#include <hal/thread.h>
+#include <hal/debug.h>
 #include <synch/pipe.h>
 
 void pipe_send_prepare(pipe_txn_t *txn, pipe_t *pipe, uint8_t sender_id) {

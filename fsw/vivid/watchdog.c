@@ -2,9 +2,10 @@
 #include <stdint.h>
 
 #include <rtos/gic.h>
+#include <hal/atomic.h>
+#include <hal/clip.h>
 #include <hal/debug.h>
 #include <hal/system.h>
-#include <hal/thread.h>
 #include <hal/timer.h>
 #include <hal/watchdog.h>
 #include <synch/duct.h>

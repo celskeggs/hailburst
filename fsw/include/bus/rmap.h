@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <bus/switch.h>
 
 enum {

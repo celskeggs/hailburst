@@ -8,6 +8,7 @@ env["VIVID_LINKSCRIPT"] = File('link.ld')
 env["REPLICA_SCRIPT"] = File('replica.ld')
 
 sources = [
+    "clip.c",
     "clip_entry.s",
     "crash.c",
     "entrypoint.s",
@@ -15,8 +16,7 @@ sources = [
     "gic.c",
     "rtos_tasks.c",
     "scrubber.c",
-    "stubs.c",
-    "thread.c",
+    "startup.c",
     "virtio_console.c",
     "virtio_device.c",
     "virtio_input.c",

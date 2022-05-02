@@ -28,15 +28,12 @@
  *
  */
 
-/* Standard includes. */
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* FreeRTOS includes. */
-#include <task.h>
-
 #include <rtos/gic.h>
+#include <rtos/scheduler.h>
 #include <hal/atomic.h>
 
 static uint32_t schedule_index = 0;
@@ -45,13 +42,13 @@ uint32_t schedule_ticks = 0;
 local_time_t schedule_period_start = 0;
 local_time_t schedule_last = 0;
 local_time_t schedule_epoch_start = 0;
-TCB_t * volatile pxCurrentTCB = NULL;
+clip_t *schedule_current_clip = NULL;
 
 static __attribute__((noreturn)) void schedule_execute(bool validate) {
-    assert(schedule_index < task_scheduling_order_length);
-    schedule_entry_t sched = task_scheduling_order[schedule_index];
-    pxCurrentTCB = sched.task;
-    assert(pxCurrentTCB != NULL);
+    assert(schedule_index < schedule_partitions_length);
+    schedule_entry_t sched = schedule_partitions[schedule_index];
+    atomic_store(schedule_current_clip, sched.clip);
+    assert(schedule_current_clip != NULL);
     schedule_loads++;
 
     if (schedule_index == 0) {
@@ -62,7 +59,7 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     uint64_t new_time = schedule_last + sched.nanos;
 
 #ifdef TASK_DEBUG
-    debugf(TRACE, "VIVID scheduling %15s until %" PRIu64, sched.task->pcTaskName, new_time);
+    debugf(TRACE, "VIVID scheduling %15s until %" PRIu64, sched.clip->label, new_time);
 #endif
 
     if (validate) {
@@ -85,11 +82,11 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
 
     schedule_last = new_time;
 
-    sched.task->enter_context();
+    sched.clip->enter_context();
     abortf("should never return from enter_context");
 }
 
-__attribute__((noreturn)) void schedule_first_task(void) {
+__attribute__((noreturn)) void schedule_first_clip(void) {
     /* Interrupts are verified to be off here, to ensure ticks do not execute while the scheduler is being started.
      * When clips are executed, the status word will be switched such that interrupts are re-enabled. */
     uint32_t cpsr = arm_get_cpsr();
@@ -97,24 +94,24 @@ __attribute__((noreturn)) void schedule_first_task(void) {
     /* Also, ensure that we are in IRQ mode, which is the standard mode for executing in the scheduler. */
     assert((cpsr & ARM_CPSR_MASK_MODE) == ARM_IRQ_MODE);
 
-    assert(pxCurrentTCB == NULL);
+    assert(schedule_current_clip == NULL);
 
     /* Start the timer that generates the tick ISR. */
     assert(TIMER_ASSUMED_CNTFRQ == arm_get_cntfrq());
 
-    // start scheduling at next millisecond boundary (yes, this means the first task might have a bit of extra
+    // start scheduling at next millisecond boundary (yes, this means the first clip might have a bit of extra
     // time, but we can live with that)
     uint64_t start_time_ns = timer_now_ns();
     schedule_last = start_time_ns + CLOCK_NS_PER_MS - (start_time_ns % CLOCK_NS_PER_MS);
 
-    // start executing first task
+    // start executing first clip
     schedule_index = 0;
     schedule_execute(false);
 }
 
-__attribute__((noreturn)) void schedule_next_task(void) {
-    /* Select the next task to run, round-robin-style */
-    schedule_index = (schedule_index + 1) % task_scheduling_order_length;
+__attribute__((noreturn)) void schedule_next_clip(void) {
+    /* Select the next clip to run, round-robin-style */
+    schedule_index = (schedule_index + 1) % schedule_partitions_length;
     if (schedule_index == 0) {
         schedule_ticks++;
     }

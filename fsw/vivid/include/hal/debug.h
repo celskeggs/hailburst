@@ -2,6 +2,7 @@
 #define FSW_VIVID_HAL_DEBUG_H
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <hal/loglevel.h>
 // for clock_timestamp_fast() needed by debugf macro
@@ -32,11 +33,11 @@ struct debugf_metadata {
 } __attribute__((packed));
 
 // restart the current task
-extern void restart_current_task(void) __attribute__((noreturn));
+extern void restart_current_clip(void) __attribute__((noreturn));
 
 #if ( VIVID_RECOVER_FROM_ASSERTIONS == 1 )
 static inline __attribute__((noreturn)) void assert_restart_task(void) {
-    restart_current_task();
+    restart_current_clip();
 }
 #else /* ( VIVID_RECOVER_FROM_ASSERTIONS == 0 ) */
 static inline __attribute__((noreturn)) void assert_restart_task(void) {

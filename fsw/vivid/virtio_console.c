@@ -4,8 +4,8 @@
 
 #include <rtos/gic.h>
 #include <rtos/virtio_console.h>
+#include <hal/clip.h>
 #include <hal/debug.h>
-#include <hal/thread.h>
 #include <hal/timer.h>
 
 enum {

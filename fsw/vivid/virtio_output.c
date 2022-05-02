@@ -1,4 +1,5 @@
 #include <rtos/virtio.h>
+#include <hal/atomic.h>
 
 enum {
     REPLICA_PREPARE_ID = 0,

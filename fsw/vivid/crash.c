@@ -1,13 +1,11 @@
 #include <inttypes.h>
 
-#include <task.h>
-
 #include <rtos/arm.h>
 #include <hal/atomic.h>
+#include <hal/clip.h>
 #include <hal/debug.h>
 #include <hal/init.h>
 #include <hal/system.h>
-#include <hal/thread.h>
 
 // referenced in entrypoint.s
 // force to 1 if we don't want to recover cleanly
@@ -17,12 +15,12 @@ uint32_t trap_recursive_flag = 0;
 const uint32_t trap_recursive_flag = 1;
 #endif
 
-__attribute__((noreturn)) void restart_current_task(void) {
+__attribute__((noreturn)) void restart_current_clip(void) {
     if ((arm_get_cpsr() & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE) {
         abortf("Restart condition hit in kernel context.");
     }
 
-    thread_t current_thread = task_get_current();
+    clip_t *current_thread = schedule_get_clip();
     assert(current_thread != NULL);
 
     // mark clip
@@ -31,13 +29,13 @@ __attribute__((noreturn)) void restart_current_task(void) {
     scrubber_start_pend(&current_thread->mut->clip_pend);
 #endif
 
-    debugf(WARNING, "Suspending restarted task to wait for reschedule.");
+    debugf(WARNING, "Suspending restarted clip to wait for reschedule.");
 
     // make sure interrupts are enabled before we use any WFI instructions
     asm volatile("CPSIE i" ::: "memory");
 
     // wait forever for the reschedule
-    task_yield();
+    schedule_yield();
 }
 
 struct reg_state {
@@ -70,18 +68,18 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
 
     const char *trap_name = trap_mode < 4 ? trap_mode_names[trap_mode] : "???????";
     debugf(CRITICAL, "%s", trap_name);
-    bool task_recursive = false;
-    if (!scheduler_has_started()) {
+    bool clip_recursive = false;
+    if (!schedule_has_started()) {
         debugf(CRITICAL, "%s occurred before scheduler started", trap_name);
     } else {
-        TaskHandle_t failed_task = task_get_current();
-        debugf(CRITICAL, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
-        task_recursive = failed_task->mut->recursive_exception;
+        clip_t *failed_clip = schedule_get_clip();
+        debugf(CRITICAL, "%s occurred in clip '%s'", trap_name, failed_clip->label);
+        clip_recursive = failed_clip->mut->recursive_exception;
     }
     debugf(CRITICAL, "Status: PC=0x%08x SPSR=0x%08x",
            state->lr, spsr);
     debugf(CRITICAL, "Possible causes: InKernel=%u GlobalRecurse=%u TaskRecurse=%u",
-           (spsr & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE, atomic_load_relaxed(trap_recursive_flag) - 1, task_recursive);
+           (spsr & ARM_CPSR_MASK_MODE) != ARM_SYS_MODE, atomic_load_relaxed(trap_recursive_flag) - 1, clip_recursive);
     debugf(CRITICAL, "Registers:  R0=0x%08x  R1=0x%08x  R2=0x%08x  R3=0x%08x",
            state->r0, state->r1, state->r2, state->r3);
     debugf(CRITICAL, "Registers:  R4=0x%08x  R5=0x%08x  R6=0x%08x  R7=0x%08x",
@@ -95,28 +93,28 @@ void exception_report(uint32_t spsr, struct reg_state *state, unsigned int trap_
     // returns to an abort() call
 }
 
-__attribute__((noreturn)) void task_abort_handler(unsigned int trap_mode) {
+__attribute__((noreturn)) void clip_abort_handler(unsigned int trap_mode) {
     const char *trap_name = "???????";
     if (trap_mode < sizeof(trap_mode_names) / sizeof(trap_mode_names[0])) {
         trap_name = trap_mode_names[trap_mode];
     }
-    debugf(WARNING, "TASK %s", trap_name);
-    TaskHandle_t failed_task = task_get_current();
-    debugf(WARNING, "%s occurred in task '%s'", trap_name, failed_task->pcTaskName);
+    debugf(WARNING, "CLIP %s", trap_name);
+    clip_t *failed_clip = schedule_get_clip();
+    debugf(WARNING, "%s occurred in clip '%s'", trap_name, failed_clip->label);
 
 #if ( VIVID_RECOVER_FROM_EXCEPTIONS == 0 )
-    abortf("Recovery was disabled... shouldn't have reached task_abort_handler!");
+    abortf("Recovery was disabled... shouldn't have reached clip_abort_handler!");
 #else /* ( VIVID_RECOVER_FROM_EXCEPTIONS == 1 ) */
     // must be false because we checked it just a moment ago in the trap handler
-    assert(failed_task->mut->recursive_exception == false);
+    assert(failed_clip->mut->recursive_exception == false);
 
-    // make sure we don't clear the global recursive flag until we've safely set the task recursive flag
-    failed_task->mut->recursive_exception = true;
+    // make sure we don't clear the global recursive flag until we've safely set the clip recursive flag
+    failed_clip->mut->recursive_exception = true;
     assert(atomic_load_relaxed(trap_recursive_flag) == 1);
     atomic_store(trap_recursive_flag, 0);
 
     // this will indeed suspend us in the middle of this abort handler... but that's fine! We don't actually need
-    // to return all the way back to the interrupted task.
-    restart_current_task();
+    // to return all the way back to the interrupted clip.
+    restart_current_clip();
 #endif
 }

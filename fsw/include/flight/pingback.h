@@ -1,7 +1,7 @@
 #ifndef FSW_FLIGHT_PINGBACK_H
 #define FSW_FLIGHT_PINGBACK_H
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <flight/command.h>
 #include <flight/telemetry.h>
 

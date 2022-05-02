@@ -1,7 +1,7 @@
 #ifndef FSW_HEARTBEAT_H
 #define FSW_HEARTBEAT_H
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <synch/notepad.h>
 #include <flight/clock_cal.h>
 

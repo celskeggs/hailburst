@@ -1,4 +1,5 @@
 #include <rtos/virtio.h>
+#include <hal/atomic.h>
 #include <hal/clip.h>
 
 #define DEBUG_VIRTQ

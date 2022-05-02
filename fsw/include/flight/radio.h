@@ -1,6 +1,7 @@
 #ifndef FSW_RADIO_H
 #define FSW_RADIO_H
 
+#include <hal/clip.h>
 #include <hal/watchdog.h>
 #include <synch/notepad.h>
 #include <synch/pipe.h>

@@ -203,11 +203,11 @@ TASK_PROTO(task_main);
 
 TESTING_ASSEMBLY(validator, 5, 500);
 
-TASK_SCHEDULING_ORDER(
+SCHEDULE_PARTITION_ORDER() {
     TESTING_ASSEMBLY_SCHEDULE(validator)
     TASK_SCHEDULE(task_main, 100)
     SYSTEM_MAINTENANCE_SCHEDULE()
-);
+}
 
 static void test_main(void) {
     debugf(INFO, "Waiting for test to complete...");

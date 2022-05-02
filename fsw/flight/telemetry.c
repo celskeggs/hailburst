@@ -2,8 +2,8 @@
 #include <inttypes.h>
 
 #include <hal/atomic.h>
+#include <hal/clip.h>
 #include <hal/debug.h>
-#include <hal/thread.h>
 #include <hal/watchdog.h>
 #include <flight/clock.h>
 #include <flight/telemetry.h>

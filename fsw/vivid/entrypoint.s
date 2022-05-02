@@ -39,7 +39,7 @@
     .set IRQ_MODE, 0x12
 
     /* Variables and functions. */
-    .extern pxCurrentTCB
+    .extern schedule_current_clip
     .extern gic_interrupt_handler
     .extern trap_recursive_flag
 
@@ -105,12 +105,12 @@ _start:                               @ r0 is populated by the bootrom with the 
     BNE     emergency_abort_handler
 
     @ Next, check whether this particular task is recursively trapping.
-    LDR     r12, =pxCurrentTCB      /* r12 = &pxCurrentTCB */
-    LDR     r12, [r12]              /* r12 = pxCurrentTCB */
+    LDR     r12, =schedule_current_clip  /* r12 = &schedule_current_clip */
+    LDR     r12, [r12]                   /* r12 = schedule_current_clip */
     CMP     r12, #0      @ If no task, make sure we go to the emergency abort handler!
     BEQ     emergency_abort_handler
-    LDR     r12, [r12]              /* r12 = &pxCurrentTCB->mut->recursive_exception */
-    LDR     r12, [r12]              /* r12 = pxCurrentTCB->mut->recursive_exception */
+    LDR     r12, [r12]                   /* r12 = &schedule_current_clip->mut->recursive_exception */
+    LDR     r12, [r12]                   /* r12 = schedule_current_clip->mut->recursive_exception */
     CMP     r12, #0      @ If nonzero, then recursively trapping!
     BNE     emergency_abort_handler
 
@@ -120,8 +120,8 @@ _start:                               @ r0 is populated by the bootrom with the 
     CPS     #SYS_MODE
 
     MOV     r0,  #\trapid
-    B       task_abort_handler      @ trap_abort_handler will reset trap_recursive_flag to 0
-    @ task_abort_handler does not return
+    B       clip_abort_handler      @ trap_abort_handler will reset trap_recursive_flag to 0
+    @ clip_abort_handler does not return
 
     .endm
 

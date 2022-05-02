@@ -2,9 +2,9 @@
 #include <string.h>
 #include <time.h>
 
+#include <hal/clip.h>
 #include <hal/debug.h>
 #include <hal/init.h>
-#include <hal/thread.h>
 #include <hal/timer.h>
 #include <synch/strict.h>
 #include <bus/exchange.h>

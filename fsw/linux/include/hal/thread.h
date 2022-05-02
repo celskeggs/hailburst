@@ -109,11 +109,11 @@ macro_define(TASK_SCHEDULE, t_ident, t_micros) {
     { .task = &(t_ident), .nanos = (t_micros) * 1000 },
 }
 
-#define TASK_SCHEDULING_ORDER(...)                                                \
-    const schedule_entry_t task_scheduling_order[] = {                            \
-        __VA_ARGS__                                                               \
-    };                                                                            \
-    const uint32_t task_scheduling_order_length =                                 \
-        sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0])
+macro_block_define(SCHEDULE_PARTITION_ORDER, body) {
+    const schedule_entry_t task_scheduling_order[] = {
+        body
+    };
+    const uint32_t task_scheduling_order_length = sizeof(task_scheduling_order) / sizeof(task_scheduling_order[0]);
+}
 
 #endif /* FSW_LINUX_HAL_THREAD_H */

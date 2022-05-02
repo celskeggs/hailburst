@@ -5,11 +5,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <task.h>
-
 #include <rtos/gic.h>
 #include <rtos/virtqueue.h>
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <hal/init.h>
 #include <synch/duct.h>
 #include <synch/notepad.h>

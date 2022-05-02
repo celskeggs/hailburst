@@ -1,4 +1,5 @@
 #include <rtos/virtio.h>
+#include <hal/atomic.h>
 
 enum {
     VIRTIO_MAGIC_VALUE    = 0x74726976,

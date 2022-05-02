@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <synch/pipebuf.h>
 
 enum {

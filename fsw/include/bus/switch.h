@@ -6,7 +6,6 @@
 
 #include <hal/clip.h>
 #include <hal/init.h>
-#include <hal/thread.h>
 #include <synch/duct.h>
 
 // use default number of replicas

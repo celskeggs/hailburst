@@ -1,40 +1,37 @@
-#include <task.h>
-
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
 #include <hal/clip.h>
 #include <hal/debug.h>
 #include <hal/init.h>
-#include <hal/thread.h>
 #include <synch/strict.h>
 
 __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
-    thread_t clip = task_get_current();
+    clip_t *clip = schedule_get_clip();
 
     if (clip->mut->hit_restart) {
         // clear crash flag
         clip->mut->recursive_exception = false;
 
 #if ( VIVID_RECOVERY_WAIT_FOR_SCRUBBER == 1 )
-        // pend started in restart_current_task() to simplify this logic for us.
+        // pend started in restart_current_clip() to simplify this logic for us.
         if (!scrubber_is_pend_done(&clip->mut->clip_pend)) {
             // Go back to the top next scheduling period.
-            task_yield();
+            schedule_yield();
             abortf("Clips should never return from yield!");
         }
-        debugf(WARNING, "Clip %s resuming after scrubber cycle completion.", clip->pcTaskName);
+        debugf(WARNING, "Clip %s resuming after scrubber cycle completion.", clip->label);
 #endif
         clip->mut->hit_restart = false;
-        clip->mut->clip_next_tick = task_tick_index();
+        clip->mut->clip_next_tick = schedule_tick_index();
         clip->mut->needs_start = true;
     } else if (atomic_load(clip->mut->clip_running)) {
-        malfunctionf("Clip %s did not have a chance to complete by the end of its execution!", clip->pcTaskName);
+        malfunctionf("Clip %s did not have a chance to complete by the end of its execution!", clip->label);
         clip->mut->needs_start = true;
     } else {
-        uint32_t now = task_tick_index();
+        uint32_t now = schedule_tick_index();
         if (now != clip->mut->clip_next_tick) {
             malfunctionf("Clip %s desynched from timeline. Tick found to be %u instead of %u.",
-                         clip->pcTaskName, now, clip->mut->clip_next_tick);
+                         clip->label, now, clip->mut->clip_next_tick);
             clip->mut->needs_start = true;
         }
     }
@@ -45,7 +42,7 @@ __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
     entrypoint(clip->start_arg);
 
     // should never fail, because the clip would have been rescheduled (and therefore restart) if this happened!
-    assert(task_tick_index() == clip->mut->clip_next_tick);
+    assert(schedule_tick_index() == clip->mut->clip_next_tick);
     clip->mut->clip_next_tick += 1;
 
     assert(clip->mut->clip_running == true);
@@ -56,10 +53,10 @@ __attribute__((noreturn)) void clip_play_direct(void (*entrypoint)(void*)) {
     if (elapsed > 0 && (uint64_t) elapsed > clip->mut->clip_max_nanos) {
         clip->mut->clip_max_nanos = elapsed;
         debugf(TRACE, "New longest clip duration for %s: %u.%03u microseconds.",
-               clip->pcTaskName, elapsed / 1000, elapsed % 1000);
+               clip->label, elapsed / 1000, elapsed % 1000);
     }
 
     // yield until we are rescheduled, and start from the beginning.
-    task_yield();
+    schedule_yield();
     abortf("It should be impossible for any clip to ever resume from yield!");
 }

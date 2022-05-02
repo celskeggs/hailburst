@@ -1,9 +1,9 @@
 #include <rtos/arm.h>
 #include <rtos/gic.h>
+#include <rtos/scheduler.h>
 #include <hal/atomic.h>
 #include <hal/init.h>
 
-#include <task.h>
 
 enum {
     GIC_DIST_ADDR = 0x08000000,
@@ -151,5 +151,5 @@ void gic_interrupt_handler(void) {
     atomic_store_relaxed(cpu->gicc_eoir, irq);
 
     // Switch to the next task.
-    schedule_next_task();
+    schedule_next_clip();
 }

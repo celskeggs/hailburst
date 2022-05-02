@@ -1,6 +1,7 @@
 #ifndef FSW_CLOCK_INIT_H
 #define FSW_CLOCK_INIT_H
 
+#include <hal/clip.h>
 #include <synch/notepad.h>
 #include <bus/rmap.h>
 #include <bus/switch.h>

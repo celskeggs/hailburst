@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include <hal/clip.h>
 #include <hal/time.h>
 #include <synch/duct.h>
 #include <flight/comm.h>

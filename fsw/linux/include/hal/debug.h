@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <hal/loglevel.h>
 #include <flight/clock.h>

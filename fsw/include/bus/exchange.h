@@ -1,7 +1,7 @@
 #ifndef FSW_FAKEWIRE_EXCHANGE_H
 #define FSW_FAKEWIRE_EXCHANGE_H
 
-#include <hal/thread.h>
+#include <hal/clip.h>
 #include <synch/notepad.h>
 #include <bus/link.h>
 #include <bus/switch.h>

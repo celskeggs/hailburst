@@ -4,7 +4,6 @@
 #include <hal/clip.h>
 #include <hal/debug.h>
 #include <hal/init.h>
-#include <hal/thread.h>
 
 enum {
     MEMORY_LOW = 0x40000000,
@@ -33,7 +32,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
                vaddr, filesz, memsz);
     } else {
         debugf(TRACE, "Scrubbing read-only segment at vaddr=0x%08x (filesz=0x%08x, memsz=0x%08x) from offset=0x%08x, "
-               "time remaining=%uns", vaddr, filesz, memsz, start_offset, clip_remaining_ns());
+               "time remaining=%uns", vaddr, filesz, memsz, start_offset, schedule_remaining_ns());
         assert(memsz == filesz); // no BSS here, presumably?
 
         size_t corrections = 0;
@@ -42,7 +41,7 @@ static void scrub_segment(uintptr_t vaddr, void *load_source, size_t filesz, siz
         size_t i;
         for (i = start_offset; i < filesz; i += sizeof(uint32_t)) {
             if ((i / sizeof(uint32_t)) % SCRUBBER_ESCAPE_CHECK_INTERVAL == 0
-                        && clip_remaining_ns() < SCRUBBER_ESCAPE_TIMEOUT) {
+                        && schedule_remaining_ns() < SCRUBBER_ESCAPE_TIMEOUT) {
                 debugf(TRACE, "Scrubber pausing remainder of check; not enough time left to complete cycle now.");
                 break;
             }
