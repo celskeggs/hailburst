@@ -14,6 +14,7 @@ sources = [
     "entrypoint.s",
     "fakewire_link.c",
     "gic.c",
+    "idle.c",
     "rtos_tasks.c",
     "scrubber.c",
     "startup.c",

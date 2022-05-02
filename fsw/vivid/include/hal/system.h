@@ -1,15 +1,24 @@
 #ifndef FSW_VIVID_HAL_SYSTEM_H
 #define FSW_VIVID_HAL_SYSTEM_H
 
+#include <rtos/config.h>
 #include <rtos/scrubber.h>
 #include <hal/clip.h>
 
+void idle_clip(void);
+
 macro_define(SYSTEM_MAINTENANCE_REGISTER) {
     SCRUBBER_REGISTER()
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT <= 1 ) && ( VIVID_PARTITION_SCHEDULE_MINIMUM_CYCLE_TIME > 0 )
+    CLIP_REGISTER(sys_idle, idle_clip, NULL);
+#endif
 }
 
 macro_define(SYSTEM_MAINTENANCE_SCHEDULE) {
     SCRUBBER_SCHEDULE()
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT <= 1 ) && ( VIVID_PARTITION_SCHEDULE_MINIMUM_CYCLE_TIME > 0 )
+    CLIP_SCHEDULE(sys_idle, (VIVID_PARTITION_SCHEDULE_MINIMUM_CYCLE_TIME / CLOCK_NS_PER_US))
+#endif
 }
 
 macro_define(SYSTEM_MAINTENANCE_WATCH) {

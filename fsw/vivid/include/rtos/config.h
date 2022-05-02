@@ -24,6 +24,9 @@
 /* set to 0 for no preemption, 1 for maximum partition durations, and 2 (default) for maximum and minimum */
 #define VIVID_PARTITION_SCHEDULE_ENFORCEMENT            2
 
+/* if VIVID_PARTITION_SCHEDULE_ENFORCEMENT <= 1, this enforces a minimum cycle time in nanoseconds */
+#define VIVID_PARTITION_SCHEDULE_MINIMUM_CYCLE_TIME     3000000
+
 /* set to 1 if the watchdog monitor clip should monitor the status of other components */
 #define VIVID_WATCHDOG_MONITOR_ASPECTS                  1
 

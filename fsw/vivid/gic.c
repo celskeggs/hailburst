@@ -1,5 +1,4 @@
 #include <rtos/arm.h>
-#include <rtos/config.h>
 #include <rtos/gic.h>
 #include <rtos/scheduler.h>
 #include <hal/atomic.h>
@@ -72,7 +71,6 @@ void shutdown_gic(void) {
     cpu->gicc_ctlr = 0;
 }
 
-#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT >= 1 )
 void gic_validate_ready(void) {
     uint32_t irq = IRQ_PHYS_TIMER;
     uint32_t off = irq / 32;
@@ -83,7 +81,6 @@ void gic_validate_ready(void) {
             "GIC misconfigured for regular execution: ICACTIVER=0x%x, ICPENDR=0x%x, ISENABLER=0x%x, mask=0x%08x",
             dist->gicd_isactiver[off], dist->gicd_ispendr[off], dist->gicd_isenabler[off], mask);
 }
-#endif
 
 static void configure_gic(void) {
     num_interrupts = ((dist->gicd_typer & 0x1F) + 1) * 32;
@@ -120,7 +117,6 @@ static void configure_gic(void) {
     dist->gicd_ctlr = 1;
     cpu->gicc_ctlr = 1;
 
-#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT >= 1 )
     // enable timer interrupt
     assert(IRQ_PHYS_TIMER < num_interrupts);
 
@@ -135,7 +131,6 @@ static void configure_gic(void) {
     dist->gicd_icpendr[off]    = mask;  // clear pending bit
     dist->gicd_ipriorityr[irq] = 0xF0;  // set priority allowing FreeRTOS calls
     dist->gicd_isenabler[off]  = mask;  // enable IRQ
-#endif
 }
 // we don't need to worry about exactly when this happens, because interrupts will be disabled by the bootrom, and not
 // re-enabled until the initialization is complete.

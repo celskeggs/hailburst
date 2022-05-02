@@ -80,6 +80,8 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
 #if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT == 0 )
     // nothing to do if there are no schedule constraints
     (void) validate;
+    // unset the enable bit, just in case the IDLE task set it.
+    arm_set_cntp_ctl(0);
 #else
     if (validate) {
         // make sure we aren't drifting from the schedule
@@ -92,9 +94,9 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     arm_set_cntp_cval(new_time / CLOCK_PERIOD_NS);
     // set the enable bit and don't set the mask bit
     arm_set_cntp_ctl(ARM_TIMER_ENABLE);
+#endif
 
     gic_validate_ready();
-#endif
 
     // make the start of the scheduling period available to code that may be interested
     schedule_period_start = schedule_last;

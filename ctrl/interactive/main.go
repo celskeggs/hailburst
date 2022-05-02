@@ -8,12 +8,15 @@ import (
 	"os"
 )
 
+func usage() {
+	fmt.Printf(
+		"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor] " +
+			"[--no-watchdog] [--trial-dir <directory>]\n",
+	)
+}
+
 func main() {
 	if util.HasArg("--help") {
-		fmt.Printf(
-			"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor] " +
-				"[--no-watchdog]\n",
-		)
 		return
 	}
 
@@ -22,17 +25,45 @@ func main() {
 		TrialDir:     "./trial-last",
 		GdbPort:      1234,
 		RedirectLogs: false,
-		Verbose:      util.HasArg("--verbose"),
-		Clean:        util.HasArg("--clean"),
-		Rebuild:      util.HasArg("--rebuild"),
-		Linux:        util.HasArg("--linux"),
-		Irradiate:    util.HasArg("--irradiate"),
-		RegisterMode: util.HasArg("--registers"),
-		Run:          util.HasArg("--run"),
-		Monitor:      util.HasArg("--monitor"),
-		NoWatchdog:   util.HasArg("--no-watchdog"),
 		Interactive:  true,
 	}
+
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		switch arg {
+		case "--help":
+			usage()
+			return
+		case "--verbose":
+			options.Verbose = true
+		case "--clean":
+			options.Clean = true
+		case "--rebuild":
+			options.Rebuild = true
+		case "--linux":
+			options.Linux = true
+		case "--irradiate":
+			options.Irradiate = true
+		case "--run":
+			options.Run = true
+		case "--monitor":
+			options.Monitor = true
+		case "--no-watchdog":
+			options.NoWatchdog = true
+		case "--trial-dir":
+			i++
+			if i < len(os.Args) {
+				options.TrialDir = os.Args[i]
+			} else {
+				usage()
+				return
+			}
+		default:
+			usage()
+			return
+		}
+	}
+
 	if err := os.Mkdir(options.TrialDir, 0777); err != nil && !os.IsExist(err) {
 		log.Fatal(err)
 	}

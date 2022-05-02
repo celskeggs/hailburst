@@ -83,11 +83,16 @@ void schedule_first_clip(void) __attribute__((noreturn));
 void schedule_next_clip(void) __attribute__((noreturn));
 void clip_exit_context(void) __attribute__((noreturn));
 
-static inline __attribute__((noreturn)) void schedule_yield(void) {
-#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT >= 2 )
+// only separate so that the special idle clip (which is normally not used) can wait instead of directly exiting
+static inline __attribute__((noreturn)) void schedule_wait_for_interrupt(void) {
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
     asm volatile("WFI");
     abortf("should never return from WFI since all non-timer interrupts are masked");
+}
+
+static inline __attribute__((noreturn)) void schedule_yield(void) {
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT >= 2 )
+    schedule_wait_for_interrupt();
 #else /* ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT <= 1 ) */
     clip_exit_context();
 #endif
