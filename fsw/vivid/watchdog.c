@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include <rtos/config.h>
 #include <rtos/gic.h>
 #include <hal/atomic.h>
 #include <hal/clip.h>

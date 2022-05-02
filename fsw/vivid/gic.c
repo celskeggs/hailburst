@@ -1,9 +1,9 @@
 #include <rtos/arm.h>
+#include <rtos/config.h>
 #include <rtos/gic.h>
 #include <rtos/scheduler.h>
 #include <hal/atomic.h>
 #include <hal/init.h>
-
 
 enum {
     GIC_DIST_ADDR = 0x08000000,

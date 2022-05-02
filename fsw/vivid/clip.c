@@ -1,3 +1,4 @@
+#include <rtos/config.h>
 #include <rtos/scrubber.h>
 #include <hal/atomic.h>
 #include <hal/clip.h>

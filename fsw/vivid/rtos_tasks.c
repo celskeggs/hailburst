@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <rtos/config.h>
 #include <rtos/gic.h>
 #include <rtos/scheduler.h>
 #include <hal/atomic.h>

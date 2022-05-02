@@ -1,6 +1,7 @@
 #include <inttypes.h>
 
 #include <rtos/arm.h>
+#include <rtos/config.h>
 #include <hal/atomic.h>
 #include <hal/clip.h>
 #include <hal/debug.h>

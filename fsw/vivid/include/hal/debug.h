@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <rtos/config.h>
 #include <hal/loglevel.h>
 // for clock_timestamp_fast() needed by debugf macro
 #include <flight/clock.h>
@@ -49,7 +50,9 @@ macro_define(assert, x) {
     ({
         if (!(x)) {
             blame_caller { debugf_stable(WARNING, Assertion, "ASSERT"); }
+#if ( VIVID_CHECK_ASSERTIONS == 1 )
             assert_restart_task();
+#endif
         }
     })
 }
@@ -58,7 +61,9 @@ macro_define(assertf, x, fmt, args...) {
     ({
         if (!(x)) {
             blame_caller { debugf_stable(WARNING, Assertion, "ASSERT: " fmt, args); }
+#if ( VIVID_CHECK_ASSERTIONS == 1 )
             assert_restart_task();
+#endif
         }
     })
 }

@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <rtos/config.h>
 #include <rtos/replicate.h>
 #include <rtos/scheduler.h>
 

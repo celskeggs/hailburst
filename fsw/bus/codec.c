@@ -27,7 +27,7 @@ const char *fakewire_codec_symbol(fw_ctrl_t c) {
     case FWC_CODEC_ERROR:
         return "CODEC_ERROR";
     default:
-        assert(false);
+        abortf("invalid codec symbol: %u", c);
     }
 }
 

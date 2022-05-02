@@ -1,6 +1,7 @@
 #ifndef FSW_VIVID_HAL_WATCHDOG_H
 #define FSW_VIVID_HAL_WATCHDOG_H
 
+#include <rtos/config.h>
 #include <hal/init.h>
 #include <synch/duct.h>
 
