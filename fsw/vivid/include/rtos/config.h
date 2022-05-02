@@ -18,4 +18,7 @@
 /* set to 1 if assertions and explicit restarts should actually restart the clip, as opposed to reset the system */
 #define VIVID_RECOVER_FROM_ASSERTIONS                   1
 
+/* set to 0 for no preemption, 1 for maximum partition durations, and 2 (default) for maximum and minimum. */
+#define VIVID_PARTITION_SCHEDULE_ENFORCEMENT            2
+
 #endif /* FSW_VIVID_RTOS_CONFIG_H */

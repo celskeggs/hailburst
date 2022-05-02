@@ -81,11 +81,16 @@ static inline uint32_t schedule_remaining_ns(void) {
 
 void schedule_first_clip(void) __attribute__((noreturn));
 void schedule_next_clip(void) __attribute__((noreturn));
+void clip_exit_context(void) __attribute__((noreturn));
 
 static inline __attribute__((noreturn)) void schedule_yield(void) {
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT >= 2 )
     assert((arm_get_cpsr() & ARM_CPSR_MASK_INTERRUPTS) == 0);
     asm volatile("WFI");
     abortf("should never return from WFI since all non-timer interrupts are masked");
+#else /* ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT <= 1 ) */
+    clip_exit_context();
+#endif
 }
 
 static inline local_time_t timer_epoch_ns(void) {

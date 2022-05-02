@@ -51,6 +51,20 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     assert(schedule_current_clip != NULL);
     schedule_loads++;
 
+    uint64_t sched_now = timer_now_ns();
+
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT == 0 )
+    // if no minimum or maximum times, just say it was supposed to end now, whatever.
+    schedule_last = sched_now;
+#else
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT == 1 )
+    // if no minimum times, then rewind schedule_last to the current time if necessary.
+    if (sched_now < schedule_last) {
+        schedule_last = sched_now;
+    }
+#endif
+#endif
+
     if (schedule_index == 0) {
         schedule_epoch_start = schedule_last;
     }
@@ -62,12 +76,15 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     debugf(TRACE, "VIVID scheduling %15s until %" PRIu64, sched.clip->label, new_time);
 #endif
 
+#if ( VIVID_PARTITION_SCHEDULE_ENFORCEMENT == 0 )
+    // nothing to do if there are no schedule constraints
+    (void) validate;
+#else
     if (validate) {
-        uint64_t here = timer_now_ns();
         // make sure we aren't drifting from the schedule
-        assertf(schedule_last <= here && here <= new_time,
+        assertf(schedule_last <= sched_now && sched_now <= new_time,
                 "schedule invariant last=" TIMEFMT " <= here=" TIMEFMT " <= new_time=" TIMEFMT " violated",
-                TIMEARG(schedule_last), TIMEARG(here), TIMEARG(new_time));
+                TIMEARG(schedule_last), TIMEARG(sched_now), TIMEARG(new_time));
     }
 
     // set the next callback time
@@ -76,6 +93,7 @@ static __attribute__((noreturn)) void schedule_execute(bool validate) {
     arm_set_cntp_ctl(ARM_TIMER_ENABLE);
 
     gic_validate_ready();
+#endif
 
     // make the start of the scheduling period available to code that may be interested
     schedule_period_start = schedule_last;
