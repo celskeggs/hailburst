@@ -30,6 +30,7 @@ type Options struct {
 	Run          bool
 	Monitor      bool
 	Interactive  bool
+	NoWatchdog   bool
 	QemuTrace    string
 }
 
@@ -324,6 +325,11 @@ func (opt Options) QemuArgs() []string {
 		"-global", "virtio-mmio.force-legacy=false",
 		"-nographic",
 	)
+	if opt.NoWatchdog {
+		cmd = append(cmd,
+			"-global", "watchdog-strict.disable-auto=true",
+		)
+	}
 	if len(opt.QemuTrace) > 0 {
 		cmd = append(cmd,
 			"--trace", opt.QemuTrace,

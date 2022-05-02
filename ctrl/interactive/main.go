@@ -11,7 +11,9 @@ import (
 func main() {
 	if util.HasArg("--help") {
 		fmt.Printf(
-			"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor]\n")
+			"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor] " +
+				"[--no-watchdog]\n",
+		)
 		return
 	}
 
@@ -28,6 +30,7 @@ func main() {
 		RegisterMode: util.HasArg("--registers"),
 		Run:          util.HasArg("--run"),
 		Monitor:      util.HasArg("--monitor"),
+		NoWatchdog:   util.HasArg("--no-watchdog"),
 		Interactive:  true,
 	}
 	if err := os.Mkdir(options.TrialDir, 0777); err != nil && !os.IsExist(err) {
