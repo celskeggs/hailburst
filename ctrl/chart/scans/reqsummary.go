@@ -321,7 +321,7 @@ func CollectiveSummary(raw []*ReqIntervalScan) *ReqIntervalScan {
 func MeanDuration(durations []time.Duration) time.Duration {
 	var total time.Duration
 	if len(durations) == 0 {
-		return time.Duration(math.NaN())
+		return -1
 	}
 	for _, duration := range durations {
 		total += duration

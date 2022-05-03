@@ -9,7 +9,6 @@ import (
 	"gonum.org/v1/plot/vg/draw"
 	"image/color"
 	"io"
-	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -26,22 +25,34 @@ func (rs *ReqScan) Label() string {
 	return rs.RequirementName
 }
 
-func (rs *ReqScan) LastTime() float64 {
-	latest := 0.0
+func (rs *ReqScan) LastTimeVT() model.VirtualTime {
+	latest := model.TimeZero
 	for _, failure := range rs.Failures {
-		latest = math.Max(latest, failure.Since(model.TimeZero).Seconds())
+		if failure.After(latest) {
+			latest = failure
+		}
 	}
 	for _, success := range rs.Successes {
-		latest = math.Max(latest, success.Since(model.TimeZero).Seconds())
+		if success.After(latest) {
+			latest = success
+		}
 	}
 	for _, interval := range rs.Intervals {
 		if interval.End.TimeExists() {
-			latest = math.Max(latest, interval.End.Since(model.TimeZero).Seconds())
+			if interval.End.After(latest) {
+				latest = interval.End
+			}
 		} else {
-			latest = math.Max(latest, interval.Start.Since(model.TimeZero).Seconds())
+			if interval.Start.After(latest) {
+				latest = interval.Start
+			}
 		}
 	}
 	return latest
+}
+
+func (rs *ReqScan) LastTime() float64 {
+	return rs.LastTimeVT().Since(model.TimeZero).Seconds()
 }
 
 func (rs *ReqScan) BuildPlot(lastTime float64, location float64) *tlplot.TimelinePlot {

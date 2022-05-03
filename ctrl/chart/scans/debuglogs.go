@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"time"
 )
 
 type DebugLogCorruption struct {
@@ -107,7 +108,7 @@ func ScanDebugLog(path string, elfPaths []string) ([]*DebugLogScan, error) {
 	isInvalid := false
 	prevRegion := model.TimeZero
 	for record := range records {
-		if record.Timestamp.TimeExists() {
+		if record.Timestamp.TimeExists() && record.Timestamp.AtOrAfter(prevRegion) && record.Timestamp.AtOrBefore(prevRegion.Add(time.Second * 50)) {
 			if isInvalid {
 				levelScans[readlog.LogCritical].Corruptions = append(
 					levelScans[readlog.LogCritical].Corruptions,
