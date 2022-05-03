@@ -5,19 +5,17 @@ import (
 	"github.com/celskeggs/hailburst/sim/telecomm"
 	"github.com/celskeggs/hailburst/sim/telecomm/transport"
 	"github.com/celskeggs/hailburst/sim/verifier/collector"
-	"math"
 	"math/rand"
 	"time"
 )
 
-func randInterval(r *rand.Rand, base time.Duration) time.Duration {
-	baseNs := base.Nanoseconds()
-	// multiply by something in the range [0.25, 4.0)
-	ns := float64(baseNs) * math.Pow(2.0, r.Float64()*4-2)
+func randInterval(r *rand.Rand, minInterval, maxInterval time.Duration) time.Duration {
+	minNs, maxNs := minInterval.Nanoseconds(), maxInterval.Nanoseconds()
+	ns := r.Int63n(maxNs - minNs + 1) + minNs
 	return time.Nanosecond * time.Duration(ns)
 }
 
-func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, interval time.Duration, ac collector.ActivityCollector) {
+func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, minInterval, maxInterval time.Duration, ac collector.ActivityCollector) {
 	var pendingCmd transport.Command
 	var lastPacketTimestamp model.VirtualTime
 	var lastPacket transport.Command
@@ -40,7 +38,7 @@ func AttachCommandGenerator(ctx model.SimContext, dest *telecomm.Connection, int
 				}
 				lastPacket, lastPacketTimestamp = pendingCmd, timestamp
 				pendingCmd = nil
-				delay := randInterval(ctx.Rand(), interval)
+				delay := randInterval(ctx.Rand(), minInterval, maxInterval)
 				_ = ctx.SetTimer(ctx.Now().Add(delay), "sim.telecomm.cmd.CommandGenerator/GenCmd", genCmd)
 				// we only check this so that the sender knows we want to hear when we can send again
 				if sender.CanSend() {

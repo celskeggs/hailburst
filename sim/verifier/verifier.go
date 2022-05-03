@@ -232,7 +232,8 @@ func (v *verifier) OnTelemetryDownlink(telemetry transport.Telemetry, remoteTime
 				inOrder = false
 				break
 			}
-			if !readingTime.AtOrAfter(lastReadingTime.Add(time.Millisecond * 95)) {
+			// have to only perform this if inOrder is true, because otherwise lastReadingTime might not be valid.
+			if inOrder && !readingTime.AtOrAfter(lastReadingTime.Add(time.Millisecond * 95)) {
 				log.Printf("Out-of-order error resulting from comparison issue: %v < (%v + 95ms = %v)",
 					readingTime, lastReadingTime, lastReadingTime.Add(time.Millisecond*95))
 				inOrder = false
