@@ -19,30 +19,30 @@ const (
 func DefaultIndivStateTransitions() (l [][]float64) {
 	l = make([][]float64, NumIndivHiddenStates)
 	l[Passing] = make([]float64, NumIndivHiddenStates)
-	l[Passing][Passing] = 0.994
-	l[Passing][Degrading] = 0.002
-	l[Passing][Partial] = 0.002
-	l[Passing][Absent] = 0.002
+	l[Passing][Passing] = 0.97
+	l[Passing][Degrading] = 0.1
+	l[Passing][Partial] = 0.1
+	l[Passing][Absent] = 0.1
 
 	l[Degrading] = make([]float64, NumIndivHiddenStates)
-	l[Degrading][Degrading] = 0.5
-	l[Degrading][Failing] = 0.5
+	l[Degrading][Degrading] = 0.1
+	l[Degrading][Failing] = 1.0
 
 	l[Failing] = make([]float64, NumIndivHiddenStates)
-	l[Failing][Failing] = 0.996
-	l[Failing][Recovering] = 0.002
-	l[Failing][Absent] = 0.002
+	l[Failing][Failing] = 0.96
+	l[Failing][Recovering] = 0.1
+	l[Failing][Absent] = 0.1
 
 	l[Partial] = make([]float64, NumIndivHiddenStates)
-	l[Partial][Partial] = 0.996
-	l[Partial][Passing] = 0.002
-	l[Partial][Degrading] = 0.002
+	l[Partial][Partial] = 0.992
+	l[Partial][Passing] = 0.004
+	l[Partial][Degrading] = 0.004
 
 	l[Recovering] = make([]float64, NumIndivHiddenStates)
-	l[Recovering][Recovering] = 0.4
-	l[Recovering][Passing] = 0.2
-	l[Recovering][Partial] = 0.2
-	l[Recovering][Absent] = 0.2
+	l[Recovering][Recovering] = 0.1
+	l[Recovering][Passing] = 0.9
+	l[Recovering][Partial] = 0.9
+	l[Recovering][Absent] = 0.9
 
 	l[Absent] = make([]float64, NumIndivHiddenStates)
 	l[Absent][Passing] = 0.002
@@ -55,10 +55,10 @@ func DefaultIndivStateTransitions() (l [][]float64) {
 func IndivObservationLikelihood(success interface{}) []float64 {
 	var l [NumIndivHiddenStates]float64
 	if success == nil {
-		l[Passing] = 0.9
+		l[Passing] = 0.91
 		l[Partial] = 0.8
-		l[Degrading] = 0.8
-		l[Recovering] = 0.8
+		l[Degrading] = 0.91
+		l[Recovering] = 0.91
 		l[Failing] = 0.9
 		l[Absent] = 1.0
 	} else if success.(bool) {
