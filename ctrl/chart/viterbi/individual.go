@@ -42,11 +42,10 @@ func DefaultIndivStateTransitions() (l [][]float64) {
 	l[Recovering][Recovering] = 0.1
 	l[Recovering][Passing] = 0.9
 	l[Recovering][Partial] = 0.9
-	l[Recovering][Absent] = 0.9
 
 	l[Absent] = make([]float64, NumIndivHiddenStates)
-	l[Absent][Passing] = 0.002
-	l[Absent][Absent] = 0.996
+	l[Absent][Passing] = 0.01
+	l[Absent][Absent] = 0.98
 	l[Absent][Degrading] = 0.002
 
 	return

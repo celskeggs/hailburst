@@ -1,16 +1,19 @@
 package util
 
+import "log"
+
 type ViterbiState struct {
 	// variable
 	Backtrack   [][]uint // at each time step, the most likely prior state
 	Likelihoods []float64
 	// constant
+	Debug bool
 	NumHiddenStates uint
 	StateTransitions [][]float64
 	ObservationLikelihoodFn func(interface{})[]float64
 }
 
-func (v *ViterbiState) NextPeriod(observation interface{}) {
+func (v *ViterbiState) NextPeriod(observation interface{}, debug interface{}) {
 	priors := v.Likelihoods
 	posteriors := make([]float64, v.NumHiddenStates)
 	backtrack := make([]uint, v.NumHiddenStates)
@@ -42,6 +45,9 @@ func (v *ViterbiState) NextPeriod(observation interface{}) {
 		posteriors[outcome] /= largest
 	}
 
+	if v.Debug {
+		log.Printf("T=%v O=%v -> L=%v, B=%v", debug, observation, posteriors, backtrack)
+	}
 	v.Likelihoods = posteriors
 	v.Backtrack = append(v.Backtrack, backtrack)
 }

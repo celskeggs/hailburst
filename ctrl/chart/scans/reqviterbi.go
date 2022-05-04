@@ -187,6 +187,7 @@ func reqForeach(req *ReqScan, cb func(model.VirtualTime, bool)) {
 
 func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterbiIntervalScan {
 	state := viterbi.IndividualRequirementState()
+	//state.Debug = req.RequirementName == "ReqUnchangedPwr"
 	var times []model.VirtualTime
 	prev := spacecraft.MissionStartTime
 	reqForeach(req, func(t model.VirtualTime, success bool) {
@@ -199,16 +200,16 @@ func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterb
 		for t.After(prev.Add(ViterbiGranularity)) {
 			prev = prev.Add(ViterbiGranularity)
 			times = append(times, prev)
-			state.NextPeriod(nil)
+			state.NextPeriod(nil, prev)
 		}
 		times = append(times, t)
 		prev = t
-		state.NextPeriod(success)
+		state.NextPeriod(success, t)
 	})
 	for prev.Before(lastTime) {
 		prev = prev.Add(ViterbiGranularity)
 		times = append(times, prev)
-		state.NextPeriod(nil)
+		state.NextPeriod(nil, prev)
 	}
 	// compute boundaries
 	boundaries := make([]model.VirtualTime, len(times) + 1)
@@ -288,8 +289,8 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 	}
 
 	state := viterbi.InitialViterbiState()
-	for _, bucket := range buckets {
-		state.NextPeriod(bucket)
+	for i, bucket := range buckets {
+		state.NextPeriod(bucket, startTime.Add(ViterbiGranularity * time.Duration(i)))
 	}
 	viterbiPath := state.ExtractPath()
 	if len(viterbiPath) != periods + 1 {
