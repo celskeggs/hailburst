@@ -4,6 +4,7 @@ import (
 	"github.com/celskeggs/hailburst/ctrl/chart/tlplot"
 	"github.com/celskeggs/hailburst/ctrl/debuglog/readlog"
 	"github.com/celskeggs/hailburst/sim/model"
+	"github.com/celskeggs/hailburst/sim/spacecraft"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
 	"log"
@@ -106,7 +107,7 @@ func ScanDebugLog(path string, elfPaths []string) ([]*DebugLogScan, error) {
 		}
 	}
 	isInvalid := false
-	prevRegion := model.TimeZero
+	prevRegion := spacecraft.MissionStartTime
 	for record := range records {
 		if record.Timestamp.TimeExists() && record.Timestamp.AtOrAfter(prevRegion) && record.Timestamp.AtOrBefore(prevRegion.Add(time.Second * 50)) {
 			if isInvalid {
