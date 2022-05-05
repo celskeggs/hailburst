@@ -583,3 +583,37 @@ def campaign(args):
 
         ns_to_failure = sample_geo(mtbf_to_rate(mtbf))
         step_ns(ns_to_failure)
+
+
+@BuildCmd
+def continuous(args):
+    """Repeatedly inject bitflips into system and then fast-forward. Delays are uniformly distributed."""
+
+    args = args.strip().split(" ")
+    if len(args) != 4 or args[3] not in ("mem", "reg", "restart", "restart-later"):
+        print("usage: continuous <iterations> <min> <max> <mode>")
+        print("the delay between successive injections is uniformly selected from the range [min, max]")
+        print("mode must be mem, reg, restart, or restart-later")
+        return
+
+    iterations = int(args[0])
+    assert iterations >= 1
+    mintime = parse_time(args[1])
+    maxtime = parse_time(args[2])
+    assert 0 < mintime <= maxtime
+    mode = args[3]
+
+    if mode == "restart-later":
+        layout = ExecutableLayout(gdb.objfiles())
+
+    for i in range(iterations):
+        step_ns(random.randint(mintime, maxtime))
+
+        if mode == "restart":
+            inject_instant_restart()
+        elif mode == "restart-later":
+            inject_spatial_restart(layout.random_instruction())
+        elif mode == "reg":
+            inject_reg_internal(None)
+        elif mode == "mem":
+            inject_bitflip(sample_address(), 1)
