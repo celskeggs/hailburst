@@ -146,7 +146,7 @@ type PreciseTicks struct{}
 func (p PreciseTicks) Ticks(min, max float64) []plot.Tick {
 	ticks := plot.DefaultTicks{}.Ticks(min, max)
 	for i := range ticks {
-		ticks[i].Label = strconv.FormatFloat(ticks[i].Value, 'f', 6, 64)
+		ticks[i].Label = strconv.FormatFloat(ticks[i].Value, 'f', 1, 64)
 	}
 	return ticks
 }

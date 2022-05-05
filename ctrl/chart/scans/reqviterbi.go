@@ -337,7 +337,7 @@ func ScanReqSummaryViterbi(path string) ([]ScannedLine, error) {
 	for _, req := range raw {
 		v := IndividualViterbi(req, latest)
 		reqs = append(reqs, v)
-		scansOut = append(scansOut, v)
+		//scansOut = append(scansOut, v)
 	}
 	scansOut = append(scansOut, SummarizeIndiv(reqs, latest))
 	return scansOut, nil

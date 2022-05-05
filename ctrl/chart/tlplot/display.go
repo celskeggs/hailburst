@@ -313,8 +313,8 @@ func DisplayPlotExportable(p *plot.Plot, exportDir string) error {
 		win := app.NewWindow(
 			app.Title("Plot Interface"),
 			app.Size(
-				unit.Px(1024),
-				unit.Px(768),
+				unit.Px(1300),
+				unit.Px(800),
 			),
 		)
 		defer win.Close()
