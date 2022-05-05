@@ -50,7 +50,7 @@ void fakewire_link_rx_clip(fw_link_t *fwl) {
         debug_printf(TRACE, "Read %zd bytes from file descriptor.", received);
 #endif
 
-        duct_send_message(&txn, fwl->rx_buffer, received, timer_now_ns());
+        duct_send_message(&txn, fwl->rx_buffer, received, timer_epoch_ns());
     }
 
     duct_send_commit(&txn);
