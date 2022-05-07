@@ -21,7 +21,11 @@ static inline uint8_t notepad_vote_flip(notepad_ref_t *replica) {
 
     for (uint8_t i = 0; i < replica->num_replicas; i++) {
         uint8_t flip_state = replica->flip_states[i];
-        assert(flip_state == 0 || flip_state == 1);
+        if (flip_state & ~1) {
+            debugf(WARNING, "Notepad %s[%u] detected invalid value for flip_states bit: 0x%02x.",
+                   replica->label, replica->replica_id, flip_state);
+        }
+        flip_state &= 1;
         if (i < replica->replica_id) {
             // this replica has already executed before us, so assume its current flip state setting has already been
             // flipped for next cycle.
