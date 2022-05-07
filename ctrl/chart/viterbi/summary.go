@@ -38,18 +38,24 @@ func DefaultSuccessLikelihoods() *ViterbiObservationInfo {
 	voi.ModeDefaults[Passing][Working] = 1.00
 	voi.ModeDefaults[Absent][Working] = 0.90
 
-	voi.ModeDefaults[Passing][Broken] = 0.70
-	voi.ModeDefaults[Recovering][Broken] = 0.80
+	voi.ModeDefaults[Passing][Broken] = 0.90
+	voi.ModeDefaults[Recovering][Broken] = 0.90
 	voi.ModeDefaults[Partial][Broken] = 1.00
-	voi.ModeDefaults[Degrading][Broken] = 0.80
+	voi.ModeDefaults[Degrading][Broken] = 0.90
 	voi.ModeDefaults[Absent][Broken] = 0.60
 	voi.ModeDefaults[Failing][Broken] = 1.00
 
-	ll := voi.ModeDefaults // copy
-	ll[Passing][Broken] = 1.00
-	ll[Absent][Broken] = 0.90
+	lNoTelemErrors := voi.ModeDefaults // copy
+	lNoTelemErrors[Passing][Broken] = 1.00
+	lNoTelemErrors[Absent][Broken] = 0.90
+
+	lHeartbeat := voi.ModeDefaults // copy
+	lHeartbeat[Absent][Working] = 0.10
+	lHeartbeat[Absent][Broken] = 0.90
+
 	voi.ModeOverrides = map[string][6][2]float64{
-		verifier.ReqNoTelemErrs: ll,
+		verifier.ReqNoTelemErrs: lNoTelemErrors,
+		verifier.ReqHeartbeat: lHeartbeat,
 	}
 
 	return voi

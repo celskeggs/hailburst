@@ -146,6 +146,14 @@ func MaxDuration(durations []time.Duration) time.Duration {
 	return total
 }
 
+func TotalDuration(durations []time.Duration) time.Duration {
+	var total time.Duration
+	for _, duration := range durations {
+		total += duration
+	}
+	return total
+}
+
 func CalcViterbiStats(intervals []ReqViterbiInterval) {
 	var failureTimes []time.Duration
 	var successTimes []time.Duration
@@ -166,10 +174,12 @@ func CalcViterbiStats(intervals []ReqViterbiInterval) {
 		}
 	}
 
-	log.Printf("STATS: mttf=%v, mttr=%v, bttf=%v, bttr=%v, wttf=%v, wttr=%v",
+	log.Printf("STATS: mttf=%v, mttr=%v, bttf=%v, bttr=%v, wttf=%v, wttr=%v, ok=%.1f%%",
 		MeanDuration(successTimes), MeanDuration(failureTimes),
 		MaxDuration(successTimes), MinDuration(failureTimes),
-		MinDuration(successTimes), MaxDuration(failureTimes))
+		MinDuration(successTimes), MaxDuration(failureTimes),
+		100*float64(TotalDuration(successTimes))/
+			float64(TotalDuration(successTimes)+TotalDuration(failureTimes)))
 }
 
 func reqForeach(req *ReqScan, cb func(model.VirtualTime, bool)) {
@@ -187,7 +197,7 @@ func reqForeach(req *ReqScan, cb func(model.VirtualTime, bool)) {
 
 func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterbiIntervalScan {
 	state := viterbi.IndividualRequirementState()
-	//state.Debug = req.RequirementName == "ReqUnchangedPwr"
+	//state.Debug = req.RequirementName == "ReqHeartbeat"
 	var times []model.VirtualTime
 	prev := spacecraft.MissionStartTime
 	reqForeach(req, func(t model.VirtualTime, success bool) {
@@ -212,7 +222,7 @@ func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterb
 		state.NextPeriod(nil, prev)
 	}
 	// compute boundaries
-	boundaries := make([]model.VirtualTime, len(times) + 1)
+	boundaries := make([]model.VirtualTime, len(times)+1)
 	boundaries[0] = spacecraft.MissionStartTime
 	boundaries[len(times)] = lastTime.Add(time.Second)
 	for i := 1; i < len(times); i++ {
@@ -227,8 +237,8 @@ func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterb
 	}
 	for i := 1; i < len(path); i++ {
 		cur := viterbi.IndivHiddenState(path[i])
-		if len(r.Intervals) > 0 && r.Intervals[len(r.Intervals) - 1].Mode == cur {
-			r.Intervals[len(r.Intervals) - 1].End = boundaries[i]
+		if len(r.Intervals) > 0 && r.Intervals[len(r.Intervals)-1].Mode == cur {
+			r.Intervals[len(r.Intervals)-1].End = boundaries[i]
 		} else {
 			r.Intervals = append(r.Intervals, ReqIndivViterbiInterval{
 				Mode:  cur,
@@ -245,7 +255,7 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 	if lastTime.AtOrBefore(startTime) {
 		panic("invalid time spread")
 	}
-	periods := int(math.Ceil(float64((lastTime.Since(startTime) + time.Second) / ViterbiGranularity))) + 1
+	periods := int(math.Ceil(float64((lastTime.Since(startTime)+time.Second)/ViterbiGranularity))) + 1
 	buckets := make([][]viterbi.SummaryObservation, periods)
 	for _, req := range scans {
 		for _, interval := range req.Intervals {
@@ -261,8 +271,8 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 					})
 				}
 			} else {
-				startFrac := float64(startTime.Add(ViterbiGranularity * time.Duration(startBucket + 1)).Since(interval.Start)) / float64(ViterbiGranularity)
-				endFrac := float64(interval.End.Since(startTime.Add(ViterbiGranularity * time.Duration(endBucket)))) / float64(ViterbiGranularity)
+				startFrac := float64(startTime.Add(ViterbiGranularity*time.Duration(startBucket+1)).Since(interval.Start)) / float64(ViterbiGranularity)
+				endFrac := float64(interval.End.Since(startTime.Add(ViterbiGranularity*time.Duration(endBucket)))) / float64(ViterbiGranularity)
 				if startFrac > 0 {
 					buckets[startBucket] = append(buckets[startBucket], viterbi.SummaryObservation{
 						Requirement: req.RequirementName,
@@ -289,11 +299,12 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 	}
 
 	state := viterbi.InitialViterbiState()
+	//state.Debug = true
 	for i, bucket := range buckets {
-		state.NextPeriod(bucket, startTime.Add(ViterbiGranularity * time.Duration(i)))
+		state.NextPeriod(bucket, startTime.Add(ViterbiGranularity*time.Duration(i)))
 	}
 	viterbiPath := state.ExtractPath()
-	if len(viterbiPath) != periods + 1 {
+	if len(viterbiPath) != periods+1 {
 		panic("invalid path")
 	}
 	var intervals []ReqViterbiInterval
@@ -305,8 +316,8 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 		}
 		intervals = append(intervals, ReqViterbiInterval{
 			Mode:  viterbi.HiddenState(viterbiPath[startPoint]),
-			Start: startTime.Add(ViterbiGranularity * time.Duration(startPoint - 1)),
-			End:   startTime.Add(ViterbiGranularity * time.Duration(endPoint - 1)),
+			Start: startTime.Add(ViterbiGranularity * time.Duration(startPoint-1)),
+			End:   startTime.Add(ViterbiGranularity * time.Duration(endPoint-1)),
 		})
 		startPoint = endPoint
 	}
