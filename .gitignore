@@ -2,7 +2,7 @@
 /.idea
 /.gdbhistory
 /trials
-/trial-last
+/trial-*
 /local.config
 /timeline.png
 /sim/requirements-bin
