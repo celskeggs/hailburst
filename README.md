@@ -37,7 +37,7 @@ Once that finishes, or in parallel, compile QEMU:
 
 Next, compile GDB and install it to a local directory:
 
-    $ git checkout gdb-10.2-release
+    $ git checkout gdb-12.1-release
     $ mkdir ../gdbroot
     $ ./configure --enable-targets=arm-none-eabi --disable-sim --with-python=/PATH/TO/PYTHON/3/INTERPRETER --prefix=/PATH/TO/gdbroot
     $ make -j4
