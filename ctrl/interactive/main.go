@@ -6,12 +6,13 @@ import (
 	"github.com/celskeggs/hailburst/ctrl/util"
 	"log"
 	"os"
+	"strconv"
 )
 
 func usage() {
 	fmt.Printf(
-		"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate] [--run] [--monitor] " +
-			"[--no-watchdog] [--trial-dir <directory>]\n",
+		"Usage: ./ctrl.sh [--verbose] [--clean] [--rebuild] [--linux] [--irradiate mem|reg] [--run] [--monitor] " +
+			"[--no-watchdog] [--background <gdb port>] [--trial-dir <directory>]\n",
 	)
 }
 
@@ -44,12 +45,33 @@ func main() {
 			options.Linux = true
 		case "--irradiate":
 			options.Irradiate = true
+			i++
+			if i < len(os.Args) && (os.Args[i] == "mem" || os.Args[i] == "reg") {
+				options.Irradiate = true
+				options.RegisterMode = os.Args[i] == "reg"
+			} else {
+				usage()
+				return
+			}
 		case "--run":
 			options.Run = true
 		case "--monitor":
 			options.Monitor = true
 		case "--no-watchdog":
 			options.NoWatchdog = true
+		case "--background":
+			i++
+			if i < len(os.Args) {
+				port, err := strconv.ParseUint(os.Args[i], 10, 16)
+				if err != nil {
+					usage()
+				}
+				options.Interactive = false
+				options.GdbPort = uint(port)
+			} else {
+				usage()
+				return
+			}
 		case "--trial-dir":
 			i++
 			if i < len(os.Args) {

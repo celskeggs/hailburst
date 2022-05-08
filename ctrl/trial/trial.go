@@ -172,9 +172,9 @@ func (opt Options) GdbCmds() []string {
 	}
 	if opt.Irradiate {
 		if opt.RegisterMode {
-			cmds = append(cmds, "campaign 1000 1s reg")
+			cmds = append(cmds, "continuous 2000 200ms 300ms reg")
 		} else {
-			cmds = append(cmds, "campaign 10000 100ms")
+			cmds = append(cmds, "continuous 2000 100ms 150ms mem")
 		}
 		cmds = append(cmds,
 			"-ex", "printf \"Campaign concluded\n\"",
