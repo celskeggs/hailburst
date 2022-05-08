@@ -81,10 +81,11 @@ func ScanAll(dir string, fswBin string, options Options) (out []scans.ScannedLin
 		}
 	}
 	if options.ShowViterbi {
-		records, err := scans.ScanReqSummaryViterbi(path.Join(dir, "reqs-raw.log"))
+		records, stats, err := scans.ScanReqSummaryViterbi(path.Join(dir, "reqs-raw.log"))
 		if err != nil {
 			return nil, errors.Wrap(err, "while scanning requirements for Viterbi")
 		}
+		stats.Print()
 		for _, record := range records {
 			out = append(out, record)
 		}

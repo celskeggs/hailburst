@@ -154,7 +154,23 @@ func TotalDuration(durations []time.Duration) time.Duration {
 	return total
 }
 
-func CalcViterbiStats(intervals []ReqViterbiInterval) {
+type ViterbiStats struct {
+	MeanTimeToFailure   time.Duration
+	MeanTimeToRecovery  time.Duration
+	BestTimeToFailure   time.Duration
+	BestTimeToRecovery  time.Duration
+	WorstTimeToFailure  time.Duration
+	WorstTimeToRecovery time.Duration
+	OkPercent           float64
+}
+
+func (v ViterbiStats) Print() {
+	log.Printf("STATS: mttf=%v, mttr=%v, bttf=%v, bttr=%v, wttf=%v, wttr=%v, ok=%.1f%%",
+		v.MeanTimeToFailure, v.MeanTimeToRecovery, v.BestTimeToFailure, v.BestTimeToRecovery,
+		v.WorstTimeToFailure, v.WorstTimeToRecovery, v.OkPercent)
+}
+
+func CalcViterbiStats(intervals []ReqViterbiInterval) ViterbiStats {
 	var failureTimes []time.Duration
 	var successTimes []time.Duration
 
@@ -174,12 +190,16 @@ func CalcViterbiStats(intervals []ReqViterbiInterval) {
 		}
 	}
 
-	log.Printf("STATS: mttf=%v, mttr=%v, bttf=%v, bttr=%v, wttf=%v, wttr=%v, ok=%.1f%%",
-		MeanDuration(successTimes), MeanDuration(failureTimes),
-		MaxDuration(successTimes), MinDuration(failureTimes),
-		MinDuration(successTimes), MaxDuration(failureTimes),
-		100*float64(TotalDuration(successTimes))/
-			float64(TotalDuration(successTimes)+TotalDuration(failureTimes)))
+	ok := 100 * float64(TotalDuration(successTimes)) / float64(TotalDuration(successTimes)+TotalDuration(failureTimes))
+	return ViterbiStats{
+		MeanTimeToFailure:   MeanDuration(successTimes),
+		MeanTimeToRecovery:  MeanDuration(failureTimes),
+		BestTimeToFailure:   MaxDuration(successTimes),
+		BestTimeToRecovery:  MinDuration(failureTimes),
+		WorstTimeToFailure:  MinDuration(successTimes),
+		WorstTimeToRecovery: MaxDuration(failureTimes),
+		OkPercent:           ok,
+	}
 }
 
 func reqForeach(req *ReqScan, cb func(model.VirtualTime, bool)) {
@@ -250,7 +270,7 @@ func IndividualViterbi(req *ReqScan, lastTime model.VirtualTime) *ReqIndivViterb
 	return r
 }
 
-func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.VirtualTime) *ReqViterbiIntervalScan {
+func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.VirtualTime) (*ReqViterbiIntervalScan, ViterbiStats) {
 	startTime := spacecraft.MissionStartTime
 	if lastTime.AtOrBefore(startTime) {
 		panic("invalid time spread")
@@ -321,21 +341,19 @@ func SummarizeIndiv(scans []*ReqIndivViterbiIntervalScan, lastTime model.Virtual
 		})
 		startPoint = endPoint
 	}
-	log.Printf("Viterbi analysis complete!")
-	CalcViterbiStats(intervals)
+	stats := CalcViterbiStats(intervals)
 
 	return &ReqViterbiIntervalScan{
 		RequirementName: "Summary Status",
 		Intervals:       intervals,
-	}
+	}, stats
 }
 
-func ScanReqSummaryViterbi(path string) ([]ScannedLine, error) {
+func ScanReqSummaryViterbi(path string) ([]ScannedLine, ViterbiStats, error) {
 	raw, err := ScanRawReqs(path)
 	if err != nil {
-		return nil, err
+		return nil, ViterbiStats{}, err
 	}
-	log.Printf("Beginning Viterbi analysis...")
 	latest := model.TimeZero
 	for _, req := range raw {
 		lt := req.LastTimeVT()
@@ -350,6 +368,7 @@ func ScanReqSummaryViterbi(path string) ([]ScannedLine, error) {
 		reqs = append(reqs, v)
 		//scansOut = append(scansOut, v)
 	}
-	scansOut = append(scansOut, SummarizeIndiv(reqs, latest))
-	return scansOut, nil
+	summary, stats := SummarizeIndiv(reqs, latest)
+	scansOut = append(scansOut, summary)
+	return scansOut, stats, nil
 }

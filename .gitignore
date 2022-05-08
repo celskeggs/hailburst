@@ -9,3 +9,4 @@
 /sim/debuglog-bin
 /ctrl/batch-bin
 /cmake-build-debug
+/stats.csv
