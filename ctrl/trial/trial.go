@@ -177,8 +177,8 @@ func (opt Options) GdbCmds() []string {
 			cmds = append(cmds, "continuous 2000 100ms 150ms mem")
 		}
 		cmds = append(cmds,
-			"-ex", "printf \"Campaign concluded\n\"",
-			"-ex", "monitor info vtime",
+			"printf \"Campaign concluded\n\"",
+			"monitor info vtime",
 		)
 	}
 	return cmds
